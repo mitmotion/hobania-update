@@ -130,11 +130,17 @@ dependencies = [
 
 [[package]]
 name = "approx"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08abcc3b4e9339e33a3d0a5ed15d84a687350c05689d825e0f6655eef9e76a94"
+
+[[package]]
+name = "approx"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0e60b75072ecd4168020818c0107f2857bb6c4e64252d8d3983f6263b40a5c3"
 dependencies = [
- "num-traits",
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -143,7 +149,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f2a05fd1bd10b2527e20a2cd32d8873d115b8b39fe219ee25f42a8aca6ba278"
 dependencies = [
- "num-traits",
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -152,7 +158,7 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "072df7202e63b127ab55acfe16ce97013d5b97bf160489336d3f1840fd78e99e"
 dependencies = [
- "num-traits",
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -181,6 +187,15 @@ name = "arrayref"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4c527152e37cf757a3f78aae5a06fbeefdb07ccc535c980a3208ee3060dd544"
+
+[[package]]
+name = "arrayvec"
+version = "0.4.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd9fd44efafa8690358b7408d253adf110036b88f55672a933f01d616ad9b1b9"
+dependencies = [
+ "nodrop",
+]
 
 [[package]]
 name = "arrayvec"
@@ -220,7 +235,7 @@ checksum = "f17769d44fe3eee8cdc255520183fee4e76b30f105de6431cd034e1d7a6f0499"
 dependencies = [
  "ahash 0.7.4",
  "bincode",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.1",
  "log",
  "notify 4.0.17",
  "parking_lot 0.11.1",
@@ -417,7 +432,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "afa748e348ad3be8263be728124b24a24f268266f6f5d58af9d75f6a40b5c587"
 dependencies = [
  "arrayref",
- "arrayvec",
+ "arrayvec 0.5.2",
  "constant_time_eq",
 ]
 
@@ -558,7 +573,7 @@ checksum = "670ad68c9088c2a963aaa298cb369688cf3f9465ce5e2d4ca10e6e0098a1ce73"
 dependencies = [
  "libc",
  "num-integer",
- "num-traits",
+ "num-traits 0.2.14",
  "serde",
  "time",
  "winapi 0.3.9",
@@ -960,7 +975,7 @@ dependencies = [
  "gimli",
  "log",
  "regalloc",
- "smallvec",
+ "smallvec 1.6.1",
  "target-lexicon",
 ]
 
@@ -994,7 +1009,7 @@ checksum = "c31b783b351f966fce33e3c03498cb116d16d97a8f9978164a60920bd0d3a99c"
 dependencies = [
  "cranelift-codegen",
  "log",
- "smallvec",
+ "smallvec 1.6.1",
  "target-lexicon",
 ]
 
@@ -1021,7 +1036,7 @@ dependencies = [
  "futures",
  "itertools 0.10.1",
  "lazy_static",
- "num-traits",
+ "num-traits 0.2.14",
  "oorandom",
  "plotters",
  "rayon",
@@ -1047,16 +1062,41 @@ dependencies = [
 
 [[package]]
 name = "crossbeam"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7408247b1b87f480890f28b670c5f8d9a8a4274833433fe74dc0dfd46d33650"
+dependencies = [
+ "crossbeam-channel 0.2.6",
+ "crossbeam-deque 0.5.2",
+ "crossbeam-epoch 0.5.2",
+ "crossbeam-utils 0.5.0",
+]
+
+[[package]]
+name = "crossbeam"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ae5588f6b3c3cb05239e90bd110f257254aecd01e4635400391aeae07497845"
 dependencies = [
  "cfg-if 1.0.0",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.1",
  "crossbeam-deque 0.8.0",
  "crossbeam-epoch 0.9.5",
  "crossbeam-queue",
  "crossbeam-utils 0.8.5",
+]
+
+[[package]]
+name = "crossbeam-channel"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b85741761b7f160bc5e7e0c14986ef685b7f8bf9b7ad081c60c604bb4649827"
+dependencies = [
+ "crossbeam-epoch 0.6.1",
+ "crossbeam-utils 0.5.0",
+ "parking_lot 0.6.4",
+ "rand 0.5.6",
+ "smallvec 0.6.14",
 ]
 
 [[package]]
@@ -1067,6 +1107,16 @@ checksum = "06ed27e177f16d65f0f0c22a213e17c696ace5dd64b14258b52f9417ccb52db4"
 dependencies = [
  "cfg-if 1.0.0",
  "crossbeam-utils 0.8.5",
+]
+
+[[package]]
+name = "crossbeam-deque"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7792c4a9b5a4222f654e3728a3dd945aacc24d2c3a1a096ed265d80e4929cb9a"
+dependencies = [
+ "crossbeam-epoch 0.5.2",
+ "crossbeam-utils 0.5.0",
 ]
 
 [[package]]
@@ -1093,6 +1143,34 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-epoch"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30fecfcac6abfef8771151f8be4abc9e4edc112c2bcb233314cafde2680536e9"
+dependencies = [
+ "arrayvec 0.4.12",
+ "cfg-if 0.1.10",
+ "crossbeam-utils 0.5.0",
+ "lazy_static",
+ "memoffset 0.2.1",
+ "scopeguard 0.3.3",
+]
+
+[[package]]
+name = "crossbeam-epoch"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2449aaa4ec7ef96e5fb24db16024b935df718e9ae1cec0a1e68feeca2efca7b8"
+dependencies = [
+ "arrayvec 0.4.12",
+ "cfg-if 0.1.10",
+ "crossbeam-utils 0.6.6",
+ "lazy_static",
+ "memoffset 0.2.1",
+ "scopeguard 0.3.3",
+]
+
+[[package]]
+name = "crossbeam-epoch"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "058ed274caafc1f60c4997b5fc07bf7dc7cca454af7c6e81edffe5f33f70dace"
@@ -1103,7 +1181,7 @@ dependencies = [
  "lazy_static",
  "maybe-uninit",
  "memoffset 0.5.6",
- "scopeguard",
+ "scopeguard 1.1.0",
 ]
 
 [[package]]
@@ -1116,7 +1194,7 @@ dependencies = [
  "crossbeam-utils 0.8.5",
  "lazy_static",
  "memoffset 0.6.4",
- "scopeguard",
+ "scopeguard 1.1.0",
 ]
 
 [[package]]
@@ -1127,6 +1205,22 @@ checksum = "9b10ddc024425c88c2ad148c1b0fd53f4c6d38db9697c9f1588381212fa657c9"
 dependencies = [
  "cfg-if 1.0.0",
  "crossbeam-utils 0.8.5",
+]
+
+[[package]]
+name = "crossbeam-utils"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "677d453a17e8bd2b913fa38e8b9cf04bcdbb5be790aa294f2389661d72036015"
+
+[[package]]
+name = "crossbeam-utils"
+version = "0.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04973fa96e96579258a5091af6003abde64af786b860f18622b82e026cca60e6"
+dependencies = [
+ "cfg-if 0.1.10",
+ "lazy_static",
 ]
 
 [[package]]
@@ -1338,6 +1432,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f95bf05dffba6e6cce8dfbb30def788154949ccd9aed761b472119c21e01c70"
 dependencies = [
  "adler32",
+]
+
+[[package]]
+name = "derivative"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c6d883546668a3e2011b6a716a7330b82eabb0151b138217f632c8243e17135"
+dependencies = [
+ "proc-macro2 0.4.30",
+ "quote 0.6.13",
+ "syn 0.15.44",
 ]
 
 [[package]]
@@ -1590,7 +1695,7 @@ version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0947d06646d28a4ac2862ac5eadc1062704d61ee398b3baba8b4a21e2f1ef5ed"
 dependencies = [
- "vek",
+ "vek 0.14.1",
 ]
 
 [[package]]
@@ -1599,7 +1704,7 @@ version = "0.22.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da96828553a086d7b18dcebfc579bd9628b016f86590d7453c115e490fa74b80"
 dependencies = [
- "num-traits",
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -1698,7 +1803,7 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1267f4ac4f343772758f7b1bdcbe767c218bbab93bb432acbf5162bbf85a6c4"
 dependencies = [
- "num-traits",
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -1759,6 +1864,12 @@ checksum = "5c0e564d24da983c053beff1bb7178e237501206840a3e6bf4e267b9e8ae734a"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "fuchsia-cprng"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a06f77d526c1a601b7c4cdd98f54b5eaabffc14d5f2f0296febdc7f357c6d3ba"
 
 [[package]]
 name = "fuchsia-zircon"
@@ -1961,7 +2072,7 @@ name = "gfx-backend-dx11"
 version = "0.8.0"
 source = "git+https://github.com/gfx-rs/gfx?rev=27a1dae3796d33d23812f2bb8c7e3b5aea18b521#27a1dae3796d33d23812f2bb8c7e3b5aea18b521"
 dependencies = [
- "arrayvec",
+ "arrayvec 0.5.2",
  "bitflags",
  "gfx-auxil",
  "gfx-hal",
@@ -1970,7 +2081,7 @@ dependencies = [
  "parking_lot 0.11.1",
  "range-alloc",
  "raw-window-handle",
- "smallvec",
+ "smallvec 1.6.1",
  "spirv_cross",
  "thunderdome",
  "winapi 0.3.9",
@@ -1982,7 +2093,7 @@ name = "gfx-backend-dx12"
 version = "0.8.0"
 source = "git+https://github.com/gfx-rs/gfx?rev=27a1dae3796d33d23812f2bb8c7e3b5aea18b521#27a1dae3796d33d23812f2bb8c7e3b5aea18b521"
 dependencies = [
- "arrayvec",
+ "arrayvec 0.5.2",
  "bit-set",
  "bitflags",
  "d3d12",
@@ -1992,7 +2103,7 @@ dependencies = [
  "parking_lot 0.11.1",
  "range-alloc",
  "raw-window-handle",
- "smallvec",
+ "smallvec 1.6.1",
  "spirv_cross",
  "thunderdome",
  "winapi 0.3.9",
@@ -2013,7 +2124,7 @@ name = "gfx-backend-gl"
 version = "0.8.1"
 source = "git+https://github.com/gfx-rs/gfx?rev=27a1dae3796d33d23812f2bb8c7e3b5aea18b521#27a1dae3796d33d23812f2bb8c7e3b5aea18b521"
 dependencies = [
- "arrayvec",
+ "arrayvec 0.5.2",
  "bitflags",
  "fxhash",
  "gfx-auxil",
@@ -2036,7 +2147,7 @@ name = "gfx-backend-metal"
 version = "0.8.1"
 source = "git+https://github.com/gfx-rs/gfx?rev=27a1dae3796d33d23812f2bb8c7e3b5aea18b521#27a1dae3796d33d23812f2bb8c7e3b5aea18b521"
 dependencies = [
- "arrayvec",
+ "arrayvec 0.5.2",
  "bitflags",
  "block",
  "cocoa-foundation",
@@ -2062,7 +2173,7 @@ name = "gfx-backend-vulkan"
 version = "0.8.0"
 source = "git+https://github.com/gfx-rs/gfx?rev=27a1dae3796d33d23812f2bb8c7e3b5aea18b521#27a1dae3796d33d23812f2bb8c7e3b5aea18b521"
 dependencies = [
- "arrayvec",
+ "arrayvec 0.5.2",
  "ash",
  "byteorder",
  "core-graphics-types",
@@ -2075,7 +2186,7 @@ dependencies = [
  "parking_lot 0.11.1",
  "raw-window-handle",
  "renderdoc-sys",
- "smallvec",
+ "smallvec 1.6.1",
  "winapi 0.3.9",
 ]
 
@@ -2196,7 +2307,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac2c82074cafb68b9e459c50c655f7eedcb92d6ee7166813802934bc6fc29fa3"
 dependencies = [
  "ab_glyph",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.1",
  "crossbeam-deque 0.8.0",
  "linked-hash-map",
  "rayon",
@@ -2376,6 +2487,16 @@ checksum = "805026a5d0141ffc30abb3be3173848ad46a1b1664fe632428479619a3644d77"
 
 [[package]]
 name = "hibitset"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6527bc88f32e0d3926c7572874b2bf17a19b36978aacd0aacf75f7d27a5992d0"
+dependencies = [
+ "atom",
+ "rayon",
+]
+
+[[package]]
+name = "hibitset"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93a1bb8316a44459a7d14253c4d28dd7395cbd23cc04a68c46e851b8e46d64b1"
@@ -2500,7 +2621,7 @@ source = "git+https://github.com/Imberflur/iced?tag=winit-0.25#18a48a5eeefd2aa6e
 dependencies = [
  "iced_core",
  "iced_futures",
- "num-traits",
+ "num-traits 0.2.14",
  "twox-hash",
  "unicode-segmentation",
 ]
@@ -2557,7 +2678,7 @@ dependencies = [
  "jpeg-decoder",
  "num-iter",
  "num-rational 0.3.2",
- "num-traits",
+ "num-traits 0.2.14",
  "png",
 ]
 
@@ -2745,7 +2866,7 @@ version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73e70400c6435a3f5e4d7bfb406af50bc66950cc8f24f45488d66f47bf3f5e25"
 dependencies = [
- "num-traits",
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -2874,11 +2995,21 @@ checksum = "7fb9b38af92608140b86b693604b9ffcc5824240a484d1ecd4795bacb2fe88f3"
 
 [[package]]
 name = "lock_api"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62ebf1391f6acad60e5c8b43706dde4582df75c06698ab44511d15016bc2442c"
+dependencies = [
+ "owning_ref",
+ "scopeguard 0.3.3",
+]
+
+[[package]]
+name = "lock_api"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4da24a77a3d8a6d4862d95f72e6fdb9c09a643ecdb402d754004a557f2bec75"
 dependencies = [
- "scopeguard",
+ "scopeguard 1.1.0",
 ]
 
 [[package]]
@@ -2887,7 +3018,7 @@ version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0382880606dff6d15c9476c416d18690b72742aa7b605bb6dd6ec9030fbf07eb"
 dependencies = [
- "scopeguard",
+ "scopeguard 1.1.0",
 ]
 
 [[package]]
@@ -3017,6 +3148,12 @@ dependencies = [
 
 [[package]]
 name = "memoffset"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f9dc261e2b62d7a622bf416ea3c5245cdd5d9a7fcc428c0d06804dfce1775b3"
+
+[[package]]
+name = "memoffset"
 version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "043175f069eda7b85febe4a74abbaeff828d9f8b448515d3151a14a3542811aa"
@@ -3135,7 +3272,7 @@ version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ddf05411bb159cdb5801bb10002afb66cb4572be656044315e363460ce69dc2"
 dependencies = [
- "crossbeam",
+ "crossbeam 0.8.1",
  "crossbeam-queue",
  "log",
  "mio 0.7.13",
@@ -3184,7 +3321,7 @@ dependencies = [
  "codespan-reporting",
  "fxhash",
  "log",
- "num-traits",
+ "num-traits 0.2.14",
  "petgraph 0.5.1",
  "rose_tree",
  "spirv_headers",
@@ -3272,7 +3409,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77a5d83df9f36fe23f0c3648c6bbb8b0298bb5f1939c8f2704431371f4b84d43"
 dependencies = [
- "smallvec",
+ "smallvec 1.6.1",
 ]
 
 [[package]]
@@ -3298,6 +3435,12 @@ dependencies = [
  "cfg-if 1.0.0",
  "libc",
 ]
+
+[[package]]
+name = "nodrop"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72ef4a56884ca558e5ddb05a1d1e7e1bfd9a68d9ed024c21704cc98872dae1bb"
 
 [[package]]
 name = "noise"
@@ -3340,6 +3483,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "nonzero_signed"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02783a0482333b0d3f5f5411b8fb60454a596696da041da0470ac9ef3e6e37d8"
+
+[[package]]
 name = "notify"
 version = "4.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3364,7 +3513,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51f18203a26893ca1d3526cf58084025d5639f91c44f8b70ab3b724f60e819a0"
 dependencies = [
  "bitflags",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.1",
  "filetime",
  "fsevent-sys 4.0.0",
  "inotify 0.9.3",
@@ -3394,7 +3543,7 @@ dependencies = [
  "num-integer",
  "num-iter",
  "num-rational 0.2.4",
- "num-traits",
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -3408,7 +3557,7 @@ dependencies = [
  "num-integer",
  "num-iter",
  "num-rational 0.4.0",
- "num-traits",
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -3419,7 +3568,7 @@ checksum = "090c7f9998ee0ff65aa5b723e4009f7b217707f1fb5ea551329cc4d6231fb304"
 dependencies = [
  "autocfg",
  "num-integer",
- "num-traits",
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -3430,7 +3579,7 @@ checksum = "4e0d047c1062aa51e256408c560894e5251f08925980e53cf1aa5bd00eec6512"
 dependencies = [
  "autocfg",
  "num-integer",
- "num-traits",
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -3440,7 +3589,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6b19411a9719e753aff12e5187b74d60d3dc449ec3f4dc21e3989c3f554bc95"
 dependencies = [
  "autocfg",
- "num-traits",
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -3449,7 +3598,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26873667bbbb7c5182d4a37c1add32cdf09f841af72da53318fdb81543c15085"
 dependencies = [
- "num-traits",
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -3470,7 +3619,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2cc698a63b549a70bc047073d2949cce27cd1c7b0a4a862d08a8031bc2801db"
 dependencies = [
  "autocfg",
- "num-traits",
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -3481,7 +3630,7 @@ checksum = "b2021c8337a54d21aca0d59a92577a029af9431cb59b909b03252b9c164fad59"
 dependencies = [
  "autocfg",
  "num-integer",
- "num-traits",
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -3493,7 +3642,7 @@ dependencies = [
  "autocfg",
  "num-bigint 0.2.6",
  "num-integer",
- "num-traits",
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -3504,7 +3653,7 @@ checksum = "12ac428b1cb17fce6f731001d307d351ec70a6d202fc2e60f7d4c5e42d8f4f07"
 dependencies = [
  "autocfg",
  "num-integer",
- "num-traits",
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -3516,7 +3665,16 @@ dependencies = [
  "autocfg",
  "num-bigint 0.4.0",
  "num-integer",
- "num-traits",
+ "num-traits 0.2.14",
+]
+
+[[package]]
+name = "num-traits"
+version = "0.1.43"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92e5113e9fd4cc14ded8e499429f396a20f98c772a47cc8622a736e1ec843c31"
+dependencies = [
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -3545,7 +3703,7 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "226b45a5c2ac4dd696ed30fa6b94b057ad909c7b7fc2e0d0808192bced894066"
 dependencies = [
- "derivative",
+ "derivative 2.2.0",
  "num_enum_derive",
 ]
 
@@ -3621,7 +3779,7 @@ dependencies = [
  "ndk",
  "ndk-glue",
  "num-derive",
- "num-traits",
+ "num-traits 0.2.14",
  "oboe-sys",
 ]
 
@@ -3682,7 +3840,7 @@ version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3305af35278dd29f46fcdd139e0b1fbfae2153f0e5928b39b035542dd31e37b7"
 dependencies = [
- "num-traits",
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -3691,7 +3849,7 @@ version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6dea6388d3d5498ec651701f14edbaf463c924b5d8829fb2848ccf0bcc7b3c69"
 dependencies = [
- "num-traits",
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -3713,6 +3871,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "owning_ref"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ff55baddef9e4ad00f88b6c743a2a8062d4c6ade126c2a528644b8e444d52ce"
+dependencies = [
+ "stable_deref_trait",
+]
+
+[[package]]
 name = "packed_simd_2"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3720,6 +3887,16 @@ checksum = "0e64858a2d3733fdd61adfdd6da89aa202f7ff0e741d2fc7ed1e452ba9dc99d7"
 dependencies = [
  "cfg-if 0.1.10",
  "libm 0.1.4",
+]
+
+[[package]]
+name = "parking_lot"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0802bff09003b291ba756dc7e79313e51cc31667e94afbe847def490424cde5"
+dependencies = [
+ "lock_api 0.1.5",
+ "parking_lot_core 0.3.1",
 ]
 
 [[package]]
@@ -3745,6 +3922,19 @@ dependencies = [
 
 [[package]]
 name = "parking_lot_core"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad7f7e6ebdc79edff6fdcb87a55b620174f7a989e3eb31b65231f4af57f00b8c"
+dependencies = [
+ "libc",
+ "rand 0.5.6",
+ "rustc_version 0.2.3",
+ "smallvec 0.6.14",
+ "winapi 0.3.9",
+]
+
+[[package]]
+name = "parking_lot_core"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d58c7c768d4ba344e3e8d72518ac13e259d7c7ade24167003b8488e10b6740a3"
@@ -3753,7 +3943,7 @@ dependencies = [
  "cloudabi",
  "libc",
  "redox_syscall 0.1.57",
- "smallvec",
+ "smallvec 1.6.1",
  "winapi 0.3.9",
 ]
 
@@ -3767,7 +3957,7 @@ dependencies = [
  "instant",
  "libc",
  "redox_syscall 0.2.9",
- "smallvec",
+ "smallvec 1.6.1",
  "winapi 0.3.9",
 ]
 
@@ -3870,7 +4060,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "45ca0ae5f169d0917a7c7f5a9c1a3d3d9598f18f529dd2b8373ed988efea307a"
 dependencies = [
- "num-traits",
+ "num-traits 0.2.14",
  "plotters-backend",
  "plotters-svg",
  "wasm-bindgen",
@@ -4122,6 +4312,19 @@ dependencies = [
 
 [[package]]
 name = "rand"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c618c47cd3ebd209790115ab837de41425723956ad3ce2e6a7f09890947cacb9"
+dependencies = [
+ "cloudabi",
+ "fuchsia-cprng",
+ "libc",
+ "rand_core 0.3.1",
+ "winapi 0.3.9",
+]
+
+[[package]]
+name = "rand"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a6b1679d49b24bbfe0c803429aa1874472f50d9b363131f0e89fc356b544d03"
@@ -4167,6 +4370,21 @@ dependencies = [
 
 [[package]]
 name = "rand_core"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a6fdeb83b075e8266dcc8762c22776f6877a63111121f5f8c7411e5be7eed4b"
+dependencies = [
+ "rand_core 0.4.2",
+]
+
+[[package]]
+name = "rand_core"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c33a3c44ca05fa6f1807d8e6743f3824e8509beca625669633be0acbdf509dc"
+
+[[package]]
+name = "rand_core"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90bde5296fc891b0cef12a6d03ddccc162ce7b2aff54160af9338f8d40df6d19"
@@ -4189,7 +4407,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "051b398806e42b9cd04ad9ec8f81e355d0a382c543ac6672c62f5a5b452ef142"
 dependencies = [
- "num-traits",
+ "num-traits 0.2.14",
  "rand 0.8.4",
 ]
 
@@ -4252,7 +4470,7 @@ version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d78120e2c850279833f1dd3582f730c4ab53ed95aeaaaa862a2a5c71b1656d8e"
 dependencies = [
- "crossbeam-channel",
+ "crossbeam-channel 0.5.1",
  "crossbeam-deque 0.8.0",
  "crossbeam-utils 0.8.5",
  "lazy_static",
@@ -4345,7 +4563,7 @@ checksum = "571f7f397d61c4755285cd37853fe8e03271c243424a907415909379659381c5"
 dependencies = [
  "log",
  "rustc-hash",
- "smallvec",
+ "smallvec 1.6.1",
 ]
 
 [[package]]
@@ -4482,9 +4700,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "758e4b372b723ec1d58b5bf42e7ee0266a6969ec3da06bf48ff94021c9f1abad"
 dependencies = [
  "heapless 0.6.1",
- "num-traits",
+ "num-traits 0.2.14",
  "pdqselect",
- "smallvec",
+ "smallvec 1.6.1",
 ]
 
 [[package]]
@@ -4500,7 +4718,7 @@ dependencies = [
  "lazy_static",
  "libsqlite3-sys",
  "memchr",
- "smallvec",
+ "smallvec 1.6.1",
 ]
 
 [[package]]
@@ -4637,8 +4855,8 @@ dependencies = [
  "memchr",
  "nix 0.20.0",
  "radix_trie",
- "scopeguard",
- "smallvec",
+ "scopeguard 1.1.0",
+ "smallvec 1.6.1",
  "unicode-segmentation",
  "unicode-width",
  "utf8parse",
@@ -4675,6 +4893,12 @@ name = "scoped-tls"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ea6a9290e3c9cf0f18145ef7ffa62d68ee0bf5fcd651017e586dc7fd5da448c2"
+
+[[package]]
+name = "scopeguard"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94258f53601af11e6a49f722422f6e3425c52b06245a5cf9bc09908b174f5e27"
 
 [[package]]
 name = "scopeguard"
@@ -4889,17 +5113,41 @@ checksum = "7fdf1b9db47230893d76faad238fd6097fd6d6a9245cd7a4d90dbd639536bbd2"
 
 [[package]]
 name = "shred"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ea122e6133568144fcfb5888737d4ac776ebc959f989dd65b907136ac22bfed"
+dependencies = [
+ "arrayvec 0.4.12",
+ "fxhash",
+ "mopa",
+ "rayon",
+ "smallvec 0.6.14",
+]
+
+[[package]]
+name = "shred"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eb0210289d693217926314867c807e0b7b42f7e23c136adb31f8697f5bf242d3"
 dependencies = [
- "arrayvec",
+ "arrayvec 0.5.2",
  "hashbrown 0.11.2",
  "mopa",
  "rayon",
- "shred-derive",
- "smallvec",
+ "shred-derive 0.6.3",
+ "smallvec 1.6.1",
  "tynm",
+]
+
+[[package]]
+name = "shred-derive"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9fcf34e5e5302d3024aba7afc291f6d1ca7573ed035d3c0796976ba3f10691a1"
+dependencies = [
+ "proc-macro2 0.4.30",
+ "quote 0.6.13",
+ "syn 0.15.44",
 ]
 
 [[package]]
@@ -4990,6 +5238,15 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
+version = "0.6.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b97fcaeba89edba30f044a10c6a3cc39df9c3f17d7cd829dd1446cab35f890e0"
+dependencies = [
+ "maybe-uninit",
+]
+
+[[package]]
+name = "smallvec"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe0f37c9e8f3c5a4a66ad655a93c74daac4ad00c441533bf5c6e7990bb42604e"
@@ -5063,19 +5320,40 @@ dependencies = [
 
 [[package]]
 name = "specs"
+version = "0.14.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de65613ada4338aa7ba71eca60eca24c60483433eec0077bc4f33cfc31f4bdf0"
+dependencies = [
+ "crossbeam 0.4.1",
+ "derivative 1.0.4",
+ "fnv",
+ "hibitset 0.5.4",
+ "log",
+ "mopa",
+ "nonzero_signed",
+ "rayon",
+ "serde",
+ "shred 0.7.2",
+ "shred-derive 0.5.1",
+ "shrev",
+ "tuple_utils 0.2.0",
+]
+
+[[package]]
+name = "specs"
 version = "0.16.2"
 source = "git+https://github.com/amethyst/specs.git?rev=f985bec5d456f7b0dd8aae99848f9473c2cd9d46#f985bec5d456f7b0dd8aae99848f9473c2cd9d46"
 dependencies = [
  "crossbeam-queue",
  "hashbrown 0.11.2",
- "hibitset",
+ "hibitset 0.6.3",
  "log",
  "rayon",
  "serde",
- "shred",
+ "shred 0.12.0",
  "shrev",
  "specs-derive",
- "tuple_utils",
+ "tuple_utils 0.3.0",
 ]
 
 [[package]]
@@ -5093,7 +5371,18 @@ name = "specs-idvs"
 version = "0.1.1"
 source = "git+https://gitlab.com/veloren/specs-idvs.git?rev=8be2abcddf8f524cb5876e8dd20a7e47cfaf7573#8be2abcddf8f524cb5876e8dd20a7e47cfaf7573"
 dependencies = [
- "specs",
+ "specs 0.16.2",
+]
+
+[[package]]
+name = "sphynx"
+version = "0.1.0"
+source = "git+https://gitlab.com/veloren/sphynx.git#ac4adf54d181339a789907acd27f61fe81daa455"
+dependencies = [
+ "serde",
+ "serde_derive",
+ "specs 0.14.3",
+ "sum_type",
 ]
 
 [[package]]
@@ -5130,7 +5419,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f5b132530b1ac069df335577e3581765995cba5a13995cdbbdbc8fb057c532c"
 dependencies = [
  "bitflags",
- "num-traits",
+ "num-traits 0.2.14",
 ]
 
 [[package]]
@@ -5138,6 +5427,12 @@ name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
+
+[[package]]
+name = "static_assertions"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c19be23126415861cb3a23e501d34a708f7f9b2183c5252d690941c2e69199d5"
 
 [[package]]
 name = "static_assertions"
@@ -5408,6 +5703,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "threadpool"
+version = "1.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d050e60b33d41c19108b32cea32164033a9013fe3b46cbd4457559bfbf77afaa"
+dependencies = [
+ "num_cpus",
+]
+
+[[package]]
 name = "thunderdome"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5548,7 +5852,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9965507e507f12c8901432a33e31131222abac31edd90cabbcf85cf544b7127a"
 dependencies = [
  "chrono",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.1",
  "tracing-subscriber",
 ]
 
@@ -5595,7 +5899,7 @@ dependencies = [
  "matchers",
  "regex",
  "sharded-slab",
- "smallvec",
+ "smallvec 1.6.1",
  "thread_local",
  "tracing",
  "tracing-core",
@@ -5637,8 +5941,8 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "82449b48a3494420dd1b11081f198c542f795a036246da4a9c5845b7d7427226"
 dependencies = [
- "num-traits",
- "vek",
+ "num-traits 0.2.14",
+ "vek 0.14.1",
 ]
 
 [[package]]
@@ -5673,6 +5977,12 @@ dependencies = [
 
 [[package]]
 name = "tuple_utils"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cbfecd7bb8f0a3e96b3b31c46af2677a55a588767c0091f484601424fcb20e7e"
+
+[[package]]
+name = "tuple_utils"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44834418e2c5b16f47bedf35c28e148db099187dd5feee6367fb2525863af4f1"
@@ -5685,7 +5995,7 @@ checksum = "04f8ab788026715fa63b31960869617cba39117e520eb415b0139543e325ab59"
 dependencies = [
  "cfg-if 0.1.10",
  "rand 0.7.3",
- "static_assertions",
+ "static_assertions 1.1.0",
 ]
 
 [[package]]
@@ -5804,15 +6114,29 @@ checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
 
 [[package]]
 name = "vek"
+version = "0.9.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b833a133490ae98e9e3db1c77fc28e844f8e51b12eb35b4ab8a2082cb7cb441a"
+dependencies = [
+ "approx 0.1.1",
+ "num-integer",
+ "num-traits 0.1.43",
+ "rustc_version 0.2.3",
+ "serde",
+ "static_assertions 0.2.5",
+]
+
+[[package]]
+name = "vek"
 version = "0.14.1"
 source = "git+https://gitlab.com/veloren/vek.git?branch=fix_intrinsics2#df6842cc874a697dec8896c66851817e744af7e8"
 dependencies = [
  "approx 0.4.0",
  "num-integer",
- "num-traits",
+ "num-traits 0.2.14",
  "rustc_version 0.2.3",
  "serde",
- "static_assertions",
+ "static_assertions 1.1.0",
 ]
 
 [[package]]
@@ -5831,11 +6155,11 @@ dependencies = [
  "ron",
  "rustyline",
  "serde",
- "specs",
+ "specs 0.16.2",
  "termcolor",
  "tokio",
  "tracing",
- "vek",
+ "vek 0.14.1",
  "veloren-common",
  "veloren-common-base",
  "veloren-common-ecs",
@@ -5854,7 +6178,7 @@ dependencies = [
  "bitflags",
  "clap",
  "criterion",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.1",
  "crossbeam-utils 0.8.5",
  "csv",
  "dot_vox",
@@ -5863,7 +6187,7 @@ dependencies = [
  "indexmap",
  "lazy_static",
  "num-derive",
- "num-traits",
+ "num-traits 0.2.14",
  "ordered-float 2.6.0",
  "petgraph 0.5.1",
  "rand 0.8.4",
@@ -5874,7 +6198,7 @@ dependencies = [
  "serde_repr",
  "slab",
  "slotmap 1.0.5",
- "specs",
+ "specs 0.16.2",
  "specs-idvs",
  "spin_sleep",
  "structopt",
@@ -5883,7 +6207,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
- "vek",
+ "vek 0.14.1",
  "veloren-common-assets",
  "veloren-common-base",
 ]
@@ -5916,7 +6240,7 @@ name = "veloren-common-ecs"
 version = "0.10.0"
 dependencies = [
  "float-cmp",
- "specs",
+ "specs 0.16.2",
  "tracing",
  "veloren-common-base",
 ]
@@ -5942,13 +6266,13 @@ dependencies = [
  "flate2",
  "hashbrown 0.11.2",
  "image",
- "num-traits",
+ "num-traits 0.2.14",
  "serde",
- "specs",
+ "specs 0.16.2",
  "specs-idvs",
  "sum_type",
  "tracing",
- "vek",
+ "vek 0.14.1",
  "veloren-common",
 ]
 
@@ -5960,13 +6284,13 @@ dependencies = [
  "hashbrown 0.11.2",
  "num_cpus",
  "rayon",
- "scopeguard",
+ "scopeguard 1.1.0",
  "serde",
- "specs",
+ "specs 0.16.2",
  "tar",
  "toml",
  "tracing",
- "vek",
+ "vek 0.14.1",
  "veloren-common",
  "veloren-common-base",
  "veloren-common-ecs",
@@ -5985,9 +6309,9 @@ dependencies = [
  "rand 0.8.4",
  "rayon",
  "slab",
- "specs",
+ "specs 0.16.2",
  "tracing",
- "vek",
+ "vek 0.14.1",
  "veloren-common",
  "veloren-common-base",
  "veloren-common-ecs",
@@ -6005,7 +6329,7 @@ dependencies = [
  "bytes",
  "clap",
  "criterion",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.1",
  "futures-core",
  "futures-util",
  "hashbrown 0.11.2",
@@ -6076,7 +6400,7 @@ dependencies = [
  "atomicwrites",
  "authc",
  "chrono",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.1",
  "futures-util",
  "hashbrown 0.11.2",
  "humantime",
@@ -6096,11 +6420,11 @@ dependencies = [
  "serde",
  "serde_json",
  "slab",
- "specs",
+ "specs 0.16.2",
  "specs-idvs",
  "tokio",
  "tracing",
- "vek",
+ "vek 0.14.1",
  "veloren-common",
  "veloren-common-base",
  "veloren-common-ecs",
@@ -6134,6 +6458,7 @@ dependencies = [
  "veloren-common-frontend",
  "veloren-common-net",
  "veloren-server",
+ "veloren-worldsim",
 ]
 
 [[package]]
@@ -6151,7 +6476,7 @@ dependencies = [
  "coreaudio-sys",
  "cpal",
  "criterion",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.1",
  "crossbeam-utils 0.8.5",
  "directories-next",
  "dispatch 0.1.4",
@@ -6182,14 +6507,14 @@ dependencies = [
  "ron",
  "serde",
  "shaderc",
- "specs",
+ "specs 0.16.2",
  "specs-idvs",
  "strum",
  "strum_macros",
  "tokio",
  "tracing",
  "treeculler",
- "vek",
+ "vek 0.14.1",
  "veloren-client",
  "veloren-common",
  "veloren-common-base",
@@ -6216,7 +6541,7 @@ version = "0.10.0"
 dependencies = [
  "bytemuck",
  "lazy_static",
- "vek",
+ "vek 0.14.1",
  "veloren-common",
  "veloren-voxygen-dynlib",
 ]
@@ -6295,7 +6620,7 @@ dependencies = [
  "minifb",
  "noise",
  "num 0.4.0",
- "num-traits",
+ "num-traits 0.2.14",
  "ordered-float 2.6.0",
  "packed_simd_2",
  "rand 0.8.4",
@@ -6310,11 +6635,30 @@ dependencies = [
  "svg_fmt",
  "tracing",
  "tracing-subscriber",
- "vek",
+ "vek 0.14.1",
  "veloren-common",
  "veloren-common-base",
  "veloren-common-frontend",
  "veloren-common-net",
+]
+
+[[package]]
+name = "veloren-worldsim"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "dot_vox",
+ "log",
+ "mio 0.6.23",
+ "mio-extras",
+ "rand 0.5.6",
+ "serde",
+ "serde_derive",
+ "shred 0.7.2",
+ "specs 0.14.3",
+ "sphynx",
+ "threadpool",
+ "vek 0.9.12",
 ]
 
 [[package]]
@@ -6479,7 +6823,7 @@ dependencies = [
  "rkyv",
  "serde",
  "serde_bytes",
- "smallvec",
+ "smallvec 1.6.1",
  "target-lexicon",
  "thiserror",
  "wasmer-types",
@@ -6500,7 +6844,7 @@ dependencies = [
  "loupe",
  "more-asserts",
  "rayon",
- "smallvec",
+ "smallvec 1.6.1",
  "tracing",
  "wasmer-compiler",
  "wasmer-types",
@@ -6675,7 +7019,7 @@ checksum = "a21817947c7011bbd0a27e11b17b337bfd022e8544b071a2641232047966fbda"
 dependencies = [
  "nix 0.20.0",
  "once_cell",
- "smallvec",
+ "smallvec 1.6.1",
  "wayland-sys",
 ]
 
@@ -6759,14 +7103,14 @@ name = "wgpu"
 version = "0.8.0"
 source = "git+https://github.com/gfx-rs/wgpu.git?rev=a92b8549a8e2cb9dac781bafc5ed32828f3caf46#a92b8549a8e2cb9dac781bafc5ed32828f3caf46"
 dependencies = [
- "arrayvec",
+ "arrayvec 0.5.2",
  "js-sys",
  "log",
  "naga",
  "parking_lot 0.11.1",
  "raw-window-handle",
  "serde",
- "smallvec",
+ "smallvec 1.6.1",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -6779,7 +7123,7 @@ name = "wgpu-core"
 version = "0.8.0"
 source = "git+https://github.com/gfx-rs/wgpu.git?rev=a92b8549a8e2cb9dac781bafc5ed32828f3caf46#a92b8549a8e2cb9dac781bafc5ed32828f3caf46"
 dependencies = [
- "arrayvec",
+ "arrayvec 0.5.2",
  "bitflags",
  "cfg_aliases",
  "copyless",
@@ -6800,7 +7144,7 @@ dependencies = [
  "raw-window-handle",
  "ron",
  "serde",
- "smallvec",
+ "smallvec 1.6.1",
  "thiserror",
  "wgpu-types",
 ]
@@ -6932,7 +7276,7 @@ dependencies = [
  "parking_lot 0.11.1",
  "percent-encoding",
  "raw-window-handle",
- "scopeguard",
+ "scopeguard 1.1.0",
  "serde",
  "smithay-client-toolkit 0.12.3",
  "wayland-client",
