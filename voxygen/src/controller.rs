@@ -174,6 +174,9 @@ impl From<&crate::settings::GamepadSettings> for ControllerSettings {
                 map.entry(settings.game_buttons.swap_loadout)
                     .or_default()
                     .push(GameInput::SwapLoadout);
+                map.entry(settings.game_buttons.place_vox)
+                    .or_default()
+                    .push(GameInput::PlaceVox);
                 map
             },
             menu_button_map: {

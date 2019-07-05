@@ -1421,9 +1421,8 @@ dependencies = [
 
 [[package]]
 name = "dot_vox"
-version = "4.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83c18405ef54de0398b77a3ec8394d3a1639e7bf060e1385201e8db40c44ab41"
+version = "4.0.0"
+source = "git+https://github.com/Imberflur/dot_vox.git#23a877bcaeba0f86035a50bc49a89e5391eb38c7"
 dependencies = [
  "byteorder",
  "lazy_static",
@@ -5744,6 +5743,7 @@ dependencies = [
  "dot_vox",
  "enum-iterator",
  "hashbrown 0.11.2",
+ "image",
  "indexmap",
  "lazy_static",
  "num-derive",

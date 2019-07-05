@@ -9,9 +9,9 @@ use vek::*;
 
 use client::{self, Client};
 use common::{
-    assets::AssetExt,
-    comp,
+    assets::{self, Asset, AssetExt, AssetHandle, DotVoxAsset},
     comp::{
+        self,
         inventory::slot::{EquipSlot, Slot},
         invite::InviteKind,
         item::{tool::ToolKind, ItemDef, ItemDesc},
@@ -32,6 +32,7 @@ use common_net::{
     msg::{server::InviteAnswer, PresenceKind},
     sync::WorldSyncExt,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::{
     audio::sfx::SfxEvent,
@@ -54,6 +55,57 @@ enum TickAction {
     // Disconnected (i.e. go to main menu)
     Disconnect,
 }
+#[derive(Serialize, Deserialize)]
+struct VoxSpec(String, [i32; 3]);
+
+#[derive(Serialize, Deserialize)]
+struct PlaceSpec {
+    pieces: Vec<VoxSpec>,
+}
+
+impl Asset for PlaceSpec {
+    type Loader = assets::RonLoader;
+
+    const EXTENSION: &'static str = "ron";
+}
+
+impl PlaceSpec {
+    // pub fn load_watched() -> std::sync::Arc<Self> {
+    //     PlaceSpec::load("place")
+    // }
+
+    pub fn build_place(&self) -> (common::figure::SparseScene, Vec3<i32>) {
+        // TODO add sparse scene combination
+        //use common::figure::{DynaUnionizer, Segment};
+        fn graceful_load_vox(name: &str) -> AssetHandle<DotVoxAsset> {
+            match DotVoxAsset::load(name) {
+                Ok(dot_vox) => dot_vox,
+                Err(_) => {
+                    error!("Could not load vox file for placement: {}", name);
+                    DotVoxAsset::load_expect("voxygen.voxel.not_found")
+                },
+            }
+        }
+        //let mut unionizer = DynaUnionizer::new();
+        //for VoxSpec(specifier, offset) in &self.pieces {
+        //    let seg = Segment::from(graceful_load_vox(&specifier,
+        // indicator).as_ref());    unionizer = unionizer.add(seg,
+        // (*offset).into());
+        //}
+
+        //unionizer.unify()
+        let hack = "asset that doesn't exist";
+        (
+            match self.pieces.get(0) {
+                Some(VoxSpec(specifier, _offset)) => {
+                    common::figure::SparseScene::from(&graceful_load_vox(&specifier).read().0)
+                },
+                None => common::figure::SparseScene::from(&graceful_load_vox(&hack).read().0),
+            },
+            Vec3::zero(),
+        )
+    }
+}
 
 pub struct SessionState {
     scene: Scene,
@@ -75,6 +127,14 @@ pub struct SessionState {
     interactable: Option<Interactable>,
     saved_zoom_dist: Option<f32>,
     hitboxes: HashMap<specs::Entity, DebugShapeId>,
+
+    placing_vox: Vec<(
+        Vec3<i32>,
+        Arc<common::volumes::chunk::Chunk<common::figure::Cell, common::figure::SscSize, ()>>,
+    )>,
+    last_sent: Option<(Vec3<i32>, Block)>,
+    vox: common::figure::SparseScene,
+    placepos: Vec3<i32>,
 }
 
 /// Represents an active game session (i.e., the one being played).
@@ -123,6 +183,13 @@ impl SessionState {
             interactable: None,
             saved_zoom_dist: None,
             hitboxes: HashMap::new(),
+
+            placing_vox: Vec::new(),
+            last_sent: None,
+            // let mut place_indicator = PlaceSpec::load_expect("place");
+            // TODO: use offset
+            vox: PlaceSpec::load_expect("place").read().build_place().0,
+            placepos: Vec3::zero(),
         }
     }
 
@@ -268,6 +335,13 @@ impl SessionState {
 
 impl PlayState for SessionState {
     fn enter(&mut self, global_state: &mut GlobalState, _: Direction) {
+        // Clear vox spawining things
+        self.placing_vox = Vec::new();
+        self.last_sent = None;
+        // TODO: use offset
+        self.vox = PlaceSpec::load_expect("place").read().build_place().0;
+        self.placepos = Vec3::zero();
+
         // Trap the cursor.
         global_state.window.grab_cursor(true);
 
@@ -290,6 +364,7 @@ impl PlayState for SessionState {
             let client = self.client.borrow();
             (client.presence(), client.registered())
         };
+
         if client_presence.is_some() {
             let camera = self.scene.camera_mut();
 
@@ -766,6 +841,24 @@ impl PlayState for SessionState {
                                     client.decline_invite();
                                 }
                             },
+                            GameInput::PlaceVox if state => {
+                                // start placing
+                                if let Some(build_pos) = build_pos.filter(|_| can_build) {
+                                    self.placepos = build_pos.map(|e| e.floor() as i32);
+                                    // reload in case vox was changed
+                                    self.vox =
+                                        PlaceSpec::load_expect("place").read().build_place().0;
+                                    self.placing_vox = self
+                                        .vox
+                                        .iter()
+                                        .map(|(key, chunk)| (key, Arc::clone(chunk)))
+                                        .collect::<Vec<_>>()
+                                        .into_iter()
+                                        .rev()
+                                        .collect();
+                                    self.last_sent = None;
+                                }
+                            },
                             _ => {},
                         }
                     }
@@ -957,6 +1050,53 @@ impl PlayState for SessionState {
             self.scene
                 .camera_mut()
                 .compute_dependents(&*self.client.borrow().state().terrain());
+
+            // Only send next portion when the previous subchunk finishes sending
+            if let Some((world_pos, block)) = self.last_sent.as_ref().copied() {
+                if self
+                    .client
+                    .borrow()
+                    .state()
+                    .terrain()
+                    .get(world_pos)
+                    .map(|b| *b == block)
+                    .unwrap_or(true)
+                {
+                    self.last_sent = None;
+                }
+            }
+
+            if self.last_sent.is_none() {
+                if let Some((key, chunk)) = self.placing_vox.pop() {
+                    use common::vol::IntoFullVolIterator;
+
+                    for (pos, cell) in chunk.full_vol_iter() {
+                        let world_pos = self.vox.key_pos(key) + pos + self.placepos;
+                        match cell.get_color() {
+                            Some(color) => {
+                                let block = Block::new(BlockKind::Misc, color);
+                                self.client.borrow_mut().place_block(world_pos, block);
+                                self.last_sent = Some((world_pos, block))
+                            },
+                            None => {
+                                // Comment out this section to not carve out the empty space
+                                let mut client = self.client.borrow_mut();
+                                // Only remove the block if there is something there
+                                if client
+                                    .state()
+                                    .terrain()
+                                    .get(world_pos)
+                                    .map(|block| !block.is_fluid())
+                                    .unwrap_or(false)
+                                {
+                                    client.remove_block(world_pos);
+                                    self.last_sent = Some((world_pos, Block::empty()))
+                                }
+                            },
+                        }
+                    }
+                }
+            }
 
             // Generate debug info, if needed (it iterates through enough data that we might
             // as well avoid it unless we need it).

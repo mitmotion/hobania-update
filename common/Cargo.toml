@@ -47,7 +47,8 @@ rand = "0.8"
 
 # Assets
 common-assets = {package = "veloren-common-assets", path = "assets"}
-dot_vox = "4.0"
+dot_vox = { git = "https://github.com/Imberflur/dot_vox.git" }
+image = { version = "0.23.12", default-features = false, features = ["png"] }
 
 # Assets
 serde_repr = "0.1.6"

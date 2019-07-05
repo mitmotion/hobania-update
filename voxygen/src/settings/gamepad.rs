@@ -85,6 +85,7 @@ pub mod con_settings {
         pub interact: Button,
         pub toggle_wield: Button,
         pub swap_loadout: Button,
+        pub place_vox: Button,
     }
 
     #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -175,6 +176,7 @@ pub mod con_settings {
                 interact: Button::Simple(GilButton::North),
                 toggle_wield: Button::Simple(GilButton::West),
                 swap_loadout: Button::Simple(GilButton::LeftThumb),
+                place_vox: Button::Simple(GilButton::Unknown),
             }
         }
     }
