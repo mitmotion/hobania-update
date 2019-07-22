@@ -23,6 +23,9 @@ target
 
 .project
 
+# Valgrind, Callgrind
+callgrind.out.*
+
 # Veloren
 *.rar
 *.log
