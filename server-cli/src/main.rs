@@ -28,10 +28,10 @@ use structopt::StructOpt;
 use tracing::{info, trace};
 
 use worldsim::{
-    regionmanager::{RegionManager, meta::RegionManagerMsg},
-    server::meta::{ServerMsg},
     job::JobManager,
     region::Region,
+    regionmanager::{meta::RegionManagerMsg, RegionManager},
+    server::meta::ServerMsg,
 };
 
 lazy_static::lazy_static! {
@@ -169,11 +169,12 @@ fn main() -> io::Result<()> {
 
     let mut region_manager = RegionManager::new(region_manager_tx, server_rx);
     let mut job_manager: Arc<JobManager> = Arc::new(JobManager::new());
-    let mut server = worldsim::server::Server::new(server_tx,region_manager_rx,job_manager.clone());
-    let mut region = Region::new((0,0),job_manager.clone());
+    let mut server =
+        worldsim::server::Server::new(server_tx, region_manager_rx, job_manager.clone());
+    let mut region = Region::new((0, 0), job_manager.clone());
 
-    job_manager.repeat(move || region_manager.work() );
-    job_manager.repeat(move || server.work() );
+    job_manager.repeat(move || region_manager.work());
+    job_manager.repeat(move || server.work());
 
     // Create server
     let mut server = Server::new(
