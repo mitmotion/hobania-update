@@ -4,7 +4,7 @@ use crate::{
     state::DeltaTime,
     sync::Uid,
     terrain::{Block, TerrainGrid},
-    util::combination_to_pair_4,
+    util::{combination_to_pair_4, f7_to_f32},
     vol::ReadVol,
 };
 use specs::{Entities, Join, Read, ReadExpect, ReadStorage, System, WriteStorage};
@@ -429,7 +429,20 @@ impl<'a> System<'a> for Sys {
                     let sub_bottom = (encoded_sub_bottom as f32).div(16.0);
                     // let block_height = sub_height + sub_offset;
                     let block_height = sub_top - sub_bottom;
-                    let velocity_magnitude = (encoded_velocity as f32).div(16.0);
+                    // let velocity_magnitude = (encoded_velocity as f32).div(16.0);
+                    let velocity_magnitude = f7_to_f32(encoded_velocity as u8);
+                    // println!("Before: {:?}, after: {:?}", encoded_velocity, velocity_magnitude);
+                    // Could have Infs or NaNs, so make sure to interpret as a finite value!
+                    let velocity_magnitude = if velocity_magnitude.is_finite() {
+                        // Fine.
+                        velocity_magnitude
+                    } else if velocity_magnitude.is_infinite() {
+                        // Interpret as some maximum velocity; currently we use 128 m/s.
+                        64.0
+                    } else {
+                        // NaN, treat the velocity as zero to avoid further damage.
+                        0.0
+                    };
                     let angle_h = (encoded_angle_h as f32)
                         .sub(31.5)
                         .div(31.5)

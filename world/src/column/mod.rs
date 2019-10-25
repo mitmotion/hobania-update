@@ -3,7 +3,7 @@ use crate::{
     block::StructureMeta,
     generator::{Generator, SpawnRules, TownGen},
     sim::{
-        local_cells, quadratic_nearest_point, river_spline_coeffs, uniform_idx_as_vec2,
+        local_cells, neighbors, quadratic_nearest_point, river_spline_coeffs, uniform_idx_as_vec2,
         vec2_as_uniform_idx, LocationInfo, RiverKind, SimChunk, WorldSim,
     },
     util::{RandomPerm, Sampler, UnitChooser},
@@ -12,13 +12,14 @@ use crate::{
 use common::{
     assets,
     terrain::{BlockKind, Structure, TerrainChunkSize},
+    util::f32_to_f7,
     vol::RectVolSize,
 };
 use lazy_static::lazy_static;
 use noise::NoiseFn;
 use std::{
     cmp::Reverse,
-    f32, f64,
+    f32, f64, iter,
     ops::{Add, Div, Mul, Neg, Sub},
     sync::Arc,
 };
@@ -371,6 +372,8 @@ impl<'a> Sampler<'a> for ColumnGen<'a> {
 
         // Find the average distance to each neighboring body of water.
         let mut real_river_count = 0.0f64;
+        // let mut alt_for_lake = f64::NEG_INFINITY;
+        let mut lake_dist = 1.0f64;
         let mut river_count = 0.0f64;
         let mut overlap_count = 0.0f64;
         let mut river_distance_product = 1.0f64;
@@ -378,6 +381,7 @@ impl<'a> Sampler<'a> for ColumnGen<'a> {
         let mut max_river = None;
         let mut max_key = None;
         let mut avg_river_velocity = Vec3::zero();
+        let river_gouge = 0.5f32/*1.0*/;
         // IDEA:
         // For every "nearby" chunk, check whether it is a river.  If so, find the
         // closest point on the river segment to wposf (if two point are
@@ -414,7 +418,7 @@ impl<'a> Sampler<'a> for ColumnGen<'a> {
                     } else {
                         let river_dist = dist.map(|(has_flow, dist, river_width, (river_t, (river_pos, coeffs), downhill_river))| {
                             // let downhill
-                            let downhill_height = if let RiverKind::River { cross_section } = kind {
+                            let (dist_y, downhill_height) = if let RiverKind::River { cross_section } = kind {
                                 if dist.y == 0.0 && /*(river_t >= 0.0 && river_t <= 1.0 || river_wpos.distance_squared(river_pos) < 0.5 || downhill_river_wpos.distance_squared(river_pos) < 0.5)*/has_flow {
                                     let river_segment_length = 1.0;
                                     let downhill_river_velocity = if downhill_river.river.is_river() {
@@ -462,30 +466,38 @@ impl<'a> Sampler<'a> for ColumnGen<'a> {
                                     avg_river_velocity += velocity * height_factor;
                                     real_river_count += height_factor;
                                 }
-                                Lerp::lerp(
+                                (dist.y, Lerp::lerp(
                                     river_chunk.alt.max(river_chunk.water_alt),
                                     downhill_river.alt.max(downhill_river.water_alt),
                                     river_t as f32,
-                                ) as f64
+                                ) as f64 - river_gouge as f64)
                             } else {
                                 let neighbor_pos =
                                     river_chunk_idx.map(|e| e as f64) * neighbor_coef;
-                                if dist.y == 0.0 {
-                                    -(wposf - neighbor_pos).magnitude()
+                                let dist_ = (wposf - neighbor_pos).map(|e| e.abs()).reduce_partial_max();
+                                let dist_upon =
+                                    (dist_ - TerrainChunkSize::RECT_SIZE.x as f64 * 0.5).max(0.0);
+                                (dist.y.min(dist_upon), if /*dist.y == 0.0*/dist_upon == 0.0 {
+                                    /* -(wposf - neighbor_pos).magnitude() *//*-dist*/
+                                    /*f64::INFINITY*/river_chunk.water_alt as f64
                                 } else {
-                                    -(wposf - neighbor_pos).magnitude()
-                                }
+                                    /* -(wposf - neighbor_pos).magnitude() *//*-dist*/river_chunk.water_alt as f64
+                                })
+                                // river_chunk.water_alt
                             };
-                            (Reverse((dist.x, dist.y/*, river_t*/)), has_flow, /*Reverse(river_t), */downhill_height)
+                            (Reverse((dist.x, dist_y/*, river_t*/)), has_flow, /*Reverse(river_t), */downhill_height)
                         });
                         let river_dist = river_dist.or_else(|| {
                             if !kind.is_river() {
                                 let neighbor_pos =
                                     river_chunk_idx.map(|e| e as f64) * neighbor_coef;
-                                let dist = (wposf - neighbor_pos).magnitude();
+                                let dist =
+                                    (wposf - neighbor_pos).map(|e| e.abs()).reduce_partial_max();
+                                // let dist = (wposf - neighbor_pos).magnitude();
                                 let dist_upon =
                                     (dist - TerrainChunkSize::RECT_SIZE.x as f64 * 0.5).max(0.0);
-                                let dist_ = if dist == 0.0 { f64::INFINITY } else { -dist };
+                                let dist_ = river_chunk.water_alt as f64;
+                                // let dist_ = if dist_upon == 0.0 { f64::INFINITY } else { -dist };/*river_chunk.water_alt as f64;*/
                                 Some((
                                     Reverse((0.0, dist_upon /*, -f64::INFINITY*/)),
                                     true,
@@ -513,8 +525,24 @@ impl<'a> Sampler<'a> for ColumnGen<'a> {
                         } else {
                             TerrainChunkSize::RECT_SIZE.x as f64
                         };
+                        let river_dist = if !river.is_river() {
+                            let neighbor_pos = river_chunk_idx.map(|e| e as f64) * neighbor_coef;
+                            let dist_ =
+                                (wposf - neighbor_pos).map(|e| e.abs()).reduce_partial_max();
+                            // let dist = (wposf - neighbor_pos).magnitude();
+                            let dist_upon =
+                                (dist_ - TerrainChunkSize::RECT_SIZE.x as f64 * 1.0).max(0.0);
+                            if
+                            /*downhill_river_chunk.river.is_river()*/
+                            false {
+                                dist.y
+                            } else {
+                                dist_upon.min(dist.y)
+                            }
+                        } else {
+                            dist.y
+                        };
                         let scale_factor = max_distance;
-                        let river_dist = dist.y;
 
                         if !(dist.x == 0.0 && river_dist < scale_factor) {
                             return;
@@ -545,38 +573,48 @@ impl<'a> Sampler<'a> for ColumnGen<'a> {
                         let river_alt = Lerp::lerp(river_alt, alt, river_scale as f32);
                         let river_alt_diff = river_alt - alt;
                         let river_alt_inv = river_alt_diff as f64;
-                        river_overlap_distance_product += (1.0 - river_scale) * river_alt_inv;
-                        overlap_count += 1.0 - river_scale;
-                        river_count += 1.0;
-                        river_distance_product *= river_scale;
+                        if river.is_river()
+                        /* || downhill_river_chunk.river.is_river() */
+                        {
+                            river_overlap_distance_product += (1.0 - river_scale) * river_alt_inv;
+                            overlap_count += 1.0 - river_scale;
+                            river_count += 1.0;
+                            river_distance_product *= river_scale;
+                        } else {
+                            // if !river.is_river() && /*river_t != 0.0*/!downhill_river_chunk.river.is_river() {
+                            // let lake_alt = /*Lerp::lerp(river_chunk.alt, downhill_river_chunk.alt, river_t as f32) as f64*/alt as f64;
+                            // alt_for_lake = alt_for_lake.max(lake_alt);
+                            lake_dist = /*(river_dist / (TerrainChunkSize::RECT_SIZE.x as f64 * 0.5))*/river_scale.min(lake_dist);
+                        }
                     }
                 }
                 None => {}
             }
         });
 
-        let river_scale_factor = if river_count == 0.0 {
-            1.0
-        } else {
-            let river_scale_factor = river_distance_product;
-            assert!(river_scale_factor >= 0.0);
-            if river_scale_factor == 0.0 {
-                0.0
+        let river_scale_factor = lake_dist
+            * if river_count == 0.0 {
+                1.0
             } else {
-                river_scale_factor.powf(if river_count == 0.0 {
-                    1.0
+                let river_scale_factor = river_distance_product;
+                assert!(river_scale_factor >= 0.0);
+                if river_scale_factor == 0.0 {
+                    0.0
                 } else {
-                    1.0 / river_count
-                })
-            }
-        };
+                    river_scale_factor.powf(if river_count == 0.0 {
+                        1.0
+                    } else {
+                        1.0 / river_count
+                    })
+                }
+            };
 
         let alt_for_river = alt
-            + if overlap_count == 0.0 {
+            + (if overlap_count == 0.0 {
                 0.0
             } else {
                 river_overlap_distance_product / overlap_count
-            } as f32;
+            } * lake_dist) as f32;
         let avg_river_velocity = if real_river_count == 0.0 {
             Vec3::zero()
         } else {
@@ -604,24 +642,104 @@ impl<'a> Sampler<'a> for ColumnGen<'a> {
                 .abs()
                 .mul(3.0);
 
-        let downhill = sim_chunk.downhill;
-        let downhill_pos = downhill
-            .map(|pos| pos.map2(TerrainChunkSize::RECT_SIZE, |e, sz: u32| e / sz as i32))
-            .and_then(|downhill_pos| sim.get(downhill_pos));
-        debug_assert!(sim_chunk.water_alt >= CONFIG.sea_level);
+        let (/*downhill_pos, */downhill_chunk) =
+            if wpos == chunk_pos.map2(TerrainChunkSize::RECT_SIZE, |e, sz: u32| e * sz as i32) {
+                Some(sim_chunk)
+            } else {
+                local_cells(my_chunk_idx).filter_map(|neighbor_idx| {
+                    let neighbor_pos = uniform_idx_as_vec2(neighbor_idx);
+                    let dist = neighbor_pos - chunk_pos;
+                    let in_bounds = dist.x >= -1
+                        && dist.y >= -1
+                        && dist.x <= 1
+                        && dist.y <= 1;
+                    let in_bounds =
+                        in_bounds && (dist.x >= 0 && dist.y >= 0);
+                    if in_bounds {
+                        Some((/*neighbor_pos, */sim.get(neighbor_pos)?))
+                    } else {
+                        None
+                    }
+                })
+                .min_by(|&(/*_, */a), &(/*_, */b)| (a.water_alt).partial_cmp(&(b.water_alt)).unwrap() )
+            };
+        /* let downhill_pos =
+        min_chunk
+        .and_then(|chunk| chunk.downhill)
+        .map(|pos| pos.map2(TerrainChunkSize::RECT_SIZE, |e, sz: u32| e / sz as i32)); */
 
-        let downhill_water_alt = downhill_pos
+        /* .unwrap_or_else(||
+            sim_chunk.downhill.map()
+        );*/
+        let downhill = sim_chunk.downhill;
+        /* let downhill_pos = */
+
+        /* // Minimum neighbor by altitude who is *adjacent* to this one.
+            neighbors(my_chunk_idx).filter_map(|neighbor_idx| {
+                let neighbor_pos = uniform_idx_as_vec2(neighbor_idx);
+                let neighbor_chunk = sim.get(neighbor_pos)?
+                Some((neighbor_pos, neighbor_chunk)
+            })
+            .min_by()
+
+                .map(|downhill_chunk|
+            downhill_pos
             .map(|downhill_chunk| {
                 downhill_chunk.water_alt
                 /*.min(sim_chunk.water_alt)
                 .max(sim_chunk.alt.min(sim_chunk.water_alt))*/
             })
-            .unwrap_or(CONFIG.sea_level);
+            .unwrap_or(CONFIG.sea_level)
+        }
+        .unwrap_or_else(|| downhill
+        .map(|pos| pos.map2(TerrainChunkSize::RECT_SIZE, |e, sz: u32| e / sz as i32))
+        .and_then(|downhill_pos| sim.get(downhill_pos)));*/
+
+        /* let downhill_water_alt = sim.get_interpolated_monotone(wpos, |chunk|
+         * chunk.water_alt)?;
+         */
+        /* let downhill_pos = downhill
+        .map(|pos| pos.map2(TerrainChunkSize::RECT_SIZE, |e, sz: u32| e / sz as i32))
+        .and_then(|downhill_pos| sim.get(downhill_pos)); */
+        let downhill_water_alt =
+            if wpos == chunk_pos.map2(TerrainChunkSize::RECT_SIZE, |e, sz: u32| e * sz as i32) {
+                sim_chunk.water_alt
+            } else {
+                /* downhill_pos
+                .map(|downhill_chunk| {
+                    downhill_chunk.water_alt
+                    /*.min(sim_chunk.water_alt)
+                    .max(sim_chunk.alt.min(sim_chunk.water_alt))*/
+                })
+                .unwrap_or(CONFIG.sea_level) */
+                downhill_chunk
+                    .map(|downhill_chunk| downhill_chunk.water_alt)
+                    .unwrap_or(CONFIG.sea_level)
+                /* // Minimum neighbor.
+                neighbors(my_chunk_idx).filter_map(|neighbor_idx| {
+                    let neighbor_pos = uniform_idx_as_vec2(neighbor_idx);
+                    let neighbor_chunk = sim.get(neighbor_pos)?
+                    Some((neighbor_pos, neighbor_chunk)
+                })
+                .min_by()
+
+                    .map(|downhill_chunk|
+                downhill_pos
+                .map(|downhill_chunk| {
+                    downhill_chunk.water_alt
+                    /*.min(sim_chunk.water_alt)
+                    .max(sim_chunk.alt.min(sim_chunk.water_alt))*/
+                })
+                .unwrap_or(CONFIG.sea_level)
+                .unwrap_or_else(|| downhill
+                .map(|pos| pos.map2(TerrainChunkSize::RECT_SIZE, |e, sz: u32| e / sz as i32))
+                .and_then(|downhill_pos| sim.get(downhill_pos))); */
+            };
+        debug_assert!(sim_chunk.water_alt >= CONFIG.sea_level);
 
         let is_cliffs = sim_chunk.is_cliffs;
         let near_cliffs = sim_chunk.near_cliffs;
 
-        let river_gouge = 0.5/*1.0*/;
         let (in_water, alt_, water_level, warp_factor) = if let Some((
             max_border_river_pos,
             river_chunk,
@@ -723,9 +841,8 @@ impl<'a> Sampler<'a> for ColumnGen<'a> {
                                     ))
                                 },
                                 RiverKind::Lake { .. } => {
-                                    let lake_dist = (max_border_river_pos.map(|e| e as f64)
-                                        * neighbor_coef)
-                                        .distance(wposf);
+                                    let lake_pos = (max_border_river_pos.map(|e| e as f64) * neighbor_coef);
+                                    let lake_dist = lake_pos.distance(wposf);
                                     let downhill_river_chunk = max_border_river_pos;
                                     let lake_id_dist = downhill_river_chunk - chunk_pos;
                                     let in_bounds = lake_id_dist.x >= -1
@@ -745,7 +862,7 @@ impl<'a> Sampler<'a> for ColumnGen<'a> {
                                                river_scale_factor as f32,
                                            )); */
                                            if lake_dist
-                                                <= TerrainChunkSize::RECT_SIZE.x as f64 * 1.0
+                                                <= TerrainChunkSize::RECT_SIZE.x as f64 * 0.5/*lake_width*/
                                                 || in_bounds
                                             {
                                                 let gouge_factor = 0.0;
@@ -753,12 +870,13 @@ impl<'a> Sampler<'a> for ColumnGen<'a> {
                                                     in_bounds
                                                         || downhill_water_alt
                                                             .max(river_chunk.water_alt)
-                                                            > alt_for_river,
-                                                    /*alt_for_river*/alt,
+                                                            > /*alt_for_river*/alt,
+                                                    alt_for_river/*alt*/,
                                                     (downhill_water_alt
                                                         .max(river_chunk.water_alt/* - river_gouge*/)),
-                                                    river_scale_factor as f32
-                                                        * (1.0 - gouge_factor),
+                                                    /*river_scale_factor as f32
+                                                        * (1.0 - gouge_factor)*/
+                                                    river_scale_factor as f32,
                                                 ));
                                             } else {
                                                 return Some((
@@ -780,11 +898,11 @@ impl<'a> Sampler<'a> for ColumnGen<'a> {
                                             .max(downhill_river_chunk.water_alt),
                                         river_t as f32,
                                     );
-                                    let downhill_water_alt = Lerp::lerp(
+                                    /* let downhill_water_alt = Lerp::lerp(
                                         river_chunk.water_alt,
                                         downhill_river_chunk.alt.max(downhill_river_chunk.water_alt),
                                         river_t as f32,
-                                    );
+                                    ); */
                                     if dist.y /*== Vec2::zero()*/<= 0.0 {
                                         return Some((
                                             true,
@@ -795,18 +913,48 @@ impl<'a> Sampler<'a> for ColumnGen<'a> {
                                             ), */
                                             /*alt.min(lake_water_alt - 1.0),*/
                                             /*alt_for_river.min(lake_water_alt/* - 1.0*//* - river_gouge*/)*/
-                                            /*alt_for_river*/alt.min(lake_water_alt - 1.0),
+                                            alt_for_river.min(lake_water_alt - 1.0),
                                             downhill_water_alt.max(lake_water_alt/* - river_gouge*/),
                                             0.0,
                                         ));
                                     }
-                                    let out_of_bounds_ = /* !in_bounds && */lake_dist >= TerrainChunkSize::RECT_SIZE.x as f64 * 1.0 - lake_width * 0.5 - 1.0;
-                                    if lake_dist <= TerrainChunkSize::RECT_SIZE.x as f64 * 1.0 - lake_width * 0.5 {
+                                    let in_bounds_dist = (wposf - lake_pos).map(|e| e.abs()).reduce_partial_max();
+                                    let in_bounds_dist_ = (in_bounds_dist - TerrainChunkSize::RECT_SIZE.x as f64 * 1.0).max(0.0);
+                                    let in_bounds = in_bounds_dist_ <= 0.0;
+                                    let in_bounds_ = in_bounds_dist_.min(dist.y);
+
+                                    let out_of_bounds_ = false; // downhill_river_chunk.river.is_river(); // /* !in_bounds && */in_bounds && lake_dist >= TerrainChunkSize::RECT_SIZE.x as f64 * 1.0 - lake_width * 0.5 - 1.0;
+                                    if /*lake_dist <= TerrainChunkSize::RECT_SIZE.x as f64 * 1.0 - lake_width * 0.5*/in_bounds {
                                         return Some((
                                             river_scale_factor <= 1.0,
-                                            if out_of_bounds_ { alt_for_river.max(lake_water_alt/*.max(downhill_water_alt)*/) } else { alt_for_river },
+                                            if out_of_bounds_ {
+                                                Lerp::lerp(alt_for_river.min(lake_water_alt), alt_for_river, (dist.y / TerrainChunkSize::RECT_SIZE.x as f64) as f32)
+                                            } else {
+                                                alt_for_river/*alt.max(lake_water_alt.max(downhill_water_alt))*/
+                                            },
                                             downhill_water_alt.max(lake_water_alt/* - river_gouge*/),
-                                            if out_of_bounds_ { 0.0 } else { river_scale_factor as f32 },
+                                            if out_of_bounds_ { 0.0 } else { /*river_scale_factor as f32*/0.0 },
+                                        ));
+                                    } /*else if lake_dist <= TerrainChunkSize::RECT_SIZE.x as f64 * 0.5 {
+                                        return Some((
+                                            alt_for_river < lake_water_alt || in_bounds,
+                                            alt_for_river.min(lake_water_alt - 1.0/* - river_gouge*/),
+                                            // alt.min(lake_water_alt - 1.0/* - river_gouge*/),
+                                            downhill_water_alt
+                                                .max(lake_water_alt/* - river_gouge*/),
+                                            0.0,
+                                        ));
+
+                                    }
+                                    } */else if in_bounds_dist_ <= TerrainChunkSize::RECT_SIZE.x as f64 * 0.5 || dist.y <= TerrainChunkSize::RECT_SIZE.x as f64 * 1.0 {
+                                        // let lake_scale_factor = in_bounds_ / (TerrainChunkSize::RECT_SIZE.x as f64 * 0.5) as f64;
+                                        return Some((
+                                            river_scale_factor /* * lake_scale_factor*/ <= 1.0,
+                                            /*Lerp::lerp(alt, alt_for_river, lake_scale_factor as f32)*/
+                                            alt_for_river,
+                                            downhill_water_alt,
+                                            /*(river_scale_factor * lake_scale_factor) as
+                                            * f32*/river_scale_factor as f32,
                                         ));
                                     }
                                     /* if lake_dist <= TerrainChunkSize::RECT_SIZE.x as f64 * 1.0
@@ -872,12 +1020,16 @@ impl<'a> Sampler<'a> for ColumnGen<'a> {
                                     Some((
                                         river_scale_factor <= 1.0,
                                         if dist.y <= 1.0 {
-                                            alt_for_river.max(river_alt)
+                                            alt_for_river.max(river_alt.max(downhill_water_alt))
                                         } else {
                                             alt_for_river
                                         },
                                         downhill_water_alt,
-                                        river_scale_factor as f32,
+                                        if dist.y <= 1.0 {
+                                            0.0
+                                        } else {
+                                            river_scale_factor as f32
+                                        },
                                     ))
                                 },
                             }
@@ -1234,13 +1386,15 @@ impl<'a> Sampler<'a> for ColumnGen<'a> {
                 // Velocity magnitude is squeezed into 6 bits.  For now, we interpret the 64 values
                 // as numbers from 0 to 16 increasing in increments of 0.25, but we will probably
                 // change this at some point.
-                let encoded_velocity = velocity_magnitude
-                    .min(7.5)
+                let encoded_velocity = f32_to_f7(velocity_magnitude as f32)
+                    .expect("velocity_magnitude must be positive") as u32;
+                /* .min(7.5)
                     .mul(16.0)
                     .round()
                     .max(0.0)
                     .min(63.0) as u32;
-                let velocity = (velocity * velocity_magnitude).map(|e| e as f32);
+                let velocity = (velocity * velocity_magnitude).map(|e| e as f32); */
+                let velocity = avg_river_velocity.map(|e| e as f32);
                 // Now, we encode the velocity into a packed 14-bit RGB sequence.  Subvoxel heights
                 // will come later.
                 let water_packed =
