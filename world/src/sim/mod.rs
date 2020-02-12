@@ -1185,7 +1185,7 @@ impl WorldSim {
                     0.0
                 } else {
                     // This is not flowing into the ocean, so we can use the existing water_alt.
-                    water_alt[chunk_idx] as f32
+                    water_alt[/* chunk_idx */lake_idx] as f32
                 }
             })
             .collect::<Vec<_>>()
