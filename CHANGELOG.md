@@ -9,7 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added music system
+- Added zoomable and rotatable minimap
+- Added rotating orientation marker to main-map
+
 ### Changed
+- Brighter / higher contrast main-map
+- Removed highlighting of non-collectible sprites
 
 ### Removed
 

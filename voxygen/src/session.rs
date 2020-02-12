@@ -126,6 +126,9 @@ impl PlayState for SessionState {
         let mut clock = Clock::start();
         self.client.borrow_mut().clear_terrain();
 
+        // Kill the title music if it is still playing
+        global_state.audio.stop_title_music();
+
         // Send startup commands to the server
         if global_state.settings.send_logon_commands {
             for cmd in &global_state.settings.logon_commands {
@@ -170,7 +173,16 @@ impl PlayState for SessionState {
                     (None, None)
                 }
             };
-            self.scene.set_select_pos(select_pos);
+            // Only highlight collectables
+            self.scene.set_select_pos(select_pos.filter(|sp| {
+                self.client
+                    .borrow()
+                    .state()
+                    .terrain()
+                    .get(*sp)
+                    .map(|b| b.is_collectible())
+                    .unwrap_or(false)
+            }));
 
             // Handle window events.
             for event in global_state.window.fetch_events(&mut global_state.settings) {
