@@ -1,5 +1,6 @@
 use super::{
-    diffusion, downhill, neighbors, uniform_idx_as_vec2, uphill, vec2_as_uniform_idx,
+    diffusion, downhill, implicitize_quadratic, intersect_quadratics, neighbors,
+    quadratic_nearest_point, river_spline_coeffs, uniform_idx_as_vec2, uphill, vec2_as_uniform_idx,
     NEIGHBOR_DELTA, WORLD_SIZE,
 };
 use crate::{config::CONFIG, util::RandomField};
@@ -148,7 +149,7 @@ impl PartialOrd for RiverKind {
 /// allow it to cross more than one neighboring chunk away.  For now we defer
 /// this to rendering time.
 ///
-/// NOTE: This structure is 57 (or more likely 64) bytes, which is kind of big.
+/// NOTE: This structure is 45 (or more likely 48) bytes, which is kind of big.
 #[derive(Clone, Debug, Default)]
 pub struct RiverData {
     /// A velocity vector (in m / minute, i.e. voxels / second from a game
@@ -156,7 +157,7 @@ pub struct RiverData {
     ///
     /// TODO: To represent this in a better-packed way, use u8s instead (as
     /// "f8s").
-    pub(crate) velocity: Vec3<f32>,
+    pub(crate) velocity: f32,
     /// The computed derivative for the segment of river starting at this chunk
     /// (and flowing downhill).  Should be 0 at endpoints.  For rivers with
     /// more than one incoming segment, we weight the derivatives by flux
@@ -264,41 +265,154 @@ pub fn get_rivers<F: fmt::Debug + Float + Into<f64>, G: Float + Into<f64>>(
         // rainfall.
         let incoming_drainage = downhill_drainage - 1.0;
         let get_river_spline_derivative =
-            |neighbor_dim: Vec2<f64>, spline_derivative: Vec2<f32>| {
-                // "Velocity of center of mass" of splines of incoming flows.
-                let river_prev_slope = spline_derivative.map(|e| e as f64);
-                // NOTE: We need to make sure the slope doesn't get *too* crazy.
-                // ((dpx - cx) - 4 * MAX).abs() = bx
-                // NOTE: This will fail if the distance between chunks in any direction
-                // is exactly TerrainChunkSize::RECT * 4.0, but hopefully this should not be
-                // possible. NOTE: This isn't measuring actual distance, you can
-                // go farther on diagonals.
-                let max_deriv = neighbor_dim - neighbor_coef * 2.0 * 2.0.sqrt();
-                let extra_divisor = river_prev_slope
-                    .map2(max_deriv, |e, f| (e / f).abs())
-                    .reduce_partial_max();
-                // Set up the river's spline derivative.  For each incoming river at pos with
-                // river_spline_derivative bx, we can compute our interpolated slope as:
-                //   d_x = 2 * (chunk_pos - pos - bx) + bx
-                //       = 2 * (chunk_pos - pos) - bx
-                //
-                // which is exactly twice what was weighted by uphill nodes to get our
-                // river_spline_derivative in the first place.
-                //
-                // NOTE: this probably implies that the distance shouldn't be normalized, since
-                // the distances aren't actually equal between x and y... we'll
-                // see what happens.
-                (if extra_divisor > 1.0 {
-                    river_prev_slope / extra_divisor
-                } else {
-                    river_prev_slope
-                })
-                .map(|e| e as f32)
+            |neighbor_dim: Vec2<f64>,
+             spline_derivative: Vec2<f32>,
+             rivers: &mut [RiverData],
+             chunk_idx: usize| {
+                /*if incoming_drainage == 0.0 {
+                    Vec2::zero()
+                } else */
+                let mut spline_derivative = {
+                    // "Velocity of center of mass" of splines of incoming flows.
+                    let river_prev_slope = spline_derivative.map(|e| e as f64);
+                    // NOTE: We need to make sure the slope doesn't get *too* crazy.
+                    // ((dpx - cx) - 4 * MAX).abs() = bx
+                    // NOTE: This will fail if the distance between chunks in any direction
+                    // is exactly TerrainChunkSize::RECT * 4.0, but hopefully this should not be
+                    // possible. NOTE: This isn't measuring actual distance, you
+                    // can go farther on diagonals. let max_deriv = neighbor_dim
+                    // - neighbor_coef * 4.0;
+                    let max_deriv = neighbor_dim - neighbor_coef * 2.0 * 2.0.sqrt();
+                    let extra_divisor = river_prev_slope
+                        .map2(max_deriv, |e, f| (e / f).abs())
+                        .reduce_partial_max();
+                    // Set up the river's spline derivative.  For each incoming river at pos with
+                    // river_spline_derivative bx, we can compute our interpolated slope as:
+                    //   d_x = 2 * (chunk_pos - pos - bx) + bx
+                    //       = 2 * (chunk_pos - pos) - bx
+                    //
+                    // which is exactly twice what was weighted by uphill nodes to get our
+                    // river_spline_derivative in the first place.
+                    //
+                    // NOTE: this probably implies that the distance shouldn't be normalized, since
+                    // the distances aren't actually equal between x and y...
+                    // we'll see what happens.
+                    (if extra_divisor > 1.0 {
+                        river_prev_slope / extra_divisor
+                    } else {
+                        river_prev_slope
+                    })
+                };
+
+                // TODO: Consider wrapping spline_derivative in something like a GhostCell,
+                // and/or adding projections from Cell/GhostCell to fields in
+                // order to allow us to do this temporarily.  That way we would
+                // be able to have more specific interior mutability and
+                // wouldn't need to keep indexing into arrays instead of using
+                // pointers.
+                let chunk_pos = uniform_idx_as_vec2(chunk_idx).map(|e| e as f64) * neighbor_coef;
+                let coeffs = Vec3::new(
+                    neighbor_dim - spline_derivative,
+                    spline_derivative,
+                    chunk_pos,
+                );
+                for i in 0..rivers[chunk_idx].neighbor_rivers.len() {
+                    let incoming_river_idx = rivers[chunk_idx].neighbor_rivers[i] as usize;
+                    let incoming_river_pos =
+                        uniform_idx_as_vec2(incoming_river_idx).map(|e| e as f64) * neighbor_coef;
+                    let incoming_river_spline_derivative =
+                        rivers[incoming_river_idx].spline_derivative;
+                    let incoming_coeffs = river_spline_coeffs(
+                        incoming_river_pos,
+                        incoming_river_spline_derivative,
+                        chunk_pos,
+                    );
+                    let intersections = if let Ok(intersections) =
+                        intersect_quadratics(&coeffs, &incoming_coeffs)
+                    {
+                        intersections
+                    } else {
+                        if coeffs.x == Vec2::zero()
+                            && incoming_coeffs.x == Vec2::zero()
+                            && coeffs.y == incoming_coeffs.y
+                        {
+                            // It could be tha both curves are along the same line offset by the
+                            // same point, in which case of course they
+                            // coincide.
+                            continue;
+                        }
+                        let implicit_coeffs = implicitize_quadratic(&coeffs);
+                        let implicit_incoming_coeffs = implicitize_quadratic(&incoming_coeffs);
+                        if (coeffs.x != Vec2::zero() || incoming_coeffs.x != Vec2::zero())
+                            && implicit_coeffs == implicit_incoming_coeffs
+                        {
+                            // Literally a continuation of the same curve.
+                            continue;
+                        }
+                        println!(
+                            "River at {:?} (flowing to {:?}, spline_derivative {:?}) with river \
+                             {:?} is intersected by incoming neighbor at {:?} with river {:?} at \
+                             *every* point... how is this possible?\nCoeffs: {:?}, Incoming: \
+                             {:?}\nImplicit: {:?}, Implicit incoming: {:?}",
+                            chunk_pos,
+                            chunk_pos + neighbor_dim,
+                            spline_derivative,
+                            &rivers[chunk_idx],
+                            incoming_river_pos,
+                            &rivers[incoming_river_idx],
+                            coeffs,
+                            incoming_coeffs,
+                            implicit_coeffs,
+                            implicit_incoming_coeffs
+                        );
+                        continue;
+                    };
+                    if let Some((river_t, pt, _distance_squared)) = intersections
+                        .into_iter()
+                        // Find the parameter t along the spline associated with the intersecting
+                        // point, discarding any outside the range of the spline segment.
+                        .filter_map(|pt| quadratic_nearest_point(&incoming_coeffs, pt))
+                        // Filter out intersections at endpoints.
+                        .filter(|(_, pt, _)| {
+                            pt.distance_squared(incoming_river_pos) >= 1e-2
+                                && pt.distance_squared(chunk_pos) >= 1e-2
+                        })
+                        // Intersecting point at the minimum t along the incoming river.
+                        .min_by(|&(a, _, _), &(b, _, _)| a.partial_cmp(&b).unwrap())
+                    {
+                        println!(
+                            "Aha!  River at {:?} (flowing to {:?}, spline_derivative {:?}) with \
+                             river {:?} is intersected by incoming neighbor at {:?} with river \
+                             {:?}, initially at time t={:?} along the incoming river \
+                             (point={:?}), which is not at one of the endpoints.",
+                            chunk_pos,
+                            chunk_pos + neighbor_dim,
+                            spline_derivative,
+                            &rivers[chunk_idx],
+                            incoming_river_pos,
+                            &rivers[incoming_river_idx],
+                            river_t,
+                            pt
+                        );
+                        // Temporary fix: invert the parent!
+                        /* rivers[incoming_river_idx].spline_derivative =
+                        // incoming_river_spline_derivative.reflected((incoming_river_pos - chunk_pos).map(|e| e as f32)/*-neighbor_dim.map(|e| e as f32)*/);
+                        -incoming_river_spline_derivative; */
+                        /* // Temporary fix: linearize the child!
+                        spline_derivative = Vec2::zero();
+                        break; */
+                    }
+                }
+                spline_derivative.map(|e| e as f32)
             };
 
         let river = &rivers[chunk_idx];
-        let river_spline_derivative =
-            get_river_spline_derivative(neighbor_dim, river.spline_derivative);
+        let river_spline_derivative = get_river_spline_derivative(
+            neighbor_dim,
+            river.spline_derivative,
+            &mut rivers,
+            chunk_idx,
+        );
 
         let indirection_idx = indirection[chunk_idx];
         // Find the lake we are flowing into.
@@ -309,13 +423,16 @@ pub fn get_rivers<F: fmt::Debug + Float + Into<f64>, G: Float + Into<f64>>(
             let neighbor_pass_idx = downhill[pass_idx] as usize/*downhill_idx*/;
             let mut lake_neighbor_pass = &mut rivers[neighbor_pass_idx];
             // We definitely shouldn't have encountered this yet!
-            debug_assert!(lake_neighbor_pass.velocity == Vec3::zero());
+            debug_assert!(lake_neighbor_pass.velocity == /*Vec3::zero()*/0.0);
             // TODO: Rethink making the lake neighbor pass always a river or lake, no matter
             // how much incoming water there is?  Sometimes it looks weird
             // having a river emerge from a tiny pool.
             lake_neighbor_pass.river_kind = Some(RiverKind::River {
                 cross_section: Vec2::default(),
             });
+            /* // NOTE: Cast to usize is safe because this u32 is an index into a Vec<RiverData>,
+            // allocation sizes in bytes are at most isize::MAX, and RiverData has nonzero size.
+            lake_neighbor_pass.neighbor_rivers.push(pass_idx as u32); */
             chunk_idx
         } else {
             indirection_idx as usize
@@ -335,10 +452,10 @@ pub fn get_rivers<F: fmt::Debug + Float + Into<f64>, G: Float + Into<f64>>(
         // the pass for our own lake, because we don't want to preserve weird
         // curvature from before we hit the lake in the outflowing river (this
         // will not apply to one-chunk lakes, which are their own pass).
+        let downhill_river = &mut rivers[downhill_idx];
         if pass_idx != downhill_idx {
             // TODO: consider utilizing height difference component of flux as well;
             // currently we just discard it in figuring out the spline's slope.
-            let downhill_river = &mut rivers[downhill_idx];
             let weighted_flow = (neighbor_dim * 2.0 - river_spline_derivative.map(|e| e as f64))
                 / derivative_divisor
                 * chunk_drainage
@@ -367,6 +484,13 @@ pub fn get_rivers<F: fmt::Debug + Float + Into<f64>, G: Float + Into<f64>>(
                     // Try pointing towards the lake side of the pass.
                     (uniform_idx_as_vec2(pass_idx), river_spline_derivative)
                 };
+                // NOTE: Possibly not totally correct to add uphill entries for lakes, but it
+                // does make debugging easier.
+                //
+                // NOTE: Cast to usize is safe because this u32 is an index into a
+                // Vec<RiverData>, allocation sizes in bytes are at most
+                // isize::MAX, and RiverData has nonzero size.
+                downhill_river.neighbor_rivers.push(chunk_idx as u32);
                 let mut lake = &mut rivers[chunk_idx];
                 lake.spline_derivative = river_spline_derivative;
                 lake.river_kind = Some(RiverKind::Lake {
@@ -467,7 +591,11 @@ pub fn get_rivers<F: fmt::Debug + Float + Into<f64>, G: Float + Into<f64>>(
 
         // We can now weight the river's drainage by its direction, which we use to help
         // improve the slope of the downhill node.
-        let river_direction = Vec3::new(neighbor_dim.x, neighbor_dim.y, dz.signum() * dz);
+        /* let river_direction = Vec3::new(
+            neighbor_dim.x,
+            neighbor_dim.y,
+            dz.signum() * dz,
+        ); */
 
         // Now, we can check whether this is "really" a river.
         // Currently, we just check that width and height are at least 0.5 and
@@ -481,6 +609,13 @@ pub fn get_rivers<F: fmt::Debug + Float + Into<f64>, G: Float + Into<f64>>(
             downhill_river.river_kind = Some(RiverKind::River {
                 cross_section: Vec2::default(),
             });
+            // Also, make sure to add downhill rivers (but only where this chunk is itself a
+            // river, at least for now).
+            //
+            // NOTE: Cast to usize is safe because this u32 is an index into a
+            // Vec<RiverData>, allocation sizes in bytes are at most isize::MAX,
+            // and RiverData has nonzero size.
+            downhill_river.neighbor_rivers.push(chunk_idx as u32);
 
             // Additionally, if the cross-sectional area for this river exceeds the max
             // river width, the river is overflowing the two chunks adjacent to
@@ -507,14 +642,14 @@ pub fn get_rivers<F: fmt::Debug + Float + Into<f64>, G: Float + Into<f64>>(
         // Set up the river's cross-sectional area.
         let cross_section = Vec2::new(width as f32, height as f32);
         // Set up the river's velocity vector.
-        let mut velocity = river_direction;
+        /* let mut velocity = river_direction;
         velocity.normalize();
-        velocity *= velocity_magnitude;
+        velocity *= velocity_magnitude; */
 
         let mut river = &mut rivers[chunk_idx];
         // NOTE: Not trying to do this more cleverly because we want to keep the river's
         // neighbors. TODO: Actually put something in the neighbors.
-        river.velocity = velocity.map(|e| e as f32);
+        river.velocity = velocity_magnitude as f32; // velocity.map(|e| e as f32);
         river.spline_derivative = river_spline_derivative;
         river.river_kind = if is_river {
             Some(RiverKind::River { cross_section })

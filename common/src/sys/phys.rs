@@ -4,9 +4,14 @@ use crate::{
     state::DeltaTime,
     sync::Uid,
     terrain::{Block, TerrainGrid},
+    util::combination_to_pair_4,
     vol::ReadVol,
 };
 use specs::{Entities, Join, Read, ReadExpect, ReadStorage, System, WriteStorage};
+use std::{
+    f32,
+    ops::{Div, Mul, Sub},
+};
 use vek::*;
 
 pub const GRAVITY: f32 = 9.81 * 7.0;
@@ -21,16 +26,29 @@ const FRIC_AIR: f32 = 0.0125;
 const FRIC_FLUID: f32 = 0.2;
 
 // Integrates forces, calculates the new velocity based off of the old velocity
+// mass = entity mass
 // dt = delta time
 // lv = linear velocity
 // damp = linear damping
+// fluid = fluid force
 // Friction is a type of damping.
-fn integrate_forces(dt: f32, mut lv: Vec3<f32>, grav: f32, damp: f32) -> Vec3<f32> {
+fn integrate_forces(
+    mass: f32,
+    dt: f32,
+    mut lv: Vec3<f32>,
+    grav: f32,
+    fluid: Option<Vec3<f32>>,
+    damp: f32,
+) -> Vec3<f32> {
     // this is not linear damping, because it is proportional to the original
     // velocity this "linear" damping in in fact, quite exponential. and thus
     // must be interpolated accordingly
     let linear_damp = (1.0 - damp.min(1.0)).powf(dt * 60.0);
 
+    if let Some(fluid) = fluid {
+        lv = (lv + ((fluid / mass - lv) * dt)).map(|e| e.max(-80.0));
+        // lv = (lv + fluid / mass * dt).map(|e| e.max(-80.0));
+    }
     lv.z = (lv.z - grav * dt).max(-80.0);
     lv * linear_damp
 }
@@ -79,10 +97,11 @@ impl<'a> System<'a> for Sys {
         let mut event_emitter = event_bus.emitter();
 
         // Apply movement inputs
-        for (entity, scale, sticky, _b, mut pos, mut vel, _ori, _) in (
+        for (entity, scale, sticky, mass, _b, mut pos, mut vel, _ori, _) in (
             &entities,
             scales.maybe(),
             stickies.maybe(),
+            masses.maybe(),
             &bodies,
             &mut positions,
             &mut velocities,
@@ -124,37 +143,53 @@ impl<'a> System<'a> for Sys {
                 } else {
                     0.0
                 })
-                .max(if physics_state.in_fluid {
+                .max(if physics_state.in_fluid.is_some() {
                     FRIC_FLUID
                 } else {
                     0.0
                 });
-            let downward_force = if physics_state.in_fluid {
+            let downward_force = if physics_state.in_fluid.is_some() {
                 (1.0 - BOUYANCY) * GRAVITY
             } else {
                 GRAVITY
             } * gravities.get(entity).map(|g| g.0).unwrap_or_default();
-            vel.0 = integrate_forces(dt.0, vel.0, downward_force, friction);
+            let fluid_force = physics_state.in_fluid;
+            let mass = mass.map(|m| m.0).unwrap_or(scale);
+            vel.0 = integrate_forces(mass, dt.0, vel.0, downward_force, fluid_force, friction);
 
+            // this is an approximation that allows most framerates to
+            // behave in a similar manner.
+            let vel_approx = (vel.0 + old_vel.0 * 4.0) * 0.2;
             // Don't move if we're not in a loaded chunk
             let pos_delta = if terrain
                 .get_key(terrain.pos_key(pos.0.map(|e| e.floor() as i32)))
                 .is_some()
             {
-                // this is an approximation that allows most framerates to
-                // behave in a similar manner.
-                (vel.0 + old_vel.0 * 4.0) * dt.0 * 0.2
+                vel_approx * dt.0
             } else {
                 Vec3::zero()
             };
 
             // Function for determining whether the player at a specific position collides
             // with the ground
-            let collision_with = |pos: Vec3<f32>, hit: fn(&Block) -> bool, near_iter| {
+            fn collision_with_full<'a>(
+                terrain: &ReadExpect<'a, TerrainGrid>,
+                player_rad: f32,
+                player_height: f32,
+                pos: Vec3<f32>,
+                hit: fn(&Block) -> bool,
+                mut do_hit: impl FnMut(&Block) -> bool,
+                near_iter: impl Iterator<Item = (i32, i32, i32)>,
+            ) -> bool {
                 for (i, j, k) in near_iter {
                     let block_pos = pos.map(|e| e.floor() as i32) + Vec3::new(i, j, k);
 
-                    if terrain.get(block_pos).map(hit).unwrap_or(false) {
+                    let vox = if let Ok(vox) = terrain.get(block_pos) {
+                        vox
+                    } else {
+                        continue;
+                    };
+                    if hit(vox) {
                         let player_aabb = Aabb {
                             min: pos + Vec3::new(-player_rad, -player_rad, 0.0),
                             max: pos + Vec3::new(player_rad, player_rad, player_height),
@@ -165,11 +200,25 @@ impl<'a> System<'a> for Sys {
                         };
 
                         if player_aabb.collides_with_aabb(block_aabb) {
-                            return true;
+                            if do_hit(vox) {
+                                return true;
+                            }
                         }
                     }
                 }
                 false
+            };
+
+            let collision_with = |pos: Vec3<f32>, hit: fn(&Block) -> bool, near_iter| {
+                collision_with_full(
+                    &terrain,
+                    player_rad,
+                    player_height,
+                    pos,
+                    hit,
+                    |_| true,
+                    near_iter,
+                )
             };
 
             let was_on_ground = physics_state.on_ground;
@@ -341,7 +390,77 @@ impl<'a> System<'a> for Sys {
             }
 
             // Figure out if we're in water
-            physics_state.in_fluid = collision_with(pos.0, |vox| vox.is_fluid(), near_iter.clone());
+            let mut water_force = Vec3::zero();
+            let mut in_fluid = false;
+            collision_with_full(
+                &terrain,
+                player_rad,
+                player_height,
+                pos.0,
+                |vox| vox.is_fluid(),
+                |vox| {
+                    // We're in water, but don't stop there...
+                    in_fluid = true;
+                    /* // Decode the fluid velocity.
+                    let sub_height = water_height.sub(31.0 / 32.0).max(wposf.z).fract();
+                    // sub_height is reinterpreted such that encoded 0-31 means from 1/32 to 1.
+                    let encoded_sub_height = sub_height.mul(32.0) as u32;
+                    let water_packed = water_packed | (encoded_sub_height << 14);
+                    // let water = Rgb::new(60, 90, 190);
+                    let water = Block::new(BlockKind::Water, Rgb::new(water_packed & 0xFF0000, water_packed & 0xFF00, water_packed & 0xFF)); */
+                    let color = if let Some(color) = vox.get_color() {
+                        color
+                    } else {
+                        return false;
+                    };
+                    let water_packed =
+                        ((color.r as u32) << 16) | ((color.g as u32) << 8) | (color.b as u32);
+                    let encoded_sub_b_t = (water_packed >> 17) & 127;
+                    // If the encoded value isn't a legal combination, we assume it means that the
+                    // whole block is water.
+                    let (encoded_sub_bottom, encoded_sub_top) =
+                        combination_to_pair_4(encoded_sub_b_t as u8).unwrap_or((0, 16));
+                    /* let encoded_sub_offset = (water_packed >> 20) & 15;
+                    let encoded_sub_height = (water_packed >> 16) & 15; */
+                    let encoded_velocity = (water_packed >> 10) & 127;
+                    let encoded_angle_p = (water_packed >> 6) & 15;
+                    let encoded_angle_h = water_packed & 63;
+                    let sub_top = (encoded_sub_top as f32).div(16.0);
+                    let sub_bottom = (encoded_sub_bottom as f32).div(16.0);
+                    // let block_height = sub_height + sub_offset;
+                    let block_height = sub_top - sub_bottom;
+                    let velocity_magnitude = (encoded_velocity as f32).div(16.0);
+                    let angle_h = (encoded_angle_h as f32)
+                        .sub(31.5)
+                        .div(31.5)
+                        .mul(f32::consts::PI);
+                    let angle_p = (encoded_angle_p as f32)
+                        .div(15.0)
+                        .mul(-f32::consts::FRAC_PI_2);
+                    let velocity_direction = Vec3::new(angle_h.cos(), angle_h.sin(), angle_p.sin());
+                    let velocity = velocity_direction * velocity_magnitude;
+                    let water_density = 997.0;
+                    // F = A * p * v^2 where p = density of water = 997.0,
+                    // A = cross-sectional area = 1.0 * block_height, and v = velocity.
+                    let mut block_force = 0.5
+                        * block_height
+                        * water_density
+                        * velocity.map(|v| (v * v) * (v.signum()));
+                    block_force.z = 0.0;
+                    /* velocity.map2(vel_approx, |e, v| ((e - v) * (e - v)) * ((e - v).signum())) */
+                    // let block_force = 0.5 * block_height * velocity.map2(vel_approx, |e, v| ((e -
+                    // v) * (e - v)) * ((e - v).signum())); println!("Pos: {:?},
+                    // velocity_magnitude: {:?}, sub_height: {:?}, sub_offset: {:?}, block_height:
+                    // {:?}, velocity: {:?}, old velocity: {:?}, force: {:?}", vox,
+                    // velocity_magnitude, sub_height, sub_offset, block_height, velocity,
+                    // vel_approx, block_force);
+                    water_force += block_force;
+                    false
+                },
+                near_iter.clone(),
+            );
+
+            physics_state.in_fluid = if in_fluid { Some(water_force) } else { None };
 
             let _ = physics_states.insert(entity, physics_state);
         }

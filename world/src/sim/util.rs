@@ -4,6 +4,7 @@ use common::{terrain::TerrainChunkSize, vol::RectVolSize};
 use noise::{MultiFractal, NoiseFn, Perlin, Point2, Point3, Point4, Seedable};
 use num::Float;
 use rayon::prelude::*;
+use roots::{find_roots_cubic, find_roots_quadratic, find_roots_quartic};
 use std::{f32, f64, ops::Mul, u32};
 use vek::*;
 
@@ -333,6 +334,515 @@ pub fn get_oceans<F: Float>(oldh: impl Fn(usize) -> F + Sync) -> BitBox {
         }));
     }
     is_ocean
+}
+
+pub fn river_spline_coeffs(
+    // _sim: &WorldSim,
+    chunk_pos: Vec2<f64>,
+    spline_derivative: Vec2<f32>,
+    downhill_pos: Vec2<f64>,
+) -> Vec3<Vec2<f64>> {
+    let dxy = downhill_pos - chunk_pos;
+    // Since all splines have been precomputed, we don't have to do that much work
+    // to evaluate the spline.  The spline is just ax^2 + bx + c = 0, where
+    //
+    // a = dxy - chunk.river.spline_derivative
+    // b = chunk.river.spline_derivative
+    // c = chunk_pos
+    let spline_derivative = spline_derivative.map(|e| e as f64);
+    Vec3::new(dxy - spline_derivative, spline_derivative, chunk_pos)
+}
+
+/// Find the nearest point from a quadratic spline to this point (in terms of t,
+/// the "distance along the curve" by which our spline is parameterized).  Note
+/// that if t < 0.0 or t >= 1.0, we probably shouldn't be considered "on the
+/// curve"... hopefully this works out okay and gives us what we want (a
+/// river that extends outwards tangent to a quadratic curve, with width
+/// configured by distance along the line).
+pub fn quadratic_nearest_point(
+    spline: &Vec3<Vec2<f64>>,
+    point: Vec2<f64>,
+) -> Option<(f64, Vec2<f64>, f64)> {
+    let a = spline.z.x;
+    let b = spline.y.x;
+    let c = spline.x.x;
+    let d = point.x;
+    let e = spline.z.y;
+    let f = spline.y.y;
+    let g = spline.x.y;
+    let h = point.y;
+    // This is equivalent to solving the following cubic equation (derivation is a
+    // bit annoying):
+    //
+    // A = 2(c^2 + g^2)
+    // B = 3(b * c + g * f)
+    // C = ((a - d) * 2 * c + b^2 + (e - h) * 2 * g + f^2)
+    // D = ((a - d) * b + (e - h) * f)
+    //
+    // Ax³ + Bx² + Cx + D = 0
+    //
+    // Once solved, this yield up to three possible values for t (reflecting minimal
+    // and maximal values).  We should choose the minimal such real value with t
+    // between 0.0 and 1.0.  If we fall outside those bounds, then we are
+    // outside the spline and return None.
+    let a_ = (c * c + g * g) * 2.0;
+    let b_ = (b * c + g * f) * 3.0;
+    let a_d = a - d;
+    let e_h = e - h;
+    let c_ = a_d * c * 2.0 + b * b + e_h * g * 2.0 + f * f;
+    let d_ = a_d * b + e_h * f;
+    let roots = find_roots_cubic(a_, b_, c_, d_);
+    let roots = roots.as_ref();
+
+    let min_root = roots
+        .into_iter()
+        .copied()
+        .filter_map(|root| {
+            let river_point = spline.x * root * root + spline.y * root + spline.z;
+            let river_zero = spline.z;
+            let river_one = spline.x + spline.y + spline.z;
+            if root > 0.0 && root < 1.0 {
+                Some((root, river_point))
+            } else if
+            /*root <= 0.0 && */
+            river_point.distance_squared(river_zero) < /*0.5*/1e-2 {
+                Some((/*root*/ 0.0, /*river_point*/ river_zero))
+            } else if
+            /*root >= 1.0 && */
+            river_point.distance_squared(river_one) < /*0.5*/1e-2 {
+                Some((/*root*/ 1.0, /*river_point*/ river_one))
+            } else {
+                None
+            }
+        })
+        .map(|(root, river_point)| {
+            let river_distance = river_point.distance_squared(point);
+            (root, river_point, river_distance)
+        })
+        // In the (unlikely?) case that distances are equal, prefer the earliest point along the
+        // river.
+        .min_by(|&(ap, _, a), &(bp, _, b)| {
+            (a, /*ap < 0.0 || ap > 1.0, */ ap)
+                .partial_cmp(&(b, /*bp < 0.0 || bp > 1.0, */ bp))
+                .unwrap()
+        });
+    min_root
+}
+
+/// Transform a line in parametric form (f(t) = b t + c)) to implicit form
+/// (f(x, y) = A x + B y + C)
+fn implicitize_line(coeffs: &Vec2<Vec2<f64>>) -> [f64; 3] {
+    // b_y * x - b_x * y + (b_x * c_y - b_y * c_x) = 0
+    let b_x = coeffs.x.x;
+    let c_x = coeffs.y.x;
+    let b_y = coeffs.x.y;
+    let c_y = coeffs.y.y;
+    [b_y, -b_x, b_x * c_y - b_y * c_x]
+}
+
+/// Transform a quadratic curve in parametric form (f(t) = a t^2 + b t + c) to
+/// implicit form (f(x, y) = A x ^2 + B * x * y + C * y^2 + D * x + E * y + F =
+/// 0)
+pub fn implicitize_quadratic(coeffs: &Vec3<Vec2<f64>>) -> [f64; 6] {
+    // (a_y^2) * x^2 +
+    // (-2 * a_x * a_y) * x * y +
+    // (a_x^2) * y^2 +
+    // (a_y * b_x * b_y + 2 * a_x * a_y * c_y - (2 * a_y^2 * c_x + a_x * b_y^2)) * x
+    // + (a_x * b_x * b_y + 2 * a_x * a_y * c_x - (2 * a_x^2 * c_y + a_y *
+    // b_x^2)) * y + (a_x * b_y^2 * c_x - a_y * b_x * b_y * c_x + a_y^2 * c_x^2
+    // +  a_y * b_x^2 * c_y - a_x * b_x * b_y * c_y + a_x^2 * c_y^2 -
+    //  2 * a_x * a_y * c_x * c_y) =
+    // f(x, y)
+    let a_x = coeffs.x.x;
+    let b_x = coeffs.y.x;
+    let c_x = coeffs.z.x;
+    let a_y = coeffs.x.y;
+    let b_y = coeffs.y.y;
+    let c_y = coeffs.z.y;
+    [
+        a_y * a_y,
+        -2.0 * a_x * a_y,
+        a_x * a_x,
+        a_y * b_x * b_y + 2.0 * a_x * a_y * c_y - (2.0 * a_y * a_y * c_x + a_x * b_y * b_y),
+        a_x * b_x * b_y + 2.0 * a_x * a_y * c_x - (2.0 * a_x * a_x * c_y + a_y * b_x * b_x),
+        a_x * b_y * b_y * c_x - a_y * b_x * b_y * c_x
+            + a_y * a_y * c_x * c_x
+            + a_y * b_x * b_x * c_y
+            - a_x * b_x * b_y * c_y
+            + a_x * a_x * c_y * c_y
+            - 2.0 * a_x * a_y * c_x * c_y,
+    ]
+}
+
+fn intersect_point_point(point1: Vec2<f64>, point2: Vec2<f64>) -> Result<Vec<Vec2<f64>>, ()> {
+    // TODO: Do we really care whether they are the same line if one is a point?
+    // Currently we don't differentiate this case.
+    if (point1 - point2).map(|e| e.abs()).reduce_partial_max() < 1e-2 {
+        Ok(vec![point1])
+    } else {
+        Ok(vec![])
+    }
+}
+
+fn intersect_line_point(line: &Vec2<Vec2<f64>>, point: Vec2<f64>) -> Result<Vec<Vec2<f64>>, ()> {
+    // First, check for degenerate cases.
+    // TODO: change these to point < e.
+    // TODO: Do we really care whether they are the same line if one is a point?
+    // Currently we don't differentiate this case.
+    if line.x == Vec2::zero() {
+        // Line is a point.
+        return intersect_point_point(line.y, point);
+    }
+    // Otherwise, implicitize line and check whether the value of the equation at
+    // this point is within e.
+    let a = implicitize_line(line);
+    let e = 100.0 * f64::EPSILON.sqrt();
+    if a[0] * point.x + a[1] * point.y + a[2] < e {
+        Ok(vec![point])
+    } else {
+        Ok(vec![])
+    }
+}
+
+fn intersect_line_line(
+    line1: &Vec2<Vec2<f64>>,
+    line2: &Vec2<Vec2<f64>>,
+) -> Result<Vec<Vec2<f64>>, ()> {
+    // First, check for degenerate cases.
+    // TODO: change these to point < e.
+    if line1.x == Vec2::zero() {
+        // Line is a point.
+        return intersect_line_point(line2, line1.y);
+    }
+    if line2.x == Vec2::zero() {
+        // Line is a point.
+        return intersect_line_point(line1, line2.y);
+    }
+    // Otherwise, we can compute the intersection point directly from the
+    // parameterized version.
+    let x1 = line1.y.x;
+    let y1 = line1.y.y;
+    let dx2 = -line1.x.x;
+    let dy2 = -line1.x.y;
+    let x3 = line2.y.x;
+    let y3 = line2.y.y;
+    let dx4 = -line2.x.x;
+    let dy4 = -line2.x.y;
+    // We now perform a case distinction on the kind of equation we are dealing
+    // with...
+    let e = 100.0 * f64::EPSILON.sqrt();
+    let d_ = dx2 * dy4 - dy2 * dx4;
+    if d_.abs() < e {
+        // The lines are the same slope (i.e. parallel), but may or may not coincide.
+        let a = implicitize_line(line1);
+        let b = implicitize_line(line2);
+        if (a[2] - b[2]).abs() < e {
+            // The lines coincide (approximately) at all points.
+            return Err(());
+        }
+        // Otherwise, they are offset in a way that will cause them never to
+        // intersect.
+        return Ok(Vec::new());
+    }
+    // The lines are not parallel, so their intersection can be defined using
+    // determinants.
+    let t = ((x1 - x3) * dy4 - (y1 - y3) * dx4) / d_;
+    let x = x1 - dx2 * t;
+    let y = y1 - dy2 * t;
+    Ok(vec![Vec2::new(x, y)])
+    /* // Otherwise, implicitize lines and check where (and whether) they intersect.
+    let a = implicitize_line(line1);
+    let b = implicitize_line(line2);
+
+    // We now perform a case distinction on the kind of equation we are dealing with...
+    let d_ = a[0] * b[1] - b[0] * a[1];
+    if d_.abs() < e {
+        // The lines are the same shape, but offset in a way that will cause them never to
+        // intersect (i.e. parallel).
+        return Ok(Vec::new());
+    }
+
+    // The lines are not parallel, so their intersection can be defined using determinants.
+    let x0 =
+    let x = () / d_;
+    Ok(vec![])
+
+    // Otherwise, both lines are not parallel.
+    if a[1] >= e || a[2] {
+        // Line 1 is not vertical, so we can get its slope.
+        let y =
+    }
+    if (a[0] - b[0]).abs() > e {
+        // We have a nonzero linear Y component, so we can solve for X.
+        //
+        // If a and b are both vertical or both horizontal,
+        // We can solve for x and y by solving a simple linear equation.
+        //
+        // ax + by + c = 0
+        // ax + c = -by
+        // (ax + c) / (-b) = y
+        //
+        // Now setting both y's equal (which they must be at an intersection point), we have:
+        //
+        // (a[0]x + a[2]) / (-a[1]) = (b[0]x + b[2]) / (-b[1])
+        // (a[0]x + a[2]) / a[1] = (b[0]x + b[2]) / b[1]
+        // b[1] * (a[0]x + a[2]) = a[1] * (b[0]x + b[2])
+        // a[0] * b[1] * x + a[2] * b[1] = a[1] * b[0] * x + a[1] * b[2]
+        // (a[0] * b[1] - a[1] * b[0]) * x = (a[1] * b[2] - a[2] * a[1])
+        let x = (b[2] * a[1] - b[1] * a[2]) / d_;
+        /* let a_ = a[0] / a[1];
+        let b_ = a[1] / a[0];
+        let x = (b[1] - a[1]) / (a[0] - b[0]); */
+        // Now, solve for y by working backwards from x.
+        let y = (a[0] * x + a[2]) / a[1];
+        Ok(vec![Vec2::new(x, y)])
+    } else {
+        // The X component is zero, so we can't solve for X.
+        if (a[1] - b[1]).abs() > e {
+            // We have a nonzero linear Y coefficient, so we can still solve for Y.
+            let y = (b[0] - a[0]) / (a[1] - b[1]);
+            // Now, solve for x by working backwards from y.
+            let x = a[0] * x + a[1];
+            Ok(vec![Vec2::new(x, y)])
+        } else {
+            // x and y coefficients are zero, meaning the lines are either identical or don't
+            // intersect.
+            if (a[2] - b[2]).abs() < e {
+                // The lines are approximately identical.
+                return Err(());
+            } else {
+                // The lines are the same shape, but offset in a way that will cause them never to
+                // intersect.
+                return Ok(Vec::new());
+            }
+        }
+    } */
+}
+
+fn intersect_quadratic_point(
+    curve: &Vec3<Vec2<f64>>,
+    point: Vec2<f64>,
+) -> Result<Vec<Vec2<f64>>, ()> {
+    // TODO: Do we really care whether they are the same curve if one is a point?
+    // Currently we consider these "Ok".
+    // TODO: If needed, fix so that this doesn't care whether the points are in
+    // bounds or not (since intersect_quadratics currently doesn't try to filter
+    // roots in this way).
+    return Ok(quadratic_nearest_point(curve, point)
+        .into_iter()
+        .filter(|&(_, _, dist_squared)| dist_squared < 1e-2)
+        .map(|(_, pt, _)| pt)
+        .collect());
+}
+
+fn intersect_quadratic_line(
+    curve: &Vec3<Vec2<f64>>,
+    line: &Vec2<Vec2<f64>>,
+) -> Result<Vec<Vec2<f64>>, ()> {
+    // First, check for degenerate cases.
+    // TODO: change these to < e.
+    if line.x == Vec2::zero() {
+        // Line is a point.
+        return intersect_quadratic_point(curve, line.y);
+    }
+    if curve.x == Vec2::zero() {
+        // Curve is a line.
+        return intersect_line_line(line, &Vec2::new(curve.y, curve.z));
+    }
+    // TODO: Implement.
+    println!("Problem case.");
+    return Err(());
+}
+
+/// Solve intersection of two parametric quadratic curves.
+///
+/// Based on an algorithm for computing the intersection of bivariate quadratic
+/// equations (as part of the intersection of conic sections), from
+///
+/// http://www.piprime.fr/files/asymptote/geometry/modules/geometry.asy.html#intersectionpoints%28bqe,bqe%29
+/// (it is LGPL).
+///
+/// Returns Err if the cones are (approximately) identical, meaning the answer
+/// to the question is "every point".  Otherwise, returns a list of intersection
+/// points.
+pub fn intersect_quadratics(
+    curve1: &Vec3<Vec2<f64>>,
+    curve2: &Vec3<Vec2<f64>>,
+) -> Result<Vec<Vec2<f64>>, ()> {
+    // First, check for degenerate cases.
+    // TODO: change these to < e.
+    if curve1.x == Vec2::zero() {
+        // Curve is a line.
+        return intersect_quadratic_line(curve2, &Vec2::new(curve1.y, curve1.z));
+    }
+    if curve2.x == Vec2::zero() {
+        // Curve is a line.
+        return intersect_quadratic_line(curve1, &Vec2::new(curve2.y, curve2.z));
+    }
+
+    // Transform the curves from parametric form to implicit form.
+    let a = implicitize_quadratic(curve1);
+    let b = implicitize_quadratic(curve2);
+    // We now perform a case distinction on the kind of equation we are dealing
+    // with...
+    let e = 100.0 * f64::EPSILON.sqrt();
+    let x = if (a[0] - b[0]).abs() > e || (a[1] - b[1]).abs() > e || (a[2] - b[2]).abs() > e {
+        // The complex case: we have one or more of squared x, squared y, or interaction
+        // terms between x and y.  We start by solving for the x that minimizes
+        // the distance between the two curves, and then later will figure out
+        // which are the associated y's.
+        let a_ = -2.0 * a[0] * a[2] * b[0] * b[2] + a[0] * a[2] * b[1] * b[1]
+            - a[0] * a[1] * b[2] * b[1]
+            + a[1] * a[1] * b[0] * b[2]
+            - a[2] * a[1] * b[0] * b[1]
+            + a[0] * a[0] * b[2] * b[2]
+            + a[2] * a[2] * b[0] * b[0];
+        let b_ = -a[2] * a[1] * b[0] * b[4] - a[2] * a[4] * b[0] * b[1] - a[1] * a[3] * b[2] * b[1]
+            + 2.0 * a[0] * a[2] * b[1] * b[4]
+            - a[0] * a[1] * b[2] * b[4]
+            + a[1] * a[1] * b[2] * b[3]
+            - 2.0 * a[2] * a[3] * b[0] * b[2]
+            - 2.0 * a[0] * a[2] * b[2] * b[3]
+            + a[2] * a[3] * b[1] * b[1]
+            - a[2] * a[1] * b[1] * b[3]
+            + 2.0 * a[1] * a[4] * b[0] * b[2]
+            + 2.0 * a[2] * a[2] * b[0] * b[3]
+            - a[0] * a[4] * b[2] * b[1]
+            + 2.0 * a[0] * a[3] * b[2] * b[2];
+        let c_ = -a[3] * a[4] * b[2] * b[1] + a[2] * a[5] * b[1] * b[1]
+            - a[1] * a[5] * b[2] * b[1]
+            - a[1] * a[3] * b[2] * b[4]
+            + a[1] * a[1] * b[2] * b[5]
+            - 2.0 * a[2] * a[3] * b[2] * b[3]
+            + 2.0 * a[2] * a[2] * b[0] * b[5]
+            + 2.0 * a[0] * a[5] * b[2] * b[2]
+            + a[3] * a[3] * b[2] * b[2]
+            - 2.0 * a[2] * a[5] * b[0] * b[2]
+            + 2.0 * a[1] * a[4] * b[2] * b[3]
+            - a[2] * a[4] * b[1] * b[3]
+            - 2.0 * a[0] * a[2] * b[2] * b[5]
+            + a[2] * a[2] * b[3] * b[3]
+            + 2.0 * a[2] * a[3] * b[1] * b[4]
+            - a[2] * a[4] * b[0] * b[4]
+            + a[4] * a[4] * b[0] * b[2]
+            - a[2] * a[1] * b[3] * b[4]
+            - a[2] * a[1] * b[1] * b[5]
+            - a[0] * a[4] * b[2] * b[4]
+            + a[0] * a[2] * b[4] * b[4];
+        let d_ = -a[4] * a[5] * b[2] * b[1]
+            + a[2] * a[3] * b[4] * b[4]
+            + 2.0 * a[3] * a[5] * b[2] * b[2]
+            - a[2] * a[1] * b[4] * b[5]
+            - a[2] * a[4] * b[3] * b[4]
+            + 2.0 * a[2] * a[2] * b[3] * b[5]
+            - 2.0 * a[2] * a[3] * b[2] * b[5]
+            - a[3] * a[4] * b[2] * b[4]
+            - 2.0 * a[2] * a[5] * b[2] * b[3]
+            - a[2] * a[4] * b[1] * b[5]
+            + 2.0 * a[1] * a[4] * b[2] * b[5]
+            - a[1] * a[5] * b[2] * b[4]
+            + a[4] * a[4] * b[2] * b[3]
+            + 2.0 * a[2] * a[5] * b[1] * b[4];
+        let e_ = -2.0 * a[2] * a[5] * b[2] * b[5]
+            + a[4] * a[4] * b[2] * b[5]
+            + a[5] * a[5] * b[2] * b[2]
+            - a[4] * a[5] * b[2] * b[4]
+            + a[2] * a[5] * b[4] * b[4]
+            + a[2] * a[2] * b[5] * b[5]
+            - a[2] * a[4] * b[4] * b[5];
+        find_roots_quartic(a_, b_, c_, d_, e_)
+    } else {
+        // There are no square terms or interacting terms (x * y), so we have a simpler
+        // equation (which may require different techniques in order to solve
+        // it).
+        if (a[4] - b[4]).abs() > e {
+            // We have a nonzero linear Y component, so we can solve for X.
+            let d = (b[4] - a[4]) * (b[4] - a[4]);
+            let a_ = (a[0] * b[4] * b[4]
+                + (-a[1] * b[3] - 2.0 * a[0] * a[4] + a[1] * a[3]) * b[4]
+                + a[2] * b[3] * b[3]
+                + (a[1] * a[4] - 2.0 * a[2] * a[3]) * b[3]
+                + a[0] * a[4] * a[4]
+                - a[1] * a[3] * a[4]
+                + a[2] * a[3] * a[3])
+                / d;
+            let b_ = -((a[1] * b[4] - 2.0 * a[2] * b[3] - a[1] * a[4] + 2.0 * a[2] * a[3]) * b[5]
+                - a[3] * b[4] * b[4]
+                + (a[4] * b[3] - a[1] * a[5] + a[3] * a[4]) * b[4]
+                + (2.0 * a[2] * a[5] - a[4] * a[4]) * b[3]
+                + (a[1] * a[4] - 2.0 * a[2] * a[3]) * a[5])
+                / d;
+            let c_ = a[2] * (a[5] - b[5]) * (a[5] - b[5]) / d
+                + a[4] * (a[5] - b[5]) / (b[4] - a[4])
+                + a[5];
+            find_roots_quadratic(a_, b_, c_)
+        } else {
+            // The Y component is zero, so we can't solve for X.
+            if (a[3] - b[3]).abs() > e {
+                // The X component is nonzero, so we can still solve for Y.
+                let d = b[3] - a[3];
+                let a_ = a[2];
+                let b_ = (-a[1] * b[5] + a[4] * b[3] + a[1] * a[5] - a[3] * a[4]) / d;
+                let c_ = a[0] * (a[5] - b[5]) * (a[5] - b[5]) / (d * d)
+                    + a[3] * (a[5] - b[5]) / d
+                    + a[5];
+                let y = find_roots_quadratic(a_, b_, c_);
+                // Now, solve for x by working backwards from y.
+                let mut points = Vec::new();
+
+                for &y in y.as_ref() {
+                    let a_ = a[0];
+                    let b_ = a[1] * y + a[3];
+                    let c_ = a[2] * y * y + a[4] * y + a[5];
+                    let x = find_roots_quadratic(a_, b_, c_);
+                    points.extend(
+                        x.as_ref()
+                            .into_iter()
+                            .filter(|&x| {
+                                (b[0] * x * x
+                                    + b[1] * x * y
+                                    + b[2] * y * y
+                                    + b[3] * x
+                                    + b[4] * y
+                                    + b[5])
+                                    .abs()
+                                    < 1e-5
+                            })
+                            .map(|&x| Vec2::new(x, y)),
+                    );
+                }
+                return Ok(points);
+            } else {
+                // Both the X and Y components are 0.
+                if (a[5] - b[5]).abs() < e {
+                    // The cones are approximately identical.
+                    return Err(());
+                } else {
+                    // The cones are the same shape, but offset in a way that will cause them never
+                    // to intersect.
+                    return Ok(Vec::new());
+                }
+            }
+        }
+    };
+    // We hav solved for x; now, solve for y by working backwards from x.
+    let mut points = Vec::new();
+    for &x in x.as_ref() {
+        let a_ = a[2];
+        let b_ = a[1] * x + a[4];
+        let c_ = a[0] * x * x + a[3] * x + a[5];
+        let y = find_roots_quadratic(a_, b_, c_);
+        points.extend(
+            y.as_ref()
+                .into_iter()
+                .filter(|&y| {
+                    (b[0] * x * x + b[1] * x * y + b[2] * y * y + b[3] * x + b[4] * y + b[5]).abs()
+                        < 1e-5
+                })
+                .map(|&y| Vec2::new(x, y)),
+        );
+    }
+    return Ok(points);
 }
 
 /// A 2-dimensional vector, for internal use.

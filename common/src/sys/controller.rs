@@ -449,7 +449,7 @@ impl<'a> System<'a> for Sys {
                     // Reset to Falling while not standing on ground,
                     // otherwise keep the state given above
                     if !physics.on_ground {
-                        if physics.in_fluid {
+                        if physics.in_fluid.is_some() {
                             character.movement = Swim;
                         } else {
                             character.movement = Fall;
@@ -507,7 +507,7 @@ impl<'a> System<'a> for Sys {
                 (_action_state, Swim) => {
                     character.movement = get_state_from_move_dir(&inputs.move_dir);
 
-                    if !physics.on_ground && physics.in_fluid {
+                    if !physics.on_ground && physics.in_fluid.is_some() {
                         character.movement = Swim;
                     }
                     if inputs.primary.is_pressed() {
@@ -551,7 +551,7 @@ impl<'a> System<'a> for Sys {
                     }
 
                     if !physics.on_ground {
-                        if physics.in_fluid {
+                        if physics.in_fluid.is_some() {
                             character.movement = Swim;
                         } else {
                             character.movement = Fall;
@@ -579,7 +579,7 @@ impl<'a> System<'a> for Sys {
 
                     // Try to swim
                     if !physics.on_ground {
-                        if physics.in_fluid {
+                        if physics.in_fluid.is_some() {
                             character.movement = Swim;
                         } else {
                             character.movement = Fall;

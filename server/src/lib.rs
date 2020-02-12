@@ -296,6 +296,7 @@ impl Server {
         state.write_component(entity, comp::Alignment::Owned(entity));
         state.write_component(entity, comp::Inventory::default());
         state.write_component(entity, comp::InventoryUpdate);
+        state.write_component(entity, comp::Mass(50.0));
         // Make sure physics are accepted.
         state.write_component(entity, comp::ForceUpdate);
 
@@ -1308,6 +1309,7 @@ impl StateExt for State {
             .with(pos)
             .with(comp::Vel(Vec3::zero()))
             .with(comp::Ori(Vec3::unit_y()))
+            .with(comp::Mass(50.0))
             .with(comp::Controller::default())
             .with(body)
             .with(stats)

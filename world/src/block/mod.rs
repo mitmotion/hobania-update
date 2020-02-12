@@ -8,6 +8,7 @@ use crate::{
 };
 use common::{
     terrain::{structure::StructureBlock, Block, BlockKind, Structure},
+    util::pair_4_to_combination,
     vol::{ReadVol, Vox},
 };
 use std::ops::{Add, Div, Mul, Neg};
@@ -153,6 +154,7 @@ impl<'a> BlockGen<'a> {
             basement,
             chaos,
             water_level,
+            water_packed,
             warp_factor,
             surface_color,
             sub_surface_color,
@@ -178,19 +180,27 @@ impl<'a> BlockGen<'a> {
 
         let wposf = wpos.map(|e| e as f64);
 
+        let water_height = water_level;
+        let water_height_min = water_height.ceil();
         let (block, height) = if !only_structures {
-            let (_definitely_underground, height, on_cliff, basement_height, water_height) =
-                if (wposf.z as f32) < alt - 64.0 * chaos {
+            let (_definitely_underground, height, on_cliff, basement_height) =
+                if
+                /* alt <= water_level || */
+                (wposf.z as f32) < alt - 64.0 * chaos {
                     // Shortcut warping
-                    (true, alt, false, basement, water_level)
+                    (true, alt, false, basement)
                 } else {
                     // Apply warping
                     let warp = world
                         .gen_ctx
                         .warp_nz
                         .get(wposf.div(24.0))
+                        .max(-1.0)
+                        .min(1.0)
+                        /* .mul(0.5)
+                        .add(0.5) */
                         .mul((chaos - 0.1).max(0.0).min(1.0).powf(2.0))
-                        .mul(16.0);
+                        .mul(((wposf.z as f32) - water_height_min).abs().min(16.0));
                     let warp = Lerp::lerp(0.0, warp, warp_factor);
 
                     let surface_height = alt + warp;
@@ -225,13 +235,20 @@ impl<'a> BlockGen<'a> {
                         height,
                         on_cliff,
                         basement + height - alt,
-                        (if water_level <= alt {
+                        /*(if water_level <= alt {
                             water_level + warp
                         } else {
                             water_level
-                        }),
+                        })*/
                     )
                 };
+            let height_min = if alt <= water_height {
+                height.floor()
+            } else {
+                // height.ceil()
+                height.ceil()
+                // height.ceil()
+            };
 
             // Sample blocks
 
@@ -246,14 +263,14 @@ impl<'a> BlockGen<'a> {
             // let sand = Block::new(1, Rgb::new(180, 150, 50));
             // let warm_stone = Block::new(1, Rgb::new(165, 165, 130));
 
-            let water = Block::new(BlockKind::Water, Rgb::new(60, 90, 190));
+            // let water = Block::new(BlockKind::Water, Rgb::new(60, 90, 190));
 
             let grass_depth = (1.5 + 2.0 * chaos).min(height - basement_height);
-            let block = if (wposf.z as f32) < height - grass_depth {
+            let block = if (wposf.z as f32) < /*height*/height_min - grass_depth {
                 let col = Lerp::lerp(
                     sub_surface_color,
                     stone_col.map(|e| e as f32 / 255.0),
-                    (height - grass_depth - wposf.z as f32) * 0.15,
+                    (/*height*/height_min - grass_depth - wposf.z as f32) * 0.15,
                 )
                 .map(|e| (e * 255.0) as u8);
 
@@ -263,11 +280,11 @@ impl<'a> BlockGen<'a> {
                 } else {
                     Some(Block::new(BlockKind::Dense, col))
                 }
-            } else if (wposf.z as f32) < height {
+            } else if /*(wposf.z as f32) < height*/(wposf.z as f32) <= height_min {
                 let col = Lerp::lerp(
                     sub_surface_color,
                     surface_color,
-                    (wposf.z as f32 - (height - grass_depth))
+                    (wposf.z as f32 - (/*height*/height_min - grass_depth))
                         .div(grass_depth)
                         .powf(0.5),
                 );
@@ -276,9 +293,11 @@ impl<'a> BlockGen<'a> {
                     BlockKind::Normal,
                     col.map(|e| (e * 255.0) as u8),
                 ))
-            } else if (wposf.z as f32) < height + 0.9
+            } else if /*(wposf.z as f32) < height + 0.9*/
+                (wposf.z as f32) <= height_min
                 && temp < CONFIG.desert_temp
-                && (wposf.z as f32 > water_height + 3.0)
+                // && (wposf.z as f32 > water_height + 3.0)
+                && (wposf.z as f32 > water_height_min + 3.0)
                 && marble > 0.6
                 && marble_small > 0.55
                 && (marble * 3173.7).fract() < 0.6
@@ -316,7 +335,9 @@ impl<'a> BlockGen<'a> {
                     },
                     Rgb::broadcast(0),
                 ))
-            } else if (wposf.z as f32) < height + 0.9
+            } else if /*(wposf.z as f32) < height + 0.9*/
+                (wposf.z as f32) <= height_min
+                && wposf.z as f32 > water_height_min
                 && temp > CONFIG.desert_temp
                 && (marble * 4423.5).fract() < 0.0005
             {
@@ -376,7 +397,7 @@ impl<'a> BlockGen<'a> {
                         .add(1.0)
                     > 0.9993;
 
-                if cave && wposf.z as f32 > water_height + 3.0 {
+                if cave /*&& wposf.z as f32 > water_height + 3.0 */&& wposf.z as f32 > water_height_min {
                     None
                 } else {
                     Some(block)
@@ -384,8 +405,59 @@ impl<'a> BlockGen<'a> {
             })
             .or_else(|| {
                 // Water
-                if (wposf.z as f32) < water_height {
-                    // Ocean
+                if (wposf.z as f32) /*< water_height + 1.0*/<= water_height_min {
+                    // Idea: the "voxel" we use for water can be partially full.  If it is
+                    // partially full, it has a meaningful offset from the bottom of the
+                    // usual voxel.
+                    //
+                    // We compute it as follows:
+                    //
+                    // - if wposf.z >= water_height, fill in up to wposf.z - water_height.
+                    // - if wposf.z <
+                    //
+                    // water_packed is almost there, but we need to include a subvoxel height.
+                    // TODO: We are only using 19 bits so far, figure out what to do with the
+                    // other 5 bits.
+                    // NOTE: Probably breaks a bit if water_height < 1.0, so hopefully this doesn't
+                    // happen.
+                    // let min_sub_height = (water_height as f64).sub(31.0 / 32.0).max(31.0 / 32.0);
+                    // IDEA: If wpos.z is in [water_height - 31 / 32, water_height], use
+                    // water_height - wpos.z.
+                    /*let sub_height = if water_height as f64 - 1.0 >= wpos.z {
+
+                    }wpos.z as f64
+                    let sub_height = (water_height as f64).sub(31.0 / 32.0).max(wposf.z).max(0.0).fract(); */
+                    let max_sub_height = (water_height as f64)/*.sub(1.0 / 16.0)*/.max(1.0);
+                    // (wposf.z as f64).sub(31.0 / 32.0).max(1.0);
+                    let sub_top = max_sub_height.max(wposf.z /*.min(max_sub_height)*/).fract();
+                    // let sub_offset = min_sub_height.max(height/*.max(min_sub_height)*/).fract();
+                    // sub_height is reinterpreted such that encoded 0-31 means from 1/32 to 1.
+                    let sub_bottom = if wposf.z as f64 - 1.0 >= height as f64 {
+                        0.0
+                        /*1.0 - /*max_sub_height*/sub_height*/
+                    } else {
+                        wposf.z - height as f64
+                    };
+                    let encoded_sub_top = sub_top.mul(16.0) as u8;
+                    let encoded_sub_bottom = sub_bottom.mul(16.0) as u8;
+                    // If it returns an error, it probably means we gave two of the same
+                    // thing--generally speaking, we interpret that as meaning this should be a
+                    // full water block.
+                    let encoded_sub_b_t =
+                        pair_4_to_combination(encoded_sub_bottom, encoded_sub_top)
+                        .unwrap_or(120) as u32;
+                    let water_packed =
+                        water_packed | /*(encoded_sub_height << 16) | (encoded_sub_offset << 20)*/
+                                       (encoded_sub_b_t << 17);
+                    // let water = Rgb::new(60, 90, 190);
+                    let water = Block::new(
+                        BlockKind::Water,
+                        Rgb::new(
+                            ((water_packed & 0xFF0000) >> 16) as u8,
+                            ((water_packed & 0xFF00) >> 8) as u8,
+                            (water_packed & 0xFF) as u8,
+                        ),
+                    );
                     Some(water)
                 } else {
                     None
@@ -466,10 +538,10 @@ impl<'a> ZCache<'a> {
                 }
             });
 
-        let ground_max = (self.sample.alt + warp + rocks).max(cliff) + 2.0;
+        let ground_max = (self.sample.alt + warp + rocks).max(cliff) + 3.0;
 
         let min = min + structure_min;
-        let max = (ground_max + structure_max).max(self.sample.water_level + 2.0);
+        let max = (ground_max + structure_max).max(self.sample.water_level + 3.0);
 
         // Structures
         let (min, max) = self
@@ -484,7 +556,7 @@ impl<'a> ZCache<'a> {
             })
             .unwrap_or((min, max));
 
-        let structures_only_min_z = ground_max.max(self.sample.water_level + 2.0);
+        let structures_only_min_z = ground_max.max(self.sample.water_level + 3.0);
 
         (min, structures_only_min_z, max)
     }
@@ -617,7 +689,10 @@ pub fn block_from_structure(
             )
             .map(|e| e as u8),
         )),
-        StructureBlock::Water => Some(Block::new(BlockKind::Water, Rgb::new(100, 150, 255))),
+        StructureBlock::Water => {
+            // Encode water block RGB.
+            Some(Block::new(BlockKind::Water, Rgb::new(100, 150, 255)))
+        },
         StructureBlock::GreenSludge => Some(Block::new(BlockKind::Water, Rgb::new(30, 126, 23))),
         StructureBlock::Acacia => Some(Block::new(
             BlockKind::Normal,

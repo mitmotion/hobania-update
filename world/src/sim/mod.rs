@@ -17,7 +17,8 @@ pub use self::{
     map::{MapConfig, MapDebug},
     settlement::Settlement,
     util::{
-        cdf_irwin_hall, downhill, get_oceans, local_cells, map_edge_factor, neighbors,
+        cdf_irwin_hall, downhill, get_oceans, implicitize_quadratic, intersect_quadratics,
+        local_cells, map_edge_factor, neighbors, quadratic_nearest_point, river_spline_coeffs,
         uniform_idx_as_vec2, uniform_noise, uphill, vec2_as_uniform_idx, InverseCdf, ScaleBias,
         NEIGHBOR_DELTA,
     },
@@ -1864,11 +1865,13 @@ impl SimChunk {
             Some(RiverKind::River { .. }) => false, // TODO: inspect width
             None => false,
         };
-        let river_xy = Vec2::new(river.velocity.x, river.velocity.y).magnitude();
-        let river_slope = river.velocity.z / river_xy;
+        /* let river_xy = Vec2::new(river.velocity.x, river.velocity.y).magnitude();
+        let river_slope = river.velocity.z / river_xy; */
         match river.river_kind {
-            Some(RiverKind::River { cross_section }) => {
-                if cross_section.x >= 0.5 && cross_section.y >= CONFIG.river_min_height {
+            Some(RiverKind::River {
+                cross_section: _cross_section,
+            }) => {
+                /* if cross_section.x >= 0.5 && cross_section.y >= CONFIG.river_min_height {
                     /* println!(
                         "Big area! Pos area: {:?}, River data: {:?}, slope: {:?}",
                         wposf, river, river_slope
@@ -1881,7 +1884,7 @@ impl SimChunk {
                         river,
                         river_slope
                     );
-                }
+                } */
             },
             Some(RiverKind::Lake { .. }) => {
                 // Forces lakes to be downhill from the land around them, and adds some noise to

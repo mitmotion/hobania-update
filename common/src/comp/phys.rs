@@ -63,7 +63,7 @@ pub struct PhysicsState {
     pub on_ground: bool,
     pub on_wall: Option<Vec3<f32>>,
     pub touch_entity: Option<Uid>,
-    pub in_fluid: bool,
+    pub in_fluid: Option<Vec3<f32>>,
 }
 
 impl Component for PhysicsState {
