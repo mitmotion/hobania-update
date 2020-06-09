@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - New level of detail feature, letting you see all the world's terrain at any view distance.
 - Point and directional lights now cast realistic shadows, using shadow mapping.
 - Added leaf and chimney particles
@@ -20,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Adaptive stride setup for more dynamic run behavior
 - Theropod body
 - Several new animals
+- Added a separate camera mode for when the player is indoors
 
 ### Changed
 
@@ -95,11 +97,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add detection of entities under the cursor
 - Functional group-system with exp-sharing and disabled damage to group members
 - Some Campfire, fireball & bomb; particle, light & sound effects.
-- Added firework recipe
-- Added setting to change resolution
-- Rare (unfinished) castles
-- Caves with monsters and treasure
-- Furniture and decals in towns
 
 ### Changed
 
