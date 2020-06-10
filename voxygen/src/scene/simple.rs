@@ -213,6 +213,7 @@ impl Scene {
             scene_data.time,
             /* 1.0 / 60.0 */ scene_data.delta_time,
             scene_data.mouse_smoothing,
+            None,
         );
 
         self.camera.compute_dependents_no_terrain();
