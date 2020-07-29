@@ -1,4 +1,4 @@
-use super::{super::{Animation, AnimationEventItem}, CharacterSkeleton, SkeletonAttr};
+use super::{super::{Animation, AnimationEvent, AnimationEventItem}, CharacterSkeleton, SkeletonAttr};
 use common::comp::item::{Hands, ToolKind};
 use std::{f32::consts::PI, ops::Mul};
 use vek::*;
@@ -34,7 +34,7 @@ impl Animation for RunAnimation {
     ) -> (Self::Skeleton, VecDeque<AnimationEventItem>) {
         let mut next = (*skeleton).clone();
 
-        let speed = Vec2::<f32>::from(velocity).magnitude();
+        let speed = Vec2::<f32>::from(velocity).magnitude() / 3.0;
         *rate = 1.0;
         let impact = (avg_vel.z).max(-8.0);
 
@@ -266,6 +266,15 @@ impl Animation for RunAnimation {
             (_, _) => Vec3::zero(),
         };
 
-        (next, VecDeque::new())
+        let mut animation_events = VecDeque::new();
+
+        // if anim_time.rem_euclid(0.5) < 0.01 {
+        // if (footrotl).abs() < (0.05) {
+        if (footvertl).abs() < 0.05 {
+            let pos = next.l_foot.offset;
+            animation_events.push_back(AnimationEventItem::new(AnimationEvent::Step, pos));
+        }
+
+        (next, animation_events)
     }
 }

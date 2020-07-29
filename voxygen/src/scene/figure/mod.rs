@@ -5,6 +5,7 @@ pub use cache::FigureModelCache;
 pub use load::load_mesh; // TODO: Don't make this public.
 
 use crate::{
+    audio::sfx::{SfxEvent, SfxEventItem},
     ecs::comp::Interpolated,
     render::{Consts, FigureBoneData, FigureLocals, Globals, Light, Renderer, Shadow},
     scene::{
@@ -13,6 +14,7 @@ use crate::{
     },
 };
 use anim::{
+    AnimationEvent,
     biped_large::BipedLargeSkeleton, bird_medium::BirdMediumSkeleton,
     bird_small::BirdSmallSkeleton, character::CharacterSkeleton, critter::CritterSkeleton,
     dragon::DragonSkeleton, fish_medium::FishMediumSkeleton, fish_small::FishSmallSkeleton,
@@ -25,6 +27,7 @@ use common::{
         item::ItemKind, Body, CharacterState, Last, LightAnimation, LightEmitter, Loadout, Ori,
         PhysicsState, Pos, Scale, Stats, Vel,
     },
+    event::EventBus,
     state::{DeltaTime, State},
     states::triple_strike,
     terrain::TerrainChunk,
@@ -32,10 +35,10 @@ use common::{
 };
 use hashbrown::HashMap;
 use specs::{Entity as EcsEntity, Join, WorldExt};
+use std::collections::VecDeque;
 use tracing::trace;
 use treeculler::{BVol, BoundingSphere};
 use vek::*;
-use std::collections::VecDeque;
 
 const DAMAGE_FADE_COEFFICIENT: f64 = 5.0;
 const MOVING_THRESHOLD: f32 = 0.7;
@@ -185,6 +188,7 @@ impl FigureMgr {
         let time = state.get_time();
         let tick = scene_data.tick;
         let ecs = state.ecs();
+        let audio_events = ecs.read_resource::<EventBus<SfxEventItem>>();
         let view_distance = scene_data.view_distance;
         let dt = state.get_delta_time();
         let frustum = camera.frustum();
@@ -885,6 +889,15 @@ impl FigureMgr {
                         true,
                         is_player,
                     );
+
+                    for event in animation_events {
+                        match &event.event {
+                            AnimationEvent::Step => {
+                                let ev_pos = pos.0 + event.pos;
+                                audio_events.emit_now(SfxEventItem::new(SfxEvent::Run, Some(ev_pos), Some(0.9)));
+                            }
+                        }
+                    }
                 },
                 Body::QuadrupedSmall(_) => {
                     let skeleton_attr = &self

@@ -164,7 +164,7 @@ pub trait Animation {
                     f64,
                     &mut f32,
                     &<Self::Skeleton as Skeleton>::Attr,
-                ) -> Self::Skeleton,
+                ) -> (Self::Skeleton, VecDeque<AnimationEventItem>),
             > = unsafe {
                 //let start = std::time::Instant::now();
                 // Overhead of 0.5-5 us (could use hashmap to mitigate if this is an issue)

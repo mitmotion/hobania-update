@@ -156,7 +156,7 @@ impl MovementEventMapper {
             return if character_state.is_dodge() {
                 SfxEvent::Roll
             } else {
-                SfxEvent::Run
+                SfxEvent::Idle
             };
         }
 
