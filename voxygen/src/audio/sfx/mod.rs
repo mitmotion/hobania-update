@@ -263,8 +263,8 @@ impl SfxMgr {
                         .last()
                         .expect("Failed to determine sound file for this trigger item."),
                     _ => {
-                        let rand_step = rand::random::<usize>() % item.files.len();
-                        &item.files[rand_step]
+                        let rand_sound = rand::random::<usize>() % item.files.len();
+                        &item.files[rand_sound]
                     },
                 };
 
