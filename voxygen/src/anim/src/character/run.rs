@@ -34,7 +34,7 @@ impl Animation for RunAnimation {
     ) -> (Self::Skeleton, VecDeque<AnimationEventItem>) {
         let mut next = (*skeleton).clone();
 
-        let speed = Vec2::<f32>::from(velocity).magnitude() / 3.0;
+        let speed = Vec2::<f32>::from(velocity).magnitude();
         *rate = 1.0;
         let impact = (avg_vel.z).max(-8.0);
 

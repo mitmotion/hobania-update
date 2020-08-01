@@ -893,7 +893,7 @@ impl FigureMgr {
                     for event in animation_events {
                         match &event.event {
                             AnimationEvent::Step => {
-                                let ev_pos = pos.0 + event.pos;
+                                let ev_pos = pos.0;
                                 audio_events.emit_now(SfxEventItem::new(SfxEvent::Run, Some(ev_pos), Some(0.9)));
                             }
                         }
