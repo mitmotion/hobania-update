@@ -8,7 +8,7 @@
     const_generics,
     drain_filter,
     once_cell,
-    or_patterns
+    trait_alias
 )]
 #![recursion_limit = "2048"]
 
