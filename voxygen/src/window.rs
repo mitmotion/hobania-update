@@ -1,6 +1,6 @@
 use crate::{
     controller::*,
-    render::{Renderer, WinColorFmt, WinDepthFmt},
+    render::Renderer,
     settings::{ControlSettings, Settings},
     ui, Error,
 };
@@ -9,10 +9,9 @@ use crossbeam::channel;
 use gilrs::{EventType, Gilrs};
 use hashbrown::HashMap;
 use itertools::Itertools;
-use old_school_gfx_glutin_ext::{ContextBuilderExt, WindowInitExt, WindowUpdateExt};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use tracing::{error, info, warn};
+use tracing::{error, warn};
 use vek::*;
 use winit::monitor::VideoMode;
 
@@ -498,7 +497,7 @@ impl fmt::Display for KeyMouse {
 
 pub struct Window {
     renderer: Renderer,
-    window: glutin::ContextWrapper<glutin::PossiblyCurrent, winit::window::Window>,
+    window: winit::window::Window,
     cursor_grabbed: bool,
     pub pan_sensitivity: u32,
     pub zoom_sensitivity: u32,
@@ -543,26 +542,18 @@ impl Window {
             false,
         );
 
-        let (window, device, factory, win_color_view, win_depth_view) =
-            glutin::ContextBuilder::new()
-                .with_gl(glutin::GlRequest::Specific(glutin::Api::OpenGl, (3, 3)))
-                .with_vsync(false)
-                .with_gfx_color_depth::<WinColorFmt, WinDepthFmt>()
-                .build_windowed(win_builder, &event_loop)
-                .map_err(|err| Error::BackendError(Box::new(err)))?
-                .init_gfx::<WinColorFmt, WinDepthFmt>();
+        // let (window, device, factory, win_color_view, win_depth_view) =
+        //     glutin::ContextBuilder::new()
+        //         .with_gl(glutin::GlRequest::Specific(glutin::Api::OpenGl, (3, 3)))
+        //         .with_vsync(false)
+        //         .with_gfx_color_depth::<WinColorFmt, WinDepthFmt>()
+        //         .build_windowed(win_builder, &event_loop)
+        //         .map_err(|err| Error::BackendError(Box::new(err)))?
+        //         .init_gfx::<WinColorFmt, WinDepthFmt>();
 
-        let vendor = device.get_info().platform_name.vendor;
-        let renderer = device.get_info().platform_name.renderer;
-        let opengl_version = device.get_info().version;
-        let glsl_version = device.get_info().shading_language;
-        info!(
-            ?vendor,
-            ?renderer,
-            ?opengl_version,
-            ?glsl_version,
-            "selected graphics device"
-        );
+        let window = win_builder.build(&event_loop)?;
+
+        let renderer = Renderer::new(&window, settings.graphics.render_mode.clone())?;
 
         let keypress_map = HashMap::new();
 
@@ -598,13 +589,7 @@ impl Window {
         let scale_factor = window.window().scale_factor();
 
         let mut this = Self {
-            renderer: Renderer::new(
-                device,
-                factory,
-                win_color_view,
-                win_depth_view,
-                settings.graphics.render_mode.clone(),
-            )?,
+            renderer,
             window,
             cursor_grabbed: false,
             pan_sensitivity: settings.gameplay.pan_sensitivity,
@@ -1305,7 +1290,7 @@ impl Window {
     pub fn set_size(&mut self, new_size: Vec2<u16>) {
         self.window
             .window()
-            .set_inner_size(glutin::dpi::LogicalSize::new(
+            .set_inner_size(winit::dpi::LogicalSize::new(
                 new_size.x as f64,
                 new_size.y as f64,
             ));
