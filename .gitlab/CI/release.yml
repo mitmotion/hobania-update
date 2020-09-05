@@ -1,11 +1,9 @@
 # allow_failure: true makes these pipelines manual and "non-blocking" which changed with except -> rule syntax
-.optional-release:
+.optional-debuginfo:
   stage: check
   tags:
     - veloren-docker
   rules:
-    - if: $CI_COMMIT_REF_NAME =~ /^master$/ || $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+/ || $CI_COMMIT_REF_NAME =~ /^r[0-9]+\.[0-9]+/ || $CI_PIPELINE_SOURCE == "schedule"
-      when: never
     - when: manual
       allow_failure: true
 
