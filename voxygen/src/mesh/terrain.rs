@@ -337,6 +337,12 @@ impl<'a, V: RectRasterableVol<Vox = Block> + ReadVol + Debug>
         let max_size =
             guillotiere::Size::new(i32::from(max_texture_size.x), i32::from(max_texture_size.y));
         let greedy_size = Vec3::new(range.size().w - 2, range.size().h - 2, z_end - z_start + 1);
+        if greedy_size.reduce_min() < 1 {
+            dbg!(greedy_size);
+            dbg!(range.size());
+            dbg!(z_end);
+            dbg!(z_start);
+        }
         // NOTE: Terrain sizes are limited to 32 x 32 x 16384 (to fit in 24 bits: 5 + 5
         // + 14). FIXME: Make this function fallible, since the terrain
         // information might be dynamically generated which would make this hard
@@ -348,6 +354,10 @@ impl<'a, V: RectRasterableVol<Vox = Block> + ReadVol + Debug>
         // NOTE: Cast is safe by prior assertion on greedy_size; it fits into a u16,
         // which always fits into a usize.
         let greedy_size = greedy_size.as_::<usize>();
+        if greedy_size.x > 32 || greedy_size.y > 32 || greedy_size.z > 16384 {
+            dbg!(greedy_size);
+            dbg!(range.size());
+        }
         let greedy_size_cross = Vec3::new(greedy_size.x - 1, greedy_size.y - 1, greedy_size.z);
         let draw_delta = Vec3::new(1, 1, z_start);
 
