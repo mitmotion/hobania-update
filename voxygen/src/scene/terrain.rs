@@ -5,9 +5,9 @@ pub use self::watcher::BlocksOfInterest;
 use crate::{
     mesh::{greedy::GreedyMesh, Meshable},
     render::{
-        ColLightFmt, ColLightInfo, Consts, FluidPipeline, GlobalModel, Instances, Mesh, Model,
-        RenderError, Renderer, ShadowPipeline, SpriteInstance, SpriteLocals, SpritePipeline,
-        TerrainLocals, TerrainPipeline, Texture,
+        pipelines, ColLightInfo, Consts, FluidVertex, GlobalModel, Instances, Mesh, Model,
+        RenderError, Renderer, SpriteInstance, SpriteLocals, SpriteVertex, TerrainLocals,
+        TerrainVertex, Texture,
     },
 };
 
@@ -59,8 +59,8 @@ impl Visibility {
 pub struct TerrainChunkData {
     // GPU data
     load_time: f32,
-    opaque_model: Model<TerrainPipeline>,
-    fluid_model: Option<Model<FluidPipeline>>,
+    opaque_model: Model<TerrainVertex>,
+    fluid_model: Option<Model<FluidVertex>>,
     col_lights: guillotiere::AllocId,
     light_map: Box<dyn Fn(Vec3<i32>) -> f32 + Send + Sync>,
     glow_map: Box<dyn Fn(Vec3<i32>) -> f32 + Send + Sync>,
@@ -87,8 +87,8 @@ struct ChunkMeshState {
 struct MeshWorkerResponse {
     pos: Vec2<i32>,
     z_bounds: (f32, f32),
-    opaque_mesh: Mesh<TerrainPipeline>,
-    fluid_mesh: Mesh<FluidPipeline>,
+    opaque_mesh: Mesh<TerrainVertex>,
+    fluid_mesh: Mesh<FluidVertex>,
     col_lights_info: ColLightInfo,
     light_map: Box<dyn Fn(Vec3<i32>) -> f32 + Send + Sync>,
     glow_map: Box<dyn Fn(Vec3<i32>) -> f32 + Send + Sync>,
@@ -229,7 +229,7 @@ fn mesh_worker<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + '
 struct SpriteData {
     /* mat: Mat4<f32>, */
     locals: Consts<SpriteLocals>,
-    model: Model<SpritePipeline>,
+    model: Model<SpriteVertex>,
     /* scale: Vec3<f32>, */
     offset: Vec3<f32>,
 }
@@ -266,8 +266,8 @@ pub struct Terrain<V: RectRasterableVol = TerrainChunk> {
 
     // GPU data
     sprite_data: Arc<HashMap<(SpriteKind, usize), Vec<SpriteData>>>,
-    sprite_col_lights: Texture<ColLightFmt>,
-    col_lights: Texture<ColLightFmt>,
+    col_lights: Texture,        /* <ColLightFmt> */
+    sprite_col_lights: Texture, /* <ColLightFmt> */
     waves: Texture,
 
     phantom: PhantomData<V>,
@@ -298,7 +298,6 @@ impl<V: RectRasterableVol> Terrain<V> {
         let mut locals_buffer = [SpriteLocals::default(); 8];
         let sprite_config_ = &sprite_config;
         // NOTE: Tracks the start vertex of the next model to be meshed.
-
         let sprite_data: HashMap<(SpriteKind, usize), _> = SpriteKind::into_enum_iter()
             .filter_map(|kind| Some((kind, kind.elim_case_pure(&sprite_config_.0).as_ref()?)))
             .flat_map(|(kind, sprite_config)| {
@@ -358,7 +357,7 @@ impl<V: RectRasterableVol> Terrain<V> {
                                         // has no
                                         // interesting return value, but updates the mesh.
                                         let mut opaque_mesh = Mesh::new();
-                                        Meshable::<SpritePipeline, &mut GreedyMesh>::generate_mesh(
+                                        Meshable::<SpriteVertex, &mut GreedyMesh>::generate_mesh(
                                             Segment::from(&model.read().0).scaled_by(lod_scale),
                                             (greedy, &mut opaque_mesh, false),
                                         );
@@ -399,7 +398,7 @@ impl<V: RectRasterableVol> Terrain<V> {
             .map(|mut f| f(&mut greedy, renderer))
             .collect();
 
-        let sprite_col_lights = ShadowPipeline::create_col_lights(renderer, greedy.finalize())
+        let sprite_col_lights = pipelines::shadow::create_col_lights(renderer, greedy.finalize())
             .expect("Failed to upload sprite color and light data to the GPU!");
 
         Self {
@@ -416,9 +415,8 @@ impl<V: RectRasterableVol> Terrain<V> {
             waves: renderer
                 .create_texture(
                     &assets::Image::load_expect("voxygen.texture.waves").read().0,
-                    Some(gfx::texture::FilterMethod::Trilinear),
-                    Some(gfx::texture::WrapMode::Tile),
-                    None,
+                    Some(wgpu::FilterMode::Linear),
+                    Some(wgpu::AddressMode::Repeat),
                 )
                 .expect("Failed to create wave texture"),
             col_lights,
@@ -428,7 +426,7 @@ impl<V: RectRasterableVol> Terrain<V> {
 
     fn make_atlas(
         renderer: &mut Renderer,
-    ) -> Result<(AtlasAllocator, Texture<ColLightFmt>), RenderError> {
+    ) -> Result<(AtlasAllocator, Texture /* <ColLightFmt> */), RenderError> {
         span!(_guard, "make_atlas", "Terrain::make_atlas");
         let max_texture_size = renderer.max_texture_size();
         let atlas_size =
@@ -440,20 +438,29 @@ impl<V: RectRasterableVol> Terrain<V> {
             ..guillotiere::AllocatorOptions::default()
         });
         let texture = renderer.create_texture_raw(
-            gfx::texture::Kind::D2(
-                max_texture_size,
-                max_texture_size,
-                gfx::texture::AaMode::Single,
-            ),
-            1_u8,
-            gfx::memory::Bind::SHADER_RESOURCE,
-            gfx::memory::Usage::Dynamic,
-            (0, 0),
-            gfx::format::Swizzle::new(),
-            gfx::texture::SamplerInfo::new(
-                gfx::texture::FilterMethod::Bilinear,
-                gfx::texture::WrapMode::Clamp,
-            ),
+            wgpu::TextureDescriptor {
+                label: Some("Atlas texture"),
+                size: wgpu::Extent3d {
+                    width: max_texture_size,
+                    height: max_texture_size,
+                    depth: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D1,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsage::COPY_DST | wgpu::TextureUsage::SAMPLED,
+            },
+            wgpu::SamplerDescriptor {
+                label: Some("Atlas sampler"),
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                mipmap_filter: wgpu::FilterMode::Nearest,
+                ..Default::default()
+            },
         )?;
         Ok((atlas, texture))
     }
