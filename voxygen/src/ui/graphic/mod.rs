@@ -3,7 +3,7 @@ mod renderer;
 
 pub use renderer::{SampleStrat, Transform};
 
-use crate::render::{RenderError, Renderer, Texture};
+use crate::render::{Renderer, Texture};
 use common::figure::Segment;
 use guillotiere::{size2, SimpleAtlasAllocator};
 use hashbrown::{hash_map::Entry, HashMap};
@@ -443,21 +443,17 @@ fn upload_image(renderer: &mut Renderer, aabr: Aabr<u16>, tex: &Texture, image: 
         size,
         // NOTE: Rgba texture, so each pixel is 4 bytes, ergo this cannot fail.
         // We make the cast parameters explicit for clarity.
-        gfx::memory::cast_slice::<u8, [u8; 4]>(&image),
+        bytemuck::cast_slice::<u8, [u8; 4]>(&image),
     ) {
         warn!(?e, "Failed to update texture");
     }
 }
 
-fn create_image(
-    renderer: &mut Renderer,
-    image: RgbaImage,
-    border_color: Rgba<f32>,
-) -> Result<Texture, RenderError> {
+fn create_image(renderer: &mut Renderer, image: RgbaImage, border_color: Rgba<f32>) {
     renderer.create_texture(
         &DynamicImage::ImageRgba8(image),
         None,
-        Some(gfx::texture::WrapMode::Border),
+        Some(wgpu::AddressMode::ClampToBorder),
         Some(border_color.into_array().into()),
     )
 }
