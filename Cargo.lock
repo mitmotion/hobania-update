@@ -6017,6 +6017,7 @@ dependencies = [
 name = "veloren-voxygen-anim"
 version = "0.8.0"
 dependencies = [
+ "bytemuck",
  "find_folder",
  "inline_tweak",
  "lazy_static",

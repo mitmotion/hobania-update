@@ -3,7 +3,7 @@ mod watcher;
 pub use self::watcher::BlocksOfInterest;
 
 use crate::{
-    mesh::{greedy::GreedyMesh, Meshable},
+    mesh::{greedy::GreedyMesh, segment::generate_mesh_base_vol_sprite, terrain::generate_mesh},
     render::{
         pipelines, ColLightInfo, Consts, FluidVertex, GlobalModel, Instances, Mesh, Model,
         RenderError, Renderer, SpriteInstance, SpriteLocals, SpriteVertex, TerrainLocals,
@@ -31,7 +31,6 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc,
 };
-use tracing::warn;
 use treeculler::{BVol, Frustum, AABB};
 use vek::*;
 
@@ -153,11 +152,14 @@ fn mesh_worker<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + '
     span!(_guard, "mesh_worker");
     let blocks_of_interest = BlocksOfInterest::from_chunk(&chunk);
     let (opaque_mesh, fluid_mesh, _shadow_mesh, (bounds, col_lights_info, light_map, glow_map)) =
-        volume.generate_mesh((
-            range,
-            Vec2::new(max_texture_size, max_texture_size),
-            &blocks_of_interest,
-        ));
+        generate_mesh(
+            &volume,
+            (
+                range,
+                Vec2::new(max_texture_size, max_texture_size),
+                &blocks_of_interest,
+            ),
+        );
     MeshWorkerResponse {
         pos,
         z_bounds: (bounds.min.z, bounds.max.z),
@@ -292,8 +294,7 @@ impl<V: RectRasterableVol> Terrain<V> {
             Self::make_atlas(renderer).expect("Failed to create atlas texture");
 
         let max_texture_size = renderer.max_texture_size();
-        let max_size =
-            guillotiere::Size::new(i32::from(max_texture_size), i32::from(max_texture_size));
+        let max_size = guillotiere::Size::new(max_texture_size as i32, max_texture_size as i32);
         let mut greedy = GreedyMesh::new(max_size);
         let mut locals_buffer = [SpriteLocals::default(); 8];
         let sprite_config_ = &sprite_config;
@@ -357,7 +358,7 @@ impl<V: RectRasterableVol> Terrain<V> {
                                         // has no
                                         // interesting return value, but updates the mesh.
                                         let mut opaque_mesh = Mesh::new();
-                                        Meshable::<SpriteVertex, &mut GreedyMesh>::generate_mesh(
+                                        generate_mesh_base_vol_sprite(
                                             Segment::from(&model.read().0).scaled_by(lod_scale),
                                             (greedy, &mut opaque_mesh, false),
                                         );
@@ -398,8 +399,7 @@ impl<V: RectRasterableVol> Terrain<V> {
             .map(|mut f| f(&mut greedy, renderer))
             .collect();
 
-        let sprite_col_lights = pipelines::shadow::create_col_lights(renderer, greedy.finalize())
-            .expect("Failed to upload sprite color and light data to the GPU!");
+        let sprite_col_lights = pipelines::shadow::create_col_lights(renderer, greedy.finalize());
 
         Self {
             atlas,
@@ -429,8 +429,7 @@ impl<V: RectRasterableVol> Terrain<V> {
     ) -> Result<(AtlasAllocator, Texture /* <ColLightFmt> */), RenderError> {
         span!(_guard, "make_atlas", "Terrain::make_atlas");
         let max_texture_size = renderer.max_texture_size();
-        let atlas_size =
-            guillotiere::Size::new(i32::from(max_texture_size), i32::from(max_texture_size));
+        let atlas_size = guillotiere::Size::new(max_texture_size as i32, max_texture_size as i32);
         let atlas = AtlasAllocator::with_options(atlas_size, &guillotiere::AllocatorOptions {
             // TODO: Verify some good empirical constants.
             small_size_threshold: 128,
@@ -438,7 +437,7 @@ impl<V: RectRasterableVol> Terrain<V> {
             ..guillotiere::AllocatorOptions::default()
         });
         let texture = renderer.create_texture_raw(
-            wgpu::TextureDescriptor {
+            &wgpu::TextureDescriptor {
                 label: Some("Atlas texture"),
                 size: wgpu::Extent3d {
                     width: max_texture_size,
@@ -451,7 +450,17 @@ impl<V: RectRasterableVol> Terrain<V> {
                 format: wgpu::TextureFormat::Rgba8UnormSrgb,
                 usage: wgpu::TextureUsage::COPY_DST | wgpu::TextureUsage::SAMPLED,
             },
-            wgpu::SamplerDescriptor {
+            &wgpu::TextureViewDescriptor {
+                label: Some("Atlas texture view"),
+                format: Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+                dimension: Some(wgpu::TextureViewDimension::D1),
+                aspect: wgpu::TextureAspect::All,
+                base_mip_level: 0,
+                level_count: None,
+                base_array_layer: 0,
+                array_layer_count: None,
+            },
+            &wgpu::SamplerDescriptor {
                 label: Some("Atlas sampler"),
                 address_mode_u: wgpu::AddressMode::ClampToEdge,
                 address_mode_v: wgpu::AddressMode::ClampToEdge,
@@ -461,7 +470,7 @@ impl<V: RectRasterableVol> Terrain<V> {
                 mipmap_filter: wgpu::FilterMode::Nearest,
                 ..Default::default()
             },
-        )?;
+        );
         Ok((atlas, texture))
     }
 
@@ -726,7 +735,7 @@ impl<V: RectRasterableVol> Terrain<V> {
                     (min_z as f32, max_z as f32),
                     started_tick,
                     volume,
-                    max_texture_size,
+                    max_texture_size as u16,
                     chunk,
                     aabb,
                     &sprite_data,
@@ -758,24 +767,20 @@ impl<V: RectRasterableVol> Terrain<V> {
                     let (tex, tex_size) = response.col_lights_info;
                     let atlas = &mut self.atlas;
                     let allocation = atlas
-                        .allocate(guillotiere::Size::new(
-                            i32::from(tex_size.x),
-                            i32::from(tex_size.y),
-                        ))
+                        .allocate(guillotiere::Size::new(tex_size.x as i32, tex_size.y as i32))
                         .expect("Not yet implemented: allocate new atlas on allocation failure.");
                     // NOTE: Cast is safe since the origin was a u16.
                     let atlas_offs = Vec2::new(
-                        allocation.rectangle.min.x as u16,
-                        allocation.rectangle.min.y as u16,
+                        allocation.rectangle.min.x as u32,
+                        allocation.rectangle.min.y as u32,
                     );
-                    if let Err(err) = renderer.update_texture(
+                    renderer.update_texture(
                         &self.col_lights,
                         atlas_offs.into_array(),
                         tex_size.into_array(),
                         &tex,
-                    ) {
-                        warn!("Failed to update texture: {:?}", err);
-                    }
+                        tex_size.x * 4, // VERIFY
+                    );
 
                     self.insert_chunk(response.pos, TerrainChunkData {
                         load_time,
@@ -815,8 +820,8 @@ impl<V: RectRasterableVol> Terrain<V> {
                                 )
                                 .into_array(),
                                 atlas_offs: Vec4::new(
-                                    i32::from(atlas_offs.x),
-                                    i32::from(atlas_offs.y),
+                                    atlas_offs.x as i32,
+                                    atlas_offs.y as i32,
                                     0,
                                     0,
                                 )
