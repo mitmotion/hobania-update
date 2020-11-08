@@ -39,6 +39,7 @@ use common::{
     comp::{self, bird_medium, quadruped_low, quadruped_medium, quadruped_small},
     generation::{ChunkSupplement, EntityInfo},
     msg::WorldMapMsg,
+    span,
     terrain::{Block, BlockKind, SpriteKind, TerrainChunk, TerrainChunkMeta, TerrainChunkSize},
     vol::{ReadVol, RectVolSize, WriteVol},
 };
@@ -106,6 +107,7 @@ impl World {
         // TODO: misleading name
         mut should_continue: impl FnMut() -> bool,
     ) -> Result<(TerrainChunk, ChunkSupplement), ()> {
+        span!(_guard, "generate_chunk", "World::generate_chunk");
         let mut sampler = self.sample_blocks();
 
         let chunk_wpos2d = chunk_pos * TerrainChunkSize::RECT_SIZE.map(|e| e as i32);

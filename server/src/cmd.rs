@@ -74,6 +74,7 @@ fn get_handler(cmd: &ChatCommand) -> CommandHandler {
         ChatCommand::Campfire => handle_spawn_campfire,
         ChatCommand::Debug => handle_debug,
         ChatCommand::DebugColumn => handle_debug_column,
+        ChatCommand::DebugChunk => handle_debug_chunk,
         ChatCommand::Dummy => handle_spawn_training_dummy,
         ChatCommand::Explosion => handle_explosion,
         ChatCommand::Faction => handle_faction,
@@ -1624,6 +1625,28 @@ spawn_rate {:?} "#,
         server.notify_client(
             client,
             ChatType::CommandError.server_msg(action.help_string()),
+        );
+    }
+}
+
+fn handle_debug_chunk(
+    server: &mut Server,
+    client: EcsEntity,
+    target: EcsEntity,
+    _args: String,
+    _action: &ChatCommand,
+) {
+    if let Some(comp::Pos(current_pos)) = server.state.read_component_copied(target) {
+        let chunk_key = server.state.terrain().pos_key(current_pos.as_());
+        let message = format!(
+            "The current chunk has these chunk coordinates: ({}, {})",
+            chunk_key.x, chunk_key.y
+        );
+        server.notify_client(client, ChatType::CommandInfo.server_msg(message));
+    } else {
+        server.notify_client(
+            client,
+            ChatType::CommandError.server_msg("You have no position."),
         );
     }
 }
