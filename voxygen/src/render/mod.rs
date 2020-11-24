@@ -240,6 +240,23 @@ impl ShadowMode {
     pub fn is_map(&self) -> bool { matches!(self, Self::Map(_)) }
 }
 
+/// Shadow modes
+#[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
+pub enum ColorMode {
+    /// For people with missing/defective L cone cells (red)
+    Protanopia,
+    /// For people with missing/defective M cone cells (green)
+    Deuteranopia,
+    /// For people with missing/defective S cone cells (blue)
+    Tritanopia,
+    #[serde(other)]
+    None,
+}
+
+impl Default for ColorMode {
+    fn default() -> Self { ColorMode::None }
+}
+
 /// Upscale mode settings.
 #[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct UpscaleMode {
@@ -260,5 +277,6 @@ pub struct RenderMode {
     pub fluid: FluidMode,
     pub lighting: LightingMode,
     pub shadow: ShadowMode,
-    pub upscale_mode: UpscaleMode,
+    pub upscale: UpscaleMode,
+    pub color: ColorMode,
 }

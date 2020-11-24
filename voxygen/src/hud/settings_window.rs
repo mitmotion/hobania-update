@@ -1,15 +1,16 @@
 use super::{
     img_ids::Imgs, BarNumbers, CrosshairType, PressBehavior, ShortcutNumbers, Show,
-    CRITICAL_HP_COLOR, ERROR_COLOR, HP_COLOR, LOW_HP_COLOR, MENU_BG, STAMINA_COLOR,
-    TEXT_BIND_CONFLICT_COLOR, TEXT_COLOR, UI_HIGHLIGHT_0, UI_MAIN,
+    CRITICAL_HP_COLOR, ERROR_COLOR, LOW_HP_COLOR, MENU_BG, STAMINA_COLOR, TEXT_BIND_CONFLICT_COLOR,
+    TEXT_COLOR, UI_HIGHLIGHT_0, UI_MAIN,
 };
 use crate::{
     hud::BuffPosition,
     i18n::{list_localizations, LanguageMetadata, Localization},
     render::{
-        AaMode, CloudMode, FluidMode, LightingMode, RenderMode, ShadowMapMode, ShadowMode,
-        UpscaleMode,
+        AaMode, CloudMode, ColorMode, FluidMode, LightingMode, RenderMode, ShadowMapMode,
+        ShadowMode, UpscaleMode,
     },
+    settings::HudColors,
     ui::{fonts::Fonts, ImageSlider, ScaleMode, ToggleButton},
     window::{FullScreenSettings, FullscreenMode, GameInput},
     GlobalState,
@@ -219,6 +220,11 @@ widget_ids! {
         auto_walk_behavior_list,
         stop_auto_walk_on_input_button,
         stop_auto_walk_on_input_label,
+        //
+        color_mode_text,
+        color_mode_list,
+        hud_colors_text,
+        hud_colors_list,
     }
 }
 
@@ -315,6 +321,7 @@ pub enum Event {
     ChangeFreeLookBehavior(PressBehavior),
     ChangeAutoWalkBehavior(PressBehavior),
     ChangeStopAutoWalkOnInput(bool),
+    ChangeHudColors(HudColors),
 }
 
 pub enum ScaleChange {
@@ -393,7 +400,9 @@ impl<'a> Widget for SettingsWindow<'a> {
             SettingsTab::Video => self.localized_strings.get("common.video_settings"),
             SettingsTab::Sound => self.localized_strings.get("common.sound_settings"),
             SettingsTab::Lang => self.localized_strings.get("common.language_settings"),
-            SettingsTab::Accessibility => self.localized_strings.get("common.accessiblity_settings"),
+            SettingsTab::Accessibility => {
+                self.localized_strings.get("common.accessibility_settings")
+            },
         })
         .mid_top_with_margin_on(state.ids.frame, 3.0)
         .font_id(self.fonts.cyri.conrod_id)
@@ -1723,7 +1732,12 @@ impl<'a> Widget for SettingsWindow<'a> {
             let fps_col = match self.fps as i32 {
                 0..=14 => CRITICAL_HP_COLOR,
                 15..=29 => LOW_HP_COLOR,
-                30..=50 => HP_COLOR,
+                30..=50 => self
+                    .global_state
+                    .settings
+                    .accessibility
+                    .hud_colors
+                    .health_color(),
                 _ => STAMINA_COLOR,
             };
             Text::new(&format!("FPS: {:.0}", self.fps))
@@ -2125,7 +2139,7 @@ impl<'a> Widget for SettingsWindow<'a> {
             // Get which upscale factor is currently active
             let selected = upscale_factors
                 .iter()
-                .position(|factor| (*factor - render_mode.upscale_mode.factor).abs() < 0.001);
+                .position(|factor| (*factor - render_mode.upscale.factor).abs() < 0.001);
 
             if let Some(clicked) = DropDownList::new(
                 &upscale_factors
@@ -2142,7 +2156,7 @@ impl<'a> Widget for SettingsWindow<'a> {
             .set(state.ids.upscale_factor_list, ui)
             {
                 events.push(Event::ChangeRenderMode(Box::new(RenderMode {
-                    upscale_mode: UpscaleMode {
+                    upscale: UpscaleMode {
                         factor: upscale_factors[clicked],
                     },
                     ..render_mode.clone()
@@ -2852,7 +2866,92 @@ impl<'a> Widget for SettingsWindow<'a> {
         }
 
         if let SettingsTab::Accessibility = self.show.settings_tab {
-            // ADD STUFF HERE
+            let render_mode = &self.global_state.settings.graphics.render_mode;
+
+            // Color mode
+            Text::new(&self.localized_strings.get("hud.settings.color_mode"))
+                .top_left_with_margins_on(state.ids.settings_content, 10.0, 10.0)
+                .font_size(self.fonts.cyri.scale(14))
+                .font_id(self.fonts.cyri.conrod_id)
+                .color(TEXT_COLOR)
+                .set(state.ids.color_mode_text, ui);
+
+            let mode_list = [
+                ColorMode::None,
+                ColorMode::Protanopia,
+                ColorMode::Deuteranopia,
+                ColorMode::Tritanopia,
+            ];
+            let mode_label_list = [
+                &self.localized_strings.get("hud.settings.color_mode.none"),
+                &self
+                    .localized_strings
+                    .get("hud.settings.color_mode.protanopia"),
+                &self
+                    .localized_strings
+                    .get("hud.settings.color_mode.deuteranopia"),
+                &self
+                    .localized_strings
+                    .get("hud.settings.color_mode.tritanopia"),
+            ];
+
+            // Get which color mode is currently active
+            let selected = mode_list.iter().position(|x| *x == render_mode.color);
+
+            if let Some(clicked) = DropDownList::new(&mode_label_list, selected)
+                .w_h(400.0, 22.0)
+                .color(MENU_BG)
+                .label_color(TEXT_COLOR)
+                .label_font_id(self.fonts.cyri.conrod_id)
+                .down_from(state.ids.color_mode_text, 8.0)
+                .set(state.ids.color_mode_list, ui)
+            {
+                events.push(Event::ChangeRenderMode(Box::new(RenderMode {
+                    color: mode_list[clicked],
+                    ..render_mode.clone()
+                })));
+            }
+
+            let accessibility = &self.global_state.settings.accessibility;
+
+            // HUD colors
+            Text::new(&self.localized_strings.get("hud.settings.hud_colors"))
+                .down_from(state.ids.color_mode_list, 8.0)
+                .font_size(self.fonts.cyri.scale(14))
+                .font_id(self.fonts.cyri.conrod_id)
+                .color(TEXT_COLOR)
+                .set(state.ids.hud_colors_text, ui);
+
+            let mode_list = [
+                HudColors::Default,
+                HudColors::HighContrast,
+                HudColors::ColorDeficiency,
+            ];
+            let mode_label_list = [
+                &self.localized_strings.get("hud.settings.hud_colors.none"),
+                &self
+                    .localized_strings
+                    .get("hud.settings.hud_colors.high_contrast"),
+                &self
+                    .localized_strings
+                    .get("hud.settings.hud_colors.color_deficiency"),
+            ];
+
+            // Get which HUD colors are currently active
+            let selected = mode_list
+                .iter()
+                .position(|x| *x == accessibility.hud_colors);
+
+            if let Some(clicked) = DropDownList::new(&mode_label_list, selected)
+                .w_h(400.0, 22.0)
+                .color(MENU_BG)
+                .label_color(TEXT_COLOR)
+                .label_font_id(self.fonts.cyri.conrod_id)
+                .down_from(state.ids.hud_colors_text, 8.0)
+                .set(state.ids.hud_colors_list, ui)
+            {
+                events.push(Event::ChangeHudColors(mode_list[clicked]));
+            }
         };
         events
     }

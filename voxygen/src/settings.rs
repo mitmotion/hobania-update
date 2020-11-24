@@ -715,6 +715,32 @@ impl Default for LanguageSettings {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub enum HudColors {
+    HighContrast,
+    ColorDeficiency,
+    #[serde(other)]
+    Default,
+}
+
+impl Default for HudColors {
+    fn default() -> Self { HudColors::Default }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AccessibilitySettings {
+    pub hud_colors: HudColors,
+}
+
+impl Default for AccessibilitySettings {
+    fn default() -> Self {
+        Self {
+            hud_colors: HudColors::Default,
+        }
+    }
+}
+
 /// `Settings` contains everything that can be configured in the settings.ron
 /// file.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -733,6 +759,7 @@ pub struct Settings {
     pub language: LanguageSettings,
     pub screenshots_path: PathBuf,
     pub controller: GamepadSettings,
+    pub accessibility: AccessibilitySettings,
 }
 
 impl Default for Settings {
@@ -767,6 +794,7 @@ impl Default for Settings {
             language: LanguageSettings::default(),
             screenshots_path,
             controller: GamepadSettings::default(),
+            accessibility: AccessibilitySettings::default(),
         }
     }
 }

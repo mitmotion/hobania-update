@@ -191,28 +191,26 @@ vec3 correct(vec3 rgb, vec3 dlms) {
     return rgb + correction;
 }
 
-#define COLOR_NONE 0
-#define COLOR_PROTANOPIA 1
-#define COLOR_DEUTERANOPIA 2
-#define COLOR_TRITANOPIA 3
-
-#define COLOR_CORRECTION COLOR_NONE
+#define COLOR_MODE_NONE 0
+#define COLOR_MODE_PROTANOPIA 1
+#define COLOR_MODE_DEUTERANOPIA 2
+#define COLOR_MODE_TRITANOPIA 3
 
 vec3 color_correction(vec3 rgb) {
     vec3 lms = lms_color(rgb);
-    #if (COLOR_CORRECTION == COLOR_PROTANOPIA)
+    #if (COLOR_MODE == COLOR_MODE_PROTANOPIA)
         vec3 rgb_new = correct(rgb, vec3(
             0.0 * lms.r + 2.02344 * lms.g + -2.52581 * lms.b,
             0.0 * lms.r + 1.0 * lms.g + 0.0 * lms.b,
             0.0 * lms.r + 0.0 * lms.g + 1.0 * lms.b
         ));
-    #elif (COLOR_CORRECTION == COLOR_DEUTERANOPIA)
+    #elif (COLOR_MODE == COLOR_MODE_DEUTERANOPIA)
         vec3 rgb_new = correct(rgb, vec3(
             1.0 * lms.r + 0.0 * lms.g + 0.0 * lms.b,
             0.494207 * lms.r + 0.0 * lms.g + 1.24827 * lms.b,
             0.0 * lms.r + 0.0 * lms.g + 1.0 * lms.b
         ));
-    #elif (COLOR_CORRECTION == COLOR_TRITANOPIA)
+    #elif (COLOR_MODE == COLOR_MODE_TRITANOPIA)
         vec3 rgb_new = correct(rgb, vec3(
             1.0 * lms.r + 0.0 * lms.g + 0.0 * lms.b,
             0.0 * lms.r + 1.0 * lms.g + 0.0 * lms.b,

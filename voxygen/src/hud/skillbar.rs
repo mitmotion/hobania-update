@@ -2,7 +2,7 @@ use super::{
     hotbar,
     img_ids::{Imgs, ImgsRot},
     item_imgs::ItemImgs,
-    slots, BarNumbers, ShortcutNumbers, Show, BLACK, CRITICAL_HP_COLOR, HP_COLOR, LOW_HP_COLOR,
+    slots, BarNumbers, ShortcutNumbers, Show, BLACK, CRITICAL_HP_COLOR, LOW_HP_COLOR,
     STAMINA_COLOR, TEXT_COLOR, UI_HIGHLIGHT_0, UI_MAIN, XP_COLOR,
 };
 use crate::{
@@ -378,7 +378,12 @@ impl<'a> Widget for Skillbar<'a> {
         let health_col = match hp_percentage as u8 {
             0..=20 => crit_hp_color,
             21..=40 => LOW_HP_COLOR,
-            _ => HP_COLOR,
+            _ => self
+                .global_state
+                .settings
+                .accessibility
+                .hud_colors
+                .health_color(),
         };
         // Content
         Image::new(self.imgs.bar_content)

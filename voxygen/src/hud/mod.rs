@@ -49,6 +49,7 @@ use crate::{
     i18n::{i18n_asset_key, LanguageMetadata, Localization},
     render::{Consts, Globals, RenderMode, Renderer},
     scene::camera::{self, Camera},
+    settings::HudColors,
     ui::{fonts::Fonts, img_ids::Rotations, slot, Graphic, Ingameable, ScaleMode, Ui},
     window::{Event as WinEvent, FullScreenSettings, GameInput},
     GlobalState,
@@ -93,7 +94,7 @@ const TEXT_COLOR_3: Color = Color::Rgba(1.0, 1.0, 1.0, 0.1);
 const TEXT_BIND_CONFLICT_COLOR: Color = Color::Rgba(1.0, 0.0, 0.0, 1.0);
 const BLACK: Color = Color::Rgba(0.0, 0.0, 0.0, 1.0);
 //const BG_COLOR: Color = Color::Rgba(1.0, 1.0, 1.0, 0.8);
-const HP_COLOR: Color = Color::Rgba(0.33, 0.63, 0.0, 1.0);
+//const HP_COLOR: Color = Color::Rgba(0.33, 0.63, 0.0, 1.0);
 const LOW_HP_COLOR: Color = Color::Rgba(0.93, 0.59, 0.03, 1.0);
 const CRITICAL_HP_COLOR: Color = Color::Rgba(0.79, 0.19, 0.17, 1.0);
 const STAMINA_COLOR: Color = Color::Rgba(0.29, 0.62, 0.75, 0.9);
@@ -162,6 +163,16 @@ const NAMETAG_DMG_TIME: f32 = 60.0;
 const NAMETAG_DMG_RANGE: f32 = 120.0;
 /// Range to display speech-bubbles at
 const SPEECH_BUBBLE_RANGE: f32 = NAMETAG_RANGE;
+
+impl HudColors {
+    pub fn health_color(&self) -> Color {
+        match self {
+            HudColors::Default => Color::Rgba(0.33, 0.63, 0.0, 1.0),
+            HudColors::HighContrast => Color::Rgba(1.0, 1.0, 1.0, 1.0),
+            HudColors::ColorDeficiency => Color::Rgba(0.0, 0.3, 1.0, 1.0),
+        }
+    }
+}
 
 widget_ids! {
     struct Ids {
@@ -365,6 +376,7 @@ pub enum Event {
     ChangeRenderMode(Box<RenderMode>),
     ChangeAutoWalkBehavior(PressBehavior),
     ChangeStopAutoWalkOnInput(bool),
+    ChangeHudColors(HudColors),
     CraftRecipe(String),
     InviteMember(common::sync::Uid),
     AcceptInvite,
@@ -1261,6 +1273,7 @@ impl Hud {
 
                 // Speech bubble, name, level, and hp bars
                 overhead::Overhead::new(
+                    &global_state,
                     info,
                     bubble,
                     own_level,
@@ -2192,6 +2205,9 @@ impl Hud {
                     },
                     settings_window::Event::ChangeStopAutoWalkOnInput(state) => {
                         events.push(Event::ChangeStopAutoWalkOnInput(state));
+                    },
+                    settings_window::Event::ChangeHudColors(hud_colors) => {
+                        events.push(Event::ChangeHudColors(hud_colors));
                     },
                 }
             }

@@ -1,7 +1,7 @@
 use super::{
     img_ids::{Imgs, ImgsRot},
-    Show, BLACK, BUFF_COLOR, DEBUFF_COLOR, ERROR_COLOR, GROUP_COLOR, HP_COLOR, KILL_COLOR,
-    LOW_HP_COLOR, STAMINA_COLOR, TEXT_COLOR, TEXT_COLOR_GREY, UI_HIGHLIGHT_0, UI_MAIN,
+    Show, BLACK, BUFF_COLOR, DEBUFF_COLOR, ERROR_COLOR, GROUP_COLOR, KILL_COLOR, LOW_HP_COLOR,
+    STAMINA_COLOR, TEXT_COLOR, TEXT_COLOR_GREY, UI_HIGHLIGHT_0, UI_MAIN,
 };
 
 use crate::{
@@ -362,7 +362,7 @@ impl<'a> Widget for Group<'a> {
                         let health_col = match (health_perc * 100.0) as u8 {
                             0..=20 => crit_hp_color,
                             21..=40 => LOW_HP_COLOR,
-                            _ => HP_COLOR,
+                            _ => self.settings.accessibility.hud_colors.health_color(),
                         };
                         // Don't show panel for the player!
                         // Panel BG

@@ -1,5 +1,5 @@
 use super::{
-    img_ids::Imgs, DEFAULT_NPC, FACTION_COLOR, GROUP_COLOR, GROUP_MEMBER, HP_COLOR, LOW_HP_COLOR,
+    img_ids::Imgs, DEFAULT_NPC, FACTION_COLOR, GROUP_COLOR, GROUP_MEMBER, LOW_HP_COLOR,
     REGION_COLOR, SAY_COLOR, STAMINA_COLOR, TELL_COLOR, TEXT_BG, TEXT_COLOR,
 };
 use crate::{
@@ -7,6 +7,7 @@ use crate::{
     i18n::Localization,
     settings::GameplaySettings,
     ui::{fonts::Fonts, Ingameable},
+    GlobalState,
 };
 use common::comp::{BuffKind, Buffs, Energy, Health, SpeechBubble, SpeechBubbleType, Stats};
 use conrod_core::{
@@ -70,6 +71,7 @@ pub fn should_show_healthbar(health: &Health) -> bool { health.current() != heal
 /// (Speech bubble, Name, Level, HP/energy bars, etc.)
 #[derive(WidgetCommon)]
 pub struct Overhead<'a> {
+    global_state: &'a GlobalState,
     info: Option<Info<'a>>,
     bubble: Option<&'a SpeechBubble>,
     own_level: u32,
@@ -87,6 +89,7 @@ pub struct Overhead<'a> {
 impl<'a> Overhead<'a> {
     #[allow(clippy::too_many_arguments)] // TODO: Pending review in #587
     pub fn new(
+        global_state: &'a GlobalState,
         info: Option<Info<'a>>,
         bubble: Option<&'a SpeechBubble>,
         own_level: u32,
@@ -98,6 +101,7 @@ impl<'a> Overhead<'a> {
         fonts: &'a Fonts,
     ) -> Self {
         Self {
+            global_state,
             info,
             bubble,
             own_level,
@@ -330,7 +334,11 @@ impl<'a> Widget for Overhead<'a> {
                     } else if hp_percentage <= 50.0 {
                         LOW_HP_COLOR
                     } else {
-                        HP_COLOR
+                        self.global_state
+                            .settings
+                            .accessibility
+                            .hud_colors
+                            .health_color()
                     }))
                     .parent(id)
                     .set(state.ids.health_bar, ui);

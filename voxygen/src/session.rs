@@ -1053,6 +1053,10 @@ impl PlayState for SessionState {
                     HudEvent::ChangeStopAutoWalkOnInput(state) => {
                         global_state.settings.gameplay.stop_auto_walk_on_input = state;
                     },
+                    HudEvent::ChangeHudColors(hud_colors) => {
+                        global_state.settings.accessibility.hud_colors = hud_colors;
+                        global_state.settings.save_to_file_warn();
+                    },
                     HudEvent::CraftRecipe(r) => {
                         self.client.borrow_mut().craft_recipe(&r);
                     },

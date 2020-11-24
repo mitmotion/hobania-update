@@ -9,8 +9,8 @@ use super::{
         ui, GlobalModel, Globals,
     },
     texture::Texture,
-    AaMode, CloudMode, FilterMethod, FluidMode, LightingMode, Pipeline, RenderError, RenderMode,
-    ShadowMapMode, ShadowMode, WrapMode,
+    AaMode, CloudMode, ColorMode, FilterMethod, FluidMode, LightingMode, Pipeline, RenderError,
+    RenderMode, ShadowMapMode, ShadowMode, WrapMode,
 };
 use common::{
     assets::{self, watch::ReloadIndicator, Asset},
@@ -441,7 +441,7 @@ impl Renderer {
         RenderError,
     > {
         let upscaled = Vec2::from(size)
-            .map(|e: u16| (e as f32 * mode.upscale_mode.factor) as u16)
+            .map(|e: u16| (e as f32 * mode.upscale.factor) as u16)
             .into_tuple();
         let kind = match mode.aa {
             AaMode::None | AaMode::Fxaa => {
@@ -1821,6 +1821,7 @@ fn create_pipelines(
 #define CLOUD_MODE {}
 #define LIGHTING_ALGORITHM {}
 #define SHADOW_MODE {}
+#define COLOR_MODE {}
 
 "#,
         constants,
@@ -1847,6 +1848,12 @@ fn create_pipelines(
             ShadowMode::None => "SHADOW_MODE_NONE",
             ShadowMode::Map(_) if has_shadow_views => "SHADOW_MODE_MAP",
             ShadowMode::Cheap | ShadowMode::Map(_) => "SHADOW_MODE_CHEAP",
+        },
+        match mode.color {
+            ColorMode::None => "COLOR_MODE_NONE",
+            ColorMode::Protanopia => "COLOR_MODE_PROTANOPIA",
+            ColorMode::Deuteranopia => "COLOR_MODE_DEUTERANOPIA",
+            ColorMode::Tritanopia => "COLOR_MODE_TRITANOPIA",
         },
     );
 
