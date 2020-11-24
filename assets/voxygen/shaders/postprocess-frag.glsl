@@ -169,6 +169,62 @@ vec3 wpos_at(vec2 uv) {
 }
 */
 
+vec3 lms_color(vec3 rgb) {
+    return vec3(
+        (17.8824 * rgb.r) + (43.5161 * rgb.g) + (4.11935 * rgb.b),
+        (3.45565 * rgb.r) + (27.1554 * rgb.g) + (3.86714 * rgb.b),
+        (0.0299566 * rgb.r) + (0.184309 * rgb.g) + (1.46709 * rgb.b)
+    );
+}
+
+vec3 correct(vec3 rgb, vec3 dlms) {
+    vec3 err = rgb - vec3(
+        (0.0809444479 * dlms.r) + (-0.130504409 * dlms.g) + (0.116721066 * dlms.b),
+        (-0.0102485335 * dlms.r) + (0.0540193266 * dlms.g) + (-0.113614708 * dlms.b),
+        (-0.000365296938 * dlms.r) + (-0.00412161469 * dlms.g) + (0.693511405 * dlms.b)
+    );
+    vec3 correction = vec3(
+        0.0,
+        err.r * 0.7 + err.g * 1.0,
+        err.r * 0.7 + err.b * 1.0
+    );
+    return rgb + correction;
+}
+
+#define COLOR_NONE 0
+#define COLOR_PROTANOPIA 1
+#define COLOR_DEUTERANOPIA 2
+#define COLOR_TRITANOPIA 3
+
+#define COLOR_CORRECTION COLOR_NONE
+
+vec3 color_correction(vec3 rgb) {
+    vec3 lms = lms_color(rgb);
+    #if (COLOR_CORRECTION == COLOR_PROTANOPIA)
+        vec3 rgb_new = correct(rgb, vec3(
+            0.0 * lms.r + 2.02344 * lms.g + -2.52581 * lms.b,
+            0.0 * lms.r + 1.0 * lms.g + 0.0 * lms.b,
+            0.0 * lms.r + 0.0 * lms.g + 1.0 * lms.b
+        ));
+    #elif (COLOR_CORRECTION == COLOR_DEUTERANOPIA)
+        vec3 rgb_new = correct(rgb, vec3(
+            1.0 * lms.r + 0.0 * lms.g + 0.0 * lms.b,
+            0.494207 * lms.r + 0.0 * lms.g + 1.24827 * lms.b,
+            0.0 * lms.r + 0.0 * lms.g + 1.0 * lms.b
+        ));
+    #elif (COLOR_CORRECTION == COLOR_TRITANOPIA)
+        vec3 rgb_new = correct(rgb, vec3(
+            1.0 * lms.r + 0.0 * lms.g + 0.0 * lms.b,
+            0.0 * lms.r + 1.0 * lms.g + 0.0 * lms.b,
+            -0.395913 * lms.r + 0.801109 * lms.g + 0.0 * lms.b
+        ));
+    #else
+        vec3 rgb_new = rgb;
+    #endif
+
+    return rgb_new;
+}
+
 void main() {
     vec2 uv = (f_pos + 1.0) * 0.5;
 
@@ -212,6 +268,10 @@ void main() {
     // gamma correction
     aa_color.rgb = pow(aa_color.rgb, vec3(gamma_exposure.x + gamma_offset));
 
+    // Apply colour correction (color blindness filter)
+    aa_color.rgb = color_correction(clamp(aa_color.rgb, vec3(0), vec3(1)));
+
+
     /*
     // Apply clouds to `aa_color`
     #if (CLOUD_MODE != CLOUD_MODE_NONE)
@@ -246,13 +306,5 @@ void main() {
     //hsva_color.z = 1.0 - 1.0 / (1.0 * hsva_color.z + 1.0);
     //vec4 final_color = vec4(hsv2rgb(hsva_color.rgb), hsva_color.a);
 
-    vec4 final_color = aa_color;
-
-#if (FLUID_MODE == FLUID_MODE_CHEAP)
-    if (medium.x == 1u) {
-        final_color *= vec4(0.2, 0.2, 0.8, 1.0);
-    }
-#endif
-
-    tgt_color = vec4(final_color.rgb, 1);
+    tgt_color = vec4(aa_color.rgb, 1);
 }

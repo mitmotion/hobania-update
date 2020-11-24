@@ -70,5 +70,11 @@ void main() {
         color.rgb = get_cloud_color(color.rgb, dir, cam_pos.xyz, time_of_day.x, dist, 1.0);
     #endif
 
+    #if (FLUID_MODE == FLUID_MODE_CHEAP)
+        if (medium.x == 1u) {
+            color.rgb *= vec4(0.2, 0.2, 0.8);
+        }
+    #endif
+
     tgt_color = vec4(color.rgb, 1);
 }
