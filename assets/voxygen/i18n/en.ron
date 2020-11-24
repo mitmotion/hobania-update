@@ -57,6 +57,7 @@
         "common.video": "Graphics",
         "common.sound": "Sound",
         "common.languages": "Languages",
+        "common.accessibility": "Accessibility",
         "common.resume": "Resume",
         "common.characters": "Characters",
         "common.close": "Close",
@@ -83,6 +84,7 @@
         "common.video_settings": "Graphics Settings",
         "common.sound_settings": "Sound Settings",
         "common.language_settings": "Language Settings",
+        "common.accessiblity_settings": "Accessiblity Settings",
 
         // Message when connection to the server is lost
         "common.connection_lost": r#"Connection lost!

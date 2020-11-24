@@ -102,6 +102,7 @@ widget_ids! {
         test,
         video,
         language,
+        accessibility,
         fps_counter,
         vd_slider,
         vd_text,
@@ -228,6 +229,7 @@ pub enum SettingsTab {
     Gameplay,
     Controls,
     Lang,
+    Accessibility,
 }
 
 #[derive(WidgetCommon)]
@@ -391,6 +393,7 @@ impl<'a> Widget for SettingsWindow<'a> {
             SettingsTab::Video => self.localized_strings.get("common.video_settings"),
             SettingsTab::Sound => self.localized_strings.get("common.sound_settings"),
             SettingsTab::Lang => self.localized_strings.get("common.language_settings"),
+            SettingsTab::Accessibility => self.localized_strings.get("common.accessiblity_settings"),
         })
         .mid_top_with_margin_on(state.ids.frame, 3.0)
         .font_id(self.fonts.cyri.conrod_id)
@@ -2827,7 +2830,30 @@ impl<'a> Widget for SettingsWindow<'a> {
                 }
             }
         };
+        // 6) Accessiblity Tab -----------------------------------
+        if Button::image(if let SettingsTab::Accessibility = self.show.settings_tab {
+            self.imgs.selection
+        } else {
+            self.imgs.nothing
+        })
+        .w_h(230.0, 48.0)
+        .hover_image(self.imgs.selection_hover)
+        .press_image(self.imgs.selection_press)
+        .down_from(state.ids.language, 0.0)
+        .parent(state.ids.tabs_align)
+        .label(&self.localized_strings.get("common.accessibility"))
+        .label_font_size(self.fonts.cyri.scale(tab_font_scale))
+        .label_font_id(self.fonts.cyri.conrod_id)
+        .label_color(TEXT_COLOR)
+        .set(state.ids.accessibility, ui)
+        .was_clicked()
+        {
+            events.push(Event::ChangeTab(SettingsTab::Accessibility));
+        }
 
+        if let SettingsTab::Accessibility = self.show.settings_tab {
+            // ADD STUFF HERE
+        };
         events
     }
 }
