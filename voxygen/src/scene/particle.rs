@@ -1084,7 +1084,8 @@ impl ParticleMgr {
                 .get(DEFAULT_MODEL_KEY)
                 .expect("Expected particle model in cache");
 
-            renderer.render_particles(model, global, &self.instances, lod);
+            /* renderer.render_particles(model, global, &self.instances,
+             * lod); */
         }
     }
 
