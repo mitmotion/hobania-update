@@ -48,7 +48,7 @@ pub enum Rotation {
 /// Fraction of the total graphic cache size
 const ATLAS_CUTOFF_FRAC: f32 = 0.2;
 /// Multiplied by current window size
-const GRAPHIC_CACHE_RELATIVE_SIZE: u16 = 1;
+const GRAPHIC_CACHE_RELATIVE_SIZE: u32 = 1;
 
 #[derive(PartialEq, Eq, Hash, Copy, Clone, Debug)]
 pub struct Id(u32);
@@ -303,7 +303,7 @@ impl GraphicCache {
         // Graphics over a particular size are sent to their own textures
         let location = if let Some(border_color) = border_color {
             // Create a new immutable texture.
-            let texture = create_image(renderer, image, border_color).unwrap();
+            let texture = create_image(renderer, image, border_color);
             // NOTE: All mutations happen only after the upload succeeds!
             let index = textures.len();
             textures.push(texture);
@@ -354,7 +354,7 @@ impl GraphicCache {
             }
         } else {
             // Create a texture just for this
-            let texture = renderer.create_dynamic_texture(dims).unwrap();
+            let texture = renderer.create_dynamic_texture(dims.map(|e| e as u32));
             // NOTE: All mutations happen only after the texture creation succeeds!
             let index = textures.len();
             textures.push(texture);
@@ -409,10 +409,10 @@ fn draw_graphic(
     }
 }
 
-fn atlas_size(renderer: &Renderer) -> Vec2<u16> {
+fn atlas_size(renderer: &Renderer) -> Vec2<u32> {
     let max_texture_size = renderer.max_texture_size();
 
-    renderer.get_resolution().map(|e| {
+    renderer.resolution().map(|e| {
         (e * GRAPHIC_CACHE_RELATIVE_SIZE)
             .max(512)
             .min(max_texture_size)
@@ -421,8 +421,9 @@ fn atlas_size(renderer: &Renderer) -> Vec2<u16> {
 
 fn create_atlas_texture(renderer: &mut Renderer) -> (SimpleAtlasAllocator, Texture) {
     let size = atlas_size(renderer);
-    let atlas = SimpleAtlasAllocator::new(size2(i32::from(size.x), i32::from(size.y)));
-    let texture = renderer.create_dynamic_texture(size).unwrap();
+    // Note: here we assume the atlas size is under i32::MAX
+    let atlas = SimpleAtlasAllocator::new(size2(size.x as i32, size.y as i32));
+    let texture = renderer.create_dynamic_texture(size);
     (atlas, texture)
 }
 
@@ -435,25 +436,27 @@ fn aabr_from_alloc_rect(rect: guillotiere::Rectangle) -> Aabr<u16> {
 }
 
 fn upload_image(renderer: &mut Renderer, aabr: Aabr<u16>, tex: &Texture, image: &RgbaImage) {
+    let aabr = aabr.map(|e| e as u32);
     let offset = aabr.min.into_array();
     let size = aabr.size().into_array();
-    if let Err(e) = renderer.update_texture(
+    renderer.update_texture(
         tex,
         offset,
         size,
         // NOTE: Rgba texture, so each pixel is 4 bytes, ergo this cannot fail.
         // We make the cast parameters explicit for clarity.
         bytemuck::cast_slice::<u8, [u8; 4]>(&image),
-    ) {
-        warn!(?e, "Failed to update texture");
-    }
+    );
 }
 
-fn create_image(renderer: &mut Renderer, image: RgbaImage, border_color: Rgba<f32>) {
-    renderer.create_texture(
-        &DynamicImage::ImageRgba8(image),
-        None,
-        Some(wgpu::AddressMode::ClampToBorder),
-        Some(border_color.into_array().into()),
-    )
+fn create_image(renderer: &mut Renderer, image: RgbaImage, border_color: Rgba<f32>) -> Texture {
+    renderer
+        .create_texture(
+            &DynamicImage::ImageRgba8(image),
+            None,
+            //TODO: either use the desktop only border color or just emulate this
+            // Some(border_color.into_array().into()),
+            Some(wgpu::AddressMode::ClampToBorder),
+        )
+        .expect("create_texture only panics is non ImageRbga8 is passed")
 }
