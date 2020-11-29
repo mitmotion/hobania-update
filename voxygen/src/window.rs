@@ -586,7 +586,7 @@ impl Window {
             channel::Receiver<String>,
         ) = channel::unbounded::<String>();
 
-        let scale_factor = window.window().scale_factor();
+        let scale_factor = window.scale_factor();
 
         let mut this = Self {
             renderer,
@@ -637,6 +637,7 @@ impl Window {
     }
 
     pub fn fetch_events(&mut self) -> Vec<Event> {
+        span!(_guard, "fetch_events", "Window::fetch_events");
         // Refresh ui size (used when changing playstates)
         if self.needs_refresh_resize {
             let logical_size = self.logical_size();
@@ -1250,7 +1251,7 @@ impl Window {
     }
 
     pub fn set_fullscreen_mode(&mut self, fullscreen: FullScreenSettings) {
-        let window = self.window;
+        let window = &self.window;
         self.fullscreen = fullscreen;
         window.set_fullscreen(fullscreen.enabled.then(|| match fullscreen.mode {
             FullscreenMode::Exclusive => {
@@ -1374,7 +1375,7 @@ impl Window {
         self.remapping_keybindings = Some(game_input);
     }
 
-    pub fn window(&self) -> &winit::window::Window { self.window.window() }
+    pub fn window(&self) -> &winit::window::Window { &self.window }
 
     pub fn modifiers(&self) -> winit::event::ModifiersState { self.modifiers }
 

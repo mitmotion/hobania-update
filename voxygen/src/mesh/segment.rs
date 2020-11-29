@@ -85,7 +85,7 @@ where
         greedy_size,
         greedy_size_cross,
         get_light,
-        get_color,
+        get_glow,
         get_color,
         get_opacity,
         should_draw,
