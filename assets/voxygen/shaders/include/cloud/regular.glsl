@@ -26,7 +26,7 @@ vec4 cloud_at(vec3 pos, float dist, out vec3 emission) {
     // Mist sits close to the ground in valleys (TODO: use base_alt to put it closer to water)
     float mist_min_alt = 0.5;
     #if (CLOUD_MODE >= CLOUD_MODE_MEDIUM)
-        mist_min_alt = (texture(t_noise, pos.xy / 50000.0).x - 0.5) * 1.5 + 0.5;
+        mist_min_alt = (texture(sampler2D(t_noise, s_noise), pos.xy / 50000.0).x - 0.5) * 1.5 + 0.5;
     #endif
     mist_min_alt = view_distance.z * 1.5 * (1.0 + mist_min_alt * 0.5);
     const float MIST_FADE_HEIGHT = 500;
@@ -193,7 +193,7 @@ vec3 get_cloud_color(vec3 surf_color, vec3 dir, vec3 origin, const float time_of
         /*     (texture(t_noise, vec2(atan2(dir.x, dir.y) * 2 / PI, dir.z) * 1.0 - time_of_day * 0.00005).x - 0.5) * 0.2 / (1.0 + pow(dir.z, 2) * 10), */
         /*     (texture(t_noise, vec2(atan2(dir.x, dir.y) * 2 / PI, dir.z) * 1.0 - time_of_day * 0.00005).x - 0.5) * 0.2 / (1.0 + pow(dir.z, 2) * 10) */
         /* ) * 1500; */
-        splay += (texture(t_noise, vec2(atan2(dir.x, dir.y) * 2 / PI, dir.z) * 5.0 - time_of_day * 0.00005).x - 0.5) * 0.025 / (1.0 + pow(dir.z, 2) * 10);
+        splay += (texture(sampler2D(t_noise, s_noise), vec2(atan2(dir.x, dir.y) * 2 / PI, dir.z) * 5.0 - time_of_day * 0.00005).x - 0.5) * 0.025 / (1.0 + pow(dir.z, 2) * 10);
     #endif
 
     /* const float RAYLEIGH = 0.25; */
@@ -215,12 +215,12 @@ vec3 get_cloud_color(vec3 surf_color, vec3 dir, vec3 origin, const float time_of
         cdist = step_to_dist(trunc(dist_to_step(cdist - 0.25, quality)), quality);
 
         vec3 emission;
-        vec4 sample = cloud_at(origin + (dir + dir_diff / ldist) * ldist * splay, cdist, emission);
+        vec4 sampl = cloud_at(origin + (dir + dir_diff / ldist) * ldist * splay, cdist, emission);
 
-        vec2 density_integrals = max(sample.zw, vec2(0)) * (ldist - cdist);
+        vec2 density_integrals = max(sampl.zw, vec2(0)) * (ldist - cdist);
 
-        float sun_access = sample.x;
-        float moon_access = sample.y;
+        float sun_access = sampl.x;
+        float moon_access = sampl.y;
         float cloud_scatter_factor = 1.0 - 1.0 / (1.0 + clamp(density_integrals.x, 0, 1));
         float global_scatter_factor = 1.0 - 1.0 / (1.0 + clamp(density_integrals.y, 0, 1));
 
