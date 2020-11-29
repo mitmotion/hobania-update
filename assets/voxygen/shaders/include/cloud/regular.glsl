@@ -8,9 +8,9 @@ const float CLOUD_DENSITY = 150.0;
 vec2 get_cloud_heights(vec2 pos) {
     const float CLOUD_HALF_WIDTH = 300;
     const float CLOUD_HEIGHT_VARIATION = 1500.0;
-    float cloud_alt = CLOUD_AVG_ALT + (texture(t_noise, pos.xy * 0.00005).x - 0.5) * CLOUD_HEIGHT_VARIATION;
+    float cloud_alt = CLOUD_AVG_ALT + (texture(sampler2D(t_noise, s_noise), pos.xy * 0.00005).x - 0.5) * CLOUD_HEIGHT_VARIATION;
     #if (CLOUD_MODE > CLOUD_MODE_MINIMAL)
-        cloud_alt += (texture(t_noise, pos.xy * 0.001).x - 0.5) * 0.1 * CLOUD_HEIGHT_VARIATION;
+        cloud_alt += (texture(sampler2D(t_noise, s_noise), pos.xy * 0.001).x - 0.5) * 0.1 * CLOUD_HEIGHT_VARIATION;
     #endif
     return vec2(cloud_alt, CLOUD_HALF_WIDTH);
 }
@@ -27,7 +27,7 @@ vec4 cloud_at(vec3 pos, float dist, out vec3 emission) {
     // Mist sits close to the ground in valleys (TODO: use base_alt to put it closer to water)
     float mist_min_alt = 0.5;
     #if (CLOUD_MODE > CLOUD_MODE_LOW)
-        mist_min_alt = (texture(t_noise, pos.xy * 0.00015).x - 0.5) * 1.25 + 0.5;
+        mist_min_alt = (texture(sampler2D(t_noise, s_noise), pos.xy * 0.00015).x - 0.5) * 1.25 + 0.5;
     #endif
     mist_min_alt *= 250;
     const float MIST_FADE_HEIGHT = 500;
@@ -112,9 +112,9 @@ vec4 cloud_at(vec3 pos, float dist, out vec3 emission) {
         #if (CLOUD_MODE >= CLOUD_MODE_HIGH)
             emission_alt += (noise_3d(vec3(wind_pos.xy * 0.0005 + cloud_tendency * 0.2, emission_alt * 0.0001 + time_of_day.x * 0.0005)) - 0.5) * 1000;
         #endif
-        float tail = (texture(t_noise, wind_pos.xy * 0.00005).x - 0.5) * 10 + (z - emission_alt) * 0.001;
+        float tail = (texture(sampler2D(t_noise, s_noise), wind_pos.xy * 0.00005).x - 0.5) * 10 + (z - emission_alt) * 0.001;
         vec3 emission_col = vec3(0.6 + tail * 0.6, 1.0, 0.3 + tail * 0.2);
-        float emission_nz = max(texture(t_noise, wind_pos.xy * 0.00003).x - 0.6, 0) / (10.0 + abs(z - emission_alt) / 40);
+        float emission_nz = max(texture(sampler2D(t_noise, s_noise), wind_pos.xy * 0.00003).x - 0.6, 0) / (10.0 + abs(z - emission_alt) / 40);
         #if (CLOUD_MODE >= CLOUD_MODE_MEDIUM)
             emission_nz *= (1.0 + (noise_3d(vec3(wind_pos.xy * 0.05, time_of_day.x * 0.15) * 0.004) - 0.5) * 4.0);
         #endif
@@ -172,7 +172,7 @@ vec3 get_cloud_color(vec3 surf_color, vec3 dir, vec3 origin, const float time_of
         /*     (texture(t_noise, vec2(atan2(dir.x, dir.y) * 2 / PI, dir.z) * 1.0 - time_of_day * 0.00005).x - 0.5) * 0.2 / (1.0 + pow(dir.z, 2) * 10), */
         /*     (texture(t_noise, vec2(atan2(dir.x, dir.y) * 2 / PI, dir.z) * 1.0 - time_of_day * 0.00005).x - 0.5) * 0.2 / (1.0 + pow(dir.z, 2) * 10) */
         /* ) * 1500; */
-        splay += (texture(t_noise, vec2(atan2(dir.x, dir.y) * 2 / PI, dir.z) * 5.0 - time_of_day * 0.00005).x - 0.5) * 0.075 / (1.0 + pow(dir.z, 2) * 10);
+        splay += (texture(sampler2D(t_noise, s_noise), vec2(atan2(dir.x, dir.y) * 2 / PI, dir.z) * 5.0 - time_of_day * 0.00005).x - 0.5) * 0.075 / (1.0 + pow(dir.z, 2) * 10);
     #endif
 
     // Proportion of sunlight that get scattered back into the camera by clouds
@@ -190,12 +190,12 @@ vec3 get_cloud_color(vec3 surf_color, vec3 dir, vec3 origin, const float time_of
         cdist = step_to_dist(trunc(dist_to_step(cdist - 0.25, quality)), quality);
 
         vec3 emission;
-        vec4 sample = cloud_at(origin + (dir + dir_diff / ldist) * ldist * splay, cdist, emission);
+        vec4 sampl = cloud_at(origin + (dir + dir_diff / ldist) * ldist * splay, cdist, emission);
 
-        vec2 density_integrals = max(sample.zw, vec2(0)) * (ldist - cdist);
+        vec2 density_integrals = max(sampl.zw, vec2(0)) * (ldist - cdist);
 
-        float sun_access = sample.x;
-        float moon_access = sample.y;
+        float sun_access = sampl.x;
+        float moon_access = sampl.y;
         float scatter_factor = 1.0 - 1.0 / (1.0 + density_integrals.x);
 
         const float RAYLEIGH = 0.25;

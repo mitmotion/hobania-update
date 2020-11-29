@@ -1,3 +1,6 @@
+#ifndef SKY_GLSL
+#define SKY_GLSL
+
 #include <random.glsl>
 #include <srgb.glsl>
 #include <shadows.glsl>
@@ -75,10 +78,10 @@ const float wind_speed = 0.25;
 vec2 wind_offset = vec2(time_of_day.x * wind_speed);
 
 float cloud_tendency_at(vec2 pos) {
-    float nz = texture(t_noise, (pos + wind_offset) * 0.000075).x - 0.5;
+    float nz = texture(sampler2D(t_noise, s_noise), (pos + wind_offset) * 0.000075).x - 0.5;
     nz = clamp(nz, 0, 1);
     #if (CLOUD_MODE >= CLOUD_MODE_MEDIUM)
-        nz += (texture(t_noise, (pos + wind_offset) * 0.00035).x - 0.5) * 0.15;
+        nz += (texture(sampler2D(t_noise, s_noise), (pos + wind_offset) * 0.00035).x - 0.5) * 0.15;
     #endif
     return nz;
 }
@@ -630,3 +633,5 @@ vec3 illuminate(float max_light, vec3 view_dir, /*vec3 max_light, */vec3 emitted
     // float sum_col = color.r + color.g + color.b;
     // return /*srgb_to_linear*/(/*0.5*//*0.125 * */vec3(pow(color.x, gamma), pow(color.y, gamma), pow(color.z, gamma)));
 }
+
+#endif
