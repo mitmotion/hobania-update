@@ -163,8 +163,8 @@ impl Ui {
             draw_commands: Vec::new(),
             mesh: Mesh::new(),
             model: renderer.create_dynamic_model(100),
-            interface_locals: renderer.create_consts(&[UiLocals::default()])?,
-            default_globals: renderer.create_consts(&[Globals::default()])?,
+            interface_locals: renderer.create_consts(&[UiLocals::default()]),
+            default_globals: renderer.create_consts(&[Globals::default()]),
             ingame_locals: Vec::new(),
             window_resized: None,
             scale_factor_changed: None,
@@ -812,6 +812,7 @@ impl Ui {
                         Some((aabr, tex_id)) => {
                             let cache_dims = graphic_cache
                                 .get_tex(tex_id)
+                                .0
                                 .get_dimensions()
                                 .xy()
                                 .map(|e| e as f32);
@@ -953,7 +954,7 @@ impl Ui {
                                     )
                                 } else {
                                     self.ingame_locals
-                                        .push(renderer.create_consts(&[world_pos.into()]).unwrap());
+                                        .push(renderer.create_consts(&[world_pos.into()]));
                                 }
                                 self.draw_commands
                                     .push(DrawCommand::WorldPos(Some(ingame_local_index)));
@@ -1019,11 +1020,12 @@ impl Ui {
                     locals = index.map_or(&self.interface_locals, |i| &self.ingame_locals[i]);
                 },
                 DrawCommand::Draw { kind, verts } => {
-                    let tex = match kind {
-                        DrawKind::Image(tex_id) => self.cache.graphic_cache().get_tex(*tex_id),
-                        DrawKind::Plain => self.cache.glyph_cache_tex(),
-                    };
-                    let model = self.model.submodel(verts.clone());
+                    //let tex = match kind {
+                    //    DrawKind::Image(tex_id) =>
+                    // self.cache.graphic_cache().get_tex(*tex_id),
+                    //    DrawKind::Plain => self.cache.glyph_cache_tex(),
+                    //};
+                    //let model = self.model.submodel(verts.clone());
                     // TODO
                     //renderer.render_ui_element(model, tex, scissor, globals,
                     // locals);
