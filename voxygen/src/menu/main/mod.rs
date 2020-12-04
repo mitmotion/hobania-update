@@ -1,4 +1,5 @@
 mod client_init;
+mod scene;
 mod ui;
 
 use super::char_selection::CharSelectionState;
@@ -17,6 +18,7 @@ use client::{
 };
 use client_init::{ClientConnArgs, ClientInit, Error as InitError, Msg as InitMsg};
 use common::{assets::AssetExt, comp, span};
+use scene::Scene;
 use std::sync::Arc;
 use tokio::runtime;
 use tracing::error;
@@ -26,6 +28,7 @@ pub struct MainMenuState {
     main_menu_ui: MainMenuUi,
     // Used for client creation.
     client_init: Option<ClientInit>,
+    scene: Scene,
 }
 
 impl MainMenuState {
@@ -34,6 +37,7 @@ impl MainMenuState {
         Self {
             main_menu_ui: MainMenuUi::new(global_state),
             client_init: None,
+            scene: Scene::new(global_state.window.renderer_mut()),
         }
     }
 }
@@ -318,8 +322,18 @@ impl PlayState for MainMenuState {
     fn name(&self) -> &'static str { "Title" }
 
     fn render(&mut self, renderer: &mut Renderer, _: &Settings) {
+        // TODO: maybe the drawer should be passed in from above?
+        let mut drawer = match renderer
+            .start_recording_frame(self.scene.global_bind_group())
+            .unwrap()
+        {
+            Some(d) => d,
+            // Couldn't get swap chain texture this fime
+            None => return,
+        };
+
         // Draw the UI to the screen.
-        self.main_menu_ui.render(renderer);
+        self.main_menu_ui.render(&mut drawer.third_pass().draw_ui());
     }
 }
 
