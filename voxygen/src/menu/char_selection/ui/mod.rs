@@ -1584,7 +1584,8 @@ impl CharSelectionUi {
     }
 
     // TODO: do we need globals?
-    pub fn render(&self, renderer: &mut Renderer) { self.ui.render(renderer); }
+    pub fn render(&self, renderer: &mut Renderer) { /* self.ui.render(renderer);*/
+    }
 }
 
 #[derive(Default)]
