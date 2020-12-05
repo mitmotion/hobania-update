@@ -1287,7 +1287,16 @@ impl PlayState for SessionState {
     /// This method should be called once per frame.
     fn render(&mut self, renderer: &mut Renderer, settings: &Settings) {
         span!(_guard, "render", "<Session as PlayState>::render");
-        // Render the screen using the global renderer
+        let mut drawer = match renderer
+            .start_recording_frame(self.scene.global_bind_group())
+            .unwrap()
+        {
+            Some(d) => d,
+            // Couldn't get swap chain texture this frame
+            None => return,
+        };
+
+        // Render world
         {
             let client = self.client.borrow();
 
@@ -1310,7 +1319,7 @@ impl PlayState for SessionState {
                 is_aiming: self.is_aiming,
             };
             self.scene.render(
-                renderer,
+                &mut drawer.first_pass(),
                 client.state(),
                 client.entity(),
                 client.get_tick(),
@@ -1318,18 +1327,6 @@ impl PlayState for SessionState {
             );
         }
 
-        let mut drawer = match renderer
-            .start_recording_frame(self.scene.global_bind_group())
-            .unwrap()
-        {
-            Some(d) => d,
-            // Couldn't get swap chain texture this frame
-            None => return,
-        };
-
-        // Render world
-        /* let mut first_pass = */
-        drawer.first_pass();
         // Clouds
         drawer.second_pass().draw_clouds();
         // PostProcess and UI
