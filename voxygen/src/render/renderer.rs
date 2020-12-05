@@ -260,8 +260,6 @@ pub struct Renderer {
     // color/depth textures
     locals: Locals,
 
-    shader_reload_indicator: ReloadIndicator,
-
     noise_tex: Texture,
 
     mode: RenderMode,
