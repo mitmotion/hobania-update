@@ -51,7 +51,7 @@ use crate::{
     ecs::{comp as vcomp, comp::HpFloaterList},
     hud::{img_ids::ImgsRot, prompt_dialog::DialogOutcomeEvent},
     i18n::{LanguageMetadata, Localization},
-    render::{Consts, Globals, RenderMode, Renderer},
+    render::{Consts, Globals, RenderMode, UiDrawer},
     scene::camera::{self, Camera},
     settings::Fps,
     ui::{
@@ -2978,11 +2978,11 @@ impl Hud {
         events
     }
 
-    pub fn render(&self, renderer: &mut Renderer, globals: &Consts<Globals>) {
+    pub fn render<'a>(&'a self, drawer: &mut UiDrawer<'_, 'a>) {
         span!(_guard, "render", "Hud::render");
         // Don't show anything if the UI is toggled off.
         if self.show.ui {
-            //self.ui.render(renderer, Some(globals));
+            self.ui.render(drawer);
         }
     }
 

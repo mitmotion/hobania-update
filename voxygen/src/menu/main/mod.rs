@@ -327,7 +327,7 @@ impl PlayState for MainMenuState {
             .unwrap()
         {
             Some(d) => d,
-            // Couldn't get swap chain texture this fime
+            // Couldn't get swap chain texture this frame
             None => return,
         };
 
