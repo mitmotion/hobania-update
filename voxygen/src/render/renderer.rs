@@ -176,7 +176,6 @@ impl Locals {
         let postprocess_bind = layouts.postprocess.bind(
             device,
             tgt_color_pp_view,
-            tgt_depth_view,
             sampler,
             &postprocess_locals,
         );
@@ -208,7 +207,6 @@ impl Locals {
         self.postprocess_bind = layouts.postprocess.bind(
             device,
             tgt_color_pp_view,
-            tgt_depth_view,
             sampler,
             &self.postprocess,
         );
