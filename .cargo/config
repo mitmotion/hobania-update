@@ -11,4 +11,4 @@ tracy-server = "-Zunstable-options -Zpackage-features run --bin veloren-server-c
 test-voxygen = "-Zpackage-features run --bin veloren-voxygen --no-default-features --features gl,simd"
 tracy-voxygen = "-Zunstable-options -Zpackage-features run --bin veloren-voxygen --no-default-features --features tracy,gl,simd --profile no_overflow"
 server = "run --bin veloren-server-cli"
-
+dbg-voxygen = "run --bin veloren-voxygen -Zunstable-options --profile debuginfo"

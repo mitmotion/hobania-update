@@ -126,7 +126,7 @@ impl Camera {
         self.dependents.proj_mat_inv = self.dependents.proj_mat.inverted();
 
         // TODO: Make this more efficient.
-        self.dependents.cam_pos = Vec3::from(self.dependents.view_mat.inverted() * Vec4::unit_w());
+        self.dependents.cam_pos = Vec3::from(self.dependents.view_mat_inv * Vec4::unit_w());
         self.frustum = Frustum::from_modelview_projection(
             (self.dependents.proj_mat
                 * self.dependents.view_mat
@@ -134,7 +134,7 @@ impl Camera {
             .into_col_arrays(),
         );
 
-        self.dependents.cam_dir = Vec3::from(self.dependents.view_mat.inverted() * -Vec4::unit_z());
+        self.dependents.cam_dir = Vec3::from(self.dependents.view_mat_inv * -Vec4::unit_z());
     }
 
     pub fn frustum(&self) -> &Frustum<f32> { &self.frustum }
