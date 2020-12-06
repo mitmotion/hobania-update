@@ -5,8 +5,9 @@ pub use self::watcher::BlocksOfInterest;
 use crate::{
     mesh::{greedy::GreedyMesh, segment::generate_mesh_base_vol_sprite, terrain::generate_mesh},
     render::{
-        pipelines, ColLightInfo, Consts, FluidVertex, GlobalModel, Instances, LodData, Mesh, Model,
-        RenderError, Renderer, SpriteInstance, SpriteLocals, SpriteVertex, TerrainLocals,
+        pipelines::{self, ColLights},
+        ColLightInfo, Consts, FirstPassDrawer, FluidVertex, GlobalModel, Instances, LodData, Mesh,
+        Model, RenderError, Renderer, SpriteInstance, SpriteLocals, SpriteVertex, TerrainLocals,
         TerrainVertex, Texture,
     },
 };
@@ -64,7 +65,7 @@ pub struct TerrainChunkData {
     light_map: Box<dyn Fn(Vec3<i32>) -> f32 + Send + Sync>,
     glow_map: Box<dyn Fn(Vec3<i32>) -> f32 + Send + Sync>,
     sprite_instances: HashMap<(SpriteKind, usize), Instances<SpriteInstance>>,
-    locals: Consts<TerrainLocals>,
+    locals: pipelines::terrain::BoundLocals,
     pub blocks_of_interest: BlocksOfInterest,
 
     visible: Visibility,
@@ -268,7 +269,7 @@ pub struct Terrain<V: RectRasterableVol = TerrainChunk> {
 
     // GPU data
     sprite_data: Arc<HashMap<(SpriteKind, usize), Vec<SpriteData>>>,
-    col_lights: Texture,        /* <ColLightFmt> */
+    col_lights: ColLights<pipelines::terrain::Locals>,
     sprite_col_lights: Texture, /* <ColLightFmt> */
     waves: Texture,
 
@@ -424,7 +425,7 @@ impl<V: RectRasterableVol> Terrain<V> {
 
     fn make_atlas(
         renderer: &mut Renderer,
-    ) -> Result<(AtlasAllocator, Texture /* <ColLightFmt> */), RenderError> {
+    ) -> Result<(AtlasAllocator, ColLights<pipelines::terrain::Locals>), RenderError> {
         span!(_guard, "make_atlas", "Terrain::make_atlas");
         let max_texture_size = renderer.max_texture_size();
         let atlas_size = guillotiere::Size::new(max_texture_size as i32, max_texture_size as i32);
@@ -469,7 +470,8 @@ impl<V: RectRasterableVol> Terrain<V> {
                 ..Default::default()
             },
         );
-        Ok((atlas, texture))
+        let col_light = renderer.terrain_bind_col_light(texture);
+        Ok((atlas, col_light))
     }
 
     fn remove_chunk_meta(&mut self, _pos: Vec2<i32>, chunk: &TerrainChunkData) {
@@ -773,7 +775,7 @@ impl<V: RectRasterableVol> Terrain<V> {
                         allocation.rectangle.min.y as u32,
                     );
                     renderer.update_texture(
-                        &self.col_lights,
+                        &self.col_lights.texture,
                         atlas_offs.into_array(),
                         tex_size.into_array(),
                         &tex,
@@ -808,7 +810,7 @@ impl<V: RectRasterableVol> Terrain<V> {
                                 )
                             })
                             .collect(),
-                        locals: renderer.create_consts(&[TerrainLocals {
+                        locals: renderer.create_terrain_bound_locals(&[TerrainLocals {
                             model_offs: Vec3::from(
                                 response.pos.map2(VolGrid2d::<V>::chunk_size(), |e, sz| {
                                     e as f32 * sz as f32
@@ -1090,9 +1092,9 @@ impl<V: RectRasterableVol> Terrain<V> {
         });
     }
 
-    pub fn render(
-        &self,
-        renderer: &mut Renderer,
+    pub fn render<'a>(
+        &'a self,
+        drawer: &mut FirstPassDrawer<'a>,
         global: &GlobalModel,
         lod: &LodData,
         focus_pos: Vec3<f32>,
@@ -1111,13 +1113,7 @@ impl<V: RectRasterableVol> Terrain<V> {
 
         for (_, chunk) in chunk_iter {
             if chunk.visible.is_visible() {
-                /* renderer.render_terrain_chunk(
-                    &chunk.opaque_model,
-                    &self.col_lights,
-                    global,
-                    &chunk.locals,
-                    lod,
-                );*/
+                drawer.draw_terrain(&chunk.opaque_model, &chunk.locals, &self.col_lights)
             }
         }
     }
