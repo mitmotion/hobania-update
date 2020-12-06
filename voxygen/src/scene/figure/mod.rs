@@ -61,8 +61,7 @@ pub type CameraData<'a> = (&'a Camera, f32);
 
 /// Enough data to render a figure model.
 pub type FigureModelRef<'a> = (
-    &'a Consts<FigureLocals>,
-    &'a Consts<FigureBoneData>,
+    &'a pipelines::figure::BoundLocals,
     SubModel<'a, TerrainVertex>,
     &'a Texture, /* <ColLightFmt> */
 );
@@ -80,7 +79,7 @@ pub struct FigureModelEntry<const N: usize> {
     /// Texture used to store color/light information for this figure entry.
     /* TODO: Consider using mipmaps instead of storing multiple texture atlases for different
      * LOD levels. */
-    col_lights: Texture, /* <ColLightFmt> */
+    col_lights: pipelines::figure::ColLights,
     /// Vertex ranges stored in this figure entry; there may be several for one
     /// figure, because of LOD models.
     lod_vertex_ranges: [Range<u32>; N],
@@ -4591,7 +4590,7 @@ impl FigureMgr {
             // Don't render dead entities
             .filter(|(_, _, _, _, health, _, _)| health.map_or(true, |h| !h.is_dead))
             .for_each(|(entity, pos, _, body, _, inventory, scale)| {
-                if let Some((locals, bone_consts, model, _)) = self.get_model_for_render(
+                if let Some((bound, model, _)) = self.get_model_for_render(
                     tick,
                     camera,
                     None,
@@ -4649,7 +4648,7 @@ impl FigureMgr {
             let is_player = entity == player_entity;
 
             if !is_player {
-                if let Some((locals, bone_consts, model, col_lights)) = self.get_model_for_render(
+                if let Some((bound, model, col_lights)) = self.get_model_for_render(
                     tick,
                     camera,
                     character_state,
@@ -4698,7 +4697,7 @@ impl FigureMgr {
             let inventory_storage = ecs.read_storage::<Inventory>();
             let inventory = inventory_storage.get(player_entity);
 
-            if let Some((locals, bone_consts, model, col_lights)) = self.get_model_for_render(
+            if let Some((bound, model, col_lights)) = self.get_model_for_render(
                 tick,
                 camera,
                 character_state,
@@ -4784,14 +4783,13 @@ impl FigureMgr {
                 },
         } = self;
         let col_lights = &*col_lights_;
-        if let Some((locals, bone_consts, model_entry)) = match body {
+        if let Some((bound, model_entry)) = match body {
             Body::Humanoid(body) => character_states
                 .get(&entity)
                 .filter(|state| filter_state(&*state))
                 .map(move |state| {
                     (
-                        state.locals(),
-                        state.bone_consts(),
+                        state.bound(),
                         model_cache.get_model(
                             col_lights,
                             *body,
@@ -4807,8 +4805,7 @@ impl FigureMgr {
                 .filter(|state| filter_state(&*state))
                 .map(move |state| {
                     (
-                        state.locals(),
-                        state.bone_consts(),
+                        state.bound(),
                         quadruped_small_model_cache.get_model(
                             col_lights,
                             *body,
@@ -4824,8 +4821,7 @@ impl FigureMgr {
                 .filter(|state| filter_state(&*state))
                 .map(move |state| {
                     (
-                        state.locals(),
-                        state.bone_consts(),
+                        state.bound(),
                         quadruped_medium_model_cache.get_model(
                             col_lights,
                             *body,
@@ -4841,8 +4837,7 @@ impl FigureMgr {
                 .filter(|state| filter_state(&*state))
                 .map(move |state| {
                     (
-                        state.locals(),
-                        state.bone_consts(),
+                        state.bound(),
                         quadruped_low_model_cache.get_model(
                             col_lights,
                             *body,
@@ -4858,8 +4853,7 @@ impl FigureMgr {
                 .filter(|state| filter_state(&*state))
                 .map(move |state| {
                     (
-                        state.locals(),
-                        state.bone_consts(),
+                        state.bound(),
                         bird_medium_model_cache.get_model(
                             col_lights,
                             *body,
@@ -4875,8 +4869,7 @@ impl FigureMgr {
                 .filter(|state| filter_state(&*state))
                 .map(move |state| {
                     (
-                        state.locals(),
-                        state.bone_consts(),
+                        state.bound(),
                         fish_medium_model_cache.get_model(
                             col_lights,
                             *body,
@@ -4892,8 +4885,7 @@ impl FigureMgr {
                 .filter(|state| filter_state(&*state))
                 .map(move |state| {
                     (
-                        state.locals(),
-                        state.bone_consts(),
+                        state.bound(),
                         theropod_model_cache.get_model(
                             col_lights,
                             *body,
@@ -4909,8 +4901,7 @@ impl FigureMgr {
                 .filter(|state| filter_state(&*state))
                 .map(move |state| {
                     (
-                        state.locals(),
-                        state.bone_consts(),
+                        state.bound(),
                         dragon_model_cache.get_model(
                             col_lights,
                             *body,
@@ -4926,8 +4917,7 @@ impl FigureMgr {
                 .filter(|state| filter_state(&*state))
                 .map(move |state| {
                     (
-                        state.locals(),
-                        state.bone_consts(),
+                        state.bound(),
                         bird_large_model_cache.get_model(
                             col_lights,
                             *body,
@@ -4943,8 +4933,7 @@ impl FigureMgr {
                 .filter(|state| filter_state(&*state))
                 .map(move |state| {
                     (
-                        state.locals(),
-                        state.bone_consts(),
+                        state.bound(),
                         fish_small_model_cache.get_model(
                             col_lights,
                             *body,
@@ -4960,8 +4949,7 @@ impl FigureMgr {
                 .filter(|state| filter_state(&*state))
                 .map(move |state| {
                     (
-                        state.locals(),
-                        state.bone_consts(),
+                        state.bound(),
                         biped_large_model_cache.get_model(
                             col_lights,
                             *body,
@@ -4994,8 +4982,7 @@ impl FigureMgr {
                 .filter(|state| filter_state(&*state))
                 .map(move |state| {
                     (
-                        state.locals(),
-                        state.bone_consts(),
+                        state.bound(),
                         golem_model_cache.get_model(
                             col_lights,
                             *body,
@@ -5011,8 +4998,7 @@ impl FigureMgr {
                 .filter(|state| filter_state(&*state))
                 .map(move |state| {
                     (
-                        state.locals(),
-                        state.bone_consts(),
+                        state.bound(),
                         object_model_cache.get_model(
                             col_lights,
                             *body,
@@ -5054,7 +5040,7 @@ impl FigureMgr {
                 model_entry.lod_model(0)
             };
 
-            Some((locals, bone_consts, model, col_lights_.texture(model_entry)))
+            Some((bound, model, col_lights_.texture(model_entry)))
         } else {
             // trace!("Body has no saved figure");
             None
@@ -5080,8 +5066,10 @@ impl FigureColLights {
     }
 
     /// Find the correct texture for this model entry.
-    pub fn texture<'a, const N: usize>(&'a self, model: &'a FigureModelEntry<N>) -> &'a Texture /* <ColLightFmt> */
-    {
+    pub fn texture<'a, const N: usize>(
+        &'a self,
+        model: &'a FigureModelEntry<N>,
+    ) -> &'a pipelines::figure::ColLights {
         /* &self.col_lights */
         &model.col_lights
     }
@@ -5105,6 +5093,7 @@ impl FigureColLights {
             .allocate(guillotiere::Size::new(tex_size.x as i32, tex_size.y as i32))
             .expect("Not yet implemented: allocate new atlas on allocation failure.");
         let col_lights = pipelines::shadow::create_col_lights(renderer, &(tex, tex_size));
+        let col_lights = renderer.figure_bind_texture(col_lights);
         let model_len = u32::try_from(opaque.vertices().len())
             .expect("The model size for this figure does not fit in a u32!");
         let model = renderer.create_model(&opaque)?;
@@ -5164,8 +5153,6 @@ impl FigureColLights {
 }
 
 pub struct FigureStateMeta {
-    bone_consts: Consts<FigureBoneData>,
-    locals: Consts<FigureLocals>,
     lantern_offset: anim::vek::Vec3<f32>,
     state_time: f32,
     last_ori: anim::vek::Quaternion<f32>,
@@ -5177,6 +5164,7 @@ pub struct FigureStateMeta {
     last_light: f32,
     last_glow: (Vec3<f32>, f32),
     acc_vel: f32,
+    bound: pipelines::figure::BoundLocals,
 }
 
 impl FigureStateMeta {
@@ -5211,8 +5199,6 @@ impl<S: Skeleton> FigureState<S> {
         let bone_consts = figure_bone_data_from_anim(&buf);
         Self {
             meta: FigureStateMeta {
-                bone_consts: renderer.create_consts(bone_consts),
-                locals: renderer.create_consts(&[FigureLocals::default()]),
                 lantern_offset,
                 state_time: 0.0,
                 last_ori: Ori::default().into(),
@@ -5224,6 +5210,7 @@ impl<S: Skeleton> FigureState<S> {
                 last_light: 1.0,
                 last_glow: (Vec3::zero(), 0.0),
                 acc_vel: 0.0,
+                bound: renderer.create_figure_bound_locals(&[FigureLocals::default()], bone_consts),
             },
             skeleton,
         }
@@ -5335,16 +5322,13 @@ impl<S: Skeleton> FigureState<S> {
             self.last_light,
             self.last_glow,
         );
-        renderer.update_consts(&mut self.locals, &[locals]);
+        renderer.update_consts(&mut self.meta.bound.0, &[locals]);
 
         let lantern_offset = anim::compute_matrices(&self.skeleton, mat, buf);
 
         let new_bone_consts = figure_bone_data_from_anim(buf);
 
-        renderer.update_consts(
-            &mut self.meta.bone_consts,
-            &new_bone_consts[0..S::BONE_COUNT],
-        );
+        renderer.update_consts(&mut self.meta.bound.1, &new_bone_consts[0..S::BONE_COUNT]);
         self.lantern_offset = lantern_offset;
 
         let smoothing = (5.0 * dt).min(1.0);
@@ -5361,9 +5345,7 @@ impl<S: Skeleton> FigureState<S> {
         }
     }
 
-    pub fn locals(&self) -> &Consts<FigureLocals> { &self.locals }
-
-    pub fn bone_consts(&self) -> &Consts<FigureBoneData> { &self.bone_consts }
+    pub fn bound(&self) -> &pipelines::figure::BoundLocals { &self.bound }
 
     pub fn skeleton_mut(&mut self) -> &mut S { &mut self.skeleton }
 }
