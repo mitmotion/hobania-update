@@ -1,4 +1,4 @@
-use super::super::{AaMode, GlobalsLayouts};
+use super::super::{AaMode, Bound, Consts, GlobalsLayouts};
 use bytemuck::{Pod, Zeroable};
 use vek::*;
 
@@ -131,6 +131,8 @@ impl Locals {
         }
     }
 }
+
+pub type BoundLocals = Bound<Consts<Locals>>;
 
 pub struct TerrainLayout {
     pub locals: wgpu::BindGroupLayout,
