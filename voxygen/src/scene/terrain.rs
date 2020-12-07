@@ -231,7 +231,7 @@ fn mesh_worker<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + '
 
 struct SpriteData {
     /* mat: Mat4<f32>, */
-    locals: Consts<SpriteLocals>,
+    locals: pipelines::sprite::BoundLocals,
     model: Model<SpriteVertex>,
     /* scale: Vec3<f32>, */
     offset: Vec3<f32>,
@@ -270,7 +270,7 @@ pub struct Terrain<V: RectRasterableVol = TerrainChunk> {
     // GPU data
     sprite_data: Arc<HashMap<(SpriteKind, usize), Vec<SpriteData>>>,
     col_lights: ColLights<pipelines::terrain::Locals>,
-    sprite_col_lights: Texture, /* <ColLightFmt> */
+    sprite_col_lights: ColLights<pipelines::sprite::Locals>,
     waves: FluidWaves,
 
     phantom: PhantomData<V>,
@@ -386,7 +386,8 @@ impl<V: RectRasterableVol> Terrain<V> {
                                         SpriteData {
                                             /* vertex_range */ model,
                                             offset,
-                                            locals: renderer.create_consts(&locals_buffer),
+                                            locals: renderer
+                                                .create_sprite_bound_locals(&locals_buffer),
                                         }
                                     })
                                     .collect::<Vec<_>>(),
@@ -410,7 +411,7 @@ impl<V: RectRasterableVol> Terrain<V> {
             mesh_todo: HashMap::default(),
             mesh_todos_active: Arc::new(AtomicU64::new(0)),
             sprite_data: Arc::new(sprite_data),
-            sprite_col_lights,
+            sprite_col_lights: renderer.sprite_bind_col_light(sprite_col_lights),
             waves: {
                 let waves_tex = renderer
                     .create_texture(
@@ -1184,15 +1185,14 @@ impl<V: RectRasterableVol> Terrain<V> {
                         } else {
                             &self.sprite_data[&kind][4]
                         };
-                        /*renderer.render_sprites(
+
+                        drawer.draw_sprite(
                             model,
-                            &self.sprite_col_lights,
-                            global,
+                            instances,
                             &chunk.locals,
                             locals,
-                            &instances,
-                            lod,
-                        );*/
+                            &self.sprite_col_lights,
+                        );
                     }
                 }
             }
