@@ -346,10 +346,6 @@ impl Scene {
         body: Option<humanoid::Body>,
         inventory: Option<&Inventory>,
     ) {
-        // TODO: can probably be drawn last but it crashes when drawn first and we
-        // should figure that out
-        // drawer.draw_skybox(&self.skybox.model);
-
         if let Some(body) = body {
             let model = &self.figure_model_cache.get_model(
                 &self.col_lights,
@@ -376,5 +372,7 @@ impl Scene {
                 &self.col_lights.texture(model),
             );
         }
+
+        drawer.draw_skybox(&self.skybox.model);
     }
 }
