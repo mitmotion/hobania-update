@@ -3588,9 +3588,9 @@ impl FigureMgr {
     }
 
     #[allow(clippy::too_many_arguments)] // TODO: Pending review in #587
-    pub fn render(
-        &self,
-        renderer: &mut Renderer,
+    pub fn render<'a>(
+        &'a self,
+        drawer: &mut FirstPassDrawer<'a>,
         state: &State,
         player_entity: EcsEntity,
         tick: u64,
@@ -3632,8 +3632,7 @@ impl FigureMgr {
                     figure_lod_render_distance,
                     |state| state.visible(),
                 ) {
-                    // renderer.render_figure(model, &col_lights, global,
-                    // locals, bone_consts, lod);
+                    drawer.draw_figure(model, bound, col_lights);
                 }
             }
         }
