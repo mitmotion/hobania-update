@@ -6,9 +6,9 @@ use crate::{
     mesh::{greedy::GreedyMesh, segment::generate_mesh_base_vol_sprite, terrain::generate_mesh},
     render::{
         pipelines::{self, ColLights},
-        ColLightInfo, Consts, FirstPassDrawer, FluidVertex, FluidWaves, GlobalModel, Instances,
-        LodData, Mesh, Model, RenderError, Renderer, SpriteInstance, SpriteLocals, SpriteVertex,
-        TerrainLocals, TerrainVertex, Texture,
+        ColLightInfo, Consts, Drawer, FirstPassDrawer, FluidVertex, FluidWaves, GlobalModel,
+        Instances, LodData, Mesh, Model, RenderError, Renderer, ShadowDrawer, SpriteInstance,
+        SpriteLocals, SpriteVertex, TerrainLocals, TerrainVertex, Texture,
     },
 };
 
@@ -1035,18 +1035,14 @@ impl<V: RectRasterableVol> Terrain<V> {
 
     pub fn shadow_chunk_count(&self) -> usize { self.shadow_chunks.len() }
 
-    pub fn render_shadows(
-        &self,
-        renderer: &mut Renderer,
+    pub fn render_shadows<'a>(
+        &'a self,
+        drawer: &mut ShadowDrawer<'a>,
         global: &GlobalModel,
         (is_daylight, light_data): super::LightData,
         focus_pos: Vec3<f32>,
     ) {
         span!(_guard, "render_shadows", "Terrain::render_shadows");
-        if !renderer.render_mode().shadow.is_map() {
-            return;
-        };
-
         let focus_chunk = Vec2::from(focus_pos).map2(TerrainChunk::RECT_SIZE, |e: f32, sz| {
             (e as i32).div_euclid(sz as i32)
         });
@@ -1068,16 +1064,27 @@ impl<V: RectRasterableVol> Terrain<V> {
                 .clone()
                 .filter(|chunk| chunk.can_shadow_sun())
                 .chain(self.shadow_chunks.iter().map(|(_, chunk)| chunk))
-                .for_each(|chunk| {
-                    // Directed light shadows.
-                    /*renderer.render_terrain_shadow_directed(
-                        &chunk.opaque_model,
-                        global,
-                        &chunk.locals,
-                        &global.shadow_mats,
-                    );*/
-                });
+                .for_each(|chunk| drawer.draw_terrain_shadow(&chunk.opaque_model, &chunk.locals));
         }
+    }
+
+    pub fn render_point_shadows<'a>(
+        &'a self,
+        drawer: &mut Drawer<'a>,
+        global: &GlobalModel,
+        (is_daylight, light_data): super::LightData,
+        focus_pos: Vec3<f32>,
+    ) {
+        let focus_chunk = Vec2::from(focus_pos).map2(TerrainChunk::RECT_SIZE, |e: f32, sz| {
+            (e as i32).div_euclid(sz as i32)
+        });
+
+        let chunk_iter = Spiral2d::new()
+            .filter_map(|rpos| {
+                let pos = focus_chunk + rpos;
+                self.chunks.get(&pos)
+            })
+            .take(self.chunks.len());
 
         // Point shadows
         //
@@ -1086,12 +1093,11 @@ impl<V: RectRasterableVol> Terrain<V> {
         light_data.iter().take(1).for_each(|_light| {
             chunk_iter.clone().for_each(|chunk| {
                 if chunk.can_shadow_point {
-                    /*renderer.render_shadow_point(
+                    drawer.draw_point_shadow(
                         &chunk.opaque_model,
-                        global,
                         &chunk.locals,
-                        &global.shadow_mats,
-                    );*/
+                        &global.point_light_matrices,
+                    );
                 }
             });
         });

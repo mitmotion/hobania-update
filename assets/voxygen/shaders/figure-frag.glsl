@@ -35,9 +35,9 @@ layout(location = 1) flat in vec3 f_norm;
 // const vec4 sun_pos = vec4(0.0);
 // #endif
 
-layout(set = 2, binding = 0)
+layout(set = 3, binding = 0)
 uniform texture2D t_col_light;
-layout(set = 2, binding = 1)
+layout(set = 3, binding = 1)
 uniform sampler s_col_light;
 
 //struct ShadowLocals {
@@ -50,7 +50,7 @@ uniform sampler s_col_light;
 //    ShadowLocals shadowMats[/*MAX_LAYER_FACES*/192];
 //};
 
-layout (std140, set = 1, binding = 0)
+layout (std140, set = 2, binding = 0)
 uniform u_locals {
     mat4 model_mat;
     vec4 highlight_col;
@@ -67,7 +67,7 @@ struct BoneData {
     mat4 normals_mat;
 };
 
-layout (std140, set = 1, binding = 1)
+layout (std140, set = 2, binding = 1)
 uniform u_bones {
     BoneData bones[16];
 };
