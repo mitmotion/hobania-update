@@ -1402,6 +1402,14 @@ impl PlayState for SessionState {
                     client.get_tick(),
                     &scene_data,
                 );
+
+                self.scene.render_figure_shadows(
+                    &mut drawer,
+                    client.state(),
+                    client.entity(),
+                    client.get_tick(),
+                    &scene_data,
+                );
             });
 
             self.scene.render_point_shadows(
@@ -1412,15 +1420,6 @@ impl PlayState for SessionState {
                 &scene_data,
             );
 
-            drawer.shadow_pass().map(|mut drawer| {
-                self.scene.render_figure_shadows(
-                    &mut drawer,
-                    client.state(),
-                    client.entity(),
-                    client.get_tick(),
-                    &scene_data,
-                );
-            });
             self.scene.render(
                 &mut drawer.first_pass(),
                 client.state(),
