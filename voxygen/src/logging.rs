@@ -41,8 +41,8 @@ pub fn init(settings: &Settings) -> Vec<impl Drop> {
     // this crate would be veloren_voxygen=debug.
     let base_exceptions = |env: EnvFilter| {
         env.add_directive("dot_vox::parser=warn".parse().unwrap())
-            .add_directive("gfx_device_gl=warn".parse().unwrap())
             .add_directive("prometheus_hyper=warn".parse().unwrap())
+            .add_directive("wgpu_core::device=warn".parse().unwrap())
             .add_directive("mio::sys::windows=debug".parse().unwrap())
             .add_directive("veloren_network_protocol=info".parse().unwrap())
             .add_directive(
