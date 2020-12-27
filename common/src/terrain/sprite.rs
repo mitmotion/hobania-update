@@ -110,6 +110,8 @@ make_case_elim!(
         Mud = 0x53,
         FireBowlGround = 0x54,
         CaveMushroom = 0x55,
+        Skulls = 0x56,
+        Bones = 0x57,
     }
 );
 
@@ -129,6 +131,7 @@ impl SpriteKind {
             SpriteKind::Carrot => 0.18,
             SpriteKind::Radish => 0.18,
             SpriteKind::FireBowlGround => 0.55,
+            SpriteKind::Skulls => 0.65,
             // TODO: Uncomment this when we have a way to open doors
             // SpriteKind::Door => 3.0,
             SpriteKind::Bed => 1.54,
@@ -200,6 +203,7 @@ impl SpriteKind {
             SpriteKind::PotionMinor => true,
             SpriteKind::ChestBurried => true,
             SpriteKind::Mud => true,
+            SpriteKind::Bones => true,
             _ => false,
         }
     }
@@ -240,6 +244,7 @@ impl SpriteKind {
                 | SpriteKind::PotionMinor
                 | SpriteKind::VialEmpty
                 | SpriteKind::FireBowlGround
+                | SpriteKind::Skulls
         )
     }
 }

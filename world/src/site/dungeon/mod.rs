@@ -1139,6 +1139,8 @@ impl Floor {
                         2 => SpriteKind::Velorite,
                         3..=8 => SpriteKind::Mushroom,
                         9..=15 => SpriteKind::FireBowlGround,
+                        16..=19 => SpriteKind::Skulls,
+                        20..=24 => SpriteKind::Bones,
                         _ => SpriteKind::ShortGrass,
                     },
                 ),

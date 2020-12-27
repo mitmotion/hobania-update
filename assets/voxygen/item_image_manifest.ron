@@ -1460,6 +1460,9 @@
         "voxel.object.potion_empty",
         (0.0, 0.0, 0.0), (-50.0, 30.0, 20.0), 0.8,
     ),
+        Ingredient("Bone"): Png(
+            "element.icons.item_bone",
+    ),
     // Gliders
     Glider("Starter"): VoxTrans(
         "voxel.glider.glider_starter",
