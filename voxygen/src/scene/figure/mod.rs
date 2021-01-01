@@ -4631,9 +4631,9 @@ impl FigureMgr {
         )
             .join()
         // Don't render dead entities
-        .filter(|(_, _, _, health, _)| health.map_or(true, |h| !h.is_dead))
+        .filter(|(_, _, _, health, _, _)| health.map_or(true, |h| !h.is_dead))
         // Don't render player 
-        .filter(|(entity, _, _, _, _)| *entity != player_entity)
+        .filter(|(entity, _, _, _, _, _)| *entity != player_entity)
         {
             if let Some((bound, model, col_lights)) = self.get_model_for_render(
                 tick,
@@ -4947,8 +4947,7 @@ impl FigureMgr {
                 .filter(|state| filter_state(&*state))
                 .map(move |state| {
                     (
-                        state.locals(),
-                        state.bone_consts(),
+                        state.bound(),
                         biped_small_model_cache.get_model(
                             col_lights,
                             *body,
@@ -4996,8 +4995,7 @@ impl FigureMgr {
                 .filter(|state| filter_state(&*state))
                 .map(move |state| {
                     (
-                        state.locals(),
-                        state.bone_consts(),
+                        state.bound(),
                         ship_model_cache.get_model(
                             col_lights,
                             *body,
