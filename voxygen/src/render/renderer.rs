@@ -68,10 +68,10 @@ impl assets::Compound for Shaders {
             "include.cloud.none",
             "include.cloud.regular",
             "figure-vert",
-            "light-shadows-vert",
-            "light-shadows-directed-vert",
             "light-shadows-figure-vert",
+            "light-shadows-directed-vert",
             "light-shadows-directed-frag",
+            "point-light-shadows-vert",
             "skybox-vert",
             "skybox-frag",
             "figure-frag",
@@ -98,7 +98,7 @@ impl assets::Compound for Shaders {
         ];
 
         let shaders = shaders
-            .into_iter()
+            .iter()
             .map(|shader| {
                 let full_specifier = ["voxygen.shaders.", shader].concat();
                 let asset = AssetExt::load(&full_specifier)?;
@@ -328,7 +328,6 @@ impl Renderer {
                     | wgpu::Features::ADDRESS_MODE_CLAMP_TO_BORDER
                     | wgpu::Features::PUSH_CONSTANTS,
                 limits,
-                shader_validation: true,
             },
             None,
         ))?;
@@ -782,6 +781,7 @@ impl Renderer {
         });
         let mut clear = |tex: &Texture| {
             encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Clear dummy shadow texture"),
                 color_attachments: &[],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
                     attachment: &tex.view,
@@ -2137,7 +2137,10 @@ fn create_pipelines(
     });
 
     let mut create_shader = |name, kind| {
-        let glsl = &shaders.get(name).unwrap().0;
+        let glsl = &shaders
+            .get(name)
+            .unwrap_or_else(|| panic!("Can't retrieve shader: {}", name))
+            .0;
         let file_name = format!("{}.glsl", name);
         create_shader_module(device, &mut compiler, glsl, kind, &file_name, &options)
     };
@@ -2361,6 +2364,6 @@ fn create_shader_module(
     Ok(device.create_shader_module(&wgpu::ShaderModuleDescriptor {
         label: Some(source),
         source: wgpu::ShaderSource::SpirV(Cow::Borrowed(spv.as_binary())),
-        experimental_translation: false,
+        flags: wgpu::ShaderFlags::VALIDATION,
     }))
 }
