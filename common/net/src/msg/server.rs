@@ -55,6 +55,7 @@ pub enum ServerInit {
         client_timeout: Duration,
         world_map: crate::msg::world_msg::WorldMapMsg,
         recipe_book: RecipeBook,
+        plugins: Option<Vec<(String,Vec<Vec<u8>>)>>,
         ability_map: comp::item::tool::AbilityMap,
     },
 }

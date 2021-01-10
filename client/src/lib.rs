@@ -41,7 +41,7 @@ use common_net::{
     },
     sync::WorldSyncExt,
 };
-use common_sys::state::State;
+use common_sys::{plugin::PluginMgr, state::State};
 use comp::BuffKind;
 use futures_executor::block_on;
 use futures_timer::Delay;
@@ -218,6 +218,7 @@ impl Client {
             ServerInit::GameSync {
                 entity_package,
                 time_of_day,
+                plugins,
                 max_group_size,
                 client_timeout,
                 world_map,
@@ -372,6 +373,11 @@ impl Client {
                 let map_bounds = Vec2::new(sea_level, max_height);
                 debug!("Done preparing image...");
 
+                #[cfg(feature = "plugins")]
+                if let Some(e) = plugins {
+                    state.ecs_mut().write_resource::<PluginMgr>().load_server_plugins(&e);
+                }
+
                 Ok((
                     state,
                     entity,
@@ -382,7 +388,7 @@ impl Client {
                     world_map.sites,
                     recipe_book,
                     max_group_size,
-                    client_timeout,
+                    client_timeout
                 ))
             },
             ServerInit::TooManyPlayers => Err(Error::TooManyPlayers),

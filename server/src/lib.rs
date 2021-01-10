@@ -940,6 +940,13 @@ impl Server {
                 client_timeout: self.settings().client_timeout,
                 world_map: self.map.clone(),
                 recipe_book: default_recipe_book().cloned(),
+                #[cfg(feature = "plugins")]
+                plugins: Some(self
+                    .state
+                    .ecs()
+                    .read_resource::<PluginMgr>().get_module_bytes()),
+                #[cfg(not(feature = "plugins"))]
+                plugins: None,
                 ability_map: (&*self
                     .state
                     .ecs()
