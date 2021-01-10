@@ -175,6 +175,14 @@ impl SpriteLayout {
                         },
                         count: None,
                     },
+                    // instance buffer
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,    
+                        visibility: wgpu::ShaderStage::Vertex,
+                        ty: wgpu::BufferBindingType::Buffer {
+                            ty: wgpu::BufferBindingType:: 
+                        }
+                    },
                 ],
             }),
         }
@@ -240,7 +248,7 @@ impl SpritePipeline {
             vertex: wgpu::VertexState {
                 module: vs_module,
                 entry_point: "main",
-                buffers: &[Vertex::desc(), Instance::desc()],
+                buffers: &[],
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
