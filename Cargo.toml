@@ -11,6 +11,7 @@ members = [
 	"plugin/rt",
 	"server",
 	"server-cli",
+	"torvus",
 	"voxygen",
 	"voxygen/anim",
 	"world",

@@ -1,0 +1,16 @@
+[package]
+name = "veloren-torvus"
+version = "0.1.0"
+authors = ["Joshua Barretto <joshua.s.barretto@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+common = {package = "veloren-common", path = "../common"}
+client = {package = "veloren-client", path = "../client"}
+kankyo = "0.3.0"
+serenity = { version = "0.10.2", default-features = false, features = ["builder", "cache", "client", "gateway", "http", "model", "utils", "rustls_backend"] }
+deunicode = "1.0.0"
+env_logger = "0.7.1"
+crossbeam-channel = "0.4.2"
+log = "0.4.8"
+tokio = { version = "1.0.1", features = ["macros", "rt-multi-thread"] }

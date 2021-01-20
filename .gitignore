@@ -44,6 +44,7 @@ userdata
 # direnv
 /.direnv
 /.envrc
+.env
 *.bat
 
 # Mac
