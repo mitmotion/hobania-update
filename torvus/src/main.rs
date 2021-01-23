@@ -53,7 +53,7 @@ impl Handler {
         let (discord_msgs_tx, discord_msgs_rx) = crossbeam_channel::unbounded();
 
         let socket = addr.clone().into();
-        thread::spawn(move || {
+        tokio::task::spawn_blocking(move || {
             let mut retry_cnt = [0u32; 3];
 
             'connect: loop {
@@ -169,7 +169,7 @@ impl EventHandler for Handler {
                 let msg = match messages_rx.try_recv() {
                     Ok(msg) => msg,
                     Err(crossbeam_channel::TryRecvError::Empty) => {
-                        thread::sleep(Duration::from_millis(100));
+                        thread::sleep(Duration::from_millis(50));
                         continue;
                     },
                     _ => break,
@@ -184,7 +184,7 @@ impl EventHandler for Handler {
                 match msg {
                     VelorenMessage::Chat(chat_msg) => {
                         if !chat_msg.starts_with("[You]") {
-                            log::debug!("[Veloren] {}", chat_msg);
+                            log::debug!("Veloren -> {}", chat_msg);
                             if let Err(e) = send_msg(chat_msg).await {
                                 log::error!("Failed to send discord message: {}", e);
                             }
@@ -215,7 +215,7 @@ impl EventHandler for Handler {
         }
 
         if !msg.author.bot {
-            log::debug!("[Discord] {}", &deunicode::deunicode(&msg.content));
+            log::debug!("Discord -> {}", &deunicode::deunicode(&msg.content));
             self.discord_msgs_tx
                 .send(DiscordMessage::Chat {
                     nickname: msg
@@ -232,8 +232,10 @@ impl EventHandler for Handler {
 
 #[tokio::main]
 async fn main() {
+    use env_logger::Env;
+
     kankyo::init().ok();
-    env_logger::init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("warn,veloren_torvus=debug")).init();
 
     let token: String = env_key("DISCORD_TOKEN");
     let veloren_server: SocketAddr = env::var("VELOREN_SERVER")

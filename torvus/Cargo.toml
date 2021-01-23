@@ -5,8 +5,8 @@ authors = ["Joshua Barretto <joshua.s.barretto@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-common = {package = "veloren-common", path = "../common"}
-client = {package = "veloren-client", path = "../client"}
+common = { package = "veloren-common", path = "../common", features = ["no-assets"] }
+client = { package = "veloren-client", path = "../client" }
 kankyo = "0.3.0"
 serenity = { version = "0.10.2", default-features = false, features = ["builder", "cache", "client", "gateway", "http", "model", "utils", "rustls_backend"] }
 deunicode = "1.0.0"
