@@ -5,6 +5,9 @@
 pub mod cmd;
 pub mod error;
 
+#[cfg(feature = "plugins")]
+pub use plugin_api::*;
+
 // Reexports
 pub use crate::error::Error;
 pub use authc::AuthClientError;

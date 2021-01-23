@@ -328,7 +328,7 @@ source = "git+https://gitlab.com/veloren/auth.git?rev=bffb5181a35c19ddfd33ee0b4a
 dependencies = [
  "auth-common",
  "fxhash",
- "hex 0.3.2",
+ "hex",
  "reqwest",
  "rust-argon2",
  "serde",
@@ -5976,6 +5976,7 @@ dependencies = [
  "veloren-common",
  "veloren-common-net",
  "veloren-common-sys",
+ "veloren-plugin-api",
  "veloren_network",
 ]
 

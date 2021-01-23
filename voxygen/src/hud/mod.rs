@@ -20,6 +20,7 @@ mod social;
 mod spell;
 mod util;
 
+use common_sys::plugin::PluginMgr;
 pub use hotbar::{SlotContents as HotbarSlotContents, State as HotbarState};
 
 pub use settings_window::ScaleChange;
@@ -53,19 +54,11 @@ use crate::{
     window::{Event as WinEvent, FullScreenSettings, GameInput},
     GlobalState,
 };
-use client::Client;
-use common::{
-    comp,
-    comp::{
+use client::{Client, event::{ChatCommandEvent, Player}};
+use common::{cmd::ChatCommand, comp, comp::{
         item::{ItemDesc, Quality},
         BuffKind,
-    },
-    span,
-    terrain::TerrainChunk,
-    uid::Uid,
-    util::srgba_to_linear,
-    vol::RectRasterableVol,
-};
+    }, span, terrain::TerrainChunk, uid::Uid, util::srgba_to_linear, vol::RectRasterableVol};
 use common_net::msg::{Notification, PresenceKind};
 use conrod_core::{
     text::cursor::Index,
@@ -2018,7 +2011,37 @@ impl Hud {
                 self.tab_complete = Some(input);
             },
             Some(chat::Event::SendMessage(message)) => {
-                events.push(Event::SendMessage(message));
+                println!("ROLLER 1: {}",message);
+                let manager = ecs.read_resource::<PluginMgr>();
+                if message.starts_with("/") {
+                    let mut cmd_iter = message.split(' ');
+                    let command_tag = &cmd_iter.next().unwrap()[1..];
+                    let event = ChatCommandEvent {
+                        command: message.clone(),
+                        command_args: cmd_iter.map(|x| x.to_owned()).collect(),
+                        player: Player {
+                            id: ecs.read_storage::<Uid>().get(entity).unwrap().clone(),
+                        }
+                    };
+                    match manager.execute_event(&format!("on_command_{}",command_tag), &event) {
+                        Ok(e) => {
+                            if e.is_empty() {
+                                events.push(Event::SendMessage(message));
+                            } else {
+                                println!("Send this message to the chat:");
+                                for i in &e {
+                                    println!("{:?}",i);
+                                }
+                            }
+                        },
+                        Err(e) => {
+                            println!("Error while hooking commands with plugins");
+                            println!("{:?}",e);
+                        }
+                    }
+                } else {
+                    events.push(Event::SendMessage(message));
+                }
             },
             Some(chat::Event::Focus(focus_id)) => {
                 self.to_focus = Some(Some(focus_id));
