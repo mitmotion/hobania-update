@@ -235,7 +235,8 @@ async fn main() {
     use env_logger::Env;
 
     kankyo::init().ok();
-    env_logger::Builder::from_env(Env::default().default_filter_or("warn,veloren_torvus=debug")).init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("warn,veloren_torvus=debug"))
+        .init();
 
     let token: String = env_key("DISCORD_TOKEN");
     let veloren_server: SocketAddr = env::var("VELOREN_SERVER")

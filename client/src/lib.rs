@@ -232,8 +232,6 @@ impl Client {
                 state
                     .ecs_mut()
                     .register::<comp::Last<comp::CharacterState>>();
-                    // TODO: Probably not a good thing to do!
-                state.ecs_mut().insert(Vec::<Outcome>::new());
 
                 let entity = state.ecs_mut().apply_entity_package(entity_package);
                 *state.ecs_mut().write_resource() = time_of_day;
