@@ -22,6 +22,15 @@ pub struct PluginModule {
     name: String,
 }
 
+impl std::fmt::Debug for PluginModule {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.debug_struct("PluginModule")
+            .field("events", &self.events)
+            .field("name", &self.name)
+            .finish()
+    }
+}
+
 impl PluginModule {
     // This function takes bytes from a WASM File and compile them
     pub fn new(name: String, wasm_data: &[u8]) -> Result<Self, PluginModuleError> {

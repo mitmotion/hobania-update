@@ -256,10 +256,10 @@ impl Server {
         let map = WorldMapMsg {
             dimensions_lg: Vec2::zero(),
             max_height: 1.0,
-            rgba: vec![0],
+            rgba: common::grid::Grid::new(Vec2::new(1, 1), 1),
             horizons: [(vec![0], vec![0]), (vec![0], vec![0])],
             sea_level: 0.0,
-            alt: vec![30],
+            alt: common::grid::Grid::new(Vec2::new(1, 1), 1),
             sites: Vec::new(),
         };
 
@@ -941,10 +941,12 @@ impl Server {
                 world_map: self.map.clone(),
                 recipe_book: default_recipe_book().cloned(),
                 #[cfg(feature = "plugins")]
-                plugins: Some(self
-                    .state
-                    .ecs()
-                    .read_resource::<PluginMgr>().get_module_bytes()),
+                plugins: Some(
+                    self.state
+                        .ecs()
+                        .read_resource::<PluginMgr>()
+                        .get_module_bytes(),
+                ),
                 #[cfg(not(feature = "plugins"))]
                 plugins: None,
                 ability_map: (&*self
