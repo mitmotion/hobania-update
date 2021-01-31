@@ -271,6 +271,8 @@ impl Scene {
 
         let globals_bind_group = renderer.bind_globals(&data, lod.get_data());
 
+        let terrain = Terrain::new(renderer, &data, lod.get_data());
+
         Self {
             data,
             globals_bind_group,
@@ -281,7 +283,7 @@ impl Scene {
             skybox: Skybox {
                 model: renderer.create_model(&create_skybox_mesh()).unwrap(),
             },
-            terrain: Terrain::new(renderer),
+            terrain,
             lod,
             loaded_distance: 0.0,
             map_bounds: Vec2::new(
