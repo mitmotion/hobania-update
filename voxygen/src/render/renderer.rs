@@ -2239,7 +2239,6 @@ fn create_pipelines(
         sc_desc,
         &layouts.global,
         &layouts.ui,
-        mode.aa,
     );
 
     // Construct a pipeline for rendering terrain
@@ -2272,7 +2271,6 @@ fn create_pipelines(
         sc_desc,
         &layouts.global,
         &layouts.postprocess,
-        mode.aa,
     );
 
     // Consider reenabling at some time in the future
@@ -2364,6 +2362,6 @@ fn create_shader_module(
     Ok(device.create_shader_module(&wgpu::ShaderModuleDescriptor {
         label: Some(source),
         source: wgpu::ShaderSource::SpirV(Cow::Borrowed(spv.as_binary())),
-        flags: wgpu::ShaderFlags::VALIDATION,
+        flags: wgpu::ShaderFlags::empty(), // TODO: renable wgpu::ShaderFlags::VALIDATION,
     }))
 }
