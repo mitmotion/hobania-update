@@ -94,4 +94,5 @@ void main() {
     surf_color = illuminate(max_light, view_dir, surf_color * emitted_light, surf_color * reflected_light) * f_light;
 
     tgt_color = vec4(surf_color, 1.0 - clamp((distance(focus_pos.xy, f_pos.xy) - (sprite_render_distance - FADE_DIST)) / FADE_DIST, 0, 1));
+    //tgt_color = vec4(-f_norm, 1.0);
 }

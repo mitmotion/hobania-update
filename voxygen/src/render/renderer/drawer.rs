@@ -525,7 +525,7 @@ impl<'pass_ref, 'pass: 'pass_ref> SpriteDrawer<'pass_ref, 'pass> {
         self.render_pass
             .set_vertex_buffer(0, instances.buf().slice(..));
         self.render_pass
-            .draw(0..sprite::VERT_PAGE_SIZE - 4, 0..instances.count() as u32);
+            .draw(0..sprite::VERT_PAGE_SIZE, 0..instances.count() as u32);
     }
 }
 
@@ -644,6 +644,10 @@ impl<'pass_ref, 'pass: 'pass_ref> PreparedUiDrawer<'pass_ref, 'pass> {
 
     pub fn set_scissor<'data: 'pass>(&mut self, scissor: Aabr<u16>) {
         let Aabr { min, max } = scissor;
+        // TODO: Got an invalid scissor panic from wgpu,
+        // use this if you can reproduce
+        // Note: might have been from changing monitors
+        // dbg!(&scissor)
         self.render_pass.set_scissor_rect(
             min.x as u32,
             min.y as u32,
