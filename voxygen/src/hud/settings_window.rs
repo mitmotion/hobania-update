@@ -7,8 +7,8 @@ use crate::{
     hud::BuffPosition,
     i18n::{list_localizations, LanguageMetadata, Localization},
     render::{
-        AaMode, CloudMode, FluidMode, LightingMode, RenderMode, ShadowMapMode, ShadowMode,
-        UpscaleMode,
+        AaMode, CloudMode, FluidMode, LightingMode, PresentMode, RenderMode, ShadowMapMode,
+        ShadowMode, UpscaleMode,
     },
     settings::Fps,
     ui::{fonts::Fonts, ImageSlider, ScaleMode, ToggleButton},
@@ -132,6 +132,8 @@ widget_ids! {
         max_fps_slider,
         max_fps_text,
         max_fps_value,
+        present_mode_text,
+        present_mode_list,
         fov_slider,
         fov_text,
         fov_value,
@@ -1830,6 +1832,53 @@ impl<'a> Widget for SettingsWindow<'a> {
                 .color(TEXT_COLOR)
                 .set(state.ids.max_fps_value, ui);
 
+            // Get render mode
+            let render_mode = &self.global_state.settings.graphics.render_mode;
+
+            // Present Mode
+            Text::new(&self.localized_strings.get("hud.settings.present_mode"))
+                .down_from(state.ids.vd_slider, 10.0)
+                .right_from(state.ids.max_fps_value, 30.0)
+                .font_size(self.fonts.cyri.scale(14))
+                .font_id(self.fonts.cyri.conrod_id)
+                .color(TEXT_COLOR)
+                .set(state.ids.present_mode_text, ui);
+
+            let mode_list = [
+                PresentMode::Fifo,
+                PresentMode::Mailbox,
+                PresentMode::Immediate,
+            ];
+            let mode_label_list = [
+                &self.localized_strings.get("hud.settings.present_mode.fifo"),
+                &self
+                    .localized_strings
+                    .get("hud.settings.present_mode.mailbox"),
+                &self
+                    .localized_strings
+                    .get("hud.settings.present_mode.immediate"),
+            ];
+
+            // Get which present mode is currently active
+            let selected = mode_list
+                .iter()
+                .position(|x| *x == render_mode.present_mode);
+
+            if let Some(clicked) = DropDownList::new(&mode_label_list, selected)
+                .w_h(120.0, 22.0)
+                .color(MENU_BG)
+                .label_color(TEXT_COLOR)
+                .label_font_id(self.fonts.cyri.conrod_id)
+                .down_from(state.ids.present_mode_text, 8.0)
+                .align_middle_x()
+                .set(state.ids.present_mode_list, ui)
+            {
+                events.push(Event::ChangeRenderMode(Box::new(RenderMode {
+                    present_mode: mode_list[clicked],
+                    ..render_mode.clone()
+                })));
+            }
+
             // FOV
             Text::new(&self.localized_strings.get("hud.settings.fov"))
                 .down_from(state.ids.max_fps_slider, 10.0)
@@ -2086,8 +2135,6 @@ impl<'a> Widget for SettingsWindow<'a> {
             .font_id(self.fonts.cyri.conrod_id)
             .color(TEXT_COLOR)
             .set(state.ids.figure_dist_value, ui);
-
-            let render_mode = &self.global_state.settings.graphics.render_mode;
 
             // AaMode
             Text::new(&self.localized_strings.get("hud.settings.antialiasing_mode"))
