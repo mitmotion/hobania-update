@@ -663,6 +663,42 @@ impl PlayState for SessionState {
                 },
             };
 
+            // to select entity:
+            // hover cursor over target, and press 'Y' to select an entity.
+            // TODO: make target selection easier, and ability to cycle through targets?
+            if let Some((se, inst)) = self.selected_entity {
+
+                let v = 
+                    (
+                        self.client.borrow()
+                        .state()
+                        .ecs()
+                        .read_storage::<comp::Pos>()
+                        .get(se)
+                        .expect("expected selected target pos").0
+                        -
+                        self.client.borrow()
+                        .state()
+                        .ecs()
+                        .read_storage::<comp::Pos>()
+                        .get(self.client.borrow().entity())
+                        .expect("expected selected player pos").0
+                    )
+                    .normalized();
+    
+                let x = self.client.borrow_mut()
+                .state()
+                .ecs()
+                .read_storage::<comp::Pos>()
+                .get(se)
+                .expect("expected selected target pos").0;
+    
+                self.scene.camera_mut().set_orientation(v); // TODO: fix janky camera
+                self.inputs.look_dir = Dir::from_unnormalized(v).expect("expected normalized dir");
+            }
+
+
+
             self.inputs.climb = self.key_state.climb();
             self.inputs.fly.set_state(self.key_state.fly);
             self.inputs.move_z =
