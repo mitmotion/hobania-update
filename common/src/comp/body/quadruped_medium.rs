@@ -1,6 +1,7 @@
 use crate::{make_case_elim, make_proj_elim};
 use rand::{seq::SliceRandom, thread_rng};
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 
 make_proj_elim!(
     body,
@@ -8,6 +9,8 @@ make_proj_elim!(
     pub struct Body {
         pub species: Species,
         pub body_type: BodyType,
+        #[typed(pure)]
+        pub skin: u8,
     }
 );
 
@@ -21,7 +24,11 @@ impl Body {
     #[inline]
     pub fn random_with(rng: &mut impl rand::Rng, &species: &Species) -> Self {
         let body_type = *(&ALL_BODY_TYPES).choose(rng).unwrap();
-        Self { species, body_type }
+        Self {
+            species,
+            body_type,
+            skin: rng.gen_range(0..species.num_skin_colors()),
+        }
     }
 }
 
@@ -152,3 +159,41 @@ make_case_elim!(
 );
 
 pub const ALL_BODY_TYPES: [BodyType; 2] = [BodyType::Female, BodyType::Male];
+
+// Skin colors
+pub const HORSE_COLORS: [Skin; 4] = [
+    Skin::HorseOne,
+    Skin::HorseTwo,
+    Skin::HorseThree,
+    Skin::HorseFour,
+];
+
+impl Species {
+    fn skin_colors(self) -> &'static [Skin] {
+        match self {
+            Species::Horse => &HORSE_COLORS,
+            _ => &HORSE_COLORS,
+        }
+    }
+
+    pub fn skin_color(self, val: u8) -> Skin {
+        self.skin_colors()
+            .get(val as usize)
+            .copied()
+            .unwrap_or(Skin::HorseOne)
+    }
+
+    pub fn num_skin_colors(self) -> u8 { self.skin_colors().len() as u8 }
+}
+
+make_case_elim!(
+    skin,
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize_repr, Deserialize_repr)]
+    #[repr(u32)]
+    pub enum Skin {
+        HorseOne = 0,
+        HorseTwo = 1,
+        HorseThree = 2,
+        HorseFour = 3,
+    }
+);

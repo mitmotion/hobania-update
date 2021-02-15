@@ -53,6 +53,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
                         _ => quadruped_medium::Body {
                             species: quadruped_medium::Species::Roshwalr,
                             body_type: quadruped_medium::BodyType::Male,
+                            skin: 0,
                         }
                         .into(),
                     })
@@ -726,6 +727,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
                         quadruped_medium::Body {
                             species: quadruped_medium::Species::Roshwalr,
                             body_type: quadruped_medium::BodyType::Female,
+                            skin: 0,
                         }
                         .into(),
                     )

@@ -12,7 +12,9 @@ use common::{
         humanoid::{self, Body, BodyType, EyeColor, Skin, Species},
         object,
         quadruped_low::{self, BodyType as QLBodyType, Species as QLSpecies},
-        quadruped_medium::{self, BodyType as QMBodyType, Species as QMSpecies},
+        quadruped_medium::{
+            self, Body as QMBody, BodyType as QMBodyType, Skin as QMSkins, Species as QMSpecies,
+        },
         quadruped_small::{self, BodyType as QSBodyType, Species as QSSpecies},
         theropod::{self, BodyType as TBodyType, Species as TSpecies},
     },
@@ -190,6 +192,29 @@ impl HumColorSpec {
                 Material::EyeLight => *eye_color.elim_case_pure(&self.eye_colors_light),
                 Material::EyeDark => *eye_color.elim_case_pure(&self.eye_colors_dark),
                 Material::EyeWhite => self.eye_white,
+            }
+            .into()
+        })
+    }
+}
+
+/// Color information not found in voxels, for misc creatures.
+#[derive(Deserialize)]
+struct MiscColorSpec {
+    skin_colors_plain: quadruped_medium::skin::PureCases<(u8, u8, u8)>,
+    skin_colors_light: quadruped_medium::skin::PureCases<(u8, u8, u8)>,
+    skin_colors_dark: quadruped_medium::skin::PureCases<(u8, u8, u8)>,
+}
+
+impl MiscColorSpec {
+    fn color_segment(&self, mat_segment: MatSegment, skin: QMSkins) -> Segment {
+        // TODO move some of the colors to common
+        mat_segment.to_segment(|mat| {
+            match mat {
+                Material::Skin => *skin.elim_case_pure(&self.skin_colors_plain),
+                Material::SkinDark => *skin.elim_case_pure(&self.skin_colors_dark),
+                Material::SkinLight => *skin.elim_case_pure(&self.skin_colors_light),
+                _ => *skin.elim_case_pure(&self.skin_colors_plain),
             }
             .into()
         })
@@ -1262,68 +1287,100 @@ make_vox_spec!(
     struct QuadrupedMediumSpec {
         central: QuadrupedMediumCentralSpec = "voxygen.voxel.quadruped_medium_central_manifest",
         lateral: QuadrupedMediumLateralSpec = "voxygen.voxel.quadruped_medium_lateral_manifest",
+        color: MiscColorSpec = "voxygen.voxel.quadruped_medium_color_manifest",
     },
     |FigureKey { body, .. }, spec| {
+        let color = &spec.color.read().0;
         [
             Some(spec.central.read().0.mesh_head(
+                body,
                 body.species,
                 body.body_type,
+                color,
             )),
             Some(spec.central.read().0.mesh_neck(
+                body,
                 body.species,
                 body.body_type,
+                color,
             )),
             Some(spec.central.read().0.mesh_jaw(
+                body,
                 body.species,
                 body.body_type,
+                color,
             )),
             Some(spec.central.read().0.mesh_tail(
+                body,
                 body.species,
                 body.body_type,
+                color,
             )),
             Some(spec.central.read().0.mesh_torso_front(
+                body,
                 body.species,
                 body.body_type,
+                color,
             )),
             Some(spec.central.read().0.mesh_torso_back(
+                body,
                 body.species,
                 body.body_type,
+                color,
             )),
             Some(spec.central.read().0.mesh_ears(
+                body,
                 body.species,
                 body.body_type,
+                color,
             )),
             Some(spec.lateral.read().0.mesh_leg_fl(
+                body,
                 body.species,
                 body.body_type,
+                color,
             )),
             Some(spec.lateral.read().0.mesh_leg_fr(
+                body,
                 body.species,
                 body.body_type,
+                color,
             )),
             Some(spec.lateral.read().0.mesh_leg_bl(
+                body,
                 body.species,
                 body.body_type,
+                color,
             )),
             Some(spec.lateral.read().0.mesh_leg_br(
+                body,
                 body.species,
                 body.body_type,
+                color,
             )),
             Some(spec.lateral.read().0.mesh_foot_fl(
+                body,
                 body.species,
                 body.body_type,
+                color,
             )),
             Some(spec.lateral.read().0.mesh_foot_fr(
+                body,
                 body.species,
                 body.body_type,
+                color,
             )),
             Some(spec.lateral.read().0.mesh_foot_bl(
+                body,
                 body.species,
                 body.body_type,
+                color,
             )),
             Some(spec.lateral.read().0.mesh_foot_br(
+                body,
                 body.species,
                 body.body_type,
+                color,
             )),
             None,
         ]
@@ -1331,7 +1388,13 @@ make_vox_spec!(
 );
 
 impl QuadrupedMediumCentralSpec {
-    fn mesh_head(&self, species: QMSpecies, body_type: QMBodyType) -> BoneMeshes {
+    fn mesh_head(
+        &self,
+        body: &QMBody,
+        species: QMSpecies,
+        body_type: QMBodyType,
+        color_spec: &MiscColorSpec,
+    ) -> BoneMeshes {
         let spec = match self.0.get(&(species, body_type)) {
             Some(spec) => spec,
             None => {
@@ -1342,12 +1405,20 @@ impl QuadrupedMediumCentralSpec {
                 return load_mesh("not_found", Vec3::new(-5.0, -5.0, -2.5));
             },
         };
-        let central = graceful_load_segment(&spec.head.central.0);
-
+        let central = color_spec.color_segment(
+            graceful_load_mat_segment(&spec.head.central.0),
+            species.skin_color(body.skin),
+        );
         (central, Vec3::from(spec.head.offset))
     }
 
-    fn mesh_neck(&self, species: QMSpecies, body_type: QMBodyType) -> BoneMeshes {
+    fn mesh_neck(
+        &self,
+        body: &QMBody,
+        species: QMSpecies,
+        body_type: QMBodyType,
+        color_spec: &MiscColorSpec,
+    ) -> BoneMeshes {
         let spec = match self.0.get(&(species, body_type)) {
             Some(spec) => spec,
             None => {
@@ -1358,12 +1429,21 @@ impl QuadrupedMediumCentralSpec {
                 return load_mesh("not_found", Vec3::new(-5.0, -5.0, -2.5));
             },
         };
-        let central = graceful_load_segment(&spec.neck.central.0);
+        let central = color_spec.color_segment(
+            graceful_load_mat_segment(&spec.neck.central.0),
+            species.skin_color(body.skin),
+        );
 
         (central, Vec3::from(spec.neck.offset))
     }
 
-    fn mesh_jaw(&self, species: QMSpecies, body_type: QMBodyType) -> BoneMeshes {
+    fn mesh_jaw(
+        &self,
+        body: &QMBody,
+        species: QMSpecies,
+        body_type: QMBodyType,
+        color_spec: &MiscColorSpec,
+    ) -> BoneMeshes {
         let spec = match self.0.get(&(species, body_type)) {
             Some(spec) => spec,
             None => {
@@ -1374,12 +1454,21 @@ impl QuadrupedMediumCentralSpec {
                 return load_mesh("not_found", Vec3::new(-5.0, -5.0, -2.5));
             },
         };
-        let central = graceful_load_segment(&spec.jaw.central.0);
+        let central = color_spec.color_segment(
+            graceful_load_mat_segment(&spec.jaw.central.0),
+            species.skin_color(body.skin),
+        );
 
         (central, Vec3::from(spec.jaw.offset))
     }
 
-    fn mesh_ears(&self, species: QMSpecies, body_type: QMBodyType) -> BoneMeshes {
+    fn mesh_ears(
+        &self,
+        body: &QMBody,
+        species: QMSpecies,
+        body_type: QMBodyType,
+        color_spec: &MiscColorSpec,
+    ) -> BoneMeshes {
         let spec = match self.0.get(&(species, body_type)) {
             Some(spec) => spec,
             None => {
@@ -1390,12 +1479,21 @@ impl QuadrupedMediumCentralSpec {
                 return load_mesh("not_found", Vec3::new(-5.0, -5.0, -2.5));
             },
         };
-        let central = graceful_load_segment(&spec.ears.central.0);
+        let central = color_spec.color_segment(
+            graceful_load_mat_segment(&spec.ears.central.0),
+            species.skin_color(body.skin),
+        );
 
         (central, Vec3::from(spec.ears.offset))
     }
 
-    fn mesh_torso_front(&self, species: QMSpecies, body_type: QMBodyType) -> BoneMeshes {
+    fn mesh_torso_front(
+        &self,
+        body: &QMBody,
+        species: QMSpecies,
+        body_type: QMBodyType,
+        color_spec: &MiscColorSpec,
+    ) -> BoneMeshes {
         let spec = match self.0.get(&(species, body_type)) {
             Some(spec) => spec,
             None => {
@@ -1406,12 +1504,21 @@ impl QuadrupedMediumCentralSpec {
                 return load_mesh("not_found", Vec3::new(-5.0, -5.0, -2.5));
             },
         };
-        let central = graceful_load_segment(&spec.torso_front.central.0);
+        let central = color_spec.color_segment(
+            graceful_load_mat_segment(&spec.torso_front.central.0),
+            species.skin_color(body.skin),
+        );
 
         (central, Vec3::from(spec.torso_front.offset))
     }
 
-    fn mesh_torso_back(&self, species: QMSpecies, body_type: QMBodyType) -> BoneMeshes {
+    fn mesh_torso_back(
+        &self,
+        body: &QMBody,
+        species: QMSpecies,
+        body_type: QMBodyType,
+        color_spec: &MiscColorSpec,
+    ) -> BoneMeshes {
         let spec = match self.0.get(&(species, body_type)) {
             Some(spec) => spec,
             None => {
@@ -1422,12 +1529,21 @@ impl QuadrupedMediumCentralSpec {
                 return load_mesh("not_found", Vec3::new(-5.0, -5.0, -2.5));
             },
         };
-        let central = graceful_load_segment(&spec.torso_back.central.0);
+        let central = color_spec.color_segment(
+            graceful_load_mat_segment(&spec.torso_back.central.0),
+            species.skin_color(body.skin),
+        );
 
         (central, Vec3::from(spec.torso_back.offset))
     }
 
-    fn mesh_tail(&self, species: QMSpecies, body_type: QMBodyType) -> BoneMeshes {
+    fn mesh_tail(
+        &self,
+        body: &QMBody,
+        species: QMSpecies,
+        body_type: QMBodyType,
+        color_spec: &MiscColorSpec,
+    ) -> BoneMeshes {
         let spec = match self.0.get(&(species, body_type)) {
             Some(spec) => spec,
             None => {
@@ -1438,14 +1554,23 @@ impl QuadrupedMediumCentralSpec {
                 return load_mesh("not_found", Vec3::new(-5.0, -5.0, -2.5));
             },
         };
-        let central = graceful_load_segment(&spec.tail.central.0);
+        let central = color_spec.color_segment(
+            graceful_load_mat_segment(&spec.tail.central.0),
+            species.skin_color(body.skin),
+        );
 
         (central, Vec3::from(spec.tail.offset))
     }
 }
 
 impl QuadrupedMediumLateralSpec {
-    fn mesh_leg_fl(&self, species: QMSpecies, body_type: QMBodyType) -> BoneMeshes {
+    fn mesh_leg_fl(
+        &self,
+        body: &QMBody,
+        species: QMSpecies,
+        body_type: QMBodyType,
+        color_spec: &MiscColorSpec,
+    ) -> BoneMeshes {
         let spec = match self.0.get(&(species, body_type)) {
             Some(spec) => spec,
             None => {
@@ -1456,12 +1581,21 @@ impl QuadrupedMediumLateralSpec {
                 return load_mesh("not_found", Vec3::new(-5.0, -5.0, -2.5));
             },
         };
-        let lateral = graceful_load_segment(&spec.leg_fl.lateral.0);
+        let lateral = color_spec.color_segment(
+            graceful_load_mat_segment(&spec.leg_fl.lateral.0),
+            species.skin_color(body.skin),
+        );
 
         (lateral, Vec3::from(spec.leg_fl.offset))
     }
 
-    fn mesh_leg_fr(&self, species: QMSpecies, body_type: QMBodyType) -> BoneMeshes {
+    fn mesh_leg_fr(
+        &self,
+        body: &QMBody,
+        species: QMSpecies,
+        body_type: QMBodyType,
+        color_spec: &MiscColorSpec,
+    ) -> BoneMeshes {
         let spec = match self.0.get(&(species, body_type)) {
             Some(spec) => spec,
             None => {
@@ -1472,12 +1606,21 @@ impl QuadrupedMediumLateralSpec {
                 return load_mesh("not_found", Vec3::new(-5.0, -5.0, -2.5));
             },
         };
-        let lateral = graceful_load_segment(&spec.leg_fr.lateral.0);
+        let lateral = color_spec.color_segment(
+            graceful_load_mat_segment(&spec.leg_fr.lateral.0),
+            species.skin_color(body.skin),
+        );
 
         (lateral, Vec3::from(spec.leg_fr.offset))
     }
 
-    fn mesh_leg_bl(&self, species: QMSpecies, body_type: QMBodyType) -> BoneMeshes {
+    fn mesh_leg_bl(
+        &self,
+        body: &QMBody,
+        species: QMSpecies,
+        body_type: QMBodyType,
+        color_spec: &MiscColorSpec,
+    ) -> BoneMeshes {
         let spec = match self.0.get(&(species, body_type)) {
             Some(spec) => spec,
             None => {
@@ -1488,12 +1631,21 @@ impl QuadrupedMediumLateralSpec {
                 return load_mesh("not_found", Vec3::new(-5.0, -5.0, -2.5));
             },
         };
-        let lateral = graceful_load_segment(&spec.leg_bl.lateral.0);
+        let lateral = color_spec.color_segment(
+            graceful_load_mat_segment(&spec.leg_bl.lateral.0),
+            species.skin_color(body.skin),
+        );
 
         (lateral, Vec3::from(spec.leg_bl.offset))
     }
 
-    fn mesh_leg_br(&self, species: QMSpecies, body_type: QMBodyType) -> BoneMeshes {
+    fn mesh_leg_br(
+        &self,
+        body: &QMBody,
+        species: QMSpecies,
+        body_type: QMBodyType,
+        color_spec: &MiscColorSpec,
+    ) -> BoneMeshes {
         let spec = match self.0.get(&(species, body_type)) {
             Some(spec) => spec,
             None => {
@@ -1504,12 +1656,21 @@ impl QuadrupedMediumLateralSpec {
                 return load_mesh("not_found", Vec3::new(-5.0, -5.0, -2.5));
             },
         };
-        let lateral = graceful_load_segment(&spec.leg_br.lateral.0);
+        let lateral = color_spec.color_segment(
+            graceful_load_mat_segment(&spec.leg_br.lateral.0),
+            species.skin_color(body.skin),
+        );
 
         (lateral, Vec3::from(spec.leg_br.offset))
     }
 
-    fn mesh_foot_fl(&self, species: QMSpecies, body_type: QMBodyType) -> BoneMeshes {
+    fn mesh_foot_fl(
+        &self,
+        body: &QMBody,
+        species: QMSpecies,
+        body_type: QMBodyType,
+        color_spec: &MiscColorSpec,
+    ) -> BoneMeshes {
         let spec = match self.0.get(&(species, body_type)) {
             Some(spec) => spec,
             None => {
@@ -1520,12 +1681,21 @@ impl QuadrupedMediumLateralSpec {
                 return load_mesh("not_found", Vec3::new(-5.0, -5.0, -2.5));
             },
         };
-        let lateral = graceful_load_segment(&spec.foot_fl.lateral.0);
+        let lateral = color_spec.color_segment(
+            graceful_load_mat_segment(&spec.foot_fl.lateral.0),
+            species.skin_color(body.skin),
+        );
 
         (lateral, Vec3::from(spec.foot_fl.offset))
     }
 
-    fn mesh_foot_fr(&self, species: QMSpecies, body_type: QMBodyType) -> BoneMeshes {
+    fn mesh_foot_fr(
+        &self,
+        body: &QMBody,
+        species: QMSpecies,
+        body_type: QMBodyType,
+        color_spec: &MiscColorSpec,
+    ) -> BoneMeshes {
         let spec = match self.0.get(&(species, body_type)) {
             Some(spec) => spec,
             None => {
@@ -1536,12 +1706,21 @@ impl QuadrupedMediumLateralSpec {
                 return load_mesh("not_found", Vec3::new(-5.0, -5.0, -2.5));
             },
         };
-        let lateral = graceful_load_segment(&spec.foot_fr.lateral.0);
+        let lateral = color_spec.color_segment(
+            graceful_load_mat_segment(&spec.foot_fr.lateral.0),
+            species.skin_color(body.skin),
+        );
 
         (lateral, Vec3::from(spec.foot_fr.offset))
     }
 
-    fn mesh_foot_bl(&self, species: QMSpecies, body_type: QMBodyType) -> BoneMeshes {
+    fn mesh_foot_bl(
+        &self,
+        body: &QMBody,
+        species: QMSpecies,
+        body_type: QMBodyType,
+        color_spec: &MiscColorSpec,
+    ) -> BoneMeshes {
         let spec = match self.0.get(&(species, body_type)) {
             Some(spec) => spec,
             None => {
@@ -1552,12 +1731,21 @@ impl QuadrupedMediumLateralSpec {
                 return load_mesh("not_found", Vec3::new(-5.0, -5.0, -2.5));
             },
         };
-        let lateral = graceful_load_segment(&spec.foot_bl.lateral.0);
+        let lateral = color_spec.color_segment(
+            graceful_load_mat_segment(&spec.foot_bl.lateral.0),
+            species.skin_color(body.skin),
+        );
 
         (lateral, Vec3::from(spec.foot_bl.offset))
     }
 
-    fn mesh_foot_br(&self, species: QMSpecies, body_type: QMBodyType) -> BoneMeshes {
+    fn mesh_foot_br(
+        &self,
+        body: &QMBody,
+        species: QMSpecies,
+        body_type: QMBodyType,
+        color_spec: &MiscColorSpec,
+    ) -> BoneMeshes {
         let spec = match self.0.get(&(species, body_type)) {
             Some(spec) => spec,
             None => {
@@ -1568,7 +1756,10 @@ impl QuadrupedMediumLateralSpec {
                 return load_mesh("not_found", Vec3::new(-5.0, -5.0, -2.5));
             },
         };
-        let lateral = graceful_load_segment(&spec.foot_br.lateral.0);
+        let lateral = color_spec.color_segment(
+            graceful_load_mat_segment(&spec.foot_br.lateral.0),
+            species.skin_color(body.skin),
+        );
 
         (lateral, Vec3::from(spec.foot_br.offset))
     }

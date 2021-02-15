@@ -1,0 +1,22 @@
+#![enable(unwrap_newtypes)]
+
+(
+    skin_colors_plain: (
+        HorseOne: (255, 5, 5),
+        HorseTwo: (255, 5, 255),
+        HorseThree: (255, 255, 5),
+        HorseFour: (133, 255, 255),
+    ),
+    skin_colors_light: (
+        HorseOne: (255, 0, 0),
+        HorseTwo: (255, 0, 255),
+        HorseThree: (255, 255, 0),
+        HorseFour: (128, 255, 255),
+    ),
+    skin_colors_dark: (
+        HorseOne: (255, 10, 10),
+        HorseTwo: (255, 10, 255),
+        HorseThree: (255, 255, 10),
+        HorseFour: (138, 255, 255),
+    ),
+)
