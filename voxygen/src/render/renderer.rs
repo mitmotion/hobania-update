@@ -1038,7 +1038,7 @@ impl Renderer {
             Err(wgpu::SwapChainError::Timeout) => {
                 // This will probably be resolved on the next frame
                 // NOTE: we don't log this because it happens very frequently with
-                // PresentMode::Fifo and unlimited FPS
+                // PresentMode::Fifo and unlimited FPS on certain machines
                 return Ok(None);
             },
             Err(err @ wgpu::SwapChainError::Outdated) => {

@@ -19,6 +19,8 @@ pub struct Drawer<'a> {
     pub renderer: &'a mut Renderer,
     tex: wgpu::SwapChainTexture,
     globals: &'a GlobalsBindGroup,
+    // Texture to write in screenshot data if that was requested this frame
+    taking_screenshot: Option<super::screenshot::TakingScreenshot>,
 }
 
 impl<'a> Drawer<'a> {
@@ -141,7 +143,9 @@ impl<'a> Drawer<'a> {
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("third pass (postprocess + ui)"),
                     color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                        attachment: &self.tex.view,
+                        // If a screenshot was requested render to that as an intermediate texture
+                        // instead
+                        attachment: self.taking_screenshot.map_or(&self.tex.view, |s| &s.tex),
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
@@ -295,6 +299,31 @@ impl<'a> Drawer<'a> {
 
 impl<'a> Drop for Drawer<'a> {
     fn drop(&mut self) {
+        // If taking a screenshot
+        if let Some(screenshot) = self.taking_screenshot {
+            // Image needs to be copied from the screenshot texture to the swapchain texture
+            let mut render_pass =
+                self.encoder
+                    .as_mut()
+                    .unwrap()
+                    .begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some(&label),
+                        color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                            attachment: &self.tex.view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                                store: true,
+                            },
+                        }],
+                    });
+            self.render_pass.set_pipeline(&self.blit.pipeline);
+            self.render_pass
+                .set_bind_group(0, &screenshot.bind_group.bind_group, &[]);
+            self.render_pass.draw(0..3, 0..1);
+            drop(render_pass);
+            // TODO: Send screenshot off to another thread here
+        }
         // TODO: submitting things to the queue can let the gpu start on them sooner
         // maybe we should submit each render pass to the queue as they are produced?
         self.renderer
