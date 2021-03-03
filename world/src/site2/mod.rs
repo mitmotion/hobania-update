@@ -358,8 +358,8 @@ impl Site {
         self.tiles.get(self.wpos_tile_pos(wpos2d))
     }
 
-    pub fn tile_wpos(&self, tile: Vec2<i32>) -> Vec2<i32> {
-        self.origin + tile * tile::TILE_SIZE as i32
+    pub fn tile_wpos<T: Into<Vec2<i32>>>(&self, tile: T) -> Vec2<i32> {
+        self.origin + tile.into() * tile::TILE_SIZE as i32
     }
 
     pub fn tile_center_wpos(&self, tile: Vec2<i32>) -> Vec2<i32> {
