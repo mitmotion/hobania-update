@@ -1521,7 +1521,7 @@ fn under_cursor(
     let player_cylinder = Cylinder::from_components(
         player_pos,
         scales.get(player_entity).copied(),
-        colliders.get(player_entity).copied(),
+        colliders.get(player_entity).cloned(),
         char_states.get(player_entity),
     );
     let terrain = client.state().terrain();
@@ -1602,7 +1602,7 @@ fn under_cursor(
             let target_cylinder = Cylinder::from_components(
                 p,
                 scales.get(*e).copied(),
-                colliders.get(*e).copied(),
+                colliders.get(*e).cloned(),
                 char_states.get(*e),
             );
 
@@ -1665,7 +1665,7 @@ fn select_interactable(
             let player_cylinder = Cylinder::from_components(
                 player_pos,
                 scales.get(player_entity).copied(),
-                colliders.get(player_entity).copied(),
+                colliders.get(player_entity).cloned(),
                 char_states.get(player_entity),
             );
 
@@ -1679,7 +1679,7 @@ fn select_interactable(
                 .join()
                 .filter(|(e, _, _, _, _)| *e != player_entity)
                 .map(|(e, p, s, c, cs)| {
-                    let cylinder = Cylinder::from_components(p.0, s.copied(), c.copied(), cs);
+                    let cylinder = Cylinder::from_components(p.0, s.copied(), c.cloned(), cs);
                     (e, cylinder)
                 })
                 // Roughly filter out entities farther than interaction distance
