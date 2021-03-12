@@ -453,6 +453,8 @@ impl<'a> PhysicsSystemData<'a> {
                         Vec3::zero()
                     };
 
+                    let was_on_ground = physics_state.on_ground;
+
                     match &*collider {
                         Collider::Voxel { .. } => {
                             // for now, treat entities with voxel colliders as their bounding
@@ -473,6 +475,7 @@ impl<'a> PhysicsSystemData<'a> {
                                 Vec3::zero(),
                                 &psdr.dt,
                                 true,
+                                was_on_ground,
                                 |entity, vel| land_on_grounds.push((entity, vel)),
                             );
                         },
@@ -498,6 +501,7 @@ impl<'a> PhysicsSystemData<'a> {
                                 Vec3::zero(),
                                 &psdr.dt,
                                 true,
+                                was_on_ground,
                                 |entity, vel| land_on_grounds.push((entity, vel)),
                             );
                         },
@@ -625,6 +629,7 @@ impl<'a> PhysicsSystemData<'a> {
                                     transform_to.mul_direction(vel_other.0),
                                     &psdr.dt,
                                     false,
+                                    was_on_ground,
                                     |entity, vel| land_on_grounds.push((entity, Vel(transform_from.mul_direction(vel.0)))),
                                 );
 
@@ -739,6 +744,7 @@ fn cylinder_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
     ground_vel: Vec3<f32>,
     dt: &DeltaTime,
     apply_velocity_step: bool, // Stupid hack
+    was_on_ground: bool,
     mut land_on_ground: impl FnMut(Entity, Vel),
 ) {
     let (radius, z_min, z_max) = cylinder;
@@ -814,7 +820,6 @@ fn cylinder_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
             > 0
     }
 
-    let was_on_ground = physics_state.on_ground;
     physics_state.on_ground = false;
 
     let mut on_ground = false;
@@ -937,7 +942,7 @@ fn cylinder_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
             {
                 // ...block-hop!
                 pos.0.z = (pos.0.z + 0.1).floor() + block_height;
-                vel.0.z = 0.0;
+                vel.0.z = vel.0.z.max(0.0);
                 on_ground = true;
                 break;
             } else {
@@ -945,7 +950,7 @@ fn cylinder_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
                 vel.0 = vel.0.map2(
                     resolve_dir,
                     |e, d| {
-                        if d * e.signum() < 0.0 { 0.0 } else { e }
+                        if d * e.signum() < 0.0 { if d < 0.0 { d.max(0.0) } else { d.min(0.0) } } else { e }
                     },
                 );
                 pos_delta *= resolve_dir.map(|e| if e != 0.0 { 0.0 } else { 1.0 });
@@ -981,7 +986,7 @@ fn cylinder_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
         near_iter.clone(),
         radius,
         z_range.clone(),
-    ) && vel.0.z < 0.0
+    ) && vel.0.z < 0.01
         && vel.0.z > -1.5
         && was_on_ground
         && !collision_with(
