@@ -164,15 +164,16 @@ impl Body {
                 quadruped_low::Species::Lavadrake => 4.0,
                 _ => 6.0,
             },
-            Body::Ship(_) => 1.0,
+            Body::Ship(_) => 0.1,
         }
     }
 
-    pub fn can_fly(&self) -> bool {
-        matches!(
-            self,
-            Body::BirdMedium(_) | Body::Dragon(_) | Body::BirdSmall(_) | Body::Ship(ship::Body::DefaultAirship)
-        )
+    pub fn can_fly(&self) -> Option<f32> {
+        match self {
+            Body::BirdMedium(_) | Body::Dragon(_) | Body::BirdSmall(_) => Some(1.0),
+            Body::Ship(ship::Body::DefaultAirship) => Some(1.5),
+            _ => None,
+        }
     }
 
     pub fn can_climb(&self) -> bool { matches!(self, Body::Humanoid(_)) }
@@ -182,8 +183,8 @@ impl Body {
 pub fn handle_move(data: &JoinData, update: &mut StateUpdate, efficiency: f32) {
     if let Some(depth) = data.physics.in_liquid {
         swim_move(data, update, efficiency, depth);
-    } else if data.inputs.fly.is_pressed() && !data.physics.on_ground && data.body.can_fly() {
-        fly_move(data, update, efficiency);
+    } else if data.inputs.fly.is_pressed() && !data.physics.on_ground && data.body.can_fly().is_some() {
+        fly_move(data, update, efficiency * data.body.can_fly().unwrap());
     } else {
         basic_move(data, update, efficiency);
     }
