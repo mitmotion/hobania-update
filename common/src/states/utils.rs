@@ -164,7 +164,7 @@ impl Body {
                 quadruped_low::Species::Lavadrake => 4.0,
                 _ => 6.0,
             },
-            Body::Ship(_) => 10.0,
+            Body::Ship(_) => 1.0,
         }
     }
 
