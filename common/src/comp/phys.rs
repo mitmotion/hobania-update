@@ -117,7 +117,8 @@ impl PhysicsState {
         touch_entities.clear();
         *self = Self {
             touch_entities,
-            ground_vel: self.ground_vel, // Preserved, since it's the velocity of the last contact point
+            ground_vel: self.ground_vel, /* Preserved, since it's the velocity of the last
+                                          * contact point */
             ..Self::default()
         }
     }

@@ -3,9 +3,9 @@ use crate::{
         biped_large, biped_small,
         inventory::slot::EquipSlot,
         item::{Hands, ItemKind, Tool, ToolKind},
-        quadruped_low, quadruped_medium, quadruped_small,
+        quadruped_low, quadruped_medium, quadruped_small, ship,
         skills::Skill,
-        theropod, ship, Body, CharacterAbility, CharacterState, InventoryAction, StateUpdate,
+        theropod, Body, CharacterAbility, CharacterState, InventoryAction, StateUpdate,
     },
     consts::{FRIC_GROUND, GRAVITY},
     event::{LocalEvent, ServerEvent},
@@ -183,7 +183,10 @@ impl Body {
 pub fn handle_move(data: &JoinData, update: &mut StateUpdate, efficiency: f32) {
     if let Some(depth) = data.physics.in_liquid {
         swim_move(data, update, efficiency, depth);
-    } else if data.inputs.fly.is_pressed() && !data.physics.on_ground && data.body.can_fly().is_some() {
+    } else if data.inputs.fly.is_pressed()
+        && !data.physics.on_ground
+        && data.body.can_fly().is_some()
+    {
         fly_move(data, update, efficiency * data.body.can_fly().unwrap());
     } else {
         basic_move(data, update, efficiency);
