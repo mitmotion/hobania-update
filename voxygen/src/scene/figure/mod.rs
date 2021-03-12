@@ -748,6 +748,9 @@ impl FigureMgr {
 
             let hands = (active_tool_hand, second_tool_hand);
 
+            // Velocity relative to the current ground
+            let rel_vel = vel.0 - physics.ground_vel;
+
             match body {
                 Body::Humanoid(body) => {
                     let (model, skeleton_attr) = self.model_cache.get_or_create_model(
@@ -768,6 +771,10 @@ impl FigureMgr {
                         .or_insert_with(|| {
                             FigureState::new(renderer, CharacterSkeleton::default())
                         });
+
+                    // Average velocity relative to the current ground
+                    let rel_avg_vel = state.avg_vel - physics.ground_vel;
+
                     let (character, last_character) = match (character, last_character) {
                         (Some(c), Some(l)) => (c, l),
                         _ => continue,
@@ -779,7 +786,7 @@ impl FigureMgr {
 
                     let target_base = match (
                         physics.on_ground,
-                        vel.0.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
+                        rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid.is_some(),                      // In water
                     ) {
                         // Standing
@@ -790,7 +797,7 @@ impl FigureMgr {
                                 second_tool_kind,
                                 hands,
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                             ),
                             state.state_time,
                             &mut state_animation_rate,
@@ -803,12 +810,12 @@ impl FigureMgr {
                                 active_tool_kind,
                                 second_tool_kind,
                                 hands,
-                                vel.0,
+                                rel_vel,
                                 // TODO: Update to use the quaternion.
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                                 state.acc_vel,
                             ),
                             state.state_time,
@@ -822,7 +829,7 @@ impl FigureMgr {
                                 active_tool_kind,
                                 second_tool_kind,
                                 hands,
-                                vel.0,
+                                rel_vel,
                                 // TODO: Update to use the quaternion.
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
@@ -839,12 +846,12 @@ impl FigureMgr {
                                 active_tool_kind,
                                 second_tool_kind,
                                 hands,
-                                vel.0,
+                                rel_vel,
                                 // TODO: Update to use the quaternion.
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                             ),
                             state.state_time,
                             &mut state_animation_rate,
@@ -889,7 +896,7 @@ impl FigureMgr {
                                 (
                                     active_tool_kind,
                                     second_tool_kind,
-                                    vel.0.magnitude(),
+                                    rel_vel.magnitude(),
                                     time,
                                     None,
                                 ),
@@ -917,7 +924,7 @@ impl FigureMgr {
                                 (
                                     active_tool_kind,
                                     second_tool_kind,
-                                    vel.0.magnitude(),
+                                    rel_vel.magnitude(),
                                     // TODO: Update to use the quaternion.
                                     ori * anim::vek::Vec3::<f32>::unit_y(),
                                     state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
@@ -949,7 +956,7 @@ impl FigureMgr {
                                 (
                                     active_tool_kind,
                                     second_tool_kind,
-                                    vel.0.magnitude(),
+                                    rel_vel.magnitude(),
                                     // TODO: Update to use the quaternion.
                                     ori * anim::vek::Vec3::<f32>::unit_y(),
                                     state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
@@ -983,7 +990,7 @@ impl FigureMgr {
                                 (
                                     active_tool_kind,
                                     second_tool_kind,
-                                    vel.0,
+                                    rel_vel,
                                     time,
                                     Some(s.stage_section),
                                 ),
@@ -1016,7 +1023,7 @@ impl FigureMgr {
                                 (
                                     active_tool_kind,
                                     second_tool_kind,
-                                    vel.0,
+                                    rel_vel,
                                     time,
                                     Some(s.stage_section),
                                 ),
@@ -1030,7 +1037,7 @@ impl FigureMgr {
                                 &target_base,
                                 (
                                     active_tool_kind,
-                                    vel.0,
+                                    rel_vel,
                                     // TODO: Update to use the quaternion.
                                     ori * anim::vek::Vec3::<f32>::unit_y(),
                                     state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
@@ -1047,7 +1054,7 @@ impl FigureMgr {
                                 (
                                     active_tool_kind,
                                     second_tool_kind,
-                                    vel.0.magnitude(),
+                                    rel_vel.magnitude(),
                                     time,
                                     None,
                                 ),
@@ -1106,7 +1113,7 @@ impl FigureMgr {
                                     active_tool_kind,
                                     second_tool_kind,
                                     time,
-                                    vel.0.magnitude(),
+                                    rel_vel.magnitude(),
                                     Some(s.stage_section),
                                 ),
                                 stage_progress,
@@ -1145,7 +1152,7 @@ impl FigureMgr {
                                 (
                                     active_tool_kind,
                                     second_tool_kind,
-                                    vel.0,
+                                    rel_vel,
                                     time,
                                     Some(s.stage_section),
                                 ),
@@ -1181,7 +1188,7 @@ impl FigureMgr {
                                 (
                                     active_tool_kind,
                                     second_tool_kind,
-                                    vel.0,
+                                    rel_vel,
                                     time,
                                     Some(s.stage_section),
                                 ),
@@ -1211,7 +1218,7 @@ impl FigureMgr {
                                         (
                                             active_tool_kind,
                                             second_tool_kind,
-                                            vel.0.magnitude(),
+                                            rel_vel.magnitude(),
                                             time,
                                             Some(s.stage_section),
                                             state.state_time,
@@ -1228,7 +1235,7 @@ impl FigureMgr {
                                         (
                                             active_tool_kind,
                                             second_tool_kind,
-                                            vel.0.magnitude(),
+                                            rel_vel.magnitude(),
                                             time,
                                             Some(s.stage_section),
                                             state.state_time,
@@ -1259,7 +1266,7 @@ impl FigureMgr {
                                     active_tool_kind,
                                     second_tool_kind,
                                     time,
-                                    vel.0.magnitude(),
+                                    rel_vel.magnitude(),
                                     Some(s.stage_section),
                                 ),
                                 stage_progress,
@@ -1297,7 +1304,7 @@ impl FigureMgr {
                                     (
                                         active_tool_kind,
                                         second_tool_kind,
-                                        vel.0.magnitude(),
+                                        rel_vel.magnitude(),
                                         time,
                                         Some(s.stage_section),
                                     ),
@@ -1310,7 +1317,7 @@ impl FigureMgr {
                                     (
                                         active_tool_kind,
                                         second_tool_kind,
-                                        vel.0,
+                                        rel_vel,
                                         time,
                                         Some(s.stage_section),
                                     ),
@@ -1323,7 +1330,7 @@ impl FigureMgr {
                                     (
                                         active_tool_kind,
                                         second_tool_kind,
-                                        vel.0.magnitude(),
+                                        rel_vel.magnitude(),
                                         time,
                                         Some(s.stage_section),
                                     ),
@@ -1345,7 +1352,7 @@ impl FigureMgr {
                         CharacterState::Equipping { .. } => {
                             anim::character::EquipAnimation::update_skeleton(
                                 &target_base,
-                                (active_tool_kind, second_tool_kind, vel.0.magnitude(), time),
+                                (active_tool_kind, second_tool_kind, rel_vel.magnitude(), time),
                                 state.state_time,
                                 &mut state_animation_rate,
                                 skeleton_attr,
@@ -1356,7 +1363,7 @@ impl FigureMgr {
                             (
                                 active_tool_kind,
                                 second_tool_kind,
-                                vel.0.magnitude(),
+                                rel_vel.magnitude(),
                                 time,
                                 look_dir,
                             ),
@@ -1368,7 +1375,7 @@ impl FigureMgr {
                             if physics.in_liquid.is_some() {
                                 anim::character::SwimWieldAnimation::update_skeleton(
                                     &target_base,
-                                    (active_tool_kind, second_tool_kind, vel.0.magnitude(), time),
+                                    (active_tool_kind, second_tool_kind, rel_vel.magnitude(), time),
                                     state.state_time,
                                     &mut state_animation_rate,
                                     skeleton_attr,
@@ -1383,7 +1390,7 @@ impl FigureMgr {
                                         ori * anim::vek::Vec3::<f32>::unit_y(),
                                         state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                         look_dir,
-                                        vel.0,
+                                        rel_vel,
                                         time,
                                     ),
                                     state.state_time,
@@ -1398,7 +1405,7 @@ impl FigureMgr {
                                 (
                                     active_tool_kind,
                                     second_tool_kind,
-                                    vel.0,
+                                    rel_vel,
                                     // TODO: Update to use the quaternion.
                                     ori * anim::vek::Vec3::<f32>::unit_y(),
                                     state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
@@ -1415,7 +1422,7 @@ impl FigureMgr {
                                 (
                                     active_tool_kind,
                                     second_tool_kind,
-                                    vel.0,
+                                    rel_vel,
                                     // TODO: Update to use the quaternion.
                                     ori * anim::vek::Vec3::<f32>::unit_y(),
                                     time,
@@ -1440,7 +1447,7 @@ impl FigureMgr {
                                 (
                                     active_tool_kind,
                                     second_tool_kind,
-                                    vel.0,
+                                    rel_vel,
                                     // TODO: Update to use the quaternion.
                                     ori * anim::vek::Vec3::<f32>::unit_y(),
                                     state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
@@ -1479,6 +1486,7 @@ impl FigureMgr {
                         camera,
                         &mut update_buf,
                         terrain,
+                        physics.ground_vel,
                     );
                 },
                 Body::QuadrupedSmall(body) => {
@@ -1502,6 +1510,9 @@ impl FigureMgr {
                             FigureState::new(renderer, QuadrupedSmallSkeleton::default())
                         });
 
+                    // Average velocity relative to the current ground
+                    let rel_avg_vel = state.avg_vel - physics.ground_vel;
+
                     let (character, last_character) = match (character, last_character) {
                         (Some(c), Some(l)) => (c, l),
                         _ => continue,
@@ -1513,7 +1524,7 @@ impl FigureMgr {
 
                     let target_base = match (
                         physics.on_ground,
-                        vel.0.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
+                        rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid.is_some(),                      // In water
                     ) {
                         // Standing
@@ -1531,12 +1542,12 @@ impl FigureMgr {
                             anim::quadruped_small::RunAnimation::update_skeleton(
                                 &QuadrupedSmallSkeleton::default(),
                                 (
-                                    vel.0.magnitude(),
+                                    rel_vel.magnitude(),
                                     // TODO: Update to use the quaternion.
                                     ori * anim::vek::Vec3::<f32>::unit_y(),
                                     state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                     time,
-                                    state.avg_vel,
+                                    rel_avg_vel,
                                     state.acc_vel,
                                 ),
                                 state.state_time,
@@ -1548,12 +1559,12 @@ impl FigureMgr {
                         (false, _, true) => anim::quadruped_small::RunAnimation::update_skeleton(
                             &QuadrupedSmallSkeleton::default(),
                             (
-                                vel.0.magnitude(),
+                                rel_vel.magnitude(),
                                 // TODO: Update to use the quaternion.
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                                 state.acc_vel,
                             ),
                             state.state_time,
@@ -1563,7 +1574,7 @@ impl FigureMgr {
                         // In air
                         (false, _, false) => anim::quadruped_small::JumpAnimation::update_skeleton(
                             &QuadrupedSmallSkeleton::default(),
-                            (vel.0.magnitude(), time),
+                            (rel_vel.magnitude(), time),
                             state.state_time,
                             &mut state_animation_rate,
                             skeleton_attr,
@@ -1605,7 +1616,7 @@ impl FigureMgr {
                                 anim::quadruped_small::AlphaAnimation::update_skeleton(
                                     &target_base,
                                     (
-                                        vel.0.magnitude(),
+                                        rel_vel.magnitude(),
                                         time,
                                         Some(s.stage_section),
                                         state.state_time,
@@ -1634,7 +1645,7 @@ impl FigureMgr {
                                     anim::quadruped_small::StunnedAnimation::update_skeleton(
                                         &target_base,
                                         (
-                                            vel.0.magnitude(),
+                                            rel_vel.magnitude(),
                                             time,
                                             Some(s.stage_section),
                                             state.state_time,
@@ -1648,7 +1659,7 @@ impl FigureMgr {
                                     anim::quadruped_small::StunnedAnimation::update_skeleton(
                                         &target_base,
                                         (
-                                            vel.0.magnitude(),
+                                            rel_vel.magnitude(),
                                             time,
                                             Some(s.stage_section),
                                             state.state_time,
@@ -1689,6 +1700,7 @@ impl FigureMgr {
                         camera,
                         &mut update_buf,
                         terrain,
+                        physics.ground_vel,
                     );
                 },
                 Body::QuadrupedMedium(body) => {
@@ -1712,6 +1724,9 @@ impl FigureMgr {
                             FigureState::new(renderer, QuadrupedMediumSkeleton::default())
                         });
 
+                    // Average velocity relative to the current ground
+                    let rel_avg_vel = state.avg_vel - physics.ground_vel;
+
                     let (character, last_character) = match (character, last_character) {
                         (Some(c), Some(l)) => (c, l),
                         _ => continue,
@@ -1723,7 +1738,7 @@ impl FigureMgr {
 
                     let target_base = match (
                         physics.on_ground,
-                        vel.0.magnitude_squared() > 0.25, // Moving
+                        rel_vel.magnitude_squared() > 0.25, // Moving
                         physics.in_liquid.is_some(),      // In water
                     ) {
                         // Standing
@@ -1741,12 +1756,12 @@ impl FigureMgr {
                             anim::quadruped_medium::RunAnimation::update_skeleton(
                                 &QuadrupedMediumSkeleton::default(),
                                 (
-                                    vel.0.magnitude(),
+                                    rel_vel.magnitude(),
                                     // TODO: Update to use the quaternion.
                                     ori * anim::vek::Vec3::<f32>::unit_y(),
                                     state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                     time,
-                                    state.avg_vel,
+                                    rel_avg_vel,
                                     state.acc_vel,
                                 ),
                                 state.state_time,
@@ -1758,12 +1773,12 @@ impl FigureMgr {
                         (false, _, true) => anim::quadruped_medium::RunAnimation::update_skeleton(
                             &QuadrupedMediumSkeleton::default(),
                             (
-                                vel.0.magnitude(),
+                                rel_vel.magnitude(),
                                 // TODO: Update to use the quaternion.
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                                 state.acc_vel,
                             ),
                             state.state_time,
@@ -1808,7 +1823,7 @@ impl FigureMgr {
                             anim::quadruped_medium::HoofAnimation::update_skeleton(
                                 &target_base,
                                 (
-                                    vel.0.magnitude(),
+                                    rel_vel.magnitude(),
                                     time,
                                     Some(s.stage_section),
                                     state.state_time,
@@ -1836,7 +1851,7 @@ impl FigureMgr {
                             anim::quadruped_medium::DashAnimation::update_skeleton(
                                 &target_base,
                                 (
-                                    vel.0.magnitude(),
+                                    rel_vel.magnitude(),
                                     time,
                                     Some(s.stage_section),
                                     state.state_time,
@@ -1866,7 +1881,7 @@ impl FigureMgr {
                             anim::quadruped_medium::LeapMeleeAnimation::update_skeleton(
                                 &target_base,
                                 (
-                                    vel.0.magnitude(),
+                                    rel_vel.magnitude(),
                                     time,
                                     Some(s.stage_section),
                                     state.state_time,
@@ -1904,7 +1919,7 @@ impl FigureMgr {
                                 1 => anim::quadruped_medium::AlphaAnimation::update_skeleton(
                                     &target_base,
                                     (
-                                        vel.0.magnitude(),
+                                        rel_vel.magnitude(),
                                         time,
                                         Some(s.stage_section),
                                         state.state_time,
@@ -1916,7 +1931,7 @@ impl FigureMgr {
                                 2 => anim::quadruped_medium::BetaAnimation::update_skeleton(
                                     &target_base,
                                     (
-                                        vel.0.magnitude(),
+                                        rel_vel.magnitude(),
                                         time,
                                         Some(s.stage_section),
                                         state.state_time,
@@ -1928,7 +1943,7 @@ impl FigureMgr {
                                 _ => anim::quadruped_medium::AlphaAnimation::update_skeleton(
                                     &target_base,
                                     (
-                                        vel.0.magnitude(),
+                                        rel_vel.magnitude(),
                                         time,
                                         Some(s.stage_section),
                                         state.state_time,
@@ -1957,7 +1972,7 @@ impl FigureMgr {
                                     anim::quadruped_medium::StunnedAnimation::update_skeleton(
                                         &target_base,
                                         (
-                                            vel.0.magnitude(),
+                                            rel_vel.magnitude(),
                                             time,
                                             Some(s.stage_section),
                                             state.state_time,
@@ -1971,7 +1986,7 @@ impl FigureMgr {
                                     anim::quadruped_medium::StunnedAnimation::update_skeleton(
                                         &target_base,
                                         (
-                                            vel.0.magnitude(),
+                                            rel_vel.magnitude(),
                                             time,
                                             Some(s.stage_section),
                                             state.state_time,
@@ -2012,6 +2027,7 @@ impl FigureMgr {
                         camera,
                         &mut update_buf,
                         terrain,
+                        physics.ground_vel,
                     );
                 },
                 Body::QuadrupedLow(body) => {
@@ -2035,6 +2051,9 @@ impl FigureMgr {
                             FigureState::new(renderer, QuadrupedLowSkeleton::default())
                         });
 
+                    // Average velocity relative to the current ground
+                    let rel_avg_vel = state.avg_vel - physics.ground_vel;
+
                     let (character, last_character) = match (character, last_character) {
                         (Some(c), Some(l)) => (c, l),
                         _ => continue,
@@ -2046,7 +2065,7 @@ impl FigureMgr {
 
                     let target_base = match (
                         physics.on_ground,
-                        vel.0.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
+                        rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid.is_some(),                      // In water
                     ) {
                         // Standing
@@ -2063,12 +2082,12 @@ impl FigureMgr {
                         (true, true, false) => anim::quadruped_low::RunAnimation::update_skeleton(
                             &QuadrupedLowSkeleton::default(),
                             (
-                                vel.0.magnitude(),
+                                rel_vel.magnitude(),
                                 // TODO: Update to use the quaternion.
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                                 state.acc_vel,
                             ),
                             state.state_time,
@@ -2079,12 +2098,12 @@ impl FigureMgr {
                         (false, _, true) => anim::quadruped_low::RunAnimation::update_skeleton(
                             &QuadrupedLowSkeleton::default(),
                             (
-                                vel.0.magnitude(),
+                                rel_vel.magnitude(),
                                 // TODO: Update to use the quaternion.
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                                 state.acc_vel,
                             ),
                             state.state_time,
@@ -2094,7 +2113,7 @@ impl FigureMgr {
                         // In air
                         (false, _, false) => anim::quadruped_low::JumpAnimation::update_skeleton(
                             &QuadrupedLowSkeleton::default(),
-                            (vel.0.magnitude(), time),
+                            (rel_vel.magnitude(), time),
                             state.state_time,
                             &mut state_animation_rate,
                             skeleton_attr,
@@ -2123,7 +2142,7 @@ impl FigureMgr {
                             };
                             anim::quadruped_low::ShootAnimation::update_skeleton(
                                 &target_base,
-                                (vel.0.magnitude(), time, Some(s.stage_section)),
+                                (rel_vel.magnitude(), time, Some(s.stage_section)),
                                 stage_progress,
                                 &mut state_animation_rate,
                                 skeleton_attr,
@@ -2148,7 +2167,7 @@ impl FigureMgr {
                             anim::quadruped_low::BetaAnimation::update_skeleton(
                                 &target_base,
                                 (
-                                    vel.0.magnitude(),
+                                    rel_vel.magnitude(),
                                     time,
                                     Some(s.stage_section),
                                     state.state_time,
@@ -2178,7 +2197,7 @@ impl FigureMgr {
                             anim::quadruped_low::TailwhipAnimation::update_skeleton(
                                 &target_base,
                                 (
-                                    vel.0.magnitude(),
+                                    rel_vel.magnitude(),
                                     time,
                                     Some(s.stage_section),
                                     state.state_time,
@@ -2206,7 +2225,7 @@ impl FigureMgr {
                                     anim::quadruped_low::StunnedAnimation::update_skeleton(
                                         &target_base,
                                         (
-                                            vel.0.magnitude(),
+                                            rel_vel.magnitude(),
                                             time,
                                             Some(s.stage_section),
                                             state.state_time,
@@ -2220,7 +2239,7 @@ impl FigureMgr {
                                     anim::quadruped_low::StunnedAnimation::update_skeleton(
                                         &target_base,
                                         (
-                                            vel.0.magnitude(),
+                                            rel_vel.magnitude(),
                                             time,
                                             Some(s.stage_section),
                                             state.state_time,
@@ -2260,7 +2279,7 @@ impl FigureMgr {
                                 1 => anim::quadruped_low::AlphaAnimation::update_skeleton(
                                     &target_base,
                                     (
-                                        vel.0.magnitude(),
+                                        rel_vel.magnitude(),
                                         time,
                                         Some(s.stage_section),
                                         state.state_time,
@@ -2272,7 +2291,7 @@ impl FigureMgr {
                                 2 => anim::quadruped_low::BetaAnimation::update_skeleton(
                                     &target_base,
                                     (
-                                        vel.0.magnitude(),
+                                        rel_vel.magnitude(),
                                         time,
                                         Some(s.stage_section),
                                         state.state_time,
@@ -2284,7 +2303,7 @@ impl FigureMgr {
                                 _ => anim::quadruped_low::AlphaAnimation::update_skeleton(
                                     &target_base,
                                     (
-                                        vel.0.magnitude(),
+                                        rel_vel.magnitude(),
                                         time,
                                         Some(s.stage_section),
                                         state.state_time,
@@ -2310,7 +2329,7 @@ impl FigureMgr {
                             anim::quadruped_low::BreatheAnimation::update_skeleton(
                                 &target_base,
                                 (
-                                    vel.0.magnitude(),
+                                    rel_vel.magnitude(),
                                     time,
                                     Some(s.stage_section),
                                     state.state_time,
@@ -2338,7 +2357,7 @@ impl FigureMgr {
                             anim::quadruped_low::DashAnimation::update_skeleton(
                                 &target_base,
                                 (
-                                    vel.0.magnitude(),
+                                    rel_vel.magnitude(),
                                     time,
                                     Some(s.stage_section),
                                     state.state_time,
@@ -2368,6 +2387,7 @@ impl FigureMgr {
                         camera,
                         &mut update_buf,
                         terrain,
+                        physics.ground_vel,
                     );
                 },
                 Body::BirdMedium(body) => {
@@ -2390,6 +2410,9 @@ impl FigureMgr {
                             FigureState::new(renderer, BirdMediumSkeleton::default())
                         });
 
+                    // Average velocity relative to the current ground
+                    let rel_avg_vel = state.avg_vel - physics.ground_vel;
+
                     let (character, last_character) = match (character, last_character) {
                         (Some(c), Some(l)) => (c, l),
                         _ => continue,
@@ -2401,7 +2424,7 @@ impl FigureMgr {
 
                     let target_base = match (
                         physics.on_ground,
-                        vel.0.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
+                        rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid.is_some(),                      // In water
                     ) {
                         // Standing
@@ -2415,7 +2438,7 @@ impl FigureMgr {
                         // Running
                         (true, true, false) => anim::bird_medium::RunAnimation::update_skeleton(
                             &BirdMediumSkeleton::default(),
-                            (vel.0.magnitude(), time),
+                            (rel_vel.magnitude(), time),
                             state.state_time,
                             &mut state_animation_rate,
                             skeleton_attr,
@@ -2423,7 +2446,7 @@ impl FigureMgr {
                         // Running
                         (false, _, true) => anim::bird_medium::RunAnimation::update_skeleton(
                             &BirdMediumSkeleton::default(),
-                            (vel.0.magnitude(), time),
+                            (rel_vel.magnitude(), time),
                             state.state_time,
                             &mut state_animation_rate,
                             skeleton_attr,
@@ -2431,7 +2454,7 @@ impl FigureMgr {
                         // In air
                         (false, _, false) => anim::bird_medium::FlyAnimation::update_skeleton(
                             &BirdMediumSkeleton::default(),
-                            (vel.0.magnitude(), time),
+                            (rel_vel.magnitude(), time),
                             state.state_time,
                             &mut state_animation_rate,
                             skeleton_attr,
@@ -2474,6 +2497,7 @@ impl FigureMgr {
                         camera,
                         &mut update_buf,
                         terrain,
+                        physics.ground_vel,
                     );
                 },
                 Body::FishMedium(body) => {
@@ -2496,6 +2520,9 @@ impl FigureMgr {
                             FigureState::new(renderer, FishMediumSkeleton::default())
                         });
 
+                    // Average velocity relative to the current ground
+                    let rel_avg_vel = state.avg_vel - physics.ground_vel;
+
                     let (character, last_character) = match (character, last_character) {
                         (Some(c), Some(l)) => (c, l),
                         _ => continue,
@@ -2507,19 +2534,19 @@ impl FigureMgr {
 
                     let target_base = match (
                         physics.on_ground,
-                        vel.0.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
+                        rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid.is_some(),                      // In water
                     ) {
                         // Idle
                         (_, false, _) => anim::fish_medium::IdleAnimation::update_skeleton(
                             &FishMediumSkeleton::default(),
                             (
-                                vel.0,
+                                rel_vel,
                                 // TODO: Update to use the quaternion.
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                             ),
                             state.state_time,
                             &mut state_animation_rate,
@@ -2529,12 +2556,12 @@ impl FigureMgr {
                         (_, true, _) => anim::fish_medium::SwimAnimation::update_skeleton(
                             &FishMediumSkeleton::default(),
                             (
-                                vel.0,
+                                rel_vel,
                                 // TODO: Update to use the quaternion.
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                                 state.acc_vel,
                             ),
                             state.state_time,
@@ -2559,6 +2586,7 @@ impl FigureMgr {
                         camera,
                         &mut update_buf,
                         terrain,
+                        physics.ground_vel,
                     );
                 },
                 Body::BipedSmall(body) => {
@@ -2581,6 +2609,9 @@ impl FigureMgr {
                             FigureState::new(renderer, BipedSmallSkeleton::default())
                         });
 
+                    // Average velocity relative to the current ground
+                    let rel_avg_vel = state.avg_vel - physics.ground_vel;
+
                     let (character, last_character) = match (character, last_character) {
                         (Some(c), Some(l)) => (c, l),
                         _ => continue,
@@ -2592,18 +2623,18 @@ impl FigureMgr {
 
                     let target_base = match (
                         physics.on_ground,
-                        vel.0.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
+                        rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid.is_some(),                      // In water
                     ) {
                         // Idle
                         (true, false, false) => anim::biped_small::IdleAnimation::update_skeleton(
                             &BipedSmallSkeleton::default(),
                             (
-                                vel.0,
+                                rel_vel,
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                             ),
                             state.state_time,
                             &mut state_animation_rate,
@@ -2613,11 +2644,11 @@ impl FigureMgr {
                         (true, true, _) => anim::biped_small::RunAnimation::update_skeleton(
                             &BipedSmallSkeleton::default(),
                             (
-                                vel.0,
+                                rel_vel,
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                                 state.acc_vel,
                             ),
                             state.state_time,
@@ -2628,11 +2659,11 @@ impl FigureMgr {
                         (false, _, false) => anim::biped_small::RunAnimation::update_skeleton(
                             &BipedSmallSkeleton::default(),
                             (
-                                vel.0,
+                                rel_vel,
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                                 state.acc_vel,
                             ),
                             state.state_time,
@@ -2643,11 +2674,11 @@ impl FigureMgr {
                         (false, _, true) => anim::biped_small::RunAnimation::update_skeleton(
                             &BipedSmallSkeleton::default(),
                             (
-                                vel.0,
+                                rel_vel,
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                                 state.acc_vel,
                             ),
                             state.state_time,
@@ -2657,11 +2688,11 @@ impl FigureMgr {
                         _ => anim::biped_small::IdleAnimation::update_skeleton(
                             &BipedSmallSkeleton::default(),
                             (
-                                vel.0,
+                                rel_vel,
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                             ),
                             state.state_time,
                             &mut state_animation_rate,
@@ -2675,11 +2706,11 @@ impl FigureMgr {
                                 &target_base,
                                 (
                                     active_tool_kind,
-                                    vel.0,
+                                    rel_vel,
                                     ori * anim::vek::Vec3::<f32>::unit_y(),
                                     state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                     time,
-                                    state.avg_vel,
+                                    rel_avg_vel,
                                     state.acc_vel,
                                 ),
                                 state.state_time,
@@ -2707,11 +2738,11 @@ impl FigureMgr {
                             anim::biped_small::DashAnimation::update_skeleton(
                                 &target_base,
                                 (
-                                    vel.0,
+                                    rel_vel,
                                     ori * anim::vek::Vec3::<f32>::unit_y(),
                                     state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                     time,
-                                    state.avg_vel,
+                                    rel_avg_vel,
                                     state.acc_vel,
                                     Some(s.stage_section),
                                     state.state_time,
@@ -2738,11 +2769,11 @@ impl FigureMgr {
                                 &target_base,
                                 (
                                     active_tool_kind,
-                                    vel.0,
+                                    rel_vel,
                                     ori * anim::vek::Vec3::<f32>::unit_y(),
                                     state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                     time,
-                                    state.avg_vel,
+                                    rel_avg_vel,
                                     state.acc_vel,
                                     Some(s.stage_section),
                                     state.state_time,
@@ -2769,11 +2800,11 @@ impl FigureMgr {
                                 &target_base,
                                 (
                                     active_tool_kind,
-                                    vel.0,
+                                    rel_vel,
                                     ori * anim::vek::Vec3::<f32>::unit_y(),
                                     state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                     time,
-                                    state.avg_vel,
+                                    rel_avg_vel,
                                     state.acc_vel,
                                     Some(s.stage_section),
                                     state.state_time,
@@ -2811,11 +2842,11 @@ impl FigureMgr {
                                 1 => anim::biped_small::AlphaAnimation::update_skeleton(
                                     &target_base,
                                     (
-                                        vel.0,
+                                        rel_vel,
                                         ori * anim::vek::Vec3::<f32>::unit_y(),
                                         state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                         time,
-                                        state.avg_vel,
+                                        rel_avg_vel,
                                         state.acc_vel,
                                         Some(s.stage_section),
                                         state.state_time,
@@ -2827,11 +2858,11 @@ impl FigureMgr {
                                 _ => anim::biped_small::AlphaAnimation::update_skeleton(
                                     &target_base,
                                     (
-                                        vel.0,
+                                        rel_vel,
                                         ori * anim::vek::Vec3::<f32>::unit_y(),
                                         state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                         time,
-                                        state.avg_vel,
+                                        rel_avg_vel,
                                         state.acc_vel,
                                         Some(s.stage_section),
                                         state.state_time,
@@ -2862,6 +2893,7 @@ impl FigureMgr {
                         camera,
                         &mut update_buf,
                         terrain,
+                        physics.ground_vel,
                     );
                 },
                 Body::Dragon(body) => {
@@ -2881,6 +2913,9 @@ impl FigureMgr {
                             FigureState::new(renderer, DragonSkeleton::default())
                         });
 
+                    // Average velocity relative to the current ground
+                    let rel_avg_vel = state.avg_vel - physics.ground_vel;
+
                     let (character, last_character) = match (character, last_character) {
                         (Some(c), Some(l)) => (c, l),
                         _ => continue,
@@ -2892,7 +2927,7 @@ impl FigureMgr {
 
                     let target_base = match (
                         physics.on_ground,
-                        vel.0.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
+                        rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid.is_some(),                      // In water
                     ) {
                         // Standing
@@ -2907,12 +2942,12 @@ impl FigureMgr {
                         (true, true, false) => anim::dragon::RunAnimation::update_skeleton(
                             &DragonSkeleton::default(),
                             (
-                                vel.0.magnitude(),
+                                rel_vel.magnitude(),
                                 // TODO: Update to use the quaternion.
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                             ),
                             state.state_time,
                             &mut state_animation_rate,
@@ -2921,7 +2956,7 @@ impl FigureMgr {
                         // In air
                         (false, _, false) => anim::dragon::FlyAnimation::update_skeleton(
                             &DragonSkeleton::default(),
-                            (vel.0.magnitude(), time),
+                            (rel_vel.magnitude(), time),
                             state.state_time,
                             &mut state_animation_rate,
                             skeleton_attr,
@@ -2952,6 +2987,7 @@ impl FigureMgr {
                         camera,
                         &mut update_buf,
                         terrain,
+                        physics.ground_vel,
                     );
                 },
                 Body::Theropod(body) => {
@@ -2972,6 +3008,9 @@ impl FigureMgr {
                         .entry(entity)
                         .or_insert_with(|| FigureState::new(renderer, TheropodSkeleton::default()));
 
+                    // Average velocity relative to the current ground
+                    let rel_avg_vel = state.avg_vel - physics.ground_vel;
+
                     let (character, last_character) = match (character, last_character) {
                         (Some(c), Some(l)) => (c, l),
                         _ => continue,
@@ -2983,7 +3022,7 @@ impl FigureMgr {
 
                     let target_base = match (
                         physics.on_ground,
-                        vel.0.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
+                        rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid.is_some(),                      // In water
                     ) {
                         // Standing
@@ -2998,12 +3037,12 @@ impl FigureMgr {
                         (true, true, false) => anim::theropod::RunAnimation::update_skeleton(
                             &TheropodSkeleton::default(),
                             (
-                                vel.0,
+                                rel_vel,
                                 // TODO: Update to use the quaternion.
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                                 state.acc_vel,
                             ),
                             state.state_time,
@@ -3014,12 +3053,12 @@ impl FigureMgr {
                         (false, _, false) => anim::theropod::JumpAnimation::update_skeleton(
                             &TheropodSkeleton::default(),
                             (
-                                vel.0.magnitude(),
+                                rel_vel.magnitude(),
                                 // TODO: Update to use the quaternion.
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                             ),
                             state.state_time,
                             &mut state_animation_rate,
@@ -3062,7 +3101,7 @@ impl FigureMgr {
                                 1 => anim::theropod::AlphaAnimation::update_skeleton(
                                     &target_base,
                                     (
-                                        vel.0.magnitude(),
+                                        rel_vel.magnitude(),
                                         time,
                                         Some(s.stage_section),
                                         state.state_time,
@@ -3074,7 +3113,7 @@ impl FigureMgr {
                                 _ => anim::theropod::BetaAnimation::update_skeleton(
                                     &target_base,
                                     (
-                                        vel.0.magnitude(),
+                                        rel_vel.magnitude(),
                                         time,
                                         Some(s.stage_section),
                                         state.state_time,
@@ -3105,6 +3144,7 @@ impl FigureMgr {
                         camera,
                         &mut update_buf,
                         terrain,
+                        physics.ground_vel,
                     );
                 },
                 Body::BirdSmall(body) => {
@@ -3127,6 +3167,9 @@ impl FigureMgr {
                             FigureState::new(renderer, BirdSmallSkeleton::default())
                         });
 
+                    // Average velocity relative to the current ground
+                    let rel_avg_vel = state.avg_vel - physics.ground_vel;
+
                     let (character, last_character) = match (character, last_character) {
                         (Some(c), Some(l)) => (c, l),
                         _ => continue,
@@ -3138,7 +3181,7 @@ impl FigureMgr {
 
                     let target_base = match (
                         physics.on_ground,
-                        vel.0.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
+                        rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid.is_some(),                      // In water
                     ) {
                         // Standing
@@ -3152,7 +3195,7 @@ impl FigureMgr {
                         // Running
                         (true, true, false) => anim::bird_small::RunAnimation::update_skeleton(
                             &BirdSmallSkeleton::default(),
-                            (vel.0.magnitude(), time),
+                            (rel_vel.magnitude(), time),
                             state.state_time,
                             &mut state_animation_rate,
                             skeleton_attr,
@@ -3160,7 +3203,7 @@ impl FigureMgr {
                         // In air
                         (false, _, false) => anim::bird_small::JumpAnimation::update_skeleton(
                             &BirdSmallSkeleton::default(),
-                            (vel.0.magnitude(), time),
+                            (rel_vel.magnitude(), time),
                             state.state_time,
                             &mut state_animation_rate,
                             skeleton_attr,
@@ -3192,6 +3235,7 @@ impl FigureMgr {
                         camera,
                         &mut update_buf,
                         terrain,
+                        physics.ground_vel,
                     );
                 },
                 Body::FishSmall(body) => {
@@ -3214,6 +3258,9 @@ impl FigureMgr {
                             FigureState::new(renderer, FishSmallSkeleton::default())
                         });
 
+                    // Average velocity relative to the current ground
+                    let rel_avg_vel = state.avg_vel - physics.ground_vel;
+
                     let (character, last_character) = match (character, last_character) {
                         (Some(c), Some(l)) => (c, l),
                         _ => continue,
@@ -3225,19 +3272,19 @@ impl FigureMgr {
 
                     let target_base = match (
                         physics.on_ground,
-                        vel.0.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
+                        rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid.is_some(),                      // In water
                     ) {
                         // Idle
                         (_, false, _) => anim::fish_small::IdleAnimation::update_skeleton(
                             &FishSmallSkeleton::default(),
                             (
-                                vel.0,
+                                rel_vel,
                                 // TODO: Update to use the quaternion.
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                             ),
                             state.state_time,
                             &mut state_animation_rate,
@@ -3247,12 +3294,12 @@ impl FigureMgr {
                         (_, true, _) => anim::fish_small::SwimAnimation::update_skeleton(
                             &FishSmallSkeleton::default(),
                             (
-                                vel.0,
+                                rel_vel,
                                 // TODO: Update to use the quaternion.
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                                 state.acc_vel,
                             ),
                             state.state_time,
@@ -3277,6 +3324,7 @@ impl FigureMgr {
                         camera,
                         &mut update_buf,
                         terrain,
+                        physics.ground_vel,
                     );
                 },
                 Body::BipedLarge(body) => {
@@ -3299,6 +3347,9 @@ impl FigureMgr {
                             FigureState::new(renderer, BipedLargeSkeleton::default())
                         });
 
+                    // Average velocity relative to the current ground
+                    let rel_avg_vel = state.avg_vel - physics.ground_vel;
+
                     let (character, last_character) = match (character, last_character) {
                         (Some(c), Some(l)) => (c, l),
                         _ => continue,
@@ -3310,7 +3361,7 @@ impl FigureMgr {
 
                     let target_base = match (
                         physics.on_ground,
-                        vel.0.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
+                        rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid.is_some(),                      // In water
                     ) {
                         // Running
@@ -3319,12 +3370,12 @@ impl FigureMgr {
                             (
                                 active_tool_kind,
                                 second_tool_kind,
-                                vel.0,
+                                rel_vel,
                                 // TODO: Update to use the quaternion.
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
-                                state.avg_vel,
+                                rel_avg_vel,
                                 state.acc_vel,
                             ),
                             state.state_time,
@@ -3351,7 +3402,7 @@ impl FigureMgr {
                         CharacterState::Equipping { .. } => {
                             anim::biped_large::EquipAnimation::update_skeleton(
                                 &target_base,
-                                (active_tool_kind, second_tool_kind, vel.0.magnitude(), time),
+                                (active_tool_kind, second_tool_kind, rel_vel.magnitude(), time),
                                 state.state_time,
                                 &mut state_animation_rate,
                                 skeleton_attr,
@@ -3363,7 +3414,7 @@ impl FigureMgr {
                                 (
                                     active_tool_kind,
                                     second_tool_kind,
-                                    vel.0,
+                                    rel_vel,
                                     time,
                                     state.acc_vel,
                                 ),
@@ -3378,7 +3429,7 @@ impl FigureMgr {
                                 (
                                     active_tool_kind,
                                     second_tool_kind,
-                                    vel.0,
+                                    rel_vel,
                                     time,
                                     None,
                                     state.acc_vel,
@@ -3407,7 +3458,7 @@ impl FigureMgr {
                                 (
                                     active_tool_kind,
                                     second_tool_kind,
-                                    vel.0,
+                                    rel_vel,
                                     // TODO: Update to use the quaternion.
                                     ori * anim::vek::Vec3::<f32>::unit_y(),
                                     state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
@@ -3439,7 +3490,7 @@ impl FigureMgr {
                                 (
                                     active_tool_kind,
                                     second_tool_kind,
-                                    vel.0,
+                                    rel_vel,
                                     // TODO: Update to use the quaternion.
                                     ori * anim::vek::Vec3::<f32>::unit_y(),
                                     state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
@@ -3474,7 +3525,7 @@ impl FigureMgr {
                                 (
                                     active_tool_kind,
                                     second_tool_kind,
-                                    vel.0,
+                                    rel_vel,
                                     time,
                                     Some(s.stage_section),
                                     state.acc_vel,
@@ -3514,7 +3565,7 @@ impl FigureMgr {
                                     (
                                         active_tool_kind,
                                         second_tool_kind,
-                                        vel.0,
+                                        rel_vel,
                                         time,
                                         Some(s.stage_section),
                                         state.acc_vel,
@@ -3528,7 +3579,7 @@ impl FigureMgr {
                                     (
                                         active_tool_kind,
                                         second_tool_kind,
-                                        vel.0,
+                                        rel_vel,
                                         time,
                                         Some(s.stage_section),
                                         state.acc_vel,
@@ -3542,7 +3593,7 @@ impl FigureMgr {
                                     (
                                         active_tool_kind,
                                         second_tool_kind,
-                                        vel.0,
+                                        rel_vel,
                                         time,
                                         Some(s.stage_section),
                                         state.acc_vel,
@@ -3580,7 +3631,7 @@ impl FigureMgr {
                                 (
                                     active_tool_kind,
                                     second_tool_kind,
-                                    vel.0,
+                                    rel_vel,
                                     time,
                                     Some(s.stage_section),
                                 ),
@@ -3620,7 +3671,7 @@ impl FigureMgr {
                                 (
                                     active_tool_kind,
                                     second_tool_kind,
-                                    vel.0,
+                                    rel_vel,
                                     time,
                                     Some(s.stage_section),
                                 ),
@@ -3649,7 +3700,7 @@ impl FigureMgr {
                                     active_tool_kind,
                                     second_tool_kind,
                                     time,
-                                    vel.0.magnitude(),
+                                    rel_vel.magnitude(),
                                     Some(s.stage_section),
                                 ),
                                 stage_progress,
@@ -3675,7 +3726,7 @@ impl FigureMgr {
                                     active_tool_kind,
                                     second_tool_kind,
                                     time,
-                                    vel.0,
+                                    rel_vel,
                                     Some(s.stage_section),
                                     state.acc_vel,
                                 ),
@@ -3704,6 +3755,7 @@ impl FigureMgr {
                         camera,
                         &mut update_buf,
                         terrain,
+                        physics.ground_vel,
                     );
                 },
                 Body::Golem(body) => {
@@ -3723,6 +3775,9 @@ impl FigureMgr {
                             FigureState::new(renderer, GolemSkeleton::default())
                         });
 
+                    // Average velocity relative to the current ground
+                    let rel_avg_vel = state.avg_vel - physics.ground_vel;
+
                     let (character, last_character) = match (character, last_character) {
                         (Some(c), Some(l)) => (c, l),
                         _ => continue,
@@ -3734,7 +3789,7 @@ impl FigureMgr {
 
                     let target_base = match (
                         physics.on_ground,
-                        vel.0.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
+                        rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid.is_some(),                      // In water
                     ) {
                         // Standing
@@ -3749,7 +3804,7 @@ impl FigureMgr {
                         (true, true, false) => anim::golem::RunAnimation::update_skeleton(
                             &GolemSkeleton::default(),
                             (
-                                vel.0,
+                                rel_vel,
                                 // TODO: Update to use the quaternion.
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
@@ -3764,7 +3819,7 @@ impl FigureMgr {
                         (false, _, false) => anim::golem::RunAnimation::update_skeleton(
                             &GolemSkeleton::default(),
                             (
-                                vel.0,
+                                rel_vel,
                                 ori * anim::vek::Vec3::<f32>::unit_y(),
                                 state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
                                 time,
@@ -3833,7 +3888,7 @@ impl FigureMgr {
                             };
                             anim::golem::ShockwaveAnimation::update_skeleton(
                                 &target_base,
-                                (Some(s.stage_section), vel.0.magnitude(), time),
+                                (Some(s.stage_section), rel_vel.magnitude(), time),
                                 stage_progress,
                                 &mut state_animation_rate,
                                 skeleton_attr,
@@ -3884,6 +3939,7 @@ impl FigureMgr {
                         camera,
                         &mut update_buf,
                         terrain,
+                        physics.ground_vel,
                     );
                 },
                 Body::Object(body) => {
@@ -3903,6 +3959,9 @@ impl FigureMgr {
                             FigureState::new(renderer, ObjectSkeleton::default())
                         });
 
+                    // Average velocity relative to the current ground
+                    let rel_avg_vel = state.avg_vel - physics.ground_vel;
+
                     let (character, last_character) = match (character, last_character) {
                         (Some(c), Some(l)) => (c, l),
                         _ => (&CharacterState::Idle, &Last {
@@ -3916,7 +3975,7 @@ impl FigureMgr {
 
                     let target_base = match (
                         physics.on_ground,
-                        vel.0.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
+                        rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid.is_some(),                      // In water
                     ) {
                         // Standing
@@ -4008,6 +4067,7 @@ impl FigureMgr {
                         camera,
                         &mut update_buf,
                         terrain,
+                        physics.ground_vel,
                     );
                 },
                 Body::Ship(body) => {
@@ -4027,6 +4087,9 @@ impl FigureMgr {
                             FigureState::new(renderer, ShipSkeleton::default())
                         });
 
+                    // Average velocity relative to the current ground
+                    let rel_avg_vel = state.avg_vel - physics.ground_vel;
+
                     let (character, last_character) = match (character, last_character) {
                         (Some(c), Some(l)) => (c, l),
                         _ => (&CharacterState::Idle, &Last {
@@ -4040,7 +4103,7 @@ impl FigureMgr {
 
                     let target_base = match (
                         physics.on_ground,
-                        vel.0.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
+                        rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid.is_some(),                      // In water
                     ) {
                         // Standing
@@ -4081,6 +4144,7 @@ impl FigureMgr {
                         camera,
                         &mut update_buf,
                         terrain,
+                        physics.ground_vel,
                     );
                 },
             }
@@ -4780,6 +4844,7 @@ impl<S: Skeleton> FigureState<S> {
         _camera: &Camera,
         buf: &mut [anim::FigureBoneData; anim::MAX_BONE_COUNT],
         terrain: Option<&Terrain>,
+        ground_vel: Vec3<f32>,
     ) {
         // NOTE: As long as update() always gets called after get_or_create_model(), and
         // visibility is not set again until after the model is rendered, we
@@ -4891,7 +4956,7 @@ impl<S: Skeleton> FigureState<S> {
 
         // Can potentially overflow
         if self.avg_vel.magnitude_squared() != 0.0 {
-            self.acc_vel += self.avg_vel.magnitude() * dt;
+            self.acc_vel += (self.avg_vel - ground_vel).magnitude() * dt;
         } else {
             self.acc_vel = 0.0;
         }
