@@ -9,7 +9,7 @@ use crate::{
     util::Dir,
 };
 use serde::{Deserialize, Serialize};
-use specs::{Component, DerefFlaggedStorage};
+use specs::{Component, DerefFlaggedStorage, FlaggedStorage};
 use specs_idvs::IdvStorage;
 use std::time::Duration;
 use vek::*;
@@ -314,7 +314,7 @@ impl Controller {
 }
 
 impl Component for Controller {
-    type Storage = IdvStorage<Self>;
+    type Storage = FlaggedStorage<Self, IdvStorage<Self>>;
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

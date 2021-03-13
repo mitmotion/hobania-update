@@ -118,7 +118,7 @@ impl<'a> System<'a> for Sys {
         (read_data, event_bus, mut agents, mut controllers): Self::SystemData,
     ) {
         job.cpu_stats.measure(ParMode::Rayon);
-        (
+        let controllers_to_insert = (
             &read_data.entities,
             (&read_data.energies, &read_data.healths),
             &read_data.positions,
@@ -130,7 +130,7 @@ impl<'a> System<'a> for Sys {
             &read_data.physics_states,
             &read_data.uids,
             &mut agents,
-            &mut controllers,
+            &controllers,
             read_data.light_emitter.maybe(),
             read_data.groups.maybe(),
             read_data.mount_states.maybe(),
@@ -142,7 +142,7 @@ impl<'a> System<'a> for Sys {
                     .map(|ms| *ms == MountState::Unmounted)
                     .unwrap_or(true)
             })
-            .for_each(
+            .map(
                 |(
                     entity,
                     (energy, health),
@@ -160,6 +160,8 @@ impl<'a> System<'a> for Sys {
                     groups,
                     _,
                 )| {
+                    let mut controller = (*controller).clone();
+
                     //// Hack, replace with better system when groups are more sophisticated
                     //// Override alignment if in a group unless entity is owned already
                     let alignment = if !matches!(
@@ -266,7 +268,7 @@ impl<'a> System<'a> for Sys {
                                 if hostile {
                                     data.hostile_tree(
                                         agent,
-                                        controller,
+                                        &mut controller,
                                         &read_data,
                                         &mut event_emitter,
                                     );
@@ -279,7 +281,7 @@ impl<'a> System<'a> for Sys {
                                             agent.bearing = Vec2::zero();
                                             data.follow(
                                                 agent,
-                                                controller,
+                                                &mut controller,
                                                 &read_data.terrain,
                                                 tgt_pos,
                                             );
@@ -311,12 +313,12 @@ impl<'a> System<'a> for Sys {
                                                                 hostile: false,
                                                             });
                                                             data.idle(
-                                                                agent, controller, &read_data,
+                                                                agent, &mut controller, &read_data,
                                                             );
                                                         } else {
                                                             data.attack(
                                                                 agent,
-                                                                controller,
+                                                                &mut controller,
                                                                 &read_data.terrain,
                                                                 tgt_pos,
                                                                 read_data.bodies.get(attacker),
@@ -331,7 +333,7 @@ impl<'a> System<'a> for Sys {
                                         } else if dist_sqrd > MAX_FOLLOW_DIST.powi(2) {
                                             data.follow(
                                                 agent,
-                                                controller,
+                                                &mut controller,
                                                 &read_data.terrain,
                                                 tgt_pos,
                                             );
@@ -340,7 +342,7 @@ impl<'a> System<'a> for Sys {
                                         } else {
                                             data.idle_tree(
                                                 agent,
-                                                controller,
+                                                &mut controller,
                                                 &read_data,
                                                 &mut event_emitter,
                                             );
@@ -349,18 +351,18 @@ impl<'a> System<'a> for Sys {
                                 } else {
                                     data.idle_tree(
                                         agent,
-                                        controller,
+                                        &mut controller,
                                         &read_data,
                                         &mut event_emitter,
                                     );
                                 }
                             } else {
                                 agent.target = None;
-                                data.idle_tree(agent, controller, &read_data, &mut event_emitter);
+                                data.idle_tree(agent, &mut controller, &read_data, &mut event_emitter);
                             }
                         } else {
                             agent.target = None;
-                            data.idle_tree(agent, controller, &read_data, &mut event_emitter);
+                            data.idle_tree(agent, &mut controller, &read_data, &mut event_emitter);
                         }
                     } else {
                         // Target an entity that's attacking us if the attack was recent
@@ -381,7 +383,7 @@ impl<'a> System<'a> for Sys {
                                             agent.target = None;
                                             data.idle_tree(
                                                 agent,
-                                                controller,
+                                                &mut controller,
                                                 &read_data,
                                                 &mut event_emitter,
                                             );
@@ -392,7 +394,7 @@ impl<'a> System<'a> for Sys {
                                             });
                                             data.attack(
                                                 agent,
-                                                controller,
+                                                &mut controller,
                                                 &read_data.terrain,
                                                 tgt_pos,
                                                 read_data.bodies.get(attacker),
@@ -403,7 +405,7 @@ impl<'a> System<'a> for Sys {
                                         agent.target = None;
                                         data.idle_tree(
                                             agent,
-                                            controller,
+                                            &mut controller,
                                             &read_data,
                                             &mut event_emitter,
                                         );
@@ -411,17 +413,24 @@ impl<'a> System<'a> for Sys {
                                 }
                             } else {
                                 agent.target = None;
-                                data.idle_tree(agent, controller, &read_data, &mut event_emitter);
+                                data.idle_tree(agent, &mut controller, &read_data, &mut event_emitter);
                             }
                         } else {
-                            data.idle_tree(agent, controller, &read_data, &mut event_emitter);
+                            data.idle_tree(agent, &mut controller, &read_data, &mut event_emitter);
                         }
                     }
 
                     debug_assert!(controller.inputs.move_dir.map(|e| !e.is_nan()).reduce_and());
                     debug_assert!(controller.inputs.look_dir.map(|e| !e.is_nan()).reduce_and());
+
+                    (entity, controller)
                 },
-            );
+            )
+            .collect::<Vec<_>>();
+
+        for (entity, controller) in controllers_to_insert {
+            controllers.insert(entity, controller);
+        }
     }
 }
 

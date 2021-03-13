@@ -1004,7 +1004,7 @@ fn cylinder_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
         z_range.clone(),
     ) && vel.0.z < 0.5
         && vel.0.z > -1.5
-        && was_on_ground
+        && (was_on_ground || vel.0.z <= 0.05)
     {
         let snap_height = terrain
             .get(Vec3::new(pos.0.x, pos.0.y, pos.0.z - 0.1).map(|e| e.floor() as i32))
