@@ -138,6 +138,7 @@ pub struct Client {
     registered: bool,
     presence: Option<PresenceKind>,
     runtime: Arc<Runtime>,
+    background_threads: Arc<std_semaphore::Semaphore>,
     server_info: ServerInfo,
     world_data: WorldData,
     player_list: HashMap<Uid, PlayerInfo>,
@@ -198,6 +199,7 @@ impl Client {
         addr: ConnectionArgs,
         view_distance: Option<u32>,
         runtime: Arc<Runtime>,
+        background_threads: Arc<std_semaphore::Semaphore>,
     ) -> Result<Self, Error> {
         let network = Network::new(Pid::new(), &runtime);
 
@@ -446,6 +448,7 @@ impl Client {
             registered: false,
             presence: None,
             runtime,
+            background_threads,
             server_info,
             world_data: WorldData {
                 lod_base,
@@ -1842,6 +1845,10 @@ impl Client {
     /// exempt).
     pub fn runtime(&self) -> &Arc<Runtime> { &self.runtime }
 
+    /// Get a reference to the semaphore used to guard the number of cpu heavy
+    /// background threads running at once
+    pub fn background_threads(&self) -> &Arc<std_semaphore::Semaphore> { &self.background_threads }
+
     /// Get a reference to the client's game state.
     pub fn state(&self) -> &State { &self.state }
 
@@ -2176,11 +2183,13 @@ mod tests {
         let socket = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9000);
         let view_distance: Option<u32> = None;
         let runtime = Arc::new(Runtime::new().unwrap());
+        let background_threads = Arc::new(std_semaphore::Semaphore::new(3));
         let runtime2 = Arc::clone(&runtime);
         let veloren_client: Result<Client, Error> = runtime.block_on(Client::new(
             ConnectionArgs::IpAndPort(vec![socket]),
             view_distance,
             runtime2,
+            background_threads,
         ));
 
         let _ = veloren_client.map(|mut client| {

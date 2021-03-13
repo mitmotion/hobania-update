@@ -50,19 +50,19 @@ impl ClientInit {
         username: String,
         view_distance: Option<u32>,
         password: String,
-        runtime: Option<Arc<runtime::Runtime>>,
+        runtime_and_threads: Option<(Arc<runtime::Runtime>, Arc<std_semaphore::Semaphore>)>,
     ) -> Self {
         let (tx, rx) = unbounded();
         let (trust_tx, trust_rx) = unbounded();
         let cancel = Arc::new(AtomicBool::new(false));
         let cancel2 = Arc::clone(&cancel);
 
-        let runtime = runtime.unwrap_or_else(|| {
+        let (runtime, background_threads) = runtime_and_threads.unwrap_or_else(|| {
             let cores = num_cpus::get();
-            Arc::new(
+            let runtime = Arc::new(
                 runtime::Builder::new_multi_thread()
                     .enable_all()
-                    .worker_threads(if cores > 4 { cores - 1 } else { cores })
+                    .worker_threads(if cores < 2 { 1 } else { cores / 2 + cores / 4 })
                     .thread_name_fn(|| {
                         static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
                         let id = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);
@@ -70,9 +70,20 @@ impl ClientInit {
                     })
                     .build()
                     .unwrap(),
-            )
+            );
+
+            let background_threads = Arc::new(std_semaphore::Semaphore::new(if cores < 2 {
+                1
+            } else {
+                cores / 2 + cores / 4
+            }
+                as isize));
+
+            (runtime, background_threads)
         });
+
         let runtime2 = Arc::clone(&runtime);
+        let background_threads2 = Arc::clone(&background_threads);
 
         runtime.spawn(async move {
             let trust_fn = |auth_server: &str| {
@@ -106,6 +117,7 @@ impl ClientInit {
                     connection_args.clone(),
                     view_distance,
                     Arc::clone(&runtime2),
+                    Arc::clone(&background_threads2),
                 )
                 .await
                 {

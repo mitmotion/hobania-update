@@ -19,7 +19,8 @@ const TPS: u64 = 30;
 pub struct Singleplayer {
     _server_thread: JoinHandle<()>,
     stop_server_s: Sender<()>,
-    pub receiver: Receiver<Result<Arc<Runtime>, ServerError>>,
+    #[allow(clippy::type_complexity)] // TODO: create new type for the sent things
+    pub receiver: Receiver<Result<(Arc<Runtime>, Arc<std_semaphore::Semaphore>), ServerError>>,
     // Wether the server is stopped or not
     paused: Arc<AtomicBool>,
     // Settings that the server was started with
@@ -83,7 +84,7 @@ impl Singleplayer {
         let runtime = Arc::new(
             tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
-                .worker_threads(if cores > 4 { cores - 1 } else { cores })
+                .worker_threads(if cores < 2 { 1 } else { cores / 2 + cores / 4 })
                 .thread_name_fn(|| {
                     static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
                     let id = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);
@@ -92,6 +93,10 @@ impl Singleplayer {
                 .build()
                 .unwrap(),
         );
+        let background_threads =
+            Arc::new(std_semaphore::Semaphore::new(
+                if cores < 2 { 1 } else { cores / 2 + cores / 4 } as isize,
+            ));
 
         let settings2 = settings.clone();
 
@@ -111,10 +116,11 @@ impl Singleplayer {
                         editable_settings,
                         &server_data_dir,
                         Arc::clone(&runtime),
+                        Arc::clone(&background_threads),
                     ) {
                         Ok(s) => {
                             server = Some(s);
-                            Ok(runtime)
+                            Ok((runtime, background_threads))
                         },
                         Err(e) => Err(e),
                     },

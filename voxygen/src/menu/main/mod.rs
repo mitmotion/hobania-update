@@ -69,7 +69,7 @@ impl PlayState for MainMenuState {
         {
             if let Some(singleplayer) = &global_state.singleplayer {
                 match singleplayer.receiver.try_recv() {
-                    Ok(Ok(runtime)) => {
+                    Ok(Ok((runtime, background_threads))) => {
                         // Attempt login after the server is finished initializing
                         attempt_login(
                             &mut global_state.settings,
@@ -78,7 +78,7 @@ impl PlayState for MainMenuState {
                             "".to_owned(),
                             ClientConnArgs::Resolved(ConnectionArgs::Mpsc(14004)),
                             &mut self.client_init,
-                            Some(runtime),
+                            Some((runtime, background_threads)),
                         );
                     },
                     Ok(Err(e)) => {
@@ -342,7 +342,7 @@ fn attempt_login(
     password: String,
     connection_args: ClientConnArgs,
     client_init: &mut Option<ClientInit>,
-    runtime: Option<Arc<runtime::Runtime>>,
+    runtime_and_threads: Option<(Arc<runtime::Runtime>, Arc<std_semaphore::Semaphore>)>,
 ) {
     if comp::Player::alias_is_valid(&username) {
         // Don't try to connect if there is already a connection in progress.
@@ -352,7 +352,7 @@ fn attempt_login(
                 username,
                 Some(settings.graphics.view_distance),
                 password,
-                runtime,
+                runtime_and_threads,
             ));
         }
     } else {

@@ -98,6 +98,7 @@ pub struct SceneData<'a> {
     pub delta_time: f32,
     pub tick: u64,
     pub runtime: &'a Runtime,
+    pub background_threads: &'a std::sync::Arc<std_semaphore::Semaphore>,
     pub body: Option<humanoid::Body>,
     pub gamma: f32,
     pub exposure: f32,
@@ -358,6 +359,7 @@ impl Scene {
                     CameraMode::default(),
                     None,
                     scene_data.runtime,
+                    scene_data.background_threads,
                 )
                 .0;
             let mut buf = [Default::default(); anim::MAX_BONE_COUNT];

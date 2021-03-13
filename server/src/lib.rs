@@ -151,6 +151,7 @@ impl Server {
         editable_settings: EditableSettings,
         data_dir: &std::path::Path,
         runtime: Arc<Runtime>,
+        background_threads: Arc<std_semaphore::Semaphore>,
     ) -> Result<Self, Error> {
         info!("Server is data dir is: {}", data_dir.display());
         if settings.auth_server_address.is_none() {
@@ -199,7 +200,7 @@ impl Server {
         state.ecs_mut().insert(physics_metrics);
         state
             .ecs_mut()
-            .insert(ChunkGenerator::new(chunk_gen_metrics));
+            .insert(ChunkGenerator::new(chunk_gen_metrics, background_threads));
         state
             .ecs_mut()
             .insert(CharacterUpdater::new(&persistence_db_dir)?);

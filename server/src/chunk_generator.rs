@@ -22,16 +22,21 @@ pub struct ChunkGenerator {
     chunk_tx: crossbeam_channel::Sender<ChunkGenResult>,
     chunk_rx: crossbeam_channel::Receiver<ChunkGenResult>,
     pending_chunks: HashMap<Vec2<i32>, Arc<AtomicBool>>,
+    background_threads: Arc<std_semaphore::Semaphore>,
     metrics: Arc<ChunkGenMetrics>,
 }
 impl ChunkGenerator {
     #[allow(clippy::new_without_default)] // TODO: Pending review in #587
-    pub fn new(metrics: ChunkGenMetrics) -> Self {
+    pub fn new(
+        metrics: ChunkGenMetrics,
+        background_threads: Arc<std_semaphore::Semaphore>,
+    ) -> Self {
         let (chunk_tx, chunk_rx) = crossbeam_channel::unbounded();
         Self {
             chunk_tx,
             chunk_rx,
             pending_chunks: HashMap::new(),
+            background_threads,
             metrics: Arc::new(metrics),
         }
     }
@@ -52,8 +57,10 @@ impl ChunkGenerator {
         let cancel = Arc::new(AtomicBool::new(false));
         v.insert(Arc::clone(&cancel));
         let chunk_tx = self.chunk_tx.clone();
+        let background_threads = Arc::clone(&self.background_threads);
         self.metrics.chunks_requested.inc();
         runtime.spawn_blocking(move || {
+            let _cpu_guard = background_threads.access();
             common_base::prof_span!(_guard, "generate_chunk");
             let index = index.as_index_ref();
             let payload = world

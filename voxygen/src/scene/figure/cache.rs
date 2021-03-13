@@ -339,6 +339,7 @@ where
         camera_mode: CameraMode,
         character_state: Option<&CharacterState>,
         runtime: &Runtime,
+        background_threads: &Arc<std_semaphore::Semaphore>,
     ) -> (FigureModelEntryLod<'c>, &'c Skel::Attr)
     where
         for<'a> &'a Skel::Body: Into<Skel::Attr>,
@@ -403,8 +404,10 @@ where
                 let slot = Arc::new(atomic::AtomicCell::new(None));
                 let manifests = self.manifests;
                 let slot_ = Arc::clone(&slot);
+                let background_threads_ = Arc::clone(background_threads);
 
                 runtime.spawn_blocking(move || {
+                    let _cpu_guard = background_threads_.access();
                     // First, load all the base vertex data.
                     let manifests = &*manifests.read();
                     let meshes = <Skel::Body as BodySpec>::bone_meshes(&key, manifests);

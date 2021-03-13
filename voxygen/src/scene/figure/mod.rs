@@ -757,6 +757,7 @@ impl FigureMgr {
                         player_camera_mode,
                         player_character_state,
                         scene_data.runtime,
+                        scene_data.background_threads,
                     );
 
                     let state = self
@@ -1553,6 +1554,7 @@ impl FigureMgr {
                             player_camera_mode,
                             player_character_state,
                             scene_data.runtime,
+                            scene_data.background_threads,
                         );
 
                     let state = self
@@ -1755,6 +1757,7 @@ impl FigureMgr {
                             player_camera_mode,
                             player_character_state,
                             scene_data.runtime,
+                            scene_data.background_threads,
                         );
 
                     let state = self
@@ -2082,6 +2085,7 @@ impl FigureMgr {
                             player_camera_mode,
                             player_character_state,
                             scene_data.runtime,
+                            scene_data.background_threads,
                         );
 
                     let state = self
@@ -2441,6 +2445,7 @@ impl FigureMgr {
                         player_camera_mode,
                         player_character_state,
                         scene_data.runtime,
+                        scene_data.background_threads,
                     );
 
                     let state = self
@@ -2551,6 +2556,7 @@ impl FigureMgr {
                         player_camera_mode,
                         player_character_state,
                         scene_data.runtime,
+                        scene_data.background_threads,
                     );
 
                     let state = self
@@ -2640,6 +2646,7 @@ impl FigureMgr {
                         player_camera_mode,
                         player_character_state,
                         scene_data.runtime,
+                        scene_data.background_threads,
                     );
 
                     let state = self
@@ -2986,6 +2993,7 @@ impl FigureMgr {
                         player_camera_mode,
                         player_character_state,
                         scene_data.runtime,
+                        scene_data.background_threads,
                     );
 
                     let state =
@@ -3080,6 +3088,7 @@ impl FigureMgr {
                         player_camera_mode,
                         player_character_state,
                         scene_data.runtime,
+                        scene_data.background_threads,
                     );
 
                     let state = self
@@ -3267,6 +3276,7 @@ impl FigureMgr {
                         player_camera_mode,
                         player_character_state,
                         scene_data.runtime,
+                        scene_data.background_threads,
                     );
 
                     let state = self
@@ -3358,6 +3368,7 @@ impl FigureMgr {
                         player_camera_mode,
                         player_character_state,
                         scene_data.runtime,
+                        scene_data.background_threads,
                     );
 
                     let state = self
@@ -3447,6 +3458,7 @@ impl FigureMgr {
                         player_camera_mode,
                         player_character_state,
                         scene_data.runtime,
+                        scene_data.background_threads,
                     );
 
                     let state = self
@@ -3883,6 +3895,7 @@ impl FigureMgr {
                         player_camera_mode,
                         player_character_state,
                         scene_data.runtime,
+                        scene_data.background_threads,
                     );
 
                     let state =
@@ -4067,6 +4080,7 @@ impl FigureMgr {
                         player_camera_mode,
                         player_character_state,
                         scene_data.runtime,
+                        scene_data.background_threads,
                     );
 
                     let state =
@@ -4195,6 +4209,7 @@ impl FigureMgr {
                         player_camera_mode,
                         player_character_state,
                         scene_data.runtime,
+                        scene_data.background_threads,
                     );
 
                     let state = self

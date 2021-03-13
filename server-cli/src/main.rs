@@ -16,6 +16,7 @@ use crate::{cmd::Message, shutdown_coordinator::ShutdownCoordinator, tui_runner:
 use clap::{App, Arg, SubCommand};
 use common::clock::Clock;
 use common_base::span;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use server::{Event, Input, Server};
 use std::{
     io,
@@ -92,12 +93,23 @@ fn main() -> io::Result<()> {
         path
     };
 
+    let cores = num_cpus::get();
     let runtime = Arc::new(
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
+            .worker_threads(if cores < 2 { 1 } else { cores / 2 + cores / 4 })
+            .thread_name_fn(|| {
+                static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
+                let id = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);
+                format!("tokio-server-{}", id)
+            })
             .build()
             .unwrap(),
     );
+    let background_cpu_threads =
+        Arc::new(std_semaphore::Semaphore::new(
+            if cores < 2 { 1 } else { cores / 2 + cores / 4 } as isize,
+        ));
 
     // Load server settings
     let mut server_settings = server::Settings::load(&server_data_dir);
@@ -143,6 +155,7 @@ fn main() -> io::Result<()> {
         editable_settings,
         &server_data_dir,
         runtime,
+        background_cpu_threads,
     )
     .expect("Failed to create server instance!");
 

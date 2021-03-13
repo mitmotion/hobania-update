@@ -694,10 +694,12 @@ impl<V: RectRasterableVol> Terrain<V> {
 
         // Limit ourselves to u16::MAX even if larger textures are supported.
         let max_texture_size = renderer.max_texture_size();
+        // TODO: we need a blocking and non-blocking semaphore
+        // so we can use it in a non-blocking fashion on the main thread here
+        // and use it to block in other places that need that (chunk gen)
         let meshing_cores = match num_cpus::get() as u64 {
-            n if n < 4 => 1,
-            n if n < 8 => n - 3,
-            n => n - 4,
+            n if n < 2 => 1,
+            n => n / 2 + n / 4,
         };
 
         span!(guard, "Queue meshing from todo list");
@@ -768,7 +770,9 @@ impl<V: RectRasterableVol> Terrain<V> {
             let sprite_config = Arc::clone(&self.sprite_config);
             let cnt = Arc::clone(&self.mesh_todos_active);
             cnt.fetch_add(1, Ordering::Relaxed);
+            let background_threads = Arc::clone(scene_data.background_threads);
             scene_data.runtime.spawn_blocking(move || {
+                let _cpu_guard = background_threads.access();
                 let sprite_data = sprite_data;
                 let _ = send.send(mesh_worker(
                     pos,

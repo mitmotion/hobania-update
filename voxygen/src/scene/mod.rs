@@ -116,6 +116,7 @@ pub struct SceneData<'a> {
     pub view_distance: u32,
     pub tick: u64,
     pub runtime: &'a Runtime,
+    pub background_threads: &'a std::sync::Arc<std_semaphore::Semaphore>,
     pub gamma: f32,
     pub exposure: f32,
     pub ambiance: f32,

@@ -44,7 +44,9 @@ fn main() {
     let password = read_input();
 
     let runtime = Arc::new(Runtime::new().unwrap());
+    let background_threads = Arc::new(std_semaphore::Semaphore::new(3));
     let runtime2 = Arc::clone(&runtime);
+    let background_threads2 = Arc::clone(&background_threads);
 
     // Create a client.
     let mut client = runtime
@@ -52,7 +54,7 @@ fn main() {
             let addr = ConnectionArgs::resolve(&server_addr, false)
                 .await
                 .expect("dns resolve failed");
-            Client::new(addr, None, runtime2).await
+            Client::new(addr, None, runtime2, background_threads2).await
         })
         .expect("Failed to create client instance");
 
