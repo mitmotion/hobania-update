@@ -84,6 +84,7 @@ pub enum ChatCommand {
     Waypoint,
     Whitelist,
     World,
+    DayCycleSpeed,
 }
 
 // Thank you for keeping this sorted alphabetically :-)
@@ -131,6 +132,7 @@ pub static CHAT_COMMANDS: &[ChatCommand] = &[
     ChatCommand::Sudo,
     ChatCommand::Tell,
     ChatCommand::Time,
+    ChatCommand::DayCycleSpeed,
     ChatCommand::Tp,
     ChatCommand::Unban,
     ChatCommand::Version,
@@ -146,7 +148,7 @@ lazy_static! {
         ('r', ChatCommand::Region),
         ('s', ChatCommand::Say),
         ('t', ChatCommand::Tell),
-        ('w', ChatCommand::World),
+        ('w', ChatCommand::World),        
     ].iter().cloned().collect();
 
     static ref ALIGNMENTS: Vec<String> = vec!["wild", "enemy", "npc", "pet"]
@@ -385,6 +387,9 @@ impl ChatCommand {
             ChatCommand::SetMotd => {
                 cmd(vec![Message(Optional)], "Set the server description", Admin)
             },
+            ChatCommand::DayCycleSpeed => {
+                cmd(vec![Message(Optional)], "Set the number of days passing per hour", Admin)
+            },
             ChatCommand::SkillPoint => cmd(
                 vec![
                     Enum("skill tree", SKILL_TREES.clone(), Required),
@@ -497,6 +502,7 @@ impl ChatCommand {
             ChatCommand::Waypoint => "waypoint",
             ChatCommand::Whitelist => "whitelist",
             ChatCommand::World => "world",
+            ChatCommand::DayCycleSpeed => "days_per_hour",
         }
     }
 

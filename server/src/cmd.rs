@@ -119,6 +119,7 @@ fn get_handler(cmd: &ChatCommand) -> CommandHandler {
         ChatCommand::Sudo => handle_sudo,
         ChatCommand::Tell => handle_tell,
         ChatCommand::Time => handle_time,
+        ChatCommand::DayCycleSpeed => handle_day_cycle_speed,
         ChatCommand::Tp => handle_tp,
         ChatCommand::Unban => handle_unban,
         ChatCommand::Version => handle_version,
@@ -504,6 +505,43 @@ fn handle_kill(
         .write_storage::<comp::Health>()
         .get_mut(target)
         .map(|mut h| h.set_to(0, reason));
+}
+fn handle_day_cycle_speed(
+    server: &mut Server,
+    client: EcsEntity,
+    _target: EcsEntity,
+    args: String,
+    action: &ChatCommand,
+) {
+    let data_dir = server.data_dir();
+    match scan_fmt!(&args, &action.arg_fmt(), f64) {
+        Ok(factor) => {
+            if factor > 0.0 {
+            server
+                .editable_settings_mut()
+                .day_cycle_speed
+                .edit(data_dir.as_ref(), |d| **d = factor.clone());
+            server.notify_client(
+                client,
+                ServerGeneral::server_msg(
+                    ChatType::CommandError,
+                    format!("Daytime cycle speed set to {}", factor),
+                ),
+            );
+        } else {
+            server.notify_client(
+                client,
+                ServerGeneral::server_msg(ChatType::CommandError, "The daytime cycle factor can't be 0!"),
+            );
+        }
+        },
+        Err(_) => {
+            server.notify_client(
+                client,
+                ServerGeneral::server_msg(ChatType::CommandError, "Specify a valid daytime cycle factor!"),
+            );
+        },   
+}
 }
 
 fn handle_time(

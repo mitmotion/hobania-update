@@ -6,7 +6,7 @@ use common::{
     comp,
     event::{EventBus, LocalEvent, ServerEvent},
     region::RegionMap,
-    resources::{DeltaTime, GameMode, Time, TimeOfDay},
+    resources::{DeltaTime, GameMode, Time, TimeOfDay, DayCycleSpeed},
     terrain::{Block, TerrainChunk, TerrainGrid},
     time::DayPeriod,
     trade::Trades,
@@ -414,7 +414,7 @@ impl State {
     ) {
         span!(_guard, "tick", "State::tick");
         // Change the time accordingly.
-        self.ecs.write_resource::<TimeOfDay>().0 += dt.as_secs_f64() * DAY_CYCLE_FACTOR;
+        self.ecs.write_resource::<TimeOfDay>().0 += dt.as_secs_f64() * self.ecs.read_resource::<DayCycleSpeed>().0;
         self.ecs.write_resource::<Time>().0 += dt.as_secs_f64();
 
         // Update delta time.

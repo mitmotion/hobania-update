@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use editable::EditableSetting;
 
 /// A resource that stores the time of day.
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, Default)]
@@ -7,6 +8,10 @@ pub struct TimeOfDay(pub f64);
 /// A resource that stores the tick (i.e: physics) time.
 #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Time(pub f64);
+
+// A resource that stores the ingame days per real life hour.
+#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize)]
+pub struct DayCycleSpeed(pub f64);
 
 /// A resource that stores the time since the previous tick.
 #[derive(Default)]

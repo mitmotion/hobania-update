@@ -15,6 +15,7 @@ use std::{
 };
 use tracing::{error, warn};
 use world::sim::FileOpts;
+use common::resources::DayCycleSpeed;
 
 const DEFAULT_WORLD_SEED: u32 = 59686;
 const CONFIG_DIR: &str = "server_config";
@@ -35,6 +36,7 @@ pub struct Settings {
     //pub pvp_enabled: bool,
     pub server_name: String,
     pub start_time: f64,
+    pub day_cycle_speed: f64,
     /// When set to None, loads the default map file (if available); otherwise,
     /// uses the value of the file options to decide how to proceed.
     pub map_file: Option<FileOpts>,
@@ -54,6 +56,7 @@ impl Default for Settings {
             server_name: "Veloren Alpha".into(),
             max_players: 100,
             start_time: 9.0 * 3600.0,
+            day_cycle_speed: 1.0,
             map_file: None,
             max_view_distance: Some(30),
             banned_words_files: Vec::new(),
@@ -134,6 +137,7 @@ impl Settings {
             server_name: "Singleplayer".to_owned(),
             max_players: 100,
             start_time: 9.0 * 3600.0,
+            day_cycle_speed: 48.0,
             max_view_distance: None,
             client_timeout: Duration::from_secs(180),
             ..load // Fill in remaining fields from server_settings.ron.
@@ -174,6 +178,10 @@ impl Default for ServerDescription {
     fn default() -> Self { Self("This is the best Veloren server".into()) }
 }
 
+/*#[derive(Deserialize, Serialize, Default)]
+#[serde(transparent)]
+pub struct DayCycleSpeed(f64);*/
+
 #[derive(Deserialize, Serialize, Default)]
 #[serde(transparent)]
 pub struct Admins(HashSet<Uuid>);
@@ -183,6 +191,7 @@ pub struct EditableSettings {
     pub whitelist: Whitelist,
     pub banlist: Banlist,
     pub server_description: ServerDescription,
+    pub day_cycle_speed: DayCycleSpeed,
     pub admins: Admins,
 }
 
@@ -192,6 +201,7 @@ impl EditableSettings {
             whitelist: Whitelist::load(data_dir),
             banlist: Banlist::load(data_dir),
             server_description: ServerDescription::load(data_dir),
+            day_cycle_speed: DayCycleSpeed::load(data_dir),
             admins: Admins::load(data_dir),
         }
     }
