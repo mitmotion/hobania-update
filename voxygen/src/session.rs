@@ -1511,6 +1511,7 @@ impl PlayState for SessionState {
                 let client = self.client.borrow();
                 let scene_data = SceneData {
                     state: client.state(),
+                    background_threadpool: &client.background_threadpool(),
                     player_entity: client.entity(),
                     // Only highlight if interactable
                     target_entity: self.interactable.and_then(Interactable::entity),
@@ -1578,6 +1579,7 @@ impl PlayState for SessionState {
 
             let scene_data = SceneData {
                 state: client.state(),
+                background_threadpool: &client.background_threadpool(),
                 player_entity: client.entity(),
                 // Only highlight if interactable
                 target_entity: self.interactable.and_then(Interactable::entity),

@@ -11,7 +11,6 @@ use common::{
         Inventory,
     },
     effect::Effect,
-    slowjob::SlowJobPool,
     uid::{Uid, UidAllocator},
 };
 use common_net::{
@@ -80,6 +79,7 @@ pub trait StateExt {
         view_distance: u32,
         world: &std::sync::Arc<world::World>,
         index: &world::IndexOwned,
+        background_threadpool: &uvth::ThreadPool,
     ) -> EcsEntityBuilder;
     /// Insert common/default components for a new character joining the server
     fn initialize_character_data(&mut self, entity: EcsEntity, character_id: CharacterId);
@@ -324,13 +324,14 @@ impl StateExt for State {
         view_distance: u32,
         world: &std::sync::Arc<world::World>,
         index: &world::IndexOwned,
+        background_threadpool: &uvth::ThreadPool,
     ) -> EcsEntityBuilder {
         use common::{terrain::TerrainChunkSize, vol::RectVolSize};
         use std::sync::Arc;
         // Request chunks
         {
             let ecs = self.ecs();
-            let slow_jobs = ecs.write_resource::<SlowJobPool>();
+            //let slow_jobs = ecs.write_resource::<SlowJobPool>();
             let mut chunk_generator =
                 ecs.write_resource::<crate::chunk_generator::ChunkGenerator>();
             let chunk_pos = self.terrain().pos_key(pos.0.map(|e| e as i32));
@@ -348,7 +349,7 @@ impl StateExt for State {
                     * TerrainChunkSize::RECT_SIZE.x as f64
             })
             .for_each(|chunk_key| {
-                chunk_generator.generate_chunk(None, chunk_key, &slow_jobs, Arc::clone(world), index.clone());
+                chunk_generator.generate_chunk(None, chunk_key, /*&slow_jobs,*/ background_threadpool, Arc::clone(world), index.clone());
             });
         }
 

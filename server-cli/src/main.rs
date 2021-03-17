@@ -108,6 +108,14 @@ fn main() -> io::Result<()> {
             .unwrap(),
     );
 
+    let cores = num_cpus::get();
+    let background_threadpool = Arc::new(
+        uvth::ThreadPoolBuilder::new()
+            .num_threads(cores.max(2) / 2 + cores / 4)
+            .name("background_threadpool".into())
+            .build(),
+    );
+
     // Load server settings
     let mut server_settings = server::Settings::load(&server_data_dir);
     let mut editable_settings = server::EditableSettings::load(&server_data_dir);
@@ -152,6 +160,7 @@ fn main() -> io::Result<()> {
         editable_settings,
         &server_data_dir,
         runtime,
+        background_threadpool,
     )
     .expect("Failed to create server instance!");
 

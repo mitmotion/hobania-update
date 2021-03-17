@@ -109,6 +109,7 @@ pub struct Scene {
 
 pub struct SceneData<'a> {
     pub state: &'a State,
+    pub background_threadpool: &'a uvth::ThreadPool,
     pub player_entity: specs::Entity,
     pub target_entity: Option<specs::Entity>,
     pub loaded_distance: f32,

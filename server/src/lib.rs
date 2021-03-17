@@ -63,7 +63,6 @@ use common::{
     recipe::default_recipe_book,
     resources::TimeOfDay,
     rtsim::RtSimEntity,
-    slowjob::SlowJobPool,
     terrain::TerrainChunkSize,
     uid::UidAllocator,
 };
@@ -137,6 +136,7 @@ pub struct Server {
     connection_handler: ConnectionHandler,
 
     runtime: Arc<Runtime>,
+    background_threadpool: Arc<uvth::ThreadPool>,
 
     metrics_shutdown: Arc<Notify>,
 }
@@ -150,6 +150,7 @@ impl Server {
         editable_settings: EditableSettings,
         data_dir: &std::path::Path,
         runtime: Arc<Runtime>,
+        background_threadpool: Arc<uvth::ThreadPool>,
     ) -> Result<Self, Error> {
         info!("Server is data dir is: {}", data_dir.display());
         if settings.auth_server_address.is_none() {
@@ -196,10 +197,10 @@ impl Server {
         state.ecs_mut().insert(ecs_system_metrics);
         state.ecs_mut().insert(tick_metrics);
         state.ecs_mut().insert(physics_metrics);
-        state
-            .ecs_mut()
-            .write_resource::<SlowJobPool>()
-            .configure("CHUNK_GENERATOR", |n| n / 2 + n / 4);
+        //state
+        //    .ecs_mut()
+        //    .write_resource::<SlowJobPool>()
+        //    .configure("CHUNK_GENERATOR", |n| n / 2 + n / 4);
         state
             .ecs_mut()
             .insert(ChunkGenerator::new(chunk_gen_metrics));
@@ -368,6 +369,7 @@ impl Server {
 
             connection_handler,
             runtime,
+            background_threadpool,
 
             metrics_shutdown,
         };
@@ -629,7 +631,8 @@ impl Server {
             let index = &mut self.index;
             let world = &mut self.world;
             let ecs = self.state.ecs_mut();
-            let slow_jobs = ecs.write_resource::<SlowJobPool>();
+            //let slow_jobs = ecs.write_resource::<SlowJobPool>();
+            let background_threadpool = &self.background_threadpool;
 
             index.reload_colors_if_changed(|index| {
                 let mut chunk_generator = ecs.write_resource::<ChunkGenerator>();
@@ -648,7 +651,8 @@ impl Server {
                         chunk_generator.generate_chunk(
                             None,
                             pos,
-                            &slow_jobs,
+                            //&slow_jobs,
+                            &background_threadpool,
                             Arc::clone(&world),
                             index.clone(),
                         );
@@ -790,11 +794,12 @@ impl Server {
 
     pub fn generate_chunk(&mut self, entity: EcsEntity, key: Vec2<i32>) {
         let ecs = self.state.ecs();
-        let slow_jobs = ecs.write_resource::<SlowJobPool>();
+        //let slow_jobs = ecs.write_resource::<SlowJobPool>();
         ecs.write_resource::<ChunkGenerator>().generate_chunk(
             Some(entity),
             key,
-            &slow_jobs,
+            //&slow_jobs,
+            &self.background_threadpool,
             Arc::clone(&self.world),
             self.index.clone(),
         );
@@ -982,7 +987,7 @@ impl Server {
         // rng.gen_range(-e/2..e/2 + 1));
         let pos = comp::Pos(Vec3::from(world_dims_blocks.map(|e| e as f32 / 2.0)));
         self.state
-            .create_persister(pos, view_distance, &self.world, &self.index)
+            .create_persister(pos, view_distance, &self.world, &self.index, &self.background_threadpool)
             .build();
     }
 }

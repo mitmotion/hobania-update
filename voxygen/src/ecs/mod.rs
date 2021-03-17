@@ -2,7 +2,7 @@ pub mod comp;
 pub mod sys;
 
 use crate::audio::sfx::SfxEventItem;
-use common::{event::EventBus, slowjob::SlowJobPool};
+use common::event::EventBus;
 use specs::{World, WorldExt};
 
 pub fn init(world: &mut World) {
@@ -10,9 +10,9 @@ pub fn init(world: &mut World) {
     world.register::<comp::Interpolated>();
 
     {
-        let pool = world.read_resource::<SlowJobPool>();
-        pool.configure("FIGURE_MESHING", |n| n / 2);
-        pool.configure("TERRAIN_MESHING", |n| n / 2);
+        //let pool = world.read_resource::<SlowJobPool>();
+        //pool.configure("FIGURE_MESHING", |n| n / 2);
+        //pool.configure("TERRAIN_MESHING", |n| n / 2);
     }
 
     // Voxygen event buses

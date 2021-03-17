@@ -50,16 +50,17 @@ impl ClientInit {
         username: String,
         view_distance: Option<u32>,
         password: String,
-        runtime: Option<Arc<runtime::Runtime>>,
+        // Threadpool resources shared with the singleplayer server
+        shared_resources: Option<(Arc<runtime::Runtime>, Arc<uvth::ThreadPool>)>,
     ) -> Self {
         let (tx, rx) = unbounded();
         let (trust_tx, trust_rx) = unbounded();
         let cancel = Arc::new(AtomicBool::new(false));
         let cancel2 = Arc::clone(&cancel);
 
-        let runtime = runtime.unwrap_or_else(|| {
+        let (runtime, background_threadpool) = shared_resources.unwrap_or_else(|| {
             let cores = num_cpus::get();
-            Arc::new(
+            let runtime = Arc::new(
                 runtime::Builder::new_multi_thread()
                     .enable_all()
                     .worker_threads(if cores > 4 { cores - 1 } else { cores })
@@ -70,7 +71,16 @@ impl ClientInit {
                     })
                     .build()
                     .unwrap(),
-            )
+
+            );
+
+            let threadpool = Arc::new(uvth::ThreadPoolBuilder::new()
+                .num_threads(cores.max(2) / 2 + cores / 4)
+                .name("background_threadpool".into())
+                .build());
+
+            (runtime, threadpool)
+
         });
         let runtime2 = Arc::clone(&runtime);
 
@@ -106,6 +116,7 @@ impl ClientInit {
                     connection_args.clone(),
                     view_distance,
                     Arc::clone(&runtime2),
+                    Arc::clone(&background_threadpool),
                 )
                 .await
                 {

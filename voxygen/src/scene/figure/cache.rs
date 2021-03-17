@@ -21,7 +21,6 @@ use common::{
         CharacterState,
     },
     figure::Segment,
-    slowjob::SlowJobPool,
     vol::BaseVol,
 };
 use core::{hash::Hash, ops::Range};
@@ -338,7 +337,8 @@ where
         tick: u64,
         camera_mode: CameraMode,
         character_state: Option<&CharacterState>,
-        slow_jobs: &SlowJobPool,
+        //slow_jobs: &SlowJobPool,
+        background_threadpool: &uvth::ThreadPool,
     ) -> (FigureModelEntryLod<'c>, &'c Skel::Attr)
     where
         for<'a> &'a Skel::Body: Into<Skel::Attr>,
@@ -404,7 +404,8 @@ where
                 let manifests = self.manifests;
                 let slot_ = Arc::clone(&slot);
 
-                slow_jobs.spawn("FIGURE_MESHING", move || {
+                //slow_jobs.spawn("FIGURE_MESHING", move || {
+                background_threadpool.execute(move || {
                     // First, load all the base vertex data.
                     let manifests = &*manifests.read();
                     let meshes = <Skel::Body as BodySpec>::bone_meshes(&key, manifests);

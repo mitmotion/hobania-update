@@ -800,9 +800,9 @@ impl<V: RectRasterableVol> Terrain<V> {
             let cnt = Arc::clone(&self.mesh_todos_active);
             cnt.fetch_add(1, Ordering::Relaxed);
             scene_data
-                .state
-                .slow_job_pool()
-                .spawn("TERRAIN_MESHING", move || {
+                .background_threadpool
+                //.spawn("TERRAIN_MESHING", move || {
+                .execute(move || {
                     let sprite_data = sprite_data;
                     let _ = send.send(mesh_worker(
                         pos,

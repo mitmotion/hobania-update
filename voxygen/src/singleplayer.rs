@@ -19,7 +19,7 @@ const TPS: u64 = 30;
 pub struct Singleplayer {
     _server_thread: JoinHandle<()>,
     stop_server_s: Sender<()>,
-    pub receiver: Receiver<Result<Arc<Runtime>, ServerError>>,
+    pub receiver: Receiver<Result<(Arc<Runtime>, Arc<uvth::ThreadPool>), ServerError>>,
     // Wether the server is stopped or not
     paused: Arc<AtomicBool>,
     // Settings that the server was started with
@@ -93,6 +93,13 @@ impl Singleplayer {
                 .unwrap(),
         );
 
+        let background_threadpool = Arc::new(
+            uvth::ThreadPoolBuilder::new()
+                .num_threads(cores.max(2) / 2 + cores / 4)
+                .name("background_threadpool".into())
+                .build(),
+        );
+
         let settings2 = settings.clone();
 
         let paused = Arc::new(AtomicBool::new(false));
@@ -111,10 +118,11 @@ impl Singleplayer {
                         editable_settings,
                         &server_data_dir,
                         Arc::clone(&runtime),
+                        Arc::clone(&background_threadpool),
                     ) {
                         Ok(s) => {
                             server = Some(s);
-                            Ok(runtime)
+                            Ok((runtime, background_threadpool))
                         },
                         Err(e) => Err(e),
                     },

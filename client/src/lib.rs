@@ -138,6 +138,7 @@ pub struct Client {
     registered: bool,
     presence: Option<PresenceKind>,
     runtime: Arc<Runtime>,
+    background_threadpool: Arc<uvth::ThreadPool>,
     server_info: ServerInfo,
     world_data: WorldData,
     player_list: HashMap<Uid, PlayerInfo>,
@@ -197,6 +198,7 @@ impl Client {
         addr: ConnectionArgs,
         view_distance: Option<u32>,
         runtime: Arc<Runtime>,
+        background_threadpool: Arc<uvth::ThreadPool>,
     ) -> Result<Self, Error> {
         let network = Network::new(Pid::new(), &runtime);
 
@@ -443,6 +445,7 @@ impl Client {
             registered: false,
             presence: None,
             runtime,
+            background_threadpool,
             server_info,
             world_data: WorldData {
                 lod_base,
@@ -1850,11 +1853,13 @@ impl Client {
             * 1000.0
     }
 
-    /// Get a reference to the client's runtime thread pool. This pool should be
-    /// used for any computationally expensive operations that run outside
-    /// of the main thread (i.e., threads that block on I/O operations are
-    /// exempt).
+    /// Get a reference to the client's async runtime. 
     pub fn runtime(&self) -> &Arc<Runtime> { &self.runtime }
+
+    /// Get a reference to the client's background task threadpool.
+    /// This pool should be used for any computationally expensive operations that run outside
+    /// of the main thread (i.e., threads that block on I/O operations are exempt).
+    pub fn background_threadpool(&self) -> &Arc<uvth::ThreadPool> { &self.background_threadpool }
 
     /// Get a reference to the client's game state.
     pub fn state(&self) -> &State { &self.state }

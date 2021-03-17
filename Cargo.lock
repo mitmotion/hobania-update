@@ -223,7 +223,7 @@ checksum = "792c2eca2af86c76ffd3e72ca564c33b5a5551d5ac3f4f87dce8c0b7c6434061"
 dependencies = [
  "ahash 0.7.2",
  "bincode",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.0",
  "log",
  "notify 4.0.15",
  "parking_lot 0.11.1",
@@ -1021,11 +1021,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd01a6eb3daaafa260f6fc94c3a6c36390abc2080e38e3e34ced87393fb77d80"
 dependencies = [
  "cfg-if 1.0.0",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.0",
  "crossbeam-deque 0.8.0",
  "crossbeam-epoch 0.9.3",
  "crossbeam-queue",
  "crossbeam-utils 0.8.3",
+]
+
+[[package]]
+name = "crossbeam-channel"
+version = "0.3.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c8ec7fcd21571dc78f96cc96243cab8d8f035247c3efd16c687be154c3fa9efa"
+dependencies = [
+ "crossbeam-utils 0.6.6",
 ]
 
 [[package]]
@@ -1096,6 +1105,16 @@ checksum = "0f6cb3c7f5b8e51bc3ebb73a2327ad4abdbd119dc13223f14f961d2f38486756"
 dependencies = [
  "cfg-if 1.0.0",
  "crossbeam-utils 0.8.3",
+]
+
+[[package]]
+name = "crossbeam-utils"
+version = "0.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04973fa96e96579258a5091af6003abde64af786b860f18622b82e026cca60e6"
+dependencies = [
+ "cfg-if 0.1.10",
+ "lazy_static",
 ]
 
 [[package]]
@@ -2107,7 +2126,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac2c82074cafb68b9e459c50c655f7eedcb92d6ee7166813802934bc6fc29fa3"
 dependencies = [
  "ab_glyph",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.0",
  "crossbeam-deque 0.8.0",
  "linked-hash-map",
  "rayon",
@@ -3183,7 +3202,7 @@ checksum = "e5fd82b93434edb9c00ae65ee741e0e081cdc8c63346ab9f687935a629aaf4c3"
 dependencies = [
  "anymap",
  "bitflags",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.0",
  "filetime",
  "fsevent 2.0.2",
  "fsevent-sys 3.0.2",
@@ -4020,7 +4039,7 @@ version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ab346ac5921dc62ffa9f89b7a773907511cdfa5490c572ae9be1be33e8afa4a"
 dependencies = [
- "crossbeam-channel",
+ "crossbeam-channel 0.5.0",
  "crossbeam-deque 0.8.0",
  "crossbeam-utils 0.8.3",
  "lazy_static",
@@ -5057,7 +5076,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9965507e507f12c8901432a33e31131222abac31edd90cabbcf85cf544b7127a"
 dependencies = [
  "chrono",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.0",
  "tracing-subscriber",
 ]
 
@@ -5300,6 +5319,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "uvth"
+version = "4.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e5910f9106b96334c6cae1f1d77a764bda66ac4ca9f507f73259f184fe1bb6b"
+dependencies = [
+ "crossbeam-channel 0.3.9",
+ "log",
+ "num_cpus",
+]
+
+[[package]]
 name = "vcpkg"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5345,6 +5375,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uvth",
  "vek",
  "veloren-common",
  "veloren-common-base",
@@ -5362,7 +5393,7 @@ dependencies = [
  "arraygen",
  "assets_manager",
  "criterion",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.0",
  "crossbeam-utils 0.8.3",
  "csv",
  "dot_vox",
@@ -5465,7 +5496,7 @@ dependencies = [
  "bytes",
  "clap",
  "criterion",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.0",
  "futures-core",
  "futures-util",
  "lazy_static",
@@ -5531,7 +5562,7 @@ version = "0.9.0"
 dependencies = [
  "authc",
  "chrono",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.0",
  "diesel",
  "diesel_migrations",
  "dotenv",
@@ -5555,6 +5586,7 @@ dependencies = [
  "specs-idvs",
  "tokio",
  "tracing",
+ "uvth",
  "vek",
  "veloren-common",
  "veloren-common-base",
@@ -5574,6 +5606,7 @@ dependencies = [
  "clap",
  "crossterm 0.19.0",
  "lazy_static",
+ "num_cpus",
  "ron",
  "serde",
  "signal-hook 0.3.7",
@@ -5583,6 +5616,7 @@ dependencies = [
  "tracing-subscriber",
  "tracing-tracy",
  "tui",
+ "uvth",
  "veloren-common",
  "veloren-common-base",
  "veloren-common-net",
@@ -5644,6 +5678,7 @@ dependencies = [
  "tracing-subscriber",
  "tracing-tracy",
  "treeculler",
+ "uvth",
  "vek",
  "veloren-client",
  "veloren-common",
