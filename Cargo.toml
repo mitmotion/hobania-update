@@ -87,3 +87,4 @@ debug = 1
 # macos CI fix isn't merged yet
 winit = { git = "https://gitlab.com/veloren/winit.git", branch = "macos-test-spiffed" }
 vek = { git = "https://gitlab.com/veloren/vek.git", branch = "fix_intrinsics2" }
+cpal = { git = "https://github.com/JCapucho/cpal.git", branch = "fix-alsa-distortion" }
