@@ -1,7 +1,7 @@
 # Template to only run if actual changes has been made to the code and not just documentation
 .recompile-branch:
   tags:
-    - veloren-docker
+    - veloren-wgpu-docker
   rules:
     - if: $CI_COMMIT_REF_NAME !~ /^master$/
       # No '-' here is *very* important: https://docs.gitlab.com/ee/ci/yaml/#complex-rule-clauses
@@ -15,7 +15,7 @@
 # like .recompile-branch but will run on master too
 .recompile:
   tags:
-    - veloren-docker
+    - veloren-wgpu-docker
   rules:
     - changes:
         - "**/*.{glsl,rs,ron,toml,vox,png,wav}"
