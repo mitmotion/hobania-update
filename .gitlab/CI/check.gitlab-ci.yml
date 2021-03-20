@@ -8,10 +8,10 @@ code-quality:
     - cargo clippy --all-targets --locked -- -D warnings
     - cargo fmt --all -- --check
 
-security:
-  extends: .recompile-branch
-  stage: check
-  allow_failure: true
-  script:
-    - ln -s /dockercache/cache-all target
-    - cargo audit
+#security:
+#extends: .recompile-branch
+#stage: check
+#allow_failure: true
+#script:
+#- ln -s /dockercache/cache-all target
+#- cargo audit

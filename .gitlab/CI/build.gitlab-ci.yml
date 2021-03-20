@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 unittests:
   extends: .recompile-branch
   stage: build
@@ -49,6 +50,59 @@ coverage:
     - cargo tarpaulin -v -- --test-threads=2
   retry:
     max: 2
+=======
+# unittests:
+#   extends: .recompile-branch
+#   stage: build
+#   variables:
+#     GIT_DEPTH: 9999999999999
+#   script:
+#     - ln -s /dockercache/cache-all target
+#     - rm -r target/debug/incremental/veloren_* || echo "all good" # TMP FIX FOR 2021-03-22-nightly
+#     - cargo test --package veloren-voxygen --lib test_all_localizations -- --nocapture --ignored
+#     - rm -r target/debug/incremental* || echo "all good" # TMP FIX FOR 2021-03-22-nightly
+#     - cargo test
+#   retry:
+#     max: 2
+# 
+# benchmarks:
+#   extends: .post-merge
+#   stage: build
+#   tags:
+#     - veloren-benchmark
+#   script:
+#     - unset DISABLE_GIT_LFS_CHECK
+#     - ln -s /dockercache/cache-all target
+#     - ls -la target/*
+#     - rm -r target/debug/incremental/veloren_* || echo "all good" # TMP FIX FOR 2021-03-22-nightly
+#     - rm -r target/release/incremental/veloren_* || echo "all good" # TMP FIX FOR 2021-03-22-nightly
+#     - cargo bench || exit 0 #temp fix
+#     - TAGUUID="Z$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1)" || echo "ignore this returncode, dont ask me why, it works"
+#     - echo $TAGUUID
+#     - echo 'SET veloren.timestamp = "'"$(git show --no-patch --no-notes --pretty='%cd' HEAD)"'";' > upload.sql
+#     - echo "SET veloren.branch = \$${TAGUUID}\$${CI_COMMIT_REF_NAME}\$${TAGUUID}\$;" >> upload.sql
+#     - echo "SET veloren.sha = \$${TAGUUID}\$${CI_COMMIT_SHA}\$${TAGUUID}\$;" >> upload.sql
+#     - find target/criterion -wholename "*new/*.csv" -exec echo '\copy benchmarks ("group", "function", "value", throughput_num, throughput_type, sample_measured_value, unit, iteration_count) from '"'{}' csv header" >> upload.sql \;
+#     - cat upload.sql
+#     - PGPASSWORD="${CIDBPASSWORD}" PGSSLROOTCERT="./.gitlab/ci-db.crt" psql "sslmode=verify-ca host=auth.veloren.net dbname=benchmarks" -U bsdrftsejrhdrjhgd -f upload.sql;
+#   retry:
+#     max: 2
+# 
+# # Coverage is needed on master for the README.md badge to work
+# # tmp remove simd as it doesnt work with tarpaulin: https://github.com/rust-lang/rust/issues/77529
+# coverage:
+#   extends: .post-merge
+#   stage: build
+#   script:
+#     - ln -s /dockercache/cache-tarpaulin target
+#     - rm -r target/debug/incremental/veloren_* || echo "all good" # TMP FIX FOR 2021-03-22-nightly
+#     - find ./* -name "Cargo.toml" -exec sed -i 's/, "simd"]/]/g' {} \;
+#     - find ./* -name "Cargo.toml" -exec sed -i 's/"simd"]/]/g' {} \;
+#     - sed -i 's/vek /#vek /g' ./Cargo.toml;
+#     - cargo tarpaulin -v -- --test-threads=2
+#   retry:
+#     max: 2
+>>>>>>> ee4cacf6c (Disable CI that does not need to run for builds)
 
 #linux, windows, macos builds here as template
 .tlinux:
