@@ -824,8 +824,36 @@ impl PlayState for SessionState {
             for event in hud_events {
                 match event {
                     HudEvent::SendMessage(msg) => {
-                        // TODO: Handle result
-                        self.client.borrow_mut().send_chat(msg);
+                        let mut parts = msg.split_whitespace();
+                        let next = parts.next();
+                        if let Some("do_mine") = next {
+                            if let Ok(radius) = parts.next().unwrap_or("").parse::<i64>() {
+                                for x in -radius.saturating_sub(1)..radius {
+                                    for y in -radius.saturating_sub(1)..radius {
+                                        for z in -radius.saturating_sub(1)..radius {
+                                            if let Some(build_pos) = build_pos {
+                                                self.client.borrow_mut().remove_block(build_pos.map(|e| e as i32) + Vec3::new(x, y, z).map(|e| e as i32));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else if let Some("do_build") = next {
+                            if let Ok(radius) = parts.next().unwrap_or("").parse::<i64>() {
+                                for x in -radius.saturating_sub(1)..radius {
+                                    for y in -radius.saturating_sub(1)..radius {
+                                        for z in -radius.saturating_sub(1)..radius {
+                                            if let Some(build_pos) = build_pos {
+                                                self.client.borrow_mut().place_block(build_pos.map(|e| e as i32) + Vec3::new(x, y, z).map(|e| e as i32), self.selected_block);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            // TODO: Handle result
+                            self.client.borrow_mut().send_chat(msg);
+                        }
                     },
                     HudEvent::CharacterSelection => {
                         self.client.borrow_mut().request_remove_character()
