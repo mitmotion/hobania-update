@@ -64,12 +64,14 @@ impl CharacterBehavior for Data {
         ) {
             (wall_dir, climb)
         } else {
-            if input_is_pressed(data, InputKind::Jump) {
-                // They've climbed atop something, give them a boost
+            if let Some(impulse) = input_is_pressed(data, InputKind::Jump)
+                .then(|| data.body.can_jump())
+                .flatten()
+            {
                 update
                     .local_events
-                    .push_front(LocalEvent::Jump(data.entity, BASE_JUMP_IMPULSE * 0.5));
-            }
+                    .push_front(LocalEvent::Jump(data.entity, 0.5 * impulse / data.mass.0));
+            };
             update.character = CharacterState::Idle {};
             return update;
         };
