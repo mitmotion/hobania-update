@@ -8,7 +8,7 @@ use vek::*;
 /// occur, nor is it something that may be cancelled or otherwise altered. Its
 /// primary purpose is to act as something for frontends (both server and
 /// client) to listen to in order to receive feedback about events in the world.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum Outcome {
     Explosion {
         pos: Vec3<f32>,

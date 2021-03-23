@@ -139,8 +139,14 @@ impl PlayState for MainMenuState {
                             client::Error::AuthServerNotTrusted => localized_strings
                                 .get("main.login.untrusted_auth_server")
                                 .into(),
+                            client::Error::ServerValidationFailed(server, client) => format!(
+                                "{}: server version {}, client version {}",
+                                localized_strings.get("main.login.outdated_client_or_server"),
+                                server,
+                                client,
+                            ),
                             client::Error::ServerWentMad => localized_strings
-                                .get("main.login.outdated_client_or_server")
+                                .get("main.login.prob_outdated_client_or_server")
                                 .into(),
                             client::Error::ServerTimeout => {
                                 localized_strings.get("main.login.timeout").into()

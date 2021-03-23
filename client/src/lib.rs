@@ -5,6 +5,7 @@
 pub mod addr;
 pub mod cmd;
 pub mod error;
+pub mod validate_version;
 
 // Reexports
 pub use crate::error::Error;
@@ -225,6 +226,7 @@ impl Client {
         let character_screen_stream = participant.opened().await?;
         let in_game_stream = participant.opened().await?;
         let terrain_stream = participant.opened().await?;
+        let validation_stream = participant.opened().await?;
 
         register_stream.send(ClientType::Game)?;
         let server_info: ServerInfo = register_stream.recv().await?;
@@ -242,6 +244,22 @@ impl Client {
         debug!("Auth Server: {:?}", server_info.auth_provider);
 
         ping_stream.send(PingMsg::Ping)?;
+
+        // Validate Server dump
+        if let Err(()) = validate_version::validate_dump_from_server(validation_stream).await {
+            error!(
+                "Client does not pass server dump validation, versions do not match. \
+                 Install/Update the right version"
+            );
+            return Err(Error::ServerValidationFailed(
+                format!("{}[{}]", server_info.git_hash, server_info.git_date),
+                format!(
+                    "{}[{}]",
+                    common::util::GIT_HASH.to_string(),
+                    common::util::GIT_DATE.to_string()
+                ),
+            ));
+        };
 
         // Wait for initial sync
         let mut ping_interval = tokio::time::interval(core::time::Duration::from_secs(1));

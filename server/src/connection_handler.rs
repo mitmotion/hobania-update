@@ -88,6 +88,121 @@ impl ConnectionHandler {
         }
     }
 
+    /// This code just generates some messages so that the client can assume
+    /// deserialization This is completely random chosen with the goal to
+    /// cover as much as possible and to stop xMAC94x being annoyed in
+    /// discord by people that just have a old version
+    fn dump_messages_so_client_can_validate_itself(
+        mut validate_stream: network::Stream,
+    ) -> Result<(), network::StreamError> {
+        use common::{
+            character::{Character, CharacterItem},
+            comp,
+            comp::{
+                humanoid,
+                inventory::Inventory,
+                item::{tool::ToolKind, Reagent},
+                skills::SkillGroupKind,
+            },
+            outcome::Outcome,
+            terrain::{biome::BiomeKind, Block, BlockKind, TerrainChunk, TerrainChunkMeta},
+            trade::{Good, PendingTrade, Trades},
+            uid::Uid,
+        };
+        use common_net::{
+            msg::{world_msg::EconomyInfo, EcsCompPacket, ServerGeneral},
+            sync::CompSyncPackage,
+        };
+        use rand::SeedableRng;
+        use std::collections::HashMap;
+        use vek::*;
+
+        // 1. Simulate Character
+        let mut rng = rand::rngs::SmallRng::from_seed([42; 32]);
+        let item = CharacterItem {
+            character: Character {
+                id: Some(1337),
+                alias: "foobar".to_owned(),
+            },
+            body: comp::Body::Humanoid(humanoid::Body::random_with(
+                &mut rng,
+                &humanoid::Species::Undead,
+            )),
+            inventory: Inventory::new_empty(),
+        };
+        validate_stream.send(ServerGeneral::CharacterListUpdate(vec![item]))?;
+
+        // 2. Simulate Outcomes
+        let item1 = Outcome::Explosion {
+            pos: Vec3::new(1.0, 2.0, 3.0),
+            power: 4.0,
+            radius: 5.0,
+            is_attack: true,
+            reagent: Some(Reagent::Blue),
+        };
+        let item2 = Outcome::SkillPointGain {
+            uid: Uid::from(1337u64),
+            pos: Vec3::new(2.0, 4.0, 6.0),
+            skill_tree: SkillGroupKind::Weapon(ToolKind::Empty),
+            total_points: 99,
+        };
+        let item3 = Outcome::BreakBlock {
+            pos: Vec3::new(1, 2, 3),
+            color: Some(Rgb::new(0u8, 8u8, 13u8)),
+        };
+        validate_stream.send(ServerGeneral::Outcomes(vec![item1, item2, item3]))?;
+
+        // 3. Simulate Terrain
+        let item = TerrainChunk::new(
+            5,
+            Block::new(BlockKind::Water, Rgb::zero()),
+            Block::new(BlockKind::Air, Rgb::zero()),
+            TerrainChunkMeta::void(),
+        );
+        validate_stream.send(ServerGeneral::TerrainChunkUpdate {
+            key: Vec2::new(42, 1337),
+            chunk: Ok(Box::new(item)),
+        })?;
+
+        // 4. Simulate Componity Sync
+        let mut item = CompSyncPackage::<EcsCompPacket>::new();
+        let uid = Uid::from(70);
+        item.comp_inserted(uid, comp::Pos(Vec3::new(42.1337, 0.0, 0.0)));
+        item.comp_inserted(uid, comp::Vel(Vec3::new(0.0, 42.1337, 0.0)));
+        validate_stream.send(ServerGeneral::CompSync(item))?;
+
+        // 5. Pending Trade
+        let uid = Uid::from(70);
+        validate_stream.send(ServerGeneral::UpdatePendingTrade(
+            Trades::default().begin_trade(uid, uid),
+            PendingTrade::new(uid, Uid::from(71)),
+        ))?;
+
+        // 6. Economy Info
+        validate_stream.send(ServerGeneral::SiteEconomy(EconomyInfo {
+            id: 99,
+            population: 55,
+            stock: vec![
+                (Good::Wood, 50.0),
+                (Good::Tools, 33.3),
+                (Good::Coin, 9000.1),
+            ]
+            .into_iter()
+            .collect::<HashMap<Good, f32>>(),
+            labor_values: HashMap::new(),
+            values: vec![
+                (Good::RoadSecurity, 1.0),
+                (Good::Terrain(BiomeKind::Forest), 1.0),
+            ]
+            .into_iter()
+            .collect::<HashMap<Good, f32>>(),
+            labors: Vec::new(),
+            last_exports: HashMap::new(),
+            resources: HashMap::new(),
+        }))?;
+        Ok(())
+    }
+
     async fn init_participant(
         participant: Participant,
         client_sender: Sender<IncomingClient>,
@@ -106,6 +221,7 @@ impl ConnectionHandler {
         let character_screen_stream = participant.open(3, reliablec, 500).await?;
         let in_game_stream = participant.open(3, reliablec, 100_000).await?;
         let terrain_stream = participant.open(4, reliablec, 20_000).await?;
+        let validate_stream = participant.open(4, reliablec, 1_000_000).await?;
 
         let server_data = receiver.recv()?;
 
@@ -121,6 +237,11 @@ impl ConnectionHandler {
                 return Ok(());
             },
             Some(client_type) => client_type?,
+        };
+
+        if let Err(e) = Self::dump_messages_so_client_can_validate_itself(validate_stream) {
+            trace!(?e, ?client_type, "a client dropped as he failed validation");
+            return Err(e.into());
         };
 
         let client = Client::new(

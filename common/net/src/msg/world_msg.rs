@@ -145,7 +145,7 @@ pub enum SiteKind {
     Tree,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EconomyInfo {
     pub id: SiteId,
     pub population: u32,

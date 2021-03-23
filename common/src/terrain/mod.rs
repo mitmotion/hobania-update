@@ -78,7 +78,7 @@ impl TerrainChunkSize {
 
 // TerrainChunkMeta
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TerrainChunkMeta {
     name: Option<String>,
     biome: BiomeKind,

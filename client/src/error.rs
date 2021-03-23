@@ -8,6 +8,7 @@ pub enum Error {
     NetworkErr(NetworkError),
     ParticipantErr(ParticipantError),
     StreamErr(StreamError),
+    ServerValidationFailed(String, String),
     ServerWentMad,
     ServerTimeout,
     ServerShutdown,
