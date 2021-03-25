@@ -62,6 +62,7 @@ pub enum ChatCommand {
     Kick,
     Kill,
     KillNpcs,
+    Kit,
     Lantern,
     Light,
     MakeBlock,
@@ -116,6 +117,7 @@ pub static CHAT_COMMANDS: &[ChatCommand] = &[
     ChatCommand::Kick,
     ChatCommand::Kill,
     ChatCommand::KillNpcs,
+    ChatCommand::Kit,
     ChatCommand::Lantern,
     ChatCommand::Light,
     ChatCommand::MakeBlock,
@@ -325,6 +327,7 @@ impl ChatCommand {
             ),
             ChatCommand::Kill => cmd(vec![], "Kill yourself", NoAdmin),
             ChatCommand::KillNpcs => cmd(vec![], "Kill the NPCs", Admin),
+            ChatCommand::Kit => cmd(vec![], "Place all combat testing items into your pack.", Admin),
             ChatCommand::Lantern => cmd(
                 vec![
                     Float("strength", 5.0, Required),
@@ -482,6 +485,7 @@ impl ChatCommand {
             ChatCommand::Kick => "kick",
             ChatCommand::Kill => "kill",
             ChatCommand::KillNpcs => "kill_npcs",
+            ChatCommand::Kit => "kit",
             ChatCommand::Lantern => "lantern",
             ChatCommand::Light => "light",
             ChatCommand::MakeBlock => "make_block",

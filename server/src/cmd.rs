@@ -103,6 +103,7 @@ fn get_handler(cmd: &ChatCommand) -> CommandHandler {
         ChatCommand::Kick => handle_kick,
         ChatCommand::Kill => handle_kill,
         ChatCommand::KillNpcs => handle_kill_npcs,
+        ChatCommand::Kit => handle_kit,
         ChatCommand::Lantern => handle_lantern,
         ChatCommand::Light => handle_light,
         ChatCommand::MakeBlock => handle_make_block,
@@ -1243,6 +1244,44 @@ fn handle_kill_npcs(
         client,
         ServerGeneral::server_msg(ChatType::CommandInfo, text),
     );
+}
+
+fn handle_kit(
+    server: &mut Server,
+    _client: EcsEntity,
+    target: EcsEntity,
+    _args: String,
+    _action: &ChatCommand,
+) {
+    let item_list = [
+        comp::Item::new_from_asset_expect("common.items.armor.cultist.chest"),
+        comp::Item::new_from_asset_expect("common.items.armor.cultist.pants"),
+        comp::Item::new_from_asset_expect("common.items.armor.cultist.hand"),
+        comp::Item::new_from_asset_expect("common.items.armor.cultist.foot"),
+        comp::Item::new_from_asset_expect("common.items.armor.cultist.shoulder"),
+        comp::Item::new_from_asset_expect("common.items.armor.cultist.belt"),
+        comp::Item::new_from_asset_expect("common.items.weapons.hammer.cultist_purp_2h-0"),
+        comp::Item::new_from_asset_expect("common.items.weapons.staff.cultist_staff"),
+        comp::Item::new_from_asset_expect("common.items.weapons.sword.cultist"),
+        comp::Item::new_from_asset_expect("common.items.weapons.bow.velorite"),
+        comp::Item::new_from_asset_expect("common.items.weapons.axe.malachite_axe-0")
+        ];
+    for item in &item_list {
+        server
+            .state()
+            .ecs()
+            .write_storage::<comp::Inventory>()
+            .get_mut(target)
+            .map(|mut inv| inv.push(item.clone()));
+        let _ = server
+            .state
+            .ecs()
+            .write_storage::<comp::InventoryUpdate>()
+            .insert(
+                target,
+                comp::InventoryUpdate::new(comp::InventoryUpdateEvent::Debug),
+            );
+    }
 }
 
 #[allow(clippy::float_cmp)] // TODO: Pending review in #587
