@@ -99,9 +99,10 @@ where
                 prio,
                 promises,
                 guaranteed_bandwidth,
+                lz_dictionary,
             } => {
                 self.store
-                    .open_stream(sid, prio, promises, guaranteed_bandwidth);
+                    .open_stream(sid, prio, promises, guaranteed_bandwidth, lz_dictionary);
             },
             ProtocolEvent::CloseStream { sid } => {
                 if !self.store.try_close_stream(sid) {
@@ -123,9 +124,15 @@ where
                 prio,
                 promises,
                 guaranteed_bandwidth,
+                ref lz_dictionary,
             } => {
-                self.store
-                    .open_stream(sid, prio, promises, guaranteed_bandwidth);
+                self.store.open_stream(
+                    sid,
+                    prio,
+                    promises,
+                    guaranteed_bandwidth,
+                    lz_dictionary.clone(),
+                );
                 event.to_frame().write_bytes(&mut self.buffer);
                 self.drain.send(self.buffer.split()).await?;
             },
@@ -228,12 +235,14 @@ where
                         prio,
                         promises,
                         guaranteed_bandwidth,
+                        lz_dictionary,
                     } => {
                         break 'outer Ok(ProtocolEvent::OpenStream {
                             sid,
                             prio: prio.min(crate::types::HIGHEST_PRIO),
                             promises,
                             guaranteed_bandwidth,
+                            lz_dictionary,
                         });
                     },
                     ITFrame::CloseStream { sid } => {

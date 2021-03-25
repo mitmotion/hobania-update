@@ -25,7 +25,7 @@ use tokio::{
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::*;
 
-pub(crate) type A2bStreamOpen = (Prio, Promises, Bandwidth, oneshot::Sender<Stream>);
+pub(crate) type A2bStreamOpen = (Prio, Promises, Bandwidth, oneshot::Sender<Stream>, Vec<u8>);
 pub(crate) type S2bCreateChannel = (Cid, Sid, Protocols, oneshot::Sender<()>);
 pub(crate) type S2bShutdownBparticipant = (Duration, oneshot::Sender<Result<(), ParticipantError>>);
 pub(crate) type B2sPrioStatistic = (Pid, u64, u64);
@@ -225,12 +225,19 @@ impl BParticipant {
             };
 
             let active_err = async {
-                if let Some((prio, promises, guaranteed_bandwidth, return_s)) = open {
+                if let Some((prio, promises, guaranteed_bandwidth, return_s, lz_dictionary)) = open
+                {
                     let sid = stream_ids;
                     trace!(?sid, "open stream");
                     stream_ids += Sid::from(1);
                     let stream = self
-                        .create_stream(sid, prio, promises, guaranteed_bandwidth)
+                        .create_stream(
+                            sid,
+                            prio,
+                            promises,
+                            guaranteed_bandwidth,
+                            lz_dictionary.clone(),
+                        )
                         .await;
 
                     let event = ProtocolEvent::OpenStream {
@@ -238,6 +245,7 @@ impl BParticipant {
                         prio,
                         promises,
                         guaranteed_bandwidth,
+                        lz_dictionary,
                     };
 
                     return_s.send(stream).unwrap();
@@ -388,13 +396,15 @@ impl BParticipant {
                         prio,
                         promises,
                         guaranteed_bandwidth,
+                        ref lz_dictionary,
                     }) => {
                         trace!(?sid, "open stream");
+                        let lz_dictionary = lz_dictionary.clone();
                         let _ = b2b_notify_send_of_recv_s.send(r.unwrap());
                         // waiting for receiving is not necessary, because the send_mgr will first
                         // process this before process messages!
                         let stream = self
-                            .create_stream(sid, prio, promises, guaranteed_bandwidth)
+                            .create_stream(sid, prio, promises, guaranteed_bandwidth, lz_dictionary)
                             .await;
                         b2a_stream_opened_s.send(stream).unwrap();
                         retrigger(cid, p, &mut recv_protocols);
@@ -616,6 +626,7 @@ impl BParticipant {
         prio: Prio,
         promises: Promises,
         guaranteed_bandwidth: Bandwidth,
+        lz_dictionary: Vec<u8>,
     ) -> Stream {
         let (b2a_msg_recv_s, b2a_msg_recv_r) = async_channel::unbounded::<Bytes>();
         let send_closed = Arc::new(AtomicBool::new(false));
@@ -651,6 +662,7 @@ impl BParticipant {
             prio,
             promises,
             guaranteed_bandwidth,
+            lz_dictionary,
             send_closed,
             a2b_msg_s,
             b2a_msg_recv_r,

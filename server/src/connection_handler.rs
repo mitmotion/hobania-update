@@ -100,12 +100,12 @@ impl ConnectionHandler {
         let reliable = Promises::ORDERED | Promises::CONSISTENCY;
         let reliablec = reliable | Promises::COMPRESSED;
 
-        let general_stream = participant.open(3, reliablec, 500).await?;
-        let ping_stream = participant.open(2, reliable, 500).await?;
-        let mut register_stream = participant.open(3, reliablec, 500).await?;
-        let character_screen_stream = participant.open(3, reliablec, 500).await?;
-        let in_game_stream = participant.open(3, reliablec, 100_000).await?;
-        let terrain_stream = participant.open(4, reliablec, 20_000).await?;
+        let general_stream = participant.open(3, reliablec, 500, Vec::new()).await?;
+        let ping_stream = participant.open(2, reliable, 500, Vec::new()).await?;
+        let mut register_stream = participant.open(3, reliablec, 500, Vec::new()).await?;
+        let character_screen_stream = participant.open(3, reliablec, 500, Vec::new()).await?;
+        let in_game_stream = participant.open(3, reliablec, 100_000, Vec::new()).await?;
+        let terrain_stream = participant.open(4, reliablec, 20_000, Vec::new()).await?;
 
         let server_data = receiver.recv()?;
 

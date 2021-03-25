@@ -15,6 +15,7 @@ struct StreamInfo {
     pub(crate) guaranteed_bandwidth: Bandwidth,
     pub(crate) prio: Prio,
     pub(crate) promises: Promises,
+    pub(crate) lz_dictionary: Vec<u8>,
     pub(crate) messages: VecDeque<OTMessage>,
 }
 
@@ -44,11 +45,13 @@ impl PrioManager {
         prio: Prio,
         promises: Promises,
         guaranteed_bandwidth: Bandwidth,
+        lz_dictionary: Vec<u8>,
     ) {
         self.streams.insert(sid, StreamInfo {
             guaranteed_bandwidth,
             prio,
             promises,
+            lz_dictionary,
             messages: VecDeque::new(),
         });
     }

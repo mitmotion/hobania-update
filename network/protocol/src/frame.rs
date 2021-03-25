@@ -39,6 +39,7 @@ pub enum OTFrame {
         prio: Prio,
         promises: Promises,
         guaranteed_bandwidth: Bandwidth,
+        lz_dictionary: Vec<u8>,
     },
     CloseStream {
         sid: Sid,
@@ -64,6 +65,7 @@ pub enum ITFrame {
         prio: Prio,
         promises: Promises,
         guaranteed_bandwidth: Bandwidth,
+        lz_dictionary: Vec<u8>,
     },
     CloseStream {
         sid: Sid,
@@ -163,7 +165,7 @@ pub(crate) const TCP_CLOSE_STREAM_CNS: usize = 8;
 /// const part of the DATA frame, actual size is variable
 pub(crate) const TCP_DATA_CNS: usize = 10;
 pub(crate) const TCP_DATA_HEADER_CNS: usize = 24;
-pub(crate) const TCP_OPEN_STREAM_CNS: usize = 18;
+pub(crate) const TCP_OPEN_STREAM_CNS: usize = 20;
 // Size WITHOUT the 1rst indicating byte
 pub(crate) const TCP_SHUTDOWN_CNS: usize = 0;
 
@@ -178,12 +180,17 @@ impl OTFrame {
                 prio,
                 promises,
                 guaranteed_bandwidth,
+                lz_dictionary,
             } => {
                 bytes.put_u8(FRAME_OPEN_STREAM);
                 sid.to_bytes(bytes);
                 bytes.put_u8(prio);
                 bytes.put_u8(promises.to_le_bytes()[0]);
                 bytes.put_u64_le(guaranteed_bandwidth);
+                let lz_wire_length = lz_dictionary.len().min(0xffff);
+                bytes.put_u16_le(lz_wire_length as u16);
+                bytes.reserve(lz_wire_length);
+                bytes.extend_from_slice(&lz_dictionary[0..lz_wire_length]);
             },
             Self::CloseStream { sid } => {
                 bytes.put_u8(FRAME_CLOSE_STREAM);
@@ -213,7 +220,12 @@ impl ITFrame {
         };
         let size = match frame_no {
             FRAME_SHUTDOWN => TCP_SHUTDOWN_CNS,
-            FRAME_OPEN_STREAM => TCP_OPEN_STREAM_CNS,
+            FRAME_OPEN_STREAM => {
+                if bytes.len() < TCP_OPEN_STREAM_CNS {
+                    return None;
+                }
+                u16::from_le_bytes([bytes[18], bytes[19]]) as usize + TCP_OPEN_STREAM_CNS
+            },
             FRAME_CLOSE_STREAM => TCP_CLOSE_STREAM_CNS,
             FRAME_DATA_HEADER => TCP_DATA_HEADER_CNS,
             FRAME_DATA => {
@@ -242,6 +254,12 @@ impl ITFrame {
                     prio: bytes.get_u8(),
                     promises: Promises::from_bits_truncate(bytes.get_u8()),
                     guaranteed_bandwidth: bytes.get_u64_le(),
+                    lz_dictionary: {
+                        let lz_wire_length = bytes.get_u16_le();
+                        let mut lz_dictionary = Vec::with_capacity(lz_wire_length as usize);
+                        bytes.copy_to_slice(&mut lz_dictionary[..]);
+                        lz_dictionary
+                    },
                 }
             },
             FRAME_CLOSE_STREAM => {
@@ -284,11 +302,13 @@ impl PartialEq<ITFrame> for OTFrame {
                 prio,
                 promises,
                 guaranteed_bandwidth,
+                lz_dictionary,
             } => matches!(other, ITFrame::OpenStream {
                 sid,
                 prio,
                 promises,
                 guaranteed_bandwidth,
+                lz_dictionary,
             }),
             Self::CloseStream { sid } => matches!(other, ITFrame::CloseStream { sid }),
             Self::DataHeader { mid, sid, length } => {
@@ -325,6 +345,7 @@ mod tests {
                 prio: 14,
                 promises: Promises::GUARANTEED_DELIVERY,
                 guaranteed_bandwidth: 1_000_000,
+                lz_dictionary: Vec::new(),
             },
             OTFrame::DataHeader {
                 sid: Sid::new(1337),
@@ -499,6 +520,7 @@ mod tests {
             promises: Promises::ENCRYPTED,
             prio: 88,
             guaranteed_bandwidth: 1_000_000,
+            lz_dictionary: Vec::new(),
         };
         OTFrame::write_bytes(frame1, &mut buffer);
     }
@@ -512,6 +534,7 @@ mod tests {
             promises: Promises::ENCRYPTED,
             prio: 88,
             guaranteed_bandwidth: 1_000_000,
+            lz_dictionary: Vec::new(),
         };
         OTFrame::write_bytes(frame1, &mut buffer);
         buffer.truncate(6); // simulate partial retrieve

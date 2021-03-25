@@ -72,6 +72,7 @@ pub struct Stream {
     prio: Prio,
     promises: Promises,
     guaranteed_bandwidth: Bandwidth,
+    lz_dictionary: Vec<u8>,
     send_closed: Arc<AtomicBool>,
     a2b_msg_s: crossbeam_channel::Sender<(Sid, Bytes)>,
     b2a_msg_recv_r: Option<async_channel::Receiver<Bytes>>,
@@ -551,6 +552,7 @@ impl Participant {
         prio: u8,
         promises: Promises,
         bandwidth: Bandwidth,
+        lz_dictionary: Vec<u8>,
     ) -> Result<Stream, ParticipantError> {
         debug_assert!(prio <= network_protocol::HIGHEST_PRIO, "invalid prio");
         let (p2a_return_stream_s, p2a_return_stream_r) = oneshot::channel::<Stream>();
@@ -559,6 +561,7 @@ impl Participant {
             promises,
             bandwidth,
             p2a_return_stream_s,
+            lz_dictionary,
         )) {
             debug!(?e, "bParticipant is already closed, notifying");
             return Err(ParticipantError::ParticipantDisconnected);
@@ -728,6 +731,7 @@ impl Stream {
         prio: Prio,
         promises: Promises,
         guaranteed_bandwidth: Bandwidth,
+        lz_dictionary: Vec<u8>,
         send_closed: Arc<AtomicBool>,
         a2b_msg_s: crossbeam_channel::Sender<(Sid, Bytes)>,
         b2a_msg_recv_r: async_channel::Receiver<Bytes>,
@@ -740,6 +744,7 @@ impl Stream {
             prio,
             promises,
             guaranteed_bandwidth,
+            lz_dictionary,
             send_closed,
             a2b_msg_s,
             b2a_msg_recv_r: Some(b2a_msg_recv_r),

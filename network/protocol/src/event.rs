@@ -17,6 +17,7 @@ pub enum ProtocolEvent {
         prio: Prio,
         promises: Promises,
         guaranteed_bandwidth: Bandwidth,
+        lz_dictionary: Vec<u8>,
     },
     CloseStream {
         sid: Sid,
@@ -36,11 +37,13 @@ impl ProtocolEvent {
                 prio,
                 promises,
                 guaranteed_bandwidth,
+                lz_dictionary,
             } => OTFrame::OpenStream {
                 sid: *sid,
                 prio: *prio,
                 promises: *promises,
                 guaranteed_bandwidth: *guaranteed_bandwidth,
+                lz_dictionary: lz_dictionary.clone(),
             },
             ProtocolEvent::CloseStream { sid } => OTFrame::CloseStream { sid: *sid },
             ProtocolEvent::Message { .. } => {
