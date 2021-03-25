@@ -1248,39 +1248,104 @@ fn handle_kill_npcs(
 
 fn handle_kit(
     server: &mut Server,
-    _client: EcsEntity,
+    client: EcsEntity,
     target: EcsEntity,
-    _args: String,
-    _action: &ChatCommand,
+    args: String,
+    action: &ChatCommand,
 ) {
-    let item_list = [
-        comp::Item::new_from_asset_expect("common.items.armor.cultist.chest"),
-        comp::Item::new_from_asset_expect("common.items.armor.cultist.pants"),
-        comp::Item::new_from_asset_expect("common.items.armor.cultist.hand"),
-        comp::Item::new_from_asset_expect("common.items.armor.cultist.foot"),
-        comp::Item::new_from_asset_expect("common.items.armor.cultist.shoulder"),
-        comp::Item::new_from_asset_expect("common.items.armor.cultist.belt"),
-        comp::Item::new_from_asset_expect("common.items.weapons.hammer.cultist_purp_2h-0"),
-        comp::Item::new_from_asset_expect("common.items.weapons.staff.cultist_staff"),
-        comp::Item::new_from_asset_expect("common.items.weapons.sword.cultist"),
-        comp::Item::new_from_asset_expect("common.items.weapons.bow.velorite"),
-        comp::Item::new_from_asset_expect("common.items.weapons.axe.malachite_axe-0")
+    let kit_number = scan_fmt!(&args, &action.arg_fmt(), u32);
+    if kit_number == Ok(1) {
+        let item_list = [
+            comp::Item::new_from_asset_expect("common.items.armor.cultist.chest"),
+            comp::Item::new_from_asset_expect("common.items.armor.cultist.pants"),
+            comp::Item::new_from_asset_expect("common.items.armor.cultist.hand"),
+            comp::Item::new_from_asset_expect("common.items.armor.cultist.foot"),
+            comp::Item::new_from_asset_expect("common.items.armor.cultist.shoulder"),
+            comp::Item::new_from_asset_expect("common.items.armor.cultist.belt"),
+            comp::Item::new_from_asset_expect("common.items.weapons.hammer.cultist_purp_2h-0"),
+            comp::Item::new_from_asset_expect("common.items.weapons.staff.cultist_staff"),
+            comp::Item::new_from_asset_expect("common.items.weapons.sword.cultist"),
+            comp::Item::new_from_asset_expect("common.items.weapons.bow.velorite"),
+            comp::Item::new_from_asset_expect("common.items.weapons.axe.malachite_axe-0"),
         ];
-    for item in &item_list {
-        server
-            .state()
-            .ecs()
-            .write_storage::<comp::Inventory>()
-            .get_mut(target)
-            .map(|mut inv| inv.push(item.clone()));
-        let _ = server
-            .state
-            .ecs()
-            .write_storage::<comp::InventoryUpdate>()
-            .insert(
-                target,
-                comp::InventoryUpdate::new(comp::InventoryUpdateEvent::Debug),
-            );
+        for item in &item_list {
+            server
+                .state()
+                .ecs()
+                .write_storage::<comp::Inventory>()
+                .get_mut(target)
+                .map(|mut inv| inv.push(item.clone()));
+            let _ = server
+                .state
+                .ecs()
+                .write_storage::<comp::InventoryUpdate>()
+                .insert(
+                    target,
+                    comp::InventoryUpdate::new(comp::InventoryUpdateEvent::Debug),
+                );
+        }
+    } else if kit_number == Ok(2) {
+        let item_list = [
+            comp::Item::new_from_asset_expect("common.items.armor.cultist.chest"),
+            comp::Item::new_from_asset_expect("common.items.armor.cultist.pants"),
+            comp::Item::new_from_asset_expect("common.items.armor.cultist.hand"),
+            comp::Item::new_from_asset_expect("common.items.armor.cultist.foot"),
+            comp::Item::new_from_asset_expect("common.items.armor.cultist.shoulder"),
+            comp::Item::new_from_asset_expect("common.items.armor.cultist.belt"),
+            comp::Item::new_from_asset_expect("common.items.weapons.hammer.cultist_purp_2h-0"),
+            comp::Item::new_from_asset_expect("common.items.weapons.staff.cultist_staff"),
+            comp::Item::new_from_asset_expect("common.items.weapons.sword.cultist"),
+            comp::Item::new_from_asset_expect("common.items.weapons.bow.velorite"),
+        ];
+        for item in &item_list {
+            server
+                .state()
+                .ecs()
+                .write_storage::<comp::Inventory>()
+                .get_mut(target)
+                .map(|mut inv| inv.push(item.clone()));
+            let _ = server
+                .state
+                .ecs()
+                .write_storage::<comp::InventoryUpdate>()
+                .insert(
+                    target,
+                    comp::InventoryUpdate::new(comp::InventoryUpdateEvent::Debug),
+                );
+        }
+    } else if kit_number == Ok(3) {
+        let item_list = [
+            comp::Item::new_from_asset_expect("common.items.armor.cultist.chest"),
+            comp::Item::new_from_asset_expect("common.items.armor.cultist.pants"),
+            comp::Item::new_from_asset_expect("common.items.armor.cultist.hand"),
+            comp::Item::new_from_asset_expect("common.items.armor.cultist.foot"),
+            comp::Item::new_from_asset_expect("common.items.armor.cultist.shoulder"),
+            comp::Item::new_from_asset_expect("common.items.armor.cultist.belt"),
+            comp::Item::new_from_asset_expect("common.items.weapons.hammer.cultist_purp_2h-0"),
+            comp::Item::new_from_asset_expect("common.items.weapons.staff.cultist_staff"),
+            comp::Item::new_from_asset_expect("common.items.weapons.sword.cultist"),
+        ];
+        for item in &item_list {
+            server
+                .state()
+                .ecs()
+                .write_storage::<comp::Inventory>()
+                .get_mut(target)
+                .map(|mut inv| inv.push(item.clone()));
+            let _ = server
+                .state
+                .ecs()
+                .write_storage::<comp::InventoryUpdate>()
+                .insert(
+                    target,
+                    comp::InventoryUpdate::new(comp::InventoryUpdateEvent::Debug),
+                );
+        }
+    } else {
+        server.notify_client(
+            client,
+            ServerGeneral::server_msg(ChatType::CommandError, action.help_string()),
+        );
     }
 }
 

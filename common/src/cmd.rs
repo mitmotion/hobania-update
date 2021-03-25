@@ -327,7 +327,11 @@ impl ChatCommand {
             ),
             ChatCommand::Kill => cmd(vec![], "Kill yourself", NoAdmin),
             ChatCommand::KillNpcs => cmd(vec![], "Kill the NPCs", Admin),
-            ChatCommand::Kit => cmd(vec![], "Place all combat testing items into your pack.", Admin),
+            ChatCommand::Kit => cmd(
+                vec![Integer("kit_number", 3, Required)],
+                "Place all combat testing items into your pack.",
+                Admin,
+            ),
             ChatCommand::Lantern => cmd(
                 vec![
                     Float("strength", 5.0, Required),
