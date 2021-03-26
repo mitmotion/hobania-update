@@ -329,7 +329,7 @@ impl ChatCommand {
             ChatCommand::KillNpcs => cmd(vec![], "Kill the NPCs", Admin),
             ChatCommand::Kit => cmd(
                 vec![Integer("kit_number", 3, Required)],
-                "Place all combat testing items into your pack.",
+                "Place all combat testing items into your inventory.",
                 Admin,
             ),
             ChatCommand::Lantern => cmd(
