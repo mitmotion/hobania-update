@@ -15,9 +15,10 @@ use common_net::{
     msg::{InviteAnswer, ServerGeneral},
     sync::WorldSyncExt,
 };
-use specs::world::WorldExt;
+use specs::{world::WorldExt, Join};
 use std::time::{Duration, Instant};
 use tracing::{error, warn};
+use vek::Vec3;
 
 /// Time before invite times out
 const INVITE_TIMEOUT_DUR: Duration = Duration::from_secs(31);
@@ -73,7 +74,6 @@ pub fn handle_invite(
         }
     }
 
-    let mut agents = state.ecs().write_storage::<comp::Agent>();
     let mut invites = state.ecs().write_storage::<Invite>();
 
     if invites.contains(invitee) {
@@ -120,6 +120,16 @@ pub fn handle_invite(
         }
     };
 
+    let trader_positions: Vec<Vec3<f32>> = {
+        let positions = state.ecs().write_storage::<comp::Pos>();
+        let agents = state.ecs().read_storage::<comp::Agent>();
+        (&agents, &positions)
+            .join()
+            .filter_map(|(a, p)| a.trade_for_site.map(|_| p.0.clone()))
+            .collect()
+    };
+    let mut agents = state.ecs().write_storage::<comp::Agent>();
+
     // If client comp
     if let (Some(client), Some(inviter)) = (clients.get(invitee), uids.get(inviter).copied()) {
         if send_invite() {
@@ -132,7 +142,10 @@ pub fn handle_invite(
     } else if let Some(agent) = agents.get_mut(invitee) {
         if send_invite() {
             if let Some(inviter) = uids.get(inviter) {
-                agent.inbox.push_front(AgentEvent::TradeInvite(*inviter));
+                agent.inbox.push_front(AgentEvent::TradeInvite(
+                    *inviter,
+                    Box::new(trader_positions),
+                ));
                 invite_sent = true;
             }
         }

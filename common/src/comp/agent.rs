@@ -179,7 +179,7 @@ impl<'a> From<&'a Body> for Psyche {
 pub enum AgentEvent {
     /// Engage in conversation with entity with Uid
     Talk(Uid),
-    TradeInvite(Uid),
+    TradeInvite(Uid, Box<Vec<Vec3<f32>>>),
     FinishedTrade(TradeResult),
     UpdatePendingTrade(
         // this data structure is large so box it to keep AgentEvent small

@@ -899,7 +899,7 @@ impl<'a> AgentData<'a> {
                     }
                 }
             },
-            Some(AgentEvent::TradeInvite(with)) => {
+            Some(AgentEvent::TradeInvite(with, pos)) => {
                 if agent.trade_for_site.is_some() && !agent.trading {
                     // stand still and looking towards the trading player
                     controller.actions.push(ControlAction::Talk);
@@ -917,7 +917,28 @@ impl<'a> AgentData<'a> {
                         .push(ControlEvent::InviteResponse(InviteResponse::Accept));
                     agent.trading = true;
                 } else {
-                    // TODO: Provide a hint where to find the closest merchant?
+                    // Provide a hint where to find the closest merchant?
+                    let mypos = self.pos.0;
+                    let mut closest = std::f32::INFINITY;
+                    let mut closest_diff = None;
+                    for p in pos.iter() {
+                        let diff = (p.x - mypos.x, p.y - mypos.y);
+                        let dist = diff.0.powi(2) + diff.1.powi(2);
+                        if dist < closest {
+                            closest = dist;
+                            closest_diff = Some(diff);
+                        }
+                    }
+                    if let Some(closest_diff) = closest_diff {
+                        event_emitter.emit(ServerEvent::Chat(UnresolvedChatMsg::npc(
+                            *self.uid,
+                            format!(
+                                "The next merchant is at {},{}",
+                                closest_diff.0, closest_diff.1
+                            ),
+                        )))
+                    }
+
                     controller
                         .events
                         .push(ControlEvent::InviteResponse(InviteResponse::Decline));
