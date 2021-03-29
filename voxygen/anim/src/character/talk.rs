@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     CharacterSkeleton, SkeletonAttr,
 };
 use common::{comp::item::ToolKind, util::Dir};
@@ -22,9 +22,10 @@ impl Animation for TalkAnimation {
         anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         *rate = 1.0;
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let slowa = (anim_time * 6.0).sin();
         let slowb = (anim_time * 4.0 + PI / 2.0).sin();
@@ -49,6 +50,6 @@ impl Animation for TalkAnimation {
         next.hand_r.orientation = Quaternion::rotation_y(0.2 + slowa * -0.1 + slowb * 0.07)
             * Quaternion::rotation_x(1.3 + slowb * -0.15 + slowc * 0.05);
 
-        next
+        (next, anim_events)
     }
 }

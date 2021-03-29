@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     QuadrupedLowSkeleton, SkeletonAttr,
 };
 use common::states::utils::StageSection;
@@ -20,8 +20,9 @@ impl Animation for TailwhipAnimation {
         anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let (movement1base, movement2base, movement3, twitch1, twitch2) = match stage_section {
             Some(StageSection::Charge) => {
@@ -70,6 +71,7 @@ impl Animation for TailwhipAnimation {
                     + movement2 * 0.7
                     + twitch2 * 0.3 * mirror,
             );
-        next
+
+        (next, anim_events)
     }
 }

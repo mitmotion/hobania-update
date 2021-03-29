@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     ObjectSkeleton, SkeletonAttr,
 };
 use common::{
@@ -29,10 +29,10 @@ impl Animation for BeamAnimation {
         _anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         *rate = 1.0;
-
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         next.bone0.position = Vec3::new(s_a.bone0.0, s_a.bone0.1, s_a.bone0.2) / 11.0;
         next.bone0.orientation = Quaternion::rotation_z(0.0);
@@ -40,6 +40,6 @@ impl Animation for BeamAnimation {
         next.bone1.position = Vec3::new(s_a.bone1.0, s_a.bone1.1, s_a.bone1.2) / 11.0;
         next.bone1.orientation = Quaternion::rotation_z(0.0);
 
-        next
+        (next, anim_events)
     }
 }

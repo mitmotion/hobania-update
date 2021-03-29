@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     QuadrupedLowSkeleton, SkeletonAttr,
 };
 
@@ -19,8 +19,9 @@ impl Animation for JumpAnimation {
         _anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         next.jaw.scale = Vec3::one() * 0.98;
         next.chest.scale = Vec3::one() * s_a.scaler / 11.0;
@@ -47,6 +48,6 @@ impl Animation for JumpAnimation {
 
         next.foot_br.position = Vec3::new(s_a.feet_b.0, s_a.feet_b.1, s_a.feet_b.2);
 
-        next
+        (next, anim_events)
     }
 }

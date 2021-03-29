@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     DragonSkeleton, SkeletonAttr,
 };
 use std::f32::consts::PI;
@@ -20,8 +20,9 @@ impl Animation for FlyAnimation {
         anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let lab: f32 = 12.0;
 
@@ -105,6 +106,6 @@ impl Animation for FlyAnimation {
         next.wing_out_r.position = Vec3::new(s_a.wing_out.0, s_a.wing_out.1, s_a.wing_out.2);
         next.wing_out_r.orientation = Quaternion::rotation_y((-0.35 + wingr * 0.6).min(-0.2));
 
-        next
+        (next, anim_events)
     }
 }

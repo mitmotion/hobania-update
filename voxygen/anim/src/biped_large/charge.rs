@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     BipedLargeSkeleton, SkeletonAttr,
 };
 use common::comp::item::ToolKind;
@@ -27,8 +27,9 @@ impl Animation for ChargeAnimation {
         anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let lab: f32 = 1.0;
 
@@ -147,6 +148,6 @@ impl Animation for ChargeAnimation {
                 Quaternion::rotation_x(stop * 0.1) * Quaternion::rotation_z(stop * 0.1);
         }
 
-        next
+        (next, anim_events)
     }
 }

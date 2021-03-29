@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     BirdLargeSkeleton, SkeletonAttr,
 };
 use common::states::utils::StageSection;
@@ -20,8 +20,9 @@ impl Animation for StunnedAnimation {
         anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let wave_slow_cos = (anim_time * 4.5).cos();
 
@@ -86,6 +87,6 @@ impl Animation for StunnedAnimation {
         next.foot_l.position = Vec3::new(-s_a.foot.0, s_a.foot.1, s_a.foot.2);
         next.foot_r.position = Vec3::new(s_a.foot.0, s_a.foot.1, s_a.foot.2);
 
-        next
+        (next, anim_events)
     }
 }

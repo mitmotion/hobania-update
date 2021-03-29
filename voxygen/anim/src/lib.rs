@@ -149,7 +149,7 @@ pub trait Animation {
         _anim_time: f32,
         _rate: &mut f32,
         _skeleton_attr: &<<Self as Animation>::Skeleton as Skeleton>::Attr,
-    ) -> Self::Skeleton;
+    ) -> (Self::Skeleton, Vec<AnimationEvent>);
 
     /// Calls `update_skeleton_inner` either directly or via `libloading` to
     /// generate the new skeleton.
@@ -159,7 +159,7 @@ pub trait Animation {
         anim_time: f32,
         rate: &mut f32,
         skeleton_attr: &<<Self as Animation>::Skeleton as Skeleton>::Attr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         #[cfg(not(feature = "use-dyn-lib"))]
         {
             Self::update_skeleton_inner(skeleton, dependency, anim_time, rate, skeleton_attr)
@@ -176,7 +176,7 @@ pub trait Animation {
                     f32,
                     &mut f32,
                     &<Self::Skeleton as Skeleton>::Attr,
-                ) -> Self::Skeleton,
+                ) -> (Self::Skeleton, Vec<AnimationEvent>),
             > = unsafe {
                 //let start = std::time::Instant::now();
                 // Overhead of 0.5-5 us (could use hashmap to mitigate if this is an issue)
@@ -198,4 +198,13 @@ pub trait Animation {
             update_fn(skeleton, dependency, anim_time, rate, skeleton_attr)
         }
     }
+}
+
+pub enum AnimationEvent {
+    Footstep {
+        pos_offset: Vec3<f32>,
+    },
+    WeaponTrail {
+        pos_offset: Vec3<f32>,
+    },
 }

@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     GolemSkeleton, SkeletonAttr,
 };
 use common::states::utils::StageSection;
@@ -21,8 +21,9 @@ impl Animation for AlphaAnimation {
         anim_time: f32,
         _rate: &mut f32,
         _s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let (move1base, move2base, move3) = match stage_section {
             Some(StageSection::Buildup) => (anim_time.powf(0.25), 0.0, 0.0),
@@ -80,6 +81,7 @@ impl Animation for AlphaAnimation {
                 Quaternion::rotation_y(0.0) * Quaternion::rotation_x(move1 * -1.0 + move2 * 1.8);
         };
         next.torso.position = Vec3::new(0.0, move1 * 0.7, move1 * -0.3);
-        next
+
+        (next, anim_events)
     }
 }

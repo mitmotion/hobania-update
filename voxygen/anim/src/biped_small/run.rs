@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     BipedSmallSkeleton, SkeletonAttr,
 };
 use std::{f32::consts::PI, ops::Mul};
@@ -23,8 +23,9 @@ impl Animation for RunAnimation {
         anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
         let speed = Vec2::<f32>::from(velocity).magnitude();
         *rate = 1.0;
         let speednorm = (speed / 9.4).powf(0.4);
@@ -158,6 +159,6 @@ impl Animation for RunAnimation {
 
         next.tail.position = Vec3::new(0.0, s_a.tail.0, s_a.tail.1);
 
-        next
+        (next, anim_events)
     }
 }

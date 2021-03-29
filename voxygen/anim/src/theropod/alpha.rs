@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     SkeletonAttr, TheropodSkeleton,
 };
 use common::states::utils::StageSection;
@@ -20,8 +20,9 @@ impl Animation for AlphaAnimation {
         anim_time: f32,
         _rate: &mut f32,
         _s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let (movement1base, movement2base, movement3) = match stage_section {
             Some(StageSection::Buildup) => (anim_time.powi(2), 0.0, 0.0),
@@ -61,6 +62,7 @@ impl Animation for AlphaAnimation {
         next.tail_back.orientation =
             Quaternion::rotation_x(0.1 + movement1abs * -0.1 + movement2abs * -0.3)
                 * Quaternion::rotation_z(movement1 * -0.1 + movement2 * -0.2);
-        next
+
+        (next, anim_events)
     }
 }

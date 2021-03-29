@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     CharacterSkeleton, SkeletonAttr,
 };
 use common::{
@@ -32,7 +32,10 @@ impl Animation for SpinMeleeAnimation {
         anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
+        let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
+
         *rate = 1.0;
         let (movement1, movement2, movement3) = match stage_section {
             Some(StageSection::Buildup) => (anim_time, 0.0, 0.0),
@@ -43,7 +46,6 @@ impl Animation for SpinMeleeAnimation {
         let pullback = 1.0 - movement3;
         let move1 = movement1 * pullback;
         let move2 = movement2 * pullback;
-        let mut next = (*skeleton).clone();
         next.main.position = Vec3::new(0.0, 0.0, 0.0);
         next.main.orientation = Quaternion::rotation_z(0.0);
         next.second.position = Vec3::new(0.0, 0.0, 0.0);
@@ -209,6 +211,6 @@ impl Animation for SpinMeleeAnimation {
             next.second = next.main;
         }
 
-        next
+        (next, anim_events)
     }
 }

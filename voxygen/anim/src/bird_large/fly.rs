@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     BirdLargeSkeleton, SkeletonAttr,
 };
 
@@ -19,8 +19,9 @@ impl Animation for FlyAnimation {
         anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let slow = (anim_time * 2.0).sin();
         let fast = (anim_time * 4.0).sin();
@@ -172,6 +173,6 @@ impl Animation for FlyAnimation {
             next.foot_r.orientation = Quaternion::rotation_x(slow * -0.05);
         }
 
-        next
+        (next, anim_events)
     }
 }

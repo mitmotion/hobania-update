@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     CharacterSkeleton, SkeletonAttr,
 };
 
@@ -20,8 +20,10 @@ impl Animation for GlideWieldAnimation {
         _anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
+
         *rate = 1.0;
 
         next.hand_l.position = Vec3::new(-2.0 - s_a.hand.0, s_a.hand.1, s_a.hand.2 + 15.0);
@@ -34,6 +36,6 @@ impl Animation for GlideWieldAnimation {
 
         next.glider.position = Vec3::new(0.0, -5.0, 13.0);
 
-        next
+        (next, anim_events)
     }
 }

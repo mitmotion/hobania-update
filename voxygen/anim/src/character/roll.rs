@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     CharacterSkeleton, SkeletonAttr,
 };
 use common::{comp::item::ToolKind, states::utils::StageSection};
@@ -31,9 +31,10 @@ impl Animation for RollAnimation {
         anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         *rate = 1.0;
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let ori: Vec2<f32> = Vec2::from(orientation);
         let last_ori = Vec2::from(last_ori);
@@ -113,6 +114,6 @@ impl Animation for RollAnimation {
         next.torso.orientation = Quaternion::rotation_x(movement1 * -0.4 + movement2 * -2.0 * PI)
             * Quaternion::rotation_z(tilt * -10.0);
 
-        next
+        (next, anim_events)
     }
 }

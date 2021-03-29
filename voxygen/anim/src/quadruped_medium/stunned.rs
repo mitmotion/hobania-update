@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     QuadrupedMediumSkeleton, SkeletonAttr,
 };
 use common::states::utils::StageSection;
@@ -20,8 +20,9 @@ impl Animation for StunnedAnimation {
         anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let (movement1base, movement2, twitch) = match stage_section {
             Some(StageSection::Buildup) => (anim_time.powf(0.25), 0.0, 0.0),
@@ -84,6 +85,6 @@ impl Animation for StunnedAnimation {
 
         next.foot_br.position = Vec3::new(s_a.feet_b.0, s_a.feet_b.1, s_a.feet_b.2);
 
-        next
+        (next, anim_events)
     }
 }

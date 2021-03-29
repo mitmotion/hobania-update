@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     CharacterSkeleton, SkeletonAttr,
 };
 use common::comp::item::ToolKind;
@@ -27,8 +27,10 @@ impl Animation for ClimbAnimation {
         anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
+
         let lateral = Vec2::<f32>::from(velocity).magnitude();
         let speed = velocity.z;
         *rate = speed;
@@ -161,6 +163,6 @@ impl Animation for ClimbAnimation {
             next.torso.position = Vec3::new(0.0, -0.2, 0.4) * s_a.scaler;
         };
 
-        next
+        (next, anim_events)
     }
 }

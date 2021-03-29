@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     QuadrupedSmallSkeleton, SkeletonAttr,
 };
 use std::{f32::consts::PI, ops::Mul};
@@ -20,8 +20,9 @@ impl Animation for FeedAnimation {
         anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let slow = (anim_time * 5.0).sin();
         let quick = (anim_time * 14.0).sin();
@@ -69,6 +70,6 @@ impl Animation for FeedAnimation {
         next.tail.position = Vec3::new(0.0, s_a.tail.0, s_a.tail.1);
         next.tail.orientation = Quaternion::rotation_z(slow * 0.3 + head_look.y * 0.3);
 
-        next
+        (next, anim_events)
     }
 }

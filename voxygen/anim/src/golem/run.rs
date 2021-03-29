@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     GolemSkeleton, SkeletonAttr,
 };
 use std::f32::consts::PI;
@@ -21,8 +21,9 @@ impl Animation for RunAnimation {
         anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
         let speed = Vec2::<f32>::from(velocity).magnitude();
         let mixed_vel = acc_vel + anim_time * 2.0; //sets run frequency using speed, with anim_time setting a floor
 
@@ -136,6 +137,7 @@ impl Animation for RunAnimation {
 
         next.torso.position = Vec3::new(0.0, 0.0, 0.0);
         next.torso.orientation = Quaternion::rotation_x(-0.2 * speednorm);
-        next
+
+        (next, anim_events)
     }
 }

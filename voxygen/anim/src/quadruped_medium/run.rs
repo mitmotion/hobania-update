@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     QuadrupedMediumSkeleton, SkeletonAttr,
 };
 use std::{f32::consts::PI, ops::Mul};
@@ -20,8 +20,9 @@ impl Animation for RunAnimation {
         anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
         let speed = (Vec2::<f32>::from(velocity).magnitude()).min(24.0);
         *rate = 1.0;
         let lab: f32 = 0.72;
@@ -221,6 +222,7 @@ impl Animation for RunAnimation {
         next.foot_br.orientation =
             Quaternion::rotation_x(amplitude2 * foot4b * -0.7 - 0.2 * canceler)
                 * Quaternion::rotation_y(tilt * -1.0);
-        next
+
+        (next, anim_events)
     }
 }

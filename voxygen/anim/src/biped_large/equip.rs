@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     BipedLargeSkeleton, SkeletonAttr,
 };
 use common::comp::item::ToolKind;
@@ -22,9 +22,10 @@ impl Animation for EquipAnimation {
         anim_time: f32,
         rate: &mut f32,
         _s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         *rate = 1.0;
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let equip_slow = 1.0 + (anim_time * 12.0 + PI).cos();
         let equip_slowa = 1.0 + (anim_time * 12.0 + PI / 4.0).cos();
@@ -59,6 +60,7 @@ impl Animation for EquipAnimation {
             },
             _ => {},
         }
-        next
+
+        (next, anim_events)
     }
 }

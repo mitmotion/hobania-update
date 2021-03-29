@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     QuadrupedLowSkeleton, SkeletonAttr,
 };
 use common::states::utils::StageSection;
@@ -22,8 +22,9 @@ impl Animation for DashAnimation {
         anim_time: f32,
         _rate: &mut f32,
         _s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let (movement1base, chargemovementbase, movement2base, movement3) = match stage_section {
             Some(StageSection::Buildup) => (anim_time.sqrt(), 0.0, 0.0, 0.0),
@@ -76,6 +77,6 @@ impl Animation for DashAnimation {
                 -0.12 + movement1abs * -0.4 + movement2abs * 0.2 + chargemovementbase * 0.2,
             ) * Quaternion::rotation_z(shortalt * 0.15 + twitch1fast * 0.3);
 
-        next
+        (next, anim_events)
     }
 }

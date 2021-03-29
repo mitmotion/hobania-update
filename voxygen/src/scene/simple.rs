@@ -331,7 +331,7 @@ impl Scene {
         let hands = (active_tool_hand, second_tool_hand);
 
         if let Some(body) = scene_data.body {
-            let tgt_skeleton = IdleAnimation::update_skeleton(
+            let (tgt_skeleton, _outcomes) = IdleAnimation::update_skeleton(
                 self.figure_state.skeleton_mut(),
                 (
                     active_tool_kind,

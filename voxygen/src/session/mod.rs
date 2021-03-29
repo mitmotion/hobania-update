@@ -1263,6 +1263,7 @@ impl PlayState for SessionState {
                         &mut global_state.audio,
                         &scene_data,
                         &client,
+                        &mut outcomes,
                     );
 
                     // Process outcomes from client

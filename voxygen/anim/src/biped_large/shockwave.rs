@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     BipedLargeSkeleton, SkeletonAttr,
 };
 use common::{comp::item::ToolKind, states::utils::StageSection};
@@ -27,9 +27,10 @@ impl Animation for ShockwaveAnimation {
         anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         *rate = 1.0;
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let (movement1, movement2, movement3) = match stage_section {
             Some(StageSection::Buildup) => (anim_time, 0.0, 0.0),
@@ -97,6 +98,6 @@ impl Animation for ShockwaveAnimation {
             next.foot_r.orientation = Quaternion::rotation_y(movement1 * -0.3 + movement2 * 0.3)
                 * Quaternion::rotation_z(movement1 * 0.4 + movement2 * -0.4);
         }
-        next
+        (next, anim_events)
     }
 }

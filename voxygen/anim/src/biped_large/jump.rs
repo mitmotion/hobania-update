@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     BipedLargeSkeleton, SkeletonAttr,
 };
 use common::comp::item::ToolKind;
@@ -21,8 +21,9 @@ impl Animation for JumpAnimation {
         anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let lab: f32 = 1.0;
         let torso = (anim_time * lab + 1.5 * PI).sin();
@@ -113,6 +114,6 @@ impl Animation for JumpAnimation {
         next.torso.orientation = Quaternion::rotation_z(0.0) * Quaternion::rotation_x(0.0);
         next.torso.scale = Vec3::one() / 8.0 * s_a.scaler;
 
-        next
+        (next, anim_events)
     }
 }

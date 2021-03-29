@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     BirdLargeSkeleton, SkeletonAttr,
 };
 use common::{states::utils::StageSection, util::Dir};
@@ -22,8 +22,9 @@ impl Animation for ShootAnimation {
         anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let (movement1base, movement2base, movement3, twitch) = match stage_section {
             Some(StageSection::Buildup) => (anim_time.powf(0.25), 0.0, 0.0, 0.0),
@@ -105,6 +106,6 @@ impl Animation for ShootAnimation {
         } else {
         }
 
-        next
+        (next, anim_events)
     }
 }

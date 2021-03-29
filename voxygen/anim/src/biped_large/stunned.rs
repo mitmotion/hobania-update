@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     BipedLargeSkeleton, SkeletonAttr,
 };
 use common::{
@@ -24,9 +24,10 @@ impl Animation for StunnedAnimation {
         anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
         let speed = Vec2::<f32>::from(velocity).magnitude();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let lab: f32 = 0.65 * s_a.tempo; //.65
 
@@ -373,6 +374,6 @@ impl Animation for StunnedAnimation {
             next.foot_r.orientation = Quaternion::rotation_x(-0.5 + slow * 0.1);
         }
 
-        next
+        (next, anim_events)
     }
 }

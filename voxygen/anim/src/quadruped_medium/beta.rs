@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     QuadrupedMediumSkeleton, SkeletonAttr,
 };
 use common::states::utils::StageSection;
@@ -20,8 +20,9 @@ impl Animation for BetaAnimation {
         anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
         let speed = (Vec2::<f32>::from(velocity).magnitude()).min(24.0);
 
         let (movement1base, movement2base, movement3) = match stage_section {
@@ -95,6 +96,7 @@ impl Animation for BetaAnimation {
             next.foot_br.orientation =
                 Quaternion::rotation_x(movement1abs * -0.5 + movement2abs * -0.3);
         };
-        next
+
+        (next, anim_events)
     }
 }

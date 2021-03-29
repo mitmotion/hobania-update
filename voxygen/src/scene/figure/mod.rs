@@ -23,7 +23,7 @@ use anim::{
     dragon::DragonSkeleton, fish_medium::FishMediumSkeleton, fish_small::FishSmallSkeleton,
     golem::GolemSkeleton, object::ObjectSkeleton, quadruped_low::QuadrupedLowSkeleton,
     quadruped_medium::QuadrupedMediumSkeleton, quadruped_small::QuadrupedSmallSkeleton,
-    ship::ShipSkeleton, theropod::TheropodSkeleton, Animation, Skeleton,
+    ship::ShipSkeleton, theropod::TheropodSkeleton, AnimationEvent, Animation, Skeleton,
 };
 use common::{
     comp::{
@@ -32,6 +32,7 @@ use common::{
         Body, CharacterState, Controller, Health, Inventory, Item, Last, LightAnimation,
         LightEmitter, Ori, PhysicsState, PoiseState, Pos, Scale, Vel,
     },
+    outcome::Outcome,
     resources::DeltaTime,
     states::utils::StageSection,
     terrain::TerrainChunk,
@@ -489,6 +490,7 @@ impl FigureMgr {
         visible_psr_bounds: math::Aabr<f32>,
         camera: &Camera,
         terrain: Option<&Terrain>,
+        outcomes: &mut Vec<Outcome>,
     ) -> anim::vek::Aabb<f32> {
         span!(_guard, "maintain", "FigureManager::maintain");
         let state = scene_data.state;
@@ -791,7 +793,7 @@ impl FigureMgr {
                         state.state_time = 0.0;
                     }
 
-                    let target_base = match (
+                    let (target_base, anim_events) = match (
                         physics.on_ground,
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
@@ -859,7 +861,7 @@ impl FigureMgr {
                             skeleton_attr,
                         ),
                     };
-                    let target_bones = match &character {
+                    let (target_bones, anim_events) = match &character {
                         CharacterState::Roll(s) => {
                             let stage_time = s.timer.as_secs_f32();
 
@@ -1526,8 +1528,22 @@ impl FigureMgr {
                                 skeleton_attr,
                             )
                         },
-                        _ => target_base,
+                        _ => (target_base, anim_events),
                     };
+
+                    // Append new outcomes to the outcome resource
+                    for anim_event in anim_events {
+                        match anim_event {
+                            AnimationEvent::Footstep { pos_offset } => {
+                                let pos = pos.0 + pos_offset;
+                                outcomes.push(Outcome::Footstep {
+                                    pos: Vec3::new(pos.x, pos.y, pos.z),
+                                    vel: vel.0.magnitude_squared(),
+                                });
+                            },
+                            _ => {},
+                        }
+                    }
 
                     state.skeleton = anim::vek::Lerp::lerp(&state.skeleton, &target_bones, dt_lerp);
                     state.update(
@@ -1581,7 +1597,7 @@ impl FigureMgr {
                         state.state_time = 0.0;
                     }
 
-                    let target_base = match (
+                    let (target_base, anim_events) = match (
                         physics.on_ground,
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
@@ -1646,7 +1662,7 @@ impl FigureMgr {
                             skeleton_attr,
                         ),
                     };
-                    let target_bones = match &character {
+                    let (target_bones, _anim_events) = match &character {
                         CharacterState::ComboMelee(s) => {
                             let stage_index = (s.stage - 1) as usize;
                             let stage_time = s.timer.as_secs_f32();
@@ -1728,7 +1744,7 @@ impl FigureMgr {
                             )
                         },
                         // TODO!
-                        _ => target_base,
+                        _ => (target_base, anim_events),
                     };
 
                     state.skeleton = anim::vek::Lerp::lerp(&state.skeleton, &target_bones, dt_lerp);
@@ -1783,7 +1799,7 @@ impl FigureMgr {
                         state.state_time = 0.0;
                     }
 
-                    let target_base = match (
+                    let (target_base, anim_events) = match (
                         physics.on_ground,
                         rel_vel.magnitude_squared() > 0.25, // Moving
                         physics.in_liquid().is_some(),      // In water
@@ -1850,7 +1866,7 @@ impl FigureMgr {
                             skeleton_attr,
                         ),
                     };
-                    let target_bones = match &character {
+                    let (target_bones, _anim_events) = match &character {
                         CharacterState::BasicMelee(s) => {
                             let stage_time = s.timer.as_secs_f32();
 
@@ -2055,7 +2071,7 @@ impl FigureMgr {
                             )
                         },
                         // TODO!
-                        _ => target_base,
+                        _ => (target_base, anim_events),
                     };
 
                     state.skeleton = anim::vek::Lerp::lerp(&state.skeleton, &target_bones, dt_lerp);
@@ -2110,7 +2126,7 @@ impl FigureMgr {
                         state.state_time = 0.0;
                     }
 
-                    let target_base = match (
+                    let (target_base, anim_events) = match (
                         physics.on_ground,
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
@@ -2173,7 +2189,7 @@ impl FigureMgr {
                             skeleton_attr,
                         ),
                     };
-                    let target_bones = match &character {
+                    let (target_bones, _anim_events) = match &character {
                         CharacterState::BasicRanged(s) => {
                             let stage_time = s.timer.as_secs_f32();
 
@@ -2415,7 +2431,7 @@ impl FigureMgr {
                             )
                         },
                         // TODO!
-                        _ => target_base,
+                        _ => (target_base, anim_events),
                     };
 
                     state.skeleton = anim::vek::Lerp::lerp(&state.skeleton, &target_bones, dt_lerp);
@@ -2469,7 +2485,7 @@ impl FigureMgr {
                         state.state_time = 0.0;
                     }
 
-                    let target_base = match (
+                    let (target_base, anim_events) = match (
                         physics.on_ground,
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
@@ -2514,7 +2530,7 @@ impl FigureMgr {
                             skeleton_attr,
                         ),
                     };
-                    let target_bones = match &character {
+                    let (target_bones, _anim_events) = match &character {
                         CharacterState::Sit { .. } => {
                             anim::bird_medium::FeedAnimation::update_skeleton(
                                 &target_base,
@@ -2525,7 +2541,7 @@ impl FigureMgr {
                             )
                         },
                         // TODO!
-                        _ => target_base,
+                        _ => (target_base, anim_events),
                     };
 
                     state.skeleton = anim::vek::Lerp::lerp(&state.skeleton, &target_bones, dt_lerp);
@@ -2579,7 +2595,7 @@ impl FigureMgr {
                         state.state_time = 0.0;
                     }
 
-                    let target_base = match (
+                    let (target_base, _anim_events) = match (
                         physics.on_ground,
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
@@ -2668,7 +2684,7 @@ impl FigureMgr {
                         state.state_time = 0.0;
                     }
 
-                    let target_base = match (
+                    let (target_base, anim_events) = match (
                         physics.on_ground,
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
@@ -2747,7 +2763,7 @@ impl FigureMgr {
                         ),
                     };
 
-                    let target_bones = match &character {
+                    let (target_bones, _anim_events) = match &character {
                         CharacterState::Wielding { .. } => {
                             anim::biped_small::WieldAnimation::update_skeleton(
                                 &target_base,
@@ -2962,7 +2978,7 @@ impl FigureMgr {
                             }
                         },
                         // TODO!
-                        _ => target_base,
+                        _ => (target_base, anim_events),
                     };
 
                     state.skeleton = anim::vek::Lerp::lerp(&state.skeleton, &target_bones, dt_lerp);
@@ -3013,7 +3029,7 @@ impl FigureMgr {
                         state.state_time = 0.0;
                     }
 
-                    let target_base = match (
+                    let (target_base, _anim_events) = match (
                         physics.on_ground,
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
@@ -3108,7 +3124,7 @@ impl FigureMgr {
                         state.state_time = 0.0;
                     }
 
-                    let target_base = match (
+                    let (target_base, anim_events) = match (
                         physics.on_ground,
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
@@ -3160,7 +3176,7 @@ impl FigureMgr {
                             skeleton_attr,
                         ),
                     };
-                    let target_bones = match &character {
+                    let (target_bones, _anim_events) = match &character {
                         CharacterState::ComboMelee(s) => {
                             let stage_index = (s.stage - 1) as usize;
                             let stage_time = s.timer.as_secs_f32();
@@ -3243,7 +3259,7 @@ impl FigureMgr {
                             )
                         },
                         // TODO!
-                        _ => target_base,
+                        _ => (target_base, anim_events),
                     };
 
                     state.skeleton = anim::vek::Lerp::lerp(&state.skeleton, &target_bones, dt_lerp);
@@ -3294,7 +3310,7 @@ impl FigureMgr {
                         state.state_time = 0.0;
                     }
 
-                    let target_base = match (
+                    let (target_base, anim_events) = match (
                         physics.on_ground,
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
@@ -3351,7 +3367,7 @@ impl FigureMgr {
                             skeleton_attr,
                         ),
                     };
-                    let target_bones = match &character {
+                    let (target_bones, _anim_events) = match &character {
                         CharacterState::Sit { .. } => {
                             anim::bird_large::FeedAnimation::update_skeleton(
                                 &target_base,
@@ -3504,7 +3520,7 @@ impl FigureMgr {
                             }
                         },
                         // TODO!
-                        _ => target_base,
+                        _ => (target_base, anim_events),
                     };
 
                     state.skeleton = anim::vek::Lerp::lerp(&state.skeleton, &target_bones, dt_lerp);
@@ -3558,7 +3574,7 @@ impl FigureMgr {
                         state.state_time = 0.0;
                     }
 
-                    let target_base = match (
+                    let (target_base, _anim_events) = match (
                         physics.on_ground,
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
@@ -3647,7 +3663,7 @@ impl FigureMgr {
                         state.state_time = 0.0;
                     }
 
-                    let target_base = match (
+                    let (target_base, anim_events) = match (
                         physics.on_ground,
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
@@ -3686,7 +3702,7 @@ impl FigureMgr {
                             skeleton_attr,
                         ),
                     };
-                    let target_bones = match &character {
+                    let (target_bones, _anim_events) = match &character {
                         CharacterState::Equipping { .. } => {
                             anim::biped_large::EquipAnimation::update_skeleton(
                                 &target_base,
@@ -4117,7 +4133,7 @@ impl FigureMgr {
                             )
                         },
                         // TODO!
-                        _ => target_base,
+                        _ => (target_base, anim_events),
                     };
 
                     state.skeleton = anim::vek::Lerp::lerp(&state.skeleton, &target_bones, dt_lerp);
@@ -4168,7 +4184,7 @@ impl FigureMgr {
                         state.state_time = 0.0;
                     }
 
-                    let target_base = match (
+                    let (target_base, anim_events) = match (
                         physics.on_ground,
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
@@ -4219,7 +4235,7 @@ impl FigureMgr {
                             skeleton_attr,
                         ),
                     };
-                    let target_bones = match &character {
+                    let (target_bones, _anim_events) = match &character {
                         CharacterState::ComboMelee(s) => {
                             let stage_index = (s.stage - 1) as usize;
                             let stage_time = s.timer.as_secs_f32();
@@ -4301,7 +4317,7 @@ impl FigureMgr {
                             )
                         },
                         // TODO!
-                        _ => target_base,
+                        _ => (target_base, anim_events),
                     };
 
                     state.skeleton = anim::vek::Lerp::lerp(&state.skeleton, &target_bones, dt_lerp);
@@ -4354,7 +4370,7 @@ impl FigureMgr {
                         state.state_time = 0.0;
                     }
 
-                    let target_base = match (
+                    let (target_base, anim_events) = match (
                         physics.on_ground,
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
@@ -4376,7 +4392,7 @@ impl FigureMgr {
                         ),
                     };
 
-                    let target_bones = match &character {
+                    let (target_bones, _anim_events) = match &character {
                         CharacterState::BasicRanged(s) => {
                             let stage_time = s.timer.as_secs_f32();
 
@@ -4429,7 +4445,7 @@ impl FigureMgr {
                             )
                         },
                         // TODO!
-                        _ => target_base,
+                        _ => (target_base, anim_events),
                     };
 
                     state.skeleton = anim::vek::Lerp::lerp(&state.skeleton, &target_bones, dt_lerp);
@@ -4483,7 +4499,7 @@ impl FigureMgr {
                         state.state_time = 0.0;
                     }
 
-                    let target_base = match (
+                    let (target_base, anim_events) = match (
                         physics.on_ground,
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
@@ -4520,9 +4536,9 @@ impl FigureMgr {
                     };
 
                     #[allow(clippy::match_single_binding)]
-                    let target_bones = match &character {
+                    let (target_bones, _anim_events) = match &character {
                         // TODO!
-                        _ => target_base,
+                        _ => (target_base, anim_events),
                     };
 
                     state.skeleton = anim::vek::Lerp::lerp(&state.skeleton, &target_bones, dt_lerp);

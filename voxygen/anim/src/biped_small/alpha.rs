@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     BipedSmallSkeleton, SkeletonAttr,
 };
 use common::{
@@ -47,8 +47,9 @@ impl Animation for AlphaAnimation {
         anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
         let speed = Vec2::<f32>::from(velocity).magnitude();
 
         let fast = (anim_time * 10.0).sin();
@@ -140,6 +141,6 @@ impl Animation for AlphaAnimation {
             },
             _ => {},
         }
-        next
+        (next, anim_events)
     }
 }

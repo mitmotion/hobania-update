@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     BipedLargeSkeleton, SkeletonAttr,
 };
 use common::{comp::item::ToolKind, states::utils::StageSection};
@@ -26,9 +26,10 @@ impl Animation for LeapAnimation {
         anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         *rate = 1.0;
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let (movement1, movement2, movement3, movement4) = match stage_section {
             Some(StageSection::Buildup) => (anim_time, 0.0, 0.0, 0.0),
@@ -83,6 +84,6 @@ impl Animation for LeapAnimation {
             next.foot_r.orientation = Quaternion::rotation_x(0.9 + movement3 * -1.7);
         }
 
-        next
+        (next, anim_events)
     }
 }

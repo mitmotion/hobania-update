@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     GolemSkeleton, SkeletonAttr,
 };
 use std::{f32::consts::PI, ops::Mul};
@@ -21,8 +21,9 @@ impl Animation for IdleAnimation {
         anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let lab: f32 = 1.0;
         let breathe = (anim_time * lab + 1.5 * PI).sin();
@@ -82,6 +83,7 @@ impl Animation for IdleAnimation {
         next.foot_r.position = Vec3::new(s_a.foot.0, s_a.foot.1, s_a.foot.2 + breathe * -0.2);
 
         next.torso.position = Vec3::new(0.0, 0.0, 0.0);
-        next
+
+        (next, anim_events)
     }
 }

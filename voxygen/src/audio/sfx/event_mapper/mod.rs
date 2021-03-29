@@ -1,7 +1,7 @@
 mod block;
 mod campfire;
 mod combat;
-mod movement;
+//mod movement;
 
 use client::Client;
 use common::terrain::TerrainChunk;
@@ -10,7 +10,7 @@ use common_state::State;
 use block::BlockEventMapper;
 use campfire::CampfireEventMapper;
 use combat::CombatEventMapper;
-use movement::MovementEventMapper;
+//use movement::MovementEventMapper;
 
 use super::SfxTriggers;
 use crate::{
@@ -40,7 +40,7 @@ impl SfxEventMapper {
         Self {
             mappers: vec![
                 Box::new(CombatEventMapper::new()),
-                Box::new(MovementEventMapper::new()),
+                //Box::new(MovementEventMapper::new()),
                 Box::new(BlockEventMapper::new()),
                 Box::new(CampfireEventMapper::new()),
             ],

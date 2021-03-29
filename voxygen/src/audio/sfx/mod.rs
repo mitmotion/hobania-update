@@ -313,9 +313,22 @@ impl SfxMgr {
             return;
         }
         let triggers = self.triggers.read();
+        println!("outcome: {:?}", outcome);
 
         // TODO handle underwater
         match outcome {
+            Outcome::Footstep {
+                pos,
+                ..
+            } => {
+                let sfx_trigger_item = triggers.get_key_value(&SfxEvent::Run(BlockKind::Grass));
+                audio.emit_sfx(
+                    sfx_trigger_item,
+                    *pos,
+                    Some(1.0),
+                    false,
+                );
+            },
             Outcome::Explosion { pos, power, .. } => {
                 let sfx_trigger_item = triggers.get_key_value(&SfxEvent::Explosion);
                 audio.emit_sfx(

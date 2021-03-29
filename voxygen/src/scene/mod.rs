@@ -459,6 +459,7 @@ impl Scene {
         audio: &mut AudioFrontend,
         scene_data: &SceneData,
         client: &Client,
+        outcomes: &mut Vec<Outcome>,
     ) {
         span!(_guard, "maintain", "Scene::maintain");
         // Get player position.
@@ -705,6 +706,7 @@ impl Scene {
             visible_psr_bounds,
             &self.camera,
             Some(&self.terrain),
+            outcomes,
         );
 
         let sun_dir = scene_data.get_sun_dir();

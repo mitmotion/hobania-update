@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     CharacterSkeleton, SkeletonAttr,
 };
 use common::{
@@ -45,12 +45,12 @@ impl Animation for ShootAnimation {
         anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
+        let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
+
         *rate = 1.0;
         let speed = Vec2::<f32>::from(velocity).magnitude();
-
-        let mut next = (*skeleton).clone();
-
         let lab: f32 = 1.0;
         let ori: Vec2<f32> = Vec2::from(orientation);
         let last_ori = Vec2::from(last_ori);
@@ -183,6 +183,6 @@ impl Animation for ShootAnimation {
             next.second = next.main;
         }
 
-        next
+        (next, anim_events)
     }
 }

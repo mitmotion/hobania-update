@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     FishSmallSkeleton, SkeletonAttr,
 };
 use std::f32::consts::PI;
@@ -23,8 +23,9 @@ impl Animation for IdleAnimation {
         anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let slow = (anim_time * 3.5 + PI).sin();
 
@@ -40,6 +41,7 @@ impl Animation for IdleAnimation {
 
         next.fin_r.position = Vec3::new(s_a.fin.0, s_a.fin.1, s_a.fin.2);
         next.fin_r.orientation = Quaternion::rotation_z(-slow * 0.1 + 0.1);
-        next
+
+        (next, anim_events)
     }
 }

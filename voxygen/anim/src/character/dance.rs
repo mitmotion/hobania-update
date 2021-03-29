@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     CharacterSkeleton, SkeletonAttr,
 };
 use common::comp::item::ToolKind;
@@ -21,8 +21,9 @@ impl Animation for DanceAnimation {
         anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         *rate = 1.0;
 
@@ -107,6 +108,6 @@ impl Animation for DanceAnimation {
         next.torso.position = Vec3::new(0.0, -0.3, 0.0) * s_a.scaler;
         next.torso.orientation = Quaternion::rotation_z(short * -0.2);
 
-        next
+        (next, anim_events)
     }
 }

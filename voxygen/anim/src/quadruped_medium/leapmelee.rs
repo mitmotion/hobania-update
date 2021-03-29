@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     QuadrupedMediumSkeleton, SkeletonAttr,
 };
 use common::states::utils::StageSection;
@@ -20,8 +20,9 @@ impl Animation for LeapMeleeAnimation {
         anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
         //let speed = (Vec2::<f32>::from(velocity).magnitude()).min(24.0);
 
         let (movement1base, movement2base, movement3base, movement4) = match stage_section {
@@ -84,6 +85,6 @@ impl Animation for LeapMeleeAnimation {
 
         next.foot_br.orientation = Quaternion::rotation_x(movement1abs * -1.1);
 
-        next
+        (next, anim_events)
     }
 }

@@ -1,8 +1,8 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     CharacterSkeleton, SkeletonAttr,
 };
-use common::comp::item::{Hands, ToolKind};
+use common::{comp::item::{Hands, ToolKind}};
 use std::{f32::consts::PI, ops::Mul};
 
 pub struct SwimWieldAnimation;
@@ -29,8 +29,9 @@ impl Animation for SwimWieldAnimation {
         anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
         *rate = 1.0;
         let lab: f32 = 1.0;
         let speed = Vec3::<f32>::from(velocity).magnitude();
@@ -335,6 +336,6 @@ impl Animation for SwimWieldAnimation {
             next.second = next.main;
         }
 
-        next
+        (next, anim_events)
     }
 }

@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     BipedLargeSkeleton, SkeletonAttr,
 };
 use common::comp::item::ToolKind;
@@ -40,8 +40,9 @@ impl Animation for RunAnimation {
         anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
         let speed = Vec2::<f32>::from(velocity).magnitude();
         let speedavg = Vec2::<f32>::from(avg_vel).magnitude();
 
@@ -433,6 +434,6 @@ impl Animation for RunAnimation {
             next.foot_r.orientation = Quaternion::rotation_x(-0.5 * speednorm + slow * 0.1);
         }
 
-        next
+        (next, anim_events)
     }
 }

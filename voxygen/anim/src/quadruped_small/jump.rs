@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     QuadrupedSmallSkeleton, SkeletonAttr,
 };
 
@@ -19,8 +19,9 @@ impl Animation for JumpAnimation {
         _anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         next.head.position = Vec3::new(0.0, s_a.head.0, s_a.head.1);
 
@@ -41,6 +42,7 @@ impl Animation for JumpAnimation {
         next.leg_br.orientation = Quaternion::rotation_x(0.0);
 
         next.tail.position = Vec3::new(0.0, s_a.tail.0, s_a.tail.1);
-        next
+
+        (next, anim_events)
     }
 }

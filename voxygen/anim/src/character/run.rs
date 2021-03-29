@@ -1,8 +1,10 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     CharacterSkeleton, SkeletonAttr,
 };
-use common::comp::item::{Hands, ToolKind};
+use common::{
+    comp::item::{Hands, ToolKind},
+};
 use std::{f32::consts::PI, ops::Mul};
 
 pub struct RunAnimation;
@@ -44,8 +46,9 @@ impl Animation for RunAnimation {
         anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let mut anim_events: Vec<AnimationEvent> = Vec::new();
 
         let speed = Vec2::<f32>::from(velocity).magnitude();
         *rate = 1.0;
@@ -309,6 +312,13 @@ impl Animation for RunAnimation {
             next.second = next.main;
         }
 
-        next
+        if (footvertsl).abs() < 0.1 {
+            anim_events.push(AnimationEvent::Footstep { pos_offset: (next.foot_l.position + next.torso.position) / 11.0 });
+        }
+        if (footvertsr).abs() < 0.1 {
+            anim_events.push(AnimationEvent::Footstep { pos_offset: (next.foot_r.position + next.torso.position) / 11.0 });
+        }
+
+        (next, anim_events)
     }
 }

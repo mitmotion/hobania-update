@@ -68,6 +68,10 @@ pub enum Outcome {
         pos: Vec3<f32>,
         state: PoiseState,
     },
+    Footstep {
+        pos: Vec3<f32>,
+        vel: f32,
+    },
 }
 
 impl Outcome {
@@ -81,6 +85,7 @@ impl Outcome {
             | Outcome::SummonedCreature { pos, .. }
             | Outcome::Damage { pos, .. }
             | Outcome::Block { pos, .. }
+            | Outcome::Footstep { pos, .. }
             | Outcome::PoiseChange { pos, .. } => Some(*pos),
             Outcome::BreakBlock { pos, .. } => Some(pos.map(|e| e as f32 + 0.5)),
             Outcome::ExpChange { .. } | Outcome::ComboChange { .. } => None,

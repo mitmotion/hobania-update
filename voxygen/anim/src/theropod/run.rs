@@ -1,4 +1,4 @@
-use super::{super::Animation, SkeletonAttr, TheropodSkeleton};
+use super::{super::{AnimationEvent, Animation}, SkeletonAttr, TheropodSkeleton};
 //use std::{f32::consts::PI, ops::Mul};
 use super::super::vek::*;
 use std::f32::consts::PI;
@@ -19,8 +19,9 @@ impl Animation for RunAnimation {
         anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
         let speed = (Vec2::<f32>::from(velocity).magnitude()).min(22.0);
         *rate = 1.0;
 
@@ -145,6 +146,6 @@ impl Animation for RunAnimation {
         next.foot_r.orientation = Quaternion::rotation_x(-0.2 * speednorm + foot2b * -0.35)
             * Quaternion::rotation_y(tilt * -1.0);
 
-        next
+        (next, anim_events)
     }
 }

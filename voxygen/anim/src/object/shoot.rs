@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     ObjectSkeleton, SkeletonAttr,
 };
 use common::{
@@ -29,10 +29,11 @@ impl Animation for ShootAnimation {
         anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         *rate = 1.0;
 
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let (movement1, movement2, movement3) = match stage_section {
             Some(StageSection::Buildup) => (anim_time, 0.0, 0.0),
@@ -57,6 +58,6 @@ impl Animation for ShootAnimation {
             _ => {},
         }
 
-        next
+        (next, anim_events)
     }
 }

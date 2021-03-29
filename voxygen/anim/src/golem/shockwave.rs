@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     GolemSkeleton, SkeletonAttr,
 };
 use common::states::utils::StageSection;
@@ -22,8 +22,9 @@ impl Animation for ShockwaveAnimation {
         anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let (move1base, move2base, move3) = match stage_section {
             Some(StageSection::Buildup) => (anim_time, 0.0, 0.0),
@@ -75,6 +76,7 @@ impl Animation for ShockwaveAnimation {
             next.foot_r.position = Vec3::new(s_a.foot.0, s_a.foot.1, s_a.foot.2 + move2);
         } else {
         }
-        next
+
+        (next, anim_events)
     }
 }

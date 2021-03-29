@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     BipedLargeSkeleton, SkeletonAttr,
 };
 use common::{
@@ -32,9 +32,10 @@ impl Animation for BeamAnimation {
         anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         *rate = 1.0;
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let speed = Vec2::<f32>::from(velocity).magnitude();
 
@@ -124,6 +125,6 @@ impl Animation for BeamAnimation {
             _ => {},
         }
 
-        next
+        (next, anim_events)
     }
 }

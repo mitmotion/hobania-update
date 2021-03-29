@@ -12,7 +12,6 @@ use common::{
     comp::{Body, CharacterState, PhysicsState, Pos, Vel},
     resources::DeltaTime,
     terrain::{BlockKind, TerrainChunk},
-    vol::ReadVol,
 };
 use common_state::State;
 use hashbrown::HashMap;
@@ -100,23 +99,23 @@ impl EventMapper for MovementEventMapper {
                 };
 
                 // Check for SFX config entry for this movement
-                if Self::should_emit(internal_state, triggers.get_key_value(&mapped_event)) {
-                    let underwater = state
-                        .terrain()
-                        .get(cam_pos.map(|e| e.floor() as i32))
-                        .map(|b| b.is_liquid())
-                        .unwrap_or(false);
+                //if Self::should_emit(internal_state, triggers.get_key_value(&mapped_event)) {
+                //    let underwater = state
+                //        .terrain()
+                //        .get(cam_pos.map(|e| e.floor() as i32))
+                //        .map(|b| b.is_liquid())
+                //        .unwrap_or(false);
 
-                    let sfx_trigger_item = triggers.get_key_value(&mapped_event);
-                    audio.emit_sfx(
-                        sfx_trigger_item,
-                        pos.0,
-                        Some(Self::get_volume_for_body_type(body)),
-                        underwater,
-                    );
-                    internal_state.time = Instant::now();
-                    internal_state.distance_travelled = 0.0;
-                }
+                //    let sfx_trigger_item = triggers.get_key_value(&mapped_event);
+                //    audio.emit_sfx(
+                //        sfx_trigger_item,
+                //        pos.0,
+                //        Some(Self::get_volume_for_body_type(body)),
+                //        underwater,
+                //    );
+                //    internal_state.time = Instant::now();
+                //    internal_state.distance_travelled = 0.0;
+                //}
 
                 // update state to determine the next event. We only record the time (above) if
                 // it was dispatched
@@ -160,24 +159,24 @@ impl MovementEventMapper {
     /// file(s) to play) 2. The sfx has not been played since it's timeout
     /// threshold has elapsed, which prevents firing every tick. For movement,
     /// threshold is not a time, but a distance.
-    fn should_emit(
-        previous_state: &PreviousEntityState,
-        sfx_trigger_item: Option<(&SfxEvent, &SfxTriggerItem)>,
-    ) -> bool {
-        if let Some((event, item)) = sfx_trigger_item {
-            if &previous_state.event == event {
-                match event {
-                    SfxEvent::Run(_) => previous_state.distance_travelled >= item.threshold,
-                    SfxEvent::QuadRun(_) => previous_state.distance_travelled >= item.threshold,
-                    _ => previous_state.time.elapsed().as_secs_f32() >= item.threshold,
-                }
-            } else {
-                true
-            }
-        } else {
-            false
-        }
-    }
+    //fn should_emit(
+    //    previous_state: &PreviousEntityState,
+    //    sfx_trigger_item: Option<(&SfxEvent, &SfxTriggerItem)>,
+    //) -> bool {
+    //    if let Some((event, item)) = sfx_trigger_item {
+    //        if &previous_state.event == event {
+    //            match event {
+    //                SfxEvent::Run(_) => previous_state.distance_travelled >= item.threshold,
+    //                SfxEvent::QuadRun(_) => previous_state.distance_travelled >= item.threshold,
+    //                _ => previous_state.time.elapsed().as_secs_f32() >= item.threshold,
+    //            }
+    //        } else {
+    //            true
+    //        }
+    //    } else {
+    //        false
+    //    }
+    //}
 
     /// Voxygen has an existing list of character states however that list does
     /// not provide enough resolution to target specific entity events, such
@@ -272,20 +271,20 @@ impl MovementEventMapper {
         }
     }
 
-    /// Returns a relative volume value for a body type. This helps us emit sfx
-    /// at a volume appropriate fot the entity we are emitting the event for
-    fn get_volume_for_body_type(body: &Body) -> f32 {
-        match body {
-            Body::Humanoid(_) => 0.9,
-            Body::QuadrupedSmall(_) => 0.3,
-            Body::QuadrupedMedium(_) => 0.7,
-            Body::QuadrupedLow(_) => 0.7,
-            Body::BirdMedium(_) => 0.3,
-            Body::BirdLarge(_) => 0.2,
-            Body::BipedLarge(_) => 1.0,
-            _ => 0.9,
-        }
-    }
+    ///// Returns a relative volume value for a body type. This helps us emit sfx
+    ///// at a volume appropriate fot the entity we are emitting the event for
+    //fn get_volume_for_body_type(body: &Body) -> f32 {
+    //    match body {
+    //        Body::Humanoid(_) => 0.9,
+    //        Body::QuadrupedSmall(_) => 0.3,
+    //        Body::QuadrupedMedium(_) => 0.7,
+    //        Body::QuadrupedLow(_) => 0.7,
+    //        Body::BirdMedium(_) => 0.3,
+    //        Body::BirdLarge(_) => 0.2,
+    //        Body::BipedLarge(_) => 1.0,
+    //        _ => 0.9,
+    //    }
+    //}
 }
 
 #[cfg(test)] mod tests;

@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     QuadrupedLowSkeleton, SkeletonAttr,
 };
 use std::{f32::consts::PI, ops::Mul};
@@ -20,8 +20,9 @@ impl Animation for IdleAnimation {
         anim_time: f32,
         _rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
         let mut next = (*skeleton).clone();
+        let anim_events: Vec<AnimationEvent> = Vec::new();
 
         let slower = (anim_time * 1.25).sin();
         let slow = (anim_time * 2.5).sin();
@@ -80,6 +81,6 @@ impl Animation for IdleAnimation {
         next.foot_br.position = Vec3::new(s_a.feet_b.0, s_a.feet_b.1, s_a.feet_b.2);
         next.foot_br.orientation = Quaternion::rotation_y(slow * -0.05);
 
-        next
+        (next, anim_events)
     }
 }

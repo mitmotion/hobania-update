@@ -1,5 +1,5 @@
 use super::{
-    super::{vek::*, Animation},
+    super::{AnimationEvent, vek::*, Animation},
     CharacterSkeleton, SkeletonAttr,
 };
 use common::{
@@ -44,12 +44,14 @@ impl Animation for WieldAnimation {
         anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
-    ) -> Self::Skeleton {
+    ) -> (Self::Skeleton, Vec<AnimationEvent>) {
+        let mut next = (*skeleton).clone();
+        let mut anim_events: Vec<AnimationEvent> = Vec::new();
+
         *rate = 1.0;
         let lab: f32 = 1.0;
         let speed = Vec2::<f32>::from(velocity).magnitude();
         let speednorm = speed / 9.5;
-        let mut next = (*skeleton).clone();
         let head_look = Vec2::new(
             (global_time + anim_time / 3.0).floor().mul(7331.0).sin() * 0.2,
             (global_time + anim_time / 3.0).floor().mul(1337.0).sin() * 0.1,
@@ -349,7 +351,13 @@ impl Animation for WieldAnimation {
                     tilt * 1.0 * fast + tilt * 1.0 + fast2 * speednorm * 0.25 + fast2 * 0.1,
                 );
         }
+        if (footvertlstatic).abs() < 0.1 {
+            anim_events.push(AnimationEvent::Footstep { pos_offset: (next.foot_l.position + next.main.position) / 11.0 });
+        }
+        if (footvertrstatic).abs() < 0.1 {
+            anim_events.push(AnimationEvent::Footstep { pos_offset: (next.foot_r.position + next.main.position) / 11.0 });
+        }
 
-        next
+        (next, anim_events)
     }
 }
