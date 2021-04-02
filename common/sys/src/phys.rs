@@ -368,6 +368,12 @@ impl<'a> PhysicsData<'a> {
                                     return;
                                 }
 
+                                // Don't apply repulsion or projectile collision to voxel colliders
+                                // in the e-e loop (the latter is handled in the e-t loop)
+                                if matches!(collider_other, Some(Collider::Voxel { .. })) {
+                                    return;
+                                }
+
                                 entity_entity_collision_checks += 1;
 
                                 const MIN_COLLISION_DIST: f32 = 0.3;
@@ -403,17 +409,9 @@ impl<'a> PhysicsData<'a> {
                                         }
 
                                         // Don't apply repulsive force to projectiles or if
-                                        // we're
-                                        // colliding
-                                        // with a terrain-like entity, or if we are a
-                                        // terrain-like
-                                        // entity
+                                        // we are a terrain-like entity
                                         if diff.magnitude_squared() > 0.0
                                             && !is_projectile
-                                            && !matches!(
-                                                collider_other,
-                                                Some(Collider::Voxel { .. })
-                                            )
                                             && !matches!(collider, Some(Collider::Voxel { .. }))
                                         {
                                             let force = 400.0
@@ -864,17 +862,19 @@ impl<'a> PhysicsData<'a> {
                         .filter_map(|entity| {
                             positions
                                 .get(entity)
+                                .zip(read.uids.get(entity))
                                 .zip(velocities.get(entity))
                                 .zip(previous_phys_cache.get(entity))
                                 .zip(read.colliders.get(entity))
                                 .zip(orientations.get(entity))
-                                .map(|((((pos, vel), previous_cache), collider), ori)| {
-                                    (entity, pos, vel, previous_cache, collider, ori)
+                                .map(|(((((pos, uid), vel), previous_cache), collider), ori)| {
+                                    (entity, uid, pos, vel, previous_cache, collider, ori)
                                 })
                         })
                         .for_each(
                             |(
                                 entity_other,
+                                other,
                                 pos_other,
                                 vel_other,
                                 previous_cache_other,
@@ -974,6 +974,10 @@ impl<'a> PhysicsData<'a> {
                                     cpos.0 = transform_from.mul_point(cpos.0) + wpos;
                                     vel.0 = ori_from.mul_direction(vel.0) + vel_other;
                                     tgt_pos = cpos.0;
+
+                                    if vel != old_vel {
+                                        physics_state.touch_entities.push(*other);
+                                    }
 
                                     // union in the state updates, so that the state isn't just
                                     // based on the most
