@@ -30,7 +30,7 @@ rayon = "1.5"
 specs = { git = "https://github.com/amethyst/specs.git", rev = "f985bec5d456f7b0dd8aae99848f9473c2cd9d46" }
 vek = { version = "=0.14.1", features = ["serde"] }
 hashbrown = { version = "0.11", features = ["rayon", "serde", "nightly"] }
-authc = { git = "https://gitlab.com/veloren/auth.git", rev = "fb3dcbc4962b367253f8f2f92760ef44d2679c9a" }
+authc = { git = "https://gitlab.com/veloren/auth.git", rev = "9d3df28de3bc9a34321b3c99789a9add652cb2ba" }
 
 #TODO: put bot in a different crate
 #bot only

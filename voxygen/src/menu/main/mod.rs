@@ -429,11 +429,16 @@ fn get_client_msg_error(
                 client::AuthClientError::InsecureSchema => {
                     localization.get("main.login.insecure_auth_scheme").into()
                 },
+                client::AuthClientError::InvalidUrl(e) => format!(
+                    "{}: {}",
+                    localization.get("main.login.failed_auth_server_url_invalid"),
+                    e
+                ),
                 client::AuthClientError::ServerError(_, e) => String::from_utf8_lossy(&e).into(),
             },
             Error::AuthServerUrlInvalid(e) => {
                 format!(
-                    "{}: https://{}",
+                    "{}: {}",
                     localization.get("main.login.failed_auth_server_url_invalid"),
                     e
                 )

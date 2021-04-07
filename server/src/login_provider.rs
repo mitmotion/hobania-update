@@ -59,13 +59,6 @@ impl LoginProvider {
         let auth_server = auth_addr.map(|addr| {
             let (scheme, authority) = addr.split_once("://").expect("invalid auth url");
 
-            let scheme = scheme
-                .parse::<authc::Scheme>()
-                .expect("invalid auth url scheme");
-            let authority = authority
-                .parse::<authc::Authority>()
-                .expect("invalid auth url authority");
-
             Arc::new(AuthClient::new(scheme, authority).expect("insecure auth scheme"))
         });
 

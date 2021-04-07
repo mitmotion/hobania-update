@@ -108,12 +108,6 @@ impl BotClient {
         info!("usernames: {:?}", usernames);
         if let Some(auth_addr) = self.menu_client.server_info().auth_provider.as_ref() {
             let (scheme, authority) = auth_addr.split_once("://").expect("invalid auth url");
-            let scheme = scheme
-                .parse::<authc::Scheme>()
-                .expect("invalid auth url scheme");
-            let authority = authority
-                .parse::<authc::Authority>()
-                .expect("invalid auth url authority");
 
             let authc = AuthClient::new(scheme, authority).expect("couldn't connect to , insecure");
             for username in usernames.iter() {

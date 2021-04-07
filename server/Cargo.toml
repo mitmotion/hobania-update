@@ -47,7 +47,7 @@ rayon = "1.5"
 crossbeam-channel = "0.5"
 prometheus = { version = "0.12", default-features = false}
 portpicker = { git = "https://github.com/xMAC94x/portpicker-rs", rev = "df6b37872f3586ac3b21d08b56c8ec7cd92fb172" }
-authc = { git = "https://gitlab.com/veloren/auth.git", rev = "fb3dcbc4962b367253f8f2f92760ef44d2679c9a" }
+authc = { git = "https://gitlab.com/veloren/auth.git", rev = "9d3df28de3bc9a34321b3c99789a9add652cb2ba" }
 slab  = "0.4"
 rand_distr = "0.4.0"
 
