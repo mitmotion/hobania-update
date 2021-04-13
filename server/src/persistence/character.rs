@@ -15,9 +15,9 @@ use crate::{
             convert_body_from_database, convert_body_to_database_json,
             convert_character_from_database, convert_inventory_from_database_items,
             convert_items_to_database_items, convert_loadout_from_database_items,
-            convert_skill_groups_to_database, convert_skills_to_database,
-            convert_stats_from_database, convert_waypoint_from_database_json,
-            convert_waypoint_to_database_json,
+            convert_skill_groups_to_database, convert_skill_set_from_database,
+            convert_skills_to_database, convert_stats_from_database,
+            convert_waypoint_from_database_json, convert_waypoint_to_database_json,
         },
         character_loader::{CharacterCreationResult, CharacterDataResult, CharacterListResult},
         error::Error::DatabaseError,
@@ -122,7 +122,8 @@ pub fn load_character_data(
 
     Ok((
         convert_body_from_database(&char_body)?,
-        convert_stats_from_database(character_data.alias, &skill_data, &skill_group_data),
+        convert_stats_from_database(character_data.alias),
+        convert_skill_set_from_database(&skill_data, &skill_group_data),
         convert_inventory_from_database_items(
             character_containers.inventory_container_id,
             &inventory_items,
@@ -197,7 +198,7 @@ pub fn create_character(
 
     use schema::{body, character, skill_group};
 
-    let (body, stats, inventory, waypoint) = persisted_components;
+    let (body, _stats, skill_set, inventory, waypoint) = persisted_components;
 
     // Fetch new entity IDs for character, inventory and loadout
     let mut new_entity_ids = get_new_entity_ids(connection, |next_id| next_id + 3)?;
@@ -240,8 +241,6 @@ pub fn create_character(
             character_id, pseudo_container_count
         )));
     }
-
-    let skill_set = stats.skill_set;
 
     // Insert body record
     let new_body = Body {
@@ -547,7 +546,7 @@ fn get_pseudo_container_id(
 
 pub fn update(
     char_id: CharacterId,
-    char_stats: comp::Stats,
+    char_skill_set: comp::SkillSet,
     inventory: comp::Inventory,
     char_waypoint: Option<comp::Waypoint>,
     connection: VelorenTransaction,
@@ -635,8 +634,6 @@ pub fn update(
             )));
         }
     }
-
-    let char_skill_set = char_stats.skill_set;
 
     let db_skill_groups = convert_skill_groups_to_database(char_id, char_skill_set.skill_groups);
 

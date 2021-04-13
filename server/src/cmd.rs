@@ -900,6 +900,8 @@ fn handle_spawn(
 
                             let body = body();
 
+                            let npc_name = get_npc_name(id, npc::BodyType::from_body(body));
+
                             let loadout =
                                 LoadoutBuilder::build_loadout(body, None, None, None).build();
 
@@ -909,10 +911,8 @@ fn handle_spawn(
                                 .state
                                 .create_npc(
                                     pos,
-                                    comp::Stats::new(get_npc_name(
-                                        id,
-                                        npc::BodyType::from_body(body),
-                                    )),
+                                    comp::Stats::new(npc_name),
+                                    comp::SkillSet::default(),
                                     comp::Health::new(body, 1),
                                     comp::Poise::new(body),
                                     inventory,
@@ -1020,13 +1020,22 @@ fn handle_spawn_training_dummy(
             let body = comp::Body::Object(comp::object::Body::TrainingDummy);
 
             let stats = comp::Stats::new("Training Dummy".to_string());
+            let skill_set = comp::SkillSet::default();
 
             let health = comp::Health::new(body, 0);
             let poise = comp::Poise::new(body);
 
             server
                 .state
-                .create_npc(pos, stats, health, poise, Inventory::new_empty(), body)
+                .create_npc(
+                    pos,
+                    stats,
+                    skill_set,
+                    health,
+                    poise,
+                    Inventory::new_empty(),
+                    body,
+                )
                 .with(comp::Vel(vel))
                 .with(comp::MountState::Unmounted)
                 .build();
@@ -2445,17 +2454,17 @@ fn handle_skill_point(
         match target {
             Ok(player) => {
                 if let Some(skill_tree) = parse_skill_tree(&skill_tree) {
-                    if let Some(mut stats) = server
+                    if let Some(mut skill_set) = server
                         .state
                         .ecs_mut()
-                        .write_storage::<comp::Stats>()
+                        .write_storage::<comp::SkillSet>()
                         .get_mut(player)
                     {
-                        stats.skill_set.add_skill_points(skill_tree, sp);
+                        skill_set.add_skill_points(skill_tree, sp);
                     } else {
                         error_msg = Some(ServerGeneral::server_msg(
                             ChatType::CommandError,
-                            "Player has no stats!",
+                            "Player has no skills set!",
                         ));
                     }
                 }
