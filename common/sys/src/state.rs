@@ -145,6 +145,7 @@ impl State {
         ecs.register::<comp::Body>();
         ecs.register::<comp::Player>();
         ecs.register::<comp::Stats>();
+        ecs.register::<comp::SkillSet>();
         ecs.register::<comp::Buffs>();
         ecs.register::<comp::Auras>();
         ecs.register::<comp::Energy>();

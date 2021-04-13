@@ -152,9 +152,9 @@ pub fn handle_client_disconnect(server: &mut Server, entity: EcsEntity) -> Event
 }
 
 fn persist_entity(state: &mut State, entity: EcsEntity) -> EcsEntity {
-    if let (Some(presences), Some(stats), Some(inventory), updater) = (
+    if let (Some(presences), Some(skill_set), Some(inventory), updater) = (
         state.read_storage::<Presence>().get(entity),
-        state.read_storage::<comp::Stats>().get(entity),
+        state.read_storage::<comp::SkillSet>().get(entity),
         state.read_storage::<comp::Inventory>().get(entity),
         state
             .ecs()
@@ -163,7 +163,7 @@ fn persist_entity(state: &mut State, entity: EcsEntity) -> EcsEntity {
         if let PresenceKind::Character(character_id) = presences.kind {
             let waypoint_read = state.read_storage::<comp::Waypoint>();
             let waypoint = waypoint_read.get(entity);
-            updater.update(character_id, stats, inventory, waypoint);
+            updater.update(character_id, skill_set, inventory, waypoint);
         }
     }
 

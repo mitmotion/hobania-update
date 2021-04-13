@@ -137,6 +137,7 @@ impl Server {
                 ServerEvent::CreateNpc {
                     pos,
                     stats,
+                    skill_set,
                     health,
                     poise,
                     loadout,
@@ -151,6 +152,7 @@ impl Server {
                     self,
                     pos,
                     stats,
+                    skill_set,
                     health,
                     poise,
                     loadout,

@@ -5,7 +5,7 @@ use crate::persistence::{establish_connection, VelorenConnection};
 use std::{path::Path, sync::Arc};
 use tracing::{error, trace};
 
-pub type CharacterUpdateData = (comp::Stats, comp::Inventory, Option<comp::Waypoint>);
+pub type CharacterUpdateData = (comp::SkillSet, comp::Inventory, Option<comp::Waypoint>);
 
 /// A unidirectional messaging resource for saving characters in a
 /// background thread.
@@ -47,17 +47,17 @@ impl CharacterUpdater {
         updates: impl Iterator<
             Item = (
                 CharacterId,
-                &'a comp::Stats,
+                &'a comp::SkillSet,
                 &'a comp::Inventory,
                 Option<&'a comp::Waypoint>,
             ),
         >,
     ) {
         let updates = updates
-            .map(|(character_id, stats, inventory, waypoint)| {
+            .map(|(character_id, skill_set, inventory, waypoint)| {
                 (
                     character_id,
-                    (stats.clone(), inventory.clone(), waypoint.cloned()),
+                    (skill_set.clone(), inventory.clone(), waypoint.cloned()),
                 )
             })
             .collect::<Vec<_>>();
@@ -71,11 +71,16 @@ impl CharacterUpdater {
     pub fn update(
         &self,
         character_id: CharacterId,
-        stats: &comp::Stats,
+        skill_set: &comp::SkillSet,
         inventory: &comp::Inventory,
         waypoint: Option<&comp::Waypoint>,
     ) {
-        self.batch_update(std::iter::once((character_id, stats, inventory, waypoint)));
+        self.batch_update(std::iter::once((
+            character_id,
+            skill_set,
+            inventory,
+            waypoint,
+        )));
     }
 }
 
@@ -86,10 +91,10 @@ fn execute_batch_update(
     let mut inserted_items = Vec::<Arc<ItemId>>::new();
 
     if let Err(e) = connection.transaction::<_, super::error::Error, _>(|txn| {
-        for (character_id, (stats, inventory, waypoint)) in updates {
+        for (character_id, (skill_set, inventory, waypoint)) in updates {
             inserted_items.append(&mut super::character::update(
                 character_id,
-                stats,
+                skill_set,
                 inventory,
                 waypoint,
                 txn,
@@ -101,7 +106,7 @@ fn execute_batch_update(
         error!(?e, "Error during character batch update transaction");
     }
 
-    // NOTE: On success, updating thee atomics is already taken care of
+    // NOTE: On success, updating the atomics is already taken care of
     // internally.
 }
 
