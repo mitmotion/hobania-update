@@ -1,0 +1,22 @@
+ItemDef(
+    name: "Radish",
+    description: "A radish.",
+    kind: Consumable(
+        kind: "Radish",
+        effect: [
+            Buff((
+                kind: Saturation,
+                data: (
+                    strength: 5.0,
+                    duration: Some((
+                            secs: 10,
+                            nanos: 0,
+                        )),
+                    ),
+                cat_ids: [Natural],
+            )),
+        ]
+    ),
+    quality: Common,
+    tags: [Food],
+)

@@ -2852,6 +2852,26 @@ Lantern: Some((
     ],
     wind_sway: 0.0,
 )),
+Garlic: Some((
+    variations: [
+        (
+            model: "voxygen.voxel.sprite.food.garlic",
+            offset: (-2.5, -2.5, -6.0),
+            lod_axes: (0.0, 0.0, 0.0),
+        ),
+    ],
+    wind_sway: 0.0,
+)),
+Onion: Some((
+    variations: [
+        (
+            model: "voxygen.voxel.sprite.food.onion",
+            offset: (-2.5, -2.5, -5.0),
+            lod_axes: (0.0, 0.0, 0.0),
+        ),
+    ],
+    wind_sway: 0.2,
+)),
 // Anvil
 Anvil: Some((
     variations: [

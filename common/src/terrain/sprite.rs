@@ -1,4 +1,9 @@
-use crate::{comp::tool::ToolKind, make_case_elim};
+use crate::{
+    assets::{Asset, AssetExt, AssetHandle, RonLoader},
+    comp::tool::ToolKind,
+    lottery::LootSpec,
+    make_case_elim,
+};
 use enum_iterator::IntoEnumIterator;
 use hashbrown::HashMap;
 use lazy_static::lazy_static;
@@ -148,113 +153,51 @@ make_case_elim!(
         Cauldron = 0x79,
         Anvil = 0x7A,
         CookingPot = 0x7B,
+        Garlic = 0x7C,
+        Onion = 0x7D,
     }
 );
 
+#[derive(Debug, Deserialize)]
+pub struct SpriteBehaviorManifest {
+    pub solid_height: HashMap<SpriteKind, f32>,
+    pub collectible_id: HashMap<SpriteKind, LootSpec>,
+}
+
+impl Asset for SpriteBehaviorManifest {
+    type Loader = RonLoader;
+
+    const EXTENSION: &'static str = "ron";
+}
+
+lazy_static! {
+    pub static ref SPRITE_BEHAVIOR_MANIFEST: AssetHandle<SpriteBehaviorManifest> =
+        AssetExt::load_expect("common.sprite_behavior_manifest");
+}
+
 impl SpriteKind {
     pub fn solid_height(&self) -> Option<f32> {
-        // Beware: the height *must* be <= `MAX_HEIGHT` or the collision system will not
-        // properly detect it!
-        Some(match self {
-            SpriteKind::Tomato => 1.65,
-            SpriteKind::LargeCactus => 2.5,
-            SpriteKind::Scarecrow => 3.0,
-            SpriteKind::Turnip => 0.36,
-            SpriteKind::Pumpkin => 0.81,
-            SpriteKind::Cabbage => 0.45,
-            SpriteKind::Chest => 1.09,
-            SpriteKind::StreetLamp => 2.65,
-            SpriteKind::Carrot => 0.18,
-            SpriteKind::Radish => 0.18,
-            SpriteKind::FireBowlGround => 0.55,
-            // TODO: Uncomment this when we have a way to open doors
-            // SpriteKind::Door => 3.0,
-            SpriteKind::Bed => 1.54,
-            SpriteKind::Bench => 0.5,
-            SpriteKind::ChairSingle => 0.5,
-            SpriteKind::ChairDouble => 0.5,
-            SpriteKind::CoatRack => 2.36,
-            SpriteKind::Crate => 0.90,
-            SpriteKind::DrawerSmall => 1.0,
-            SpriteKind::DrawerMedium => 2.0,
-            SpriteKind::DrawerLarge => 2.0,
-            SpriteKind::DungeonWallDecor => 1.0,
-            SpriteKind::Planter => 1.09,
-            SpriteKind::TableSide => 1.27,
-            SpriteKind::TableDining => 1.45,
-            SpriteKind::TableDouble => 1.45,
-            SpriteKind::WardrobeSingle => 3.0,
-            SpriteKind::WardrobeDouble => 3.0,
-            SpriteKind::Pot => 0.90,
-            SpriteKind::Mud => 0.36,
-            SpriteKind::ChestBuried => 0.91,
-            SpriteKind::StonyCoral => 1.4,
-            SpriteKind::CraftingBench => 1.18,
-            SpriteKind::Forge => 2.7,
-            SpriteKind::Cauldron => 1.27,
-            SpriteKind::Anvil => 1.1,
-            SpriteKind::CookingPot => 1.36,
-            // TODO: Find suitable heights.
-            SpriteKind::BarrelCactus
-            | SpriteKind::RoundCactus
-            | SpriteKind::ShortCactus
-            | SpriteKind::MedFlatCactus
-            | SpriteKind::ShortFlatCactus
-            | SpriteKind::Apple
-            | SpriteKind::Velorite
-            | SpriteKind::VeloriteFrag
-            | SpriteKind::Coconut
-            | SpriteKind::StreetLampTall
-            | SpriteKind::Window1
-            | SpriteKind::Window2
-            | SpriteKind::Window3
-            | SpriteKind::Window4
-            | SpriteKind::DropGate => 1.0,
-            // TODO: Figure out if this should be solid or not.
-            SpriteKind::Shelf => 1.0,
-            SpriteKind::Lantern => 0.9,
-            _ => return None,
-        })
+        SPRITE_BEHAVIOR_MANIFEST
+            .read()
+            .solid_height
+            .get(self)
+            .copied()
     }
 
     pub fn is_collectible(&self) -> bool {
-        match self {
-            SpriteKind::BlueFlower => false,
-            SpriteKind::PinkFlower => false,
-            SpriteKind::PurpleFlower => false,
-            SpriteKind::RedFlower => true,
-            SpriteKind::WhiteFlower => false,
-            SpriteKind::YellowFlower => false,
-            SpriteKind::Sunflower => true,
-            SpriteKind::LongGrass => false,
-            SpriteKind::MediumGrass => false,
-            SpriteKind::ShortGrass => false,
-            SpriteKind::Apple => true,
-            SpriteKind::Mushroom => true,
-            SpriteKind::CaveMushroom => true,
-            // SpriteKind::Velorite => true,
-            // SpriteKind::VeloriteFrag => true,
-            SpriteKind::Chest => true,
-            SpriteKind::Coconut => true,
-            SpriteKind::Stones => true,
-            SpriteKind::Twigs => true,
-            SpriteKind::Crate => true,
-            SpriteKind::Beehive => true,
-            SpriteKind::VialEmpty => true,
-            SpriteKind::PotionMinor => true,
-            SpriteKind::Bowl => true,
-            SpriteKind::ChestBuried => true,
-            SpriteKind::Mud => true,
-            SpriteKind::Seashells => true,
-            _ => false,
-        }
+        SPRITE_BEHAVIOR_MANIFEST
+            .read()
+            .collectible_id
+            .get(self)
+            .is_some()
+            && !self.mine_tool().is_some()
     }
 
     /// Is the sprite a container that will emit a mystery item?
     pub fn is_container(&self) -> bool {
         matches!(
-            self,
-            SpriteKind::Chest | SpriteKind::ChestBuried | SpriteKind::Mud | SpriteKind::Crate,
+            SPRITE_BEHAVIOR_MANIFEST.read().collectible_id.get(self),
+            Some(LootSpec::LootTable(_)),
         )
     }
 

@@ -1,0 +1,9 @@
+ItemDef(
+    name: "Flax",
+    description: "A stalk of flax.",
+    kind: Ingredient(
+        kind: "Flax",
+    ),
+    quality: Common,
+    tags: [],
+)
