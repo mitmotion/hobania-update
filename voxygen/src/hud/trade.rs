@@ -41,6 +41,9 @@ widget_ids! {
         trade_close,
         bg,
         bg_frame,
+        window_1_top,
+        window_1_bg,
+        window_1_bottom,
         trade_title_bg,
         trade_title,
         inv_alignment[],
@@ -103,21 +106,31 @@ const MAX_TRADE_SLOTS: usize = 16;
 
 impl<'a> Trade<'a> {
     fn background(&mut self, state: &mut ConrodState<'_, State>, ui: &mut UiCell<'_>) {
-        Image::new(self.imgs.inv_bg_bag)
-            .w_h(424.0, 708.0)
+        Image::new(self.imgs.pixel)
+            .w_h(385.0,498.0)
             .middle()
             .color(Some(UI_MAIN))
-            .set(state.ids.bg, ui);
-        Image::new(self.imgs.inv_frame_bag)
-            .w_h(424.0, 708.0)
-            .middle_of(state.ids.bg)
+            .set(state.ids.bg,ui);
+        Image::new(self.imgs.window_1_top)
+            .w_h(385.0, 73.0)
+            .up_from(state.ids.bg,-73.0)
             .color(Some(UI_HIGHLIGHT_0))
-            .set(state.ids.bg_frame, ui);
+            .set(state.ids.window_1_top,ui);
+        Image::new(self.imgs.window_1_bg)
+            .w_h(385.0, 400.0)
+            .down_from(state.ids.window_1_top,-1.0)
+            .color(Some(UI_HIGHLIGHT_0))
+            .set(state.ids.window_1_bg, ui);
+        Image::new(self.imgs.window_1_bottom)
+            .w_h(385.0, 25.0)
+            .down_from(state.ids.window_1_bg,-1.0)
+            .color(Some(UI_HIGHLIGHT_0))
+            .set(state.ids.window_1_bottom, ui);
     }
 
     fn title(&mut self, state: &mut ConrodState<'_, State>, ui: &mut UiCell<'_>) {
         Text::new(&self.localized_strings.get("hud.trade.trade_window"))
-            .mid_top_with_margin_on(state.ids.bg_frame, 9.0)
+            .mid_top_with_margin_on(state.ids.window_1_top, 9.0)
             .font_id(self.fonts.cyri.conrod_id)
             .font_size(self.fonts.cyri.scale(20))
             .color(Color::Rgba(0.0, 0.0, 0.0, 1.0))
@@ -143,7 +156,7 @@ impl<'a> Trade<'a> {
         };
 
         Text::new(&phase_text)
-            .mid_top_with_margin_on(state.ids.bg, 70.0)
+            .mid_top_with_margin_on(state.ids.window_1_bg,10.0)
             .font_id(self.fonts.cyri.conrod_id)
             .font_size(self.fonts.cyri.scale(20))
             .color(Color::Rgba(1.0, 1.0, 1.0, 1.0))
@@ -175,7 +188,7 @@ impl<'a> Trade<'a> {
         // Alignment for Grid
         let mut alignment = Rectangle::fill_with([200.0, 340.0], color::TRANSPARENT);
         if !ours {
-            alignment = alignment.top_left_with_margins_on(state.ids.bg, 180.0, 46.5);
+            alignment = alignment.top_left_with_margins_on(state.ids.window_1_bg, 110.0, 11.5);
         } else {
             alignment = alignment.right_from(state.ids.inv_alignment[1 - who], 0.0);
         }
@@ -439,7 +452,7 @@ impl<'a> Trade<'a> {
             .w_h(31.0 * 5.0, 12.0 * 2.0)
             .hover_image(self.imgs.button_hover)
             .press_image(self.imgs.button_press)
-            .bottom_left_with_margins_on(state.ids.bg, 80.0, 60.0)
+            .bottom_left_with_margins_on(state.ids.window_1_bg, 20.0, 25.0)
             .label(&self.localized_strings.get("hud.trade.accept"))
             .label_font_size(self.fonts.cyri.scale(14))
             .label_color(TEXT_COLOR)
@@ -478,7 +491,7 @@ impl<'a> Trade<'a> {
             .w_h(24.0, 25.0)
             .hover_image(self.imgs.close_btn_hover)
             .press_image(self.imgs.close_btn_press)
-            .top_right_with_margins_on(state.ids.bg, 0.0, 0.0)
+            .top_right_with_margins_on(state.ids.window_1_top, 0.0, 0.0)
             .set(state.ids.trade_close, ui)
             .was_clicked()
         {
