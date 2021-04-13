@@ -1,0 +1,9 @@
+ItemDef(
+    name: "Wheat",
+    description: "A stalk of wheat.",
+    kind: Ingredient(
+        kind: "Wheat",
+    ),
+    quality: Common,
+    tags: [],
+)

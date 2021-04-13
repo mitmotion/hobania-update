@@ -1856,6 +1856,42 @@
         "voxel.sprite.cabbage.cabbage",
         (0.0, 0.0, 0.0), (-50.0, 30.0, 20.0), 0.8,
     ),
+    Consumable("Corn"): VoxTrans(
+        "voxel.sprite.corn.corn-1",
+        (0.0, 0.0, 0.0), (-50.0, 30.0, 20.0), 1.0,
+    ),
+    Consumable("Garlic"): VoxTrans(
+        "voxel.sprite.food.garlic",
+        (0.0, 0.0, 0.0), (-50.0, 30.0, 20.0), 0.8,
+    ),
+    Consumable("Onion"): VoxTrans(
+        "voxel.sprite.food.onion",
+        (0.0, 0.0, 0.0), (-50.0, 30.0, 20.0), 1.2,
+    ),
+    Consumable("Turnip"): VoxTrans(
+        "voxel.sprite.turnip.turnip-3",
+        (0.0, 0.0, 0.0), (-50.0, 30.0, 20.0), 1.2,
+    ),
+    Ingredient("Wheat"): VoxTrans(
+        "voxel.sprite.wheat_yellow.wheat-0",
+        (0.0, 0.0, 0.0), (-50.0, 30.0, 20.0), 1.2,
+    ),
+    Ingredient("Flax"): VoxTrans(
+        "voxel.sprite.flax.flax-0",
+        (0.0, 0.0, 0.0), (-50.0, 30.0, 20.0), 1.2,
+    ),
+    Consumable("Radish"): VoxTrans(
+        "voxel.sprite.radish.3",
+        (0.0, 0.0, 0.0), (-50.0, 30.0, 20.0), 0.8,
+    ),
+    Consumable("Blueberry"): VoxTrans(
+        "voxel.sprite.blueberry.1",
+        (0.0, 0.0, 0.0), (-50.0, 30.0, 20.0), 0.8,
+    ),
+    Consumable("Pumpkin"): VoxTrans(
+        "voxel.sprite.pumpkin.2",
+        (0.0, 0.0, 0.0), (-50.0, 30.0, 20.0), 0.8,
+    ),
     Consumable("Fish"): VoxTrans(
         "voxel.sprite.food.meat_fish",
         (0.0, 0.0, 0.0), (-20.0, 10.0, 20.0), 0.9,

@@ -509,7 +509,7 @@ impl Settlement {
             let field = self.land.new_plot(Plot::Field {
                 farm,
                 seed: rng.gen(),
-                crop: match rng.gen_range(0..8) {
+                crop: match rng.gen_range(0..=11) {
                     0 => Crop::Corn,
                     1 => Crop::Wheat,
                     2 => Crop::Cabbage,
@@ -518,7 +518,10 @@ impl Settlement {
                     5 => Crop::Carrot,
                     6 => Crop::Tomato,
                     7 => Crop::Radish,
-                    _ => Crop::Sunflower,
+                    8 => Crop::Turnip,
+                    9 => Crop::Sunflower,
+                    10 => Crop::Garlic,
+                    _ => Crop::Onion,
                 },
             });
             let tiles =
@@ -698,7 +701,13 @@ impl Settlement {
                                         Crop::Tomato if roll(6, 2) == 0 => Some(SpriteKind::Tomato),
                                         Crop::Radish if roll(7, 2) == 0 => Some(SpriteKind::Radish),
                                         Crop::Turnip if roll(8, 2) == 0 => Some(SpriteKind::Turnip),
-                                        Crop::Sunflower => Some(SpriteKind::Sunflower),
+                                        Crop::Sunflower if roll(9, 2) == 0 => {
+                                            Some(SpriteKind::Sunflower)
+                                        },
+                                        Crop::Garlic if roll(10, 2) == 0 => {
+                                            Some(SpriteKind::Garlic)
+                                        },
+                                        Crop::Onion if roll(11, 2) == 0 => Some(SpriteKind::Onion),
                                         _ => surface_sprite,
                                     }
                                     .or_else(|| {
@@ -1055,6 +1064,8 @@ pub enum Crop {
     Radish,
     Turnip,
     Sunflower,
+    Garlic,
+    Onion,
 }
 
 // NOTE: No support for struct variants in make_case_elim yet, unfortunately, so

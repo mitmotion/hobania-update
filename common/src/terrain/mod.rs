@@ -12,7 +12,7 @@ pub use self::{
     block::{Block, BlockKind},
     map::MapSizeLg,
     site::SitesKind,
-    sprite::SpriteKind,
+    sprite::{SpriteKind, SPRITE_BEHAVIOR_MANIFEST},
     structure::{Structure, StructuresGroup},
 };
 use roots::find_roots_cubic;

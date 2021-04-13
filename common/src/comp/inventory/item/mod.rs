@@ -13,9 +13,8 @@ use crate::{
         CharacterAbility,
     },
     effect::Effect,
-    lottery::{LootSpec, Lottery},
     recipe::RecipeInput,
-    terrain::{Block, SpriteKind},
+    terrain::{Block, SPRITE_BEHAVIOR_MANIFEST},
 };
 use core::{
     convert::TryFrom,
@@ -703,66 +702,13 @@ impl Item {
     pub fn slot_mut(&mut self, slot: usize) -> Option<&mut InvSlot> { self.slots.get_mut(slot) }
 
     pub fn try_reclaim_from_block(block: Block) -> Option<Self> {
-        let chosen;
-        Some(Item::new_from_asset_expect(match block.get_sprite()? {
-            SpriteKind::Apple => "common.items.food.apple",
-            SpriteKind::Mushroom => "common.items.food.mushroom",
-            SpriteKind::CaveMushroom => "common.items.food.mushroom",
-            SpriteKind::Velorite => "common.items.ore.velorite",
-            SpriteKind::VeloriteFrag => "common.items.ore.veloritefrag",
-            SpriteKind::BlueFlower => "common.items.flowers.blue",
-            SpriteKind::PinkFlower => "common.items.flowers.pink",
-            SpriteKind::PurpleFlower => "common.items.flowers.purple",
-            SpriteKind::RedFlower => "common.items.flowers.red",
-            SpriteKind::WhiteFlower => "common.items.flowers.white",
-            SpriteKind::YellowFlower => "common.items.flowers.yellow",
-            SpriteKind::Sunflower => "common.items.flowers.sunflower",
-            SpriteKind::LongGrass => "common.items.grasses.long",
-            SpriteKind::MediumGrass => "common.items.grasses.medium",
-            SpriteKind::ShortGrass => "common.items.grasses.short",
-            SpriteKind::Coconut => "common.items.food.coconut",
-
-            // Containers
-            // IMPORTANT: Add any new container to `SpriteKind::is_container`
-            SpriteKind::Chest => {
-                chosen = Lottery::<LootSpec>::load_expect("common.loot_tables.sprite.chest").read();
-                return Some(chosen.choose().to_item());
-            },
-            SpriteKind::ChestBuried => {
-                chosen = Lottery::<LootSpec>::load_expect("common.loot_tables.sprite.chest-buried")
-                    .read();
-                return Some(chosen.choose().to_item());
-            },
-            SpriteKind::Mud => {
-                chosen = Lottery::<LootSpec>::load_expect("common.loot_tables.sprite.mud").read();
-                return Some(chosen.choose().to_item());
-            },
-            SpriteKind::Crate => {
-                chosen = Lottery::<LootSpec>::load_expect("common.loot_tables.sprite.crate").read();
-                return Some(chosen.choose().to_item());
-            },
-
-            SpriteKind::Beehive => "common.items.crafting_ing.honey",
-            SpriteKind::Stones => "common.items.crafting_ing.stones",
-            SpriteKind::Twigs => "common.items.crafting_ing.twigs",
-            SpriteKind::VialEmpty => "common.items.crafting_ing.empty_vial",
-            SpriteKind::Bowl => "common.items.crafting_ing.bowl",
-            SpriteKind::PotionMinor => "common.items.consumable.potion_minor",
-            SpriteKind::Amethyst => "common.items.crafting_ing.amethyst",
-            SpriteKind::Ruby => "common.items.crafting_ing.ruby",
-            SpriteKind::Diamond => "common.items.crafting_ing.diamond",
-            SpriteKind::Sapphire => "common.items.crafting_ing.sapphire",
-            SpriteKind::Topaz => "common.items.crafting_ing.topaz",
-            SpriteKind::Emerald => "common.items.crafting_ing.emerald",
-            SpriteKind::AmethystSmall => "common.items.crafting_ing.amethyst",
-            SpriteKind::TopazSmall => "common.items.crafting_ing.topaz",
-            SpriteKind::DiamondSmall => "common.items.crafting_ing.diamond",
-            SpriteKind::RubySmall => "common.items.crafting_ing.ruby",
-            SpriteKind::EmeraldSmall => "common.items.crafting_ing.emerald",
-            SpriteKind::SapphireSmall => "common.items.crafting_ing.sapphire",
-            SpriteKind::Seashells => "common.items.crafting_ing.seashells",
-            _ => return None,
-        }))
+        Some(
+            SPRITE_BEHAVIOR_MANIFEST
+                .read()
+                .collectible_id
+                .get(&block.get_sprite()?)?
+                .to_item(),
+        )
     }
 
     pub fn ability_spec(&self) -> Option<&AbilitySpec> { self.item_def.ability_spec.as_ref() }

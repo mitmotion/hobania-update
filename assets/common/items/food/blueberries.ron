@@ -1,0 +1,22 @@
+ItemDef(
+    name: "Blueberries",
+    description: "Some blueberries.",
+    kind: Consumable(
+        kind: "Blueberries",
+        effect: [
+            Buff((
+                kind: Saturation,
+                data: (
+                    strength: 5.0,
+                    duration: Some((
+                            secs: 10,
+                            nanos: 0,
+                        )),
+                    ),
+                cat_ids: [Natural],
+            )),
+        ]
+    ),
+    quality: Common,
+    tags: [Food],
+)
