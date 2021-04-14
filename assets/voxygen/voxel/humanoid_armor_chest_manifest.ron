@@ -166,5 +166,9 @@
           vox_spec: ("armor.warlock.chest", (-7.0, -3.5, 0.5)),
           color: None
         ),
+        "CultistSlayer": (
+            vox_spec: ("armor.cultist_slayer.chest", (-7.0, -4.0, 2.0)),
+            color: None
+        ),
     },
 ))

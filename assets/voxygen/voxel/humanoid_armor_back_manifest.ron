@@ -48,5 +48,9 @@
             vox_spec: ("armor.warlock.back", (-5.0, -1.5, -15.5)),
             color: None
         ),
+        "CultistSlayer": (
+            vox_spec: ("armor.cultist_slayer.back", (-5.0, -1.5, -15.5)),
+            color: None
+        ),
     },
 ))

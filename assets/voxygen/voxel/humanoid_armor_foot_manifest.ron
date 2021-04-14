@@ -96,5 +96,9 @@
           vox_spec: ("armor.warlock.foot", (-2.5, -3.5, -2.0)),
           color: None
         ),
+        "CultistSlayer": (
+            vox_spec: ("armor.cultist_slayer.shoe_l", (-2.5, -3.5, -2.0)),
+            color: None
+        ),
     },
 ))

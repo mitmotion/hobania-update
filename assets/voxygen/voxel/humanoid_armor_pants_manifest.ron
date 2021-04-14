@@ -124,5 +124,9 @@
             vox_spec: ("armor.warlock.pants", (-5.0, -4.0, -2.0)),
             color: None
         ),
+        "CultistSlayer": (
+            vox_spec: ("armor.cultist_slayer.pants", (-5.0, -3.0, -1.0)),
+            color: None
+        ),
     },
 ))

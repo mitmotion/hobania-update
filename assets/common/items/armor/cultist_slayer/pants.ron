@@ -1,0 +1,13 @@
+ItemDef(
+    name: "Cultist Slayer Gauntlets",
+   description: "For light and honor.",
+    kind: Armor((
+        kind: Pants("CultistSlayer"),
+        stats: (
+            protection: Normal(24.0),
+            poise_resilience: Normal(1.0),
+        ),
+    )),
+    quality: Epic,
+    tags: [],
+)

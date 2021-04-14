@@ -1126,6 +1126,51 @@
         "voxel.armor.cultist.shoulder",
         (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.2,
     ),
+    // Cultist Slayer Set
+    Armor(Chest("CultistSlayer")): VoxTrans(
+        "voxel.armor.cultist.chest",
+        (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.2,
+    ),
+    Armor(Pants("CultistSlayer")): VoxTrans(
+        "voxel.armor.cultist_slayer.pants",
+        (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.2,
+    ),
+    Armor(Belt("CultistSlayer")): VoxTrans(
+        "voxel.armor.cultist_slayer.belt",
+        (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.4,
+    ),
+    Armor(Foot("CultistSlayer")): VoxTrans(
+        "voxel.armor.cultist_slayer.shoe_l",
+        (0.0, 0.0, 0.0), (-95.0, 140.0, 0.0), 1.1,
+    ),
+    Armor(Hand("CultistSlayer")): VoxTrans(
+        "voxel.armor.cultist_slayer.hand_l",
+        (0.0, -1.0, 0.0), (-90.0, 135.0, 0.0), 1.0,
+    ),
+    Armor(Shoulder("CultistSlayer")): VoxTrans(
+        "voxel.armor.cultist_slayer.shoulder_r",
+        (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.2,
+    ),
+    Armor(Chest("CultistSlayer")): VoxTrans(
+        "voxel.armor.cultist_slayer.chest",
+        (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.2,
+    ),
+    Armor(Pants("CultistSlayer")): VoxTrans(
+        "voxel.armor.cultist_slayer.pants",
+        (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.2,
+    ),
+    Armor(Hand("CultistSlayer")): VoxTrans(
+        "voxel.armor.cultist_slayer.hand_l",
+        (0.0, -1.0, 0.0), (-90.0, 135.0, 0.0), 1.0,
+    ),
+    Armor(Shoulder("CultistSlayer")): VoxTrans(
+        "voxel.armor.cultist_slayer.shoulder_l",
+        (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.2,
+    ),
+    Armor(Back("CultistSlayer")): VoxTrans(
+        "voxel.armor.cultist_slayer.back",
+        (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.0,
+    ),
     // Druid Set
     Armor(Chest("Druid")): VoxTrans(
         "voxel.armor.druid.chest",

@@ -210,5 +210,15 @@
                 color: None
             )
         ),
+        "CultistSlayer": (
+            left: (
+                vox_spec: ("armor.cultist_slayer.hand_l", (-4.0, -2.0, -4.5)),
+                color: None
+            ),
+            right: (
+                vox_spec: ("armor.cultist_slayer.hand_l", (-2.0, -2.0, -4.5)),
+                color: None
+            )
+        ),
     },
 ))
