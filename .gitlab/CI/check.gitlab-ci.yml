@@ -5,8 +5,12 @@ code-quality:
   script:
     - ln -s /dockercache/cache-all target
     - rm -r target/debug/incremental/veloren_* || echo "all good" # TMP FIX FOR 2021-03-22-nightly
-    - cargo clippy --all-targets --locked -- -D warnings
-    - cargo fmt --all -- --check
+    - pwd
+    - ls ./
+    - ls /dockercache/veloren
+    - cat assets/voxygen/element/v_logo.png | head -n 3
+      #- cargo clippy --all-targets --locked -- -D warnings
+      #- cargo fmt --all -- --check
 
 security:
   extends: .recompile-branch
