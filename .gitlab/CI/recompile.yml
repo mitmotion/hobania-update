@@ -4,13 +4,7 @@
     - veloren-docker
   rules:
     - if: $CI_COMMIT_REF_NAME !~ /^master$/
-      # No '-' here is *very* important: https://docs.gitlab.com/ee/ci/yaml/#complex-rule-clauses
-      changes:
-        - "**/*.{glsl,rs,ron,toml,vox,png}"
-        - "rust-toolchain"
-        - "Cargo.lock"
-        - ".gitlab-ci.yml"
-        - "**/*.yml"
+      when: manual
 
 # like .recompile-branch but will run on master too
 .recompile:
