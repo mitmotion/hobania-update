@@ -14,7 +14,7 @@ tag-test:
   script:
     - git config --global user.email "gitlab@veloren.net"
     - git config --global user.name "Veloren Admin"
-    - git remote add api-origin https://oauth2:${TAGTOKEN}@gitlab.com/veloren/veloren.git
+    - git remote add api-origin https://oauth2:$TAGTOKEN@gitlab.com/veloren/veloren.git
     - git tag -f airshipper
     - git push api-origin --tags -f
 
