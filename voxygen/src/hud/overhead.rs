@@ -444,7 +444,17 @@ impl<'a> Widget for Overhead<'a> {
                         .color(Some(indicator_col))
                         .parent(id)
                         .set(state.ids.level, ui);
+                        
+                    
                     }
+                    // Keep this for testing
+                    /*Text::new(&(combat_rating*10.0).floor().to_string())
+                        .x_y(-37.0 * BARSIZE, MANA_BAR_Y + 6.0)
+                        .font_size(10)
+                        .font_id(self.fonts.cyri.conrod_id)
+                        .color(indicator_col)
+                        .parent(id)
+                        .set(state.ids.level, ui);*/
                 }
                 _ => {},
             }

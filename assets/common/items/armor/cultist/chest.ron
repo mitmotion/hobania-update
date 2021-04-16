@@ -1,6 +1,6 @@
 ItemDef(
     name: "Cultist Chest",
-    description: "Ceremonial attire used by members.",
+    description: "Ceremonial attire used by members.\n\nWearing cultist armor might frighten and anger villagers.",
     kind: Armor((
         kind: Chest("Cultist"),
         stats: (
