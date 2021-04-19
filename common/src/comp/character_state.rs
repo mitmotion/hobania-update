@@ -50,7 +50,7 @@ pub enum CharacterState {
     Dance,
     Talk,
     Sneak,
-    Glide,
+    Glide(glide::Data),
     GlideWield,
     /// A stunned state
     Stunned(stunned::Data),

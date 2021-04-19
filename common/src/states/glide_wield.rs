@@ -1,7 +1,10 @@
 use super::utils::*;
 use crate::{
     comp::{slot::EquipSlot, CharacterState, EnergySource, InventoryAction, StateUpdate},
-    states::behavior::{CharacterBehavior, JoinData},
+    states::{
+        behavior::{CharacterBehavior, JoinData},
+        glide,
+    },
 };
 
 pub struct Data;
@@ -24,7 +27,11 @@ impl CharacterBehavior for Data {
                 .try_change_by(-energy_cost, EnergySource::Glide)
                 .is_ok()
             {
-                update.character = CharacterState::Glide;
+                update.character = CharacterState::Glide(glide::Data::new(
+                    inline_tweak::tweak!(10.0),
+                    inline_tweak::tweak!(1.0),
+                    *data.ori,
+                ));
             } else {
                 update.energy.set_to(0, EnergySource::Glide);
                 update.character = CharacterState::Idle;

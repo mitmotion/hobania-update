@@ -87,3 +87,5 @@ pub use comp::inventory::loadout_builder::LoadoutBuilder;
 pub use explosion::{Explosion, RadiusEffect};
 #[cfg(not(target_arch = "wasm32"))]
 pub use skillset_builder::SkillSetBuilder;
+
+pub fn lift_enabled() -> bool { inline_tweak::tweak!(true) }

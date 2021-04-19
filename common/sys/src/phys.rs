@@ -13,6 +13,7 @@ use common::{
     event::{EventBus, ServerEvent},
     outcome::Outcome,
     resources::DeltaTime,
+    states,
     terrain::{Block, TerrainGrid},
     uid::Uid,
     util::Projection,
@@ -64,9 +65,11 @@ fn fluid_density(height: f32, fluid: &Fluid) -> Density {
 fn integrate_forces(
     dt: &DeltaTime,
     mut vel: Vel,
+    ori: &Ori,
     body: &Body,
     density: &Density,
     mass: &Mass,
+    character_state: Option<&CharacterState>,
     fluid: &Fluid,
     gravity: f32,
 ) -> Vel {
@@ -80,7 +83,24 @@ fn integrate_forces(
     // Aerodynamic/hydrodynamic forces
     if !rel_flow.0.is_approx_zero() {
         debug_assert!(!rel_flow.0.map(|a| a.is_nan()).reduce_or());
-        let impulse = dt.0 * body.aerodynamic_forces(&rel_flow, fluid_density.0);
+        let glider: Option<&states::glide::Data> = character_state.and_then(|cs| match cs {
+            CharacterState::Glide(data) => Some(data),
+            _ => None,
+        });
+        // let wings: Option<(RigidWings, Ori)> =
+        // body.wings().map(|w| (w, ori)).or(character_state.and_then(|cs| {
+        //     match cs {
+        //         CharacterState::Glide(states::glide::Data{wings, ori}) =>
+        // Some((*wings, *ori)),         _ => None,
+        //     }
+        // }));
+        let impulse = dt.0
+            * body.aerodynamic_forces(
+                glider.map(|g| &g.ori).unwrap_or(ori),
+                &rel_flow,
+                fluid_density.0,
+                glider.map(|g| g.wings).or_else(|| body.wings()).as_ref(),
+            );
         debug_assert!(!impulse.map(|a| a.is_nan()).reduce_or());
         if !impulse.is_approx_zero() {
             let v_sq = rel_flow.0.magnitude_squared();
@@ -97,7 +117,8 @@ fn integrate_forces(
 
     // Hydrostatic/aerostatic forces
     // modify gravity to account for the effective density as a result of buoyancy
-    let down_force = dt.0 * gravity * (density.0 - fluid_density.0) / density.0;
+    let down_force =
+        dt.0 * inline_tweak::tweak!(1.0) * gravity * (density.0 - fluid_density.0) / density.0;
     vel.0.z -= down_force;
 
     vel
@@ -578,7 +599,9 @@ impl<'a> PhysicsData<'a> {
         (
             positions,
             velocities,
+            &write.orientations,
             &read.bodies,
+            read.character_states.maybe(),
             &write.physics_states,
             &read.masses,
             &read.densities,
@@ -590,7 +613,7 @@ impl<'a> PhysicsData<'a> {
                     prof_span!(guard, "velocity update rayon job");
                     guard
                 },
-                |_guard, (pos, vel, body, physics_state, mass, density, _)| {
+                |_guard, (pos, vel, ori, body, character_state, physics_state, mass, density, _)| {
                     let in_loaded_chunk = read
                         .terrain
                         .get_key(read.terrain.pos_key(pos.0.map(|e| e.floor() as i32)))
@@ -609,7 +632,7 @@ impl<'a> PhysicsData<'a> {
                             },
                             Some(fluid) => {
                                 vel.0 = integrate_forces(
-                                    &dt, *vel, body, density, mass, &fluid, GRAVITY,
+                                    &dt, *vel, ori, body, density, mass, character_state, &fluid, GRAVITY,
                                 )
                                 .0
                             },
