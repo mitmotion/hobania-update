@@ -52,7 +52,7 @@ pub use self::{
     body::{
         biped_large, biped_small, bird_large, bird_medium, dragon, fish_medium, fish_small, golem,
         humanoid, object, quadruped_low, quadruped_medium, quadruped_small, ship, theropod,
-        AllBodies, Body, BodyData,
+        AllBodies, Body, BodyData, RigidWings,
     },
     buff::{
         Buff, BuffCategory, BuffChange, BuffData, BuffEffect, BuffId, BuffKind, BuffSource, Buffs,

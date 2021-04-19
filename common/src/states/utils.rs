@@ -6,7 +6,7 @@ use crate::{
         quadruped_low, quadruped_medium, quadruped_small, ship,
         skills::{Skill, SwimSkill},
         theropod, Body, CharacterAbility, CharacterState, Density, InputAttr, InputKind,
-        InventoryAction, StateUpdate,
+        InventoryAction, Ori, StateUpdate,
     },
     consts::{FRIC_GROUND, GRAVITY},
     event::{LocalEvent, ServerEvent},
@@ -367,12 +367,68 @@ fn swim_move(data: &JoinData, update: &mut StateUpdate, efficiency: f32, submers
 
 /// Updates components to move entity as if it's flying
 pub fn fly_move(data: &JoinData, update: &mut StateUpdate, efficiency: f32) -> bool {
-    if let Some(force) = data.body.fly_thrust() {
+    let glider = match data.character {
+        CharacterState::Glide(data) => Some(data),
+        _ => None,
+    };
+    if let Some(force) = data
+        .body
+        .fly_thrust()
+        .or_else(|| glider.is_some().then_some(0.0))
+    {
         let thrust = efficiency * force;
 
         let accel = thrust / data.mass.0;
 
-        handle_orientation(data, update, efficiency);
+        // if lift is enabled we do some more advanced stuff with pitch and roll
+        if crate::lift_enabled() && !matches!(data.body, Body::Ship(_)) {
+            let mut ori = glider.map(|g| g.ori).unwrap_or(update.ori);
+            let fw_dir = ori.look_dir().to_horizontal();
+            let tgt_ori = Some(data.inputs.move_dir)
+                .filter(|mv_dir| !mv_dir.is_approx_zero())
+                .map(|mv_dir| {
+                    Vec3::new(
+                        mv_dir.x,
+                        mv_dir.y,
+                        Lerp::lerp_unclamped(
+                            0.0,
+                            data.inputs.look_dir.z + inline_tweak::tweak!(0.3),
+                            mv_dir.magnitude_squared() * inline_tweak::tweak!(2.0),
+                        ),
+                    )
+                })
+                .and_then(Dir::from_unnormalized)
+                .and_then(|tgt_dir| {
+                    Dir::from_unnormalized(data.vel.0)
+                        .and_then(|moving_dir| moving_dir.to_horizontal())
+                        .map(|moving_dir| {
+                            Ori::from(tgt_dir).rolled_right(
+                                (1.0 - moving_dir.dot(*tgt_dir).max(0.0))
+                                    * ori.right().dot(*tgt_dir).signum()
+                                    * std::f32::consts::PI
+                                    / 3.0,
+                            )
+                        })
+                })
+                .or_else(|| fw_dir.map(Ori::from))
+                .unwrap_or_default();
+            let rate = {
+                let angle = ori.look_dir().angle_between(*data.inputs.look_dir);
+                data.body.base_ori_rate() * efficiency * std::f32::consts::PI / angle
+            };
+
+            ori = ori.slerped_towards(tgt_ori, (data.dt.0 * rate).min(0.1));
+            if let Some(data) = glider {
+                update.character = CharacterState::Glide(glide::Data { ori, ..*data });
+                if let Some(char_ori) = ori.to_horizontal() {
+                    update.ori = char_ori;
+                }
+            } else {
+                update.ori = ori;
+            }
+        } else {
+            handle_orientation(data, update, efficiency);
+        }
 
         // Elevation control
         match data.body {
