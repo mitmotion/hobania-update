@@ -388,6 +388,32 @@ impl Server {
         });
         runtime.block_on(network.listen(ListenAddr::Tcp(settings.gameserver_address)))?;
         runtime.block_on(network.listen(ListenAddr::Mpsc(14004)))?;
+
+        let transport_config = quinn::TransportConfig::default();
+        let mut server_config = quinn::ServerConfig::default();
+        server_config.transport = Arc::new(transport_config);
+        let mut server_config = quinn::ServerConfigBuilder::new(server_config);
+        server_config.protocols(&[b"veloren"]);
+
+        trace!("generating self-signed certificate");
+        let cert = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+        let key = cert.serialize_private_key_der();
+        let cert = cert.serialize_der().unwrap();
+
+        info!(?key, "KEY");
+        info!(?cert, "CERT");
+
+        let key = quinn::PrivateKey::from_der(&key).expect("private key failed");
+        let cert = quinn::Certificate::from_der(&cert).expect("cert failed");
+        server_config
+            .certificate(quinn::CertificateChain::from_certs(vec![cert.clone()]), key)
+            .expect("set cert failed");
+
+        let server_config = server_config.build();
+
+        runtime.block_on(
+            network.listen(ListenAddr::Quic(settings.gameserver_address, server_config)),
+        )?;
         let connection_handler = ConnectionHandler::new(network, &runtime);
 
         // Initiate real-time world simulation
