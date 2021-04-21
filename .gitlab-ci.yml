@@ -2,6 +2,7 @@ stages:
   - check
   - build
   - publish
+  - analyze
 
 variables:
   # Note: this is deprecated!
@@ -47,3 +48,4 @@ include:
   - local: .gitlab/CI/check.gitlab-ci.yml
   - local: .gitlab/CI/build.gitlab-ci.yml
   - local: .gitlab/CI/publish.gitlab-ci.yml
+  - local: .gitlab/CI/analyze.gitlab-ci.yml
