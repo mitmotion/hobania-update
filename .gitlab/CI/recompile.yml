@@ -28,7 +28,7 @@
 .post-merge:
   stage: build
   tags:
-    - veloren-docker
+    - veloren-wgpu-docker
   rules:
     - if: $CI_COMMIT_REF_NAME =~ /^master$/
       changes:
