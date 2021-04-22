@@ -175,7 +175,6 @@ impl ParticlePipeline {
         device: &wgpu::Device,
         vs_module: &wgpu::ShaderModule,
         fs_module: &wgpu::ShaderModule,
-        sc_desc: &wgpu::SwapChainDescriptor,
         global_layout: &GlobalsLayouts,
         aa_mode: AaMode,
     ) -> Self {
@@ -237,7 +236,8 @@ impl ParticlePipeline {
                 module: fs_module,
                 entry_point: "main",
                 targets: &[wgpu::ColorTargetState {
-                    format: sc_desc.format,
+                    // TODO: use a constant and/or pass in this format on pipeline construction
+                    format: wgpu::TextureFormat::Rgba16Float,
                     blend: Some(wgpu::BlendState {
                         color: wgpu::BlendComponent {
                             src_factor: wgpu::BlendFactor::SrcAlpha,
