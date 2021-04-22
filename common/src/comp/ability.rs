@@ -57,7 +57,7 @@ impl From<&CharacterState> for CharacterAbilityType {
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub enum CharacterAbility {
     BasicMelee {
-        energy_cost: f32,
+        energy_cost: f32,   
         buildup_duration: f32,
         swing_duration: f32,
         recover_duration: f32,
@@ -70,7 +70,7 @@ pub enum CharacterAbility {
     BasicRanged {
         energy_cost: f32,
         buildup_duration: f32,
-        recover_duration: f32,
+        recover_duration: f32,  
         projectile: ProjectileConstructor,
         projectile_body: Body,
         projectile_light: Option<LightEmitter>,
@@ -263,6 +263,13 @@ pub enum CharacterAbility {
         recover_duration: f32,
         summon_amount: u32,
         summon_info: basic_summon::SummonInfo,
+    },
+    TargetedEffect { 
+        buildup_duration: f32,
+        recover_duration: f32,
+        max_range: f32,
+        // TODO: Replace with effect when targeted system created
+        heal: f32, 
     },
 }
 
@@ -552,6 +559,14 @@ impl CharacterAbility {
                 *buildup_duration /= speed;
                 *recover_duration /= speed;
             },
+            TargetedEffect {
+                ref mut buildup_duration,
+                ref mut recover_duration,
+                ..
+            } => {
+                *buildup_duration /= speed;
+                *recover_duration /= speed;
+            },
             BasicSummon {
                 ref mut buildup_duration,
                 ref mut cast_duration,
@@ -589,7 +604,7 @@ impl CharacterAbility {
                     0
                 }
             },
-            BasicBlock | Boost { .. } | ComboMelee { .. } | Blink { .. } | BasicSummon { .. } => 0,
+            BasicBlock | Boost { .. } | ComboMelee { .. } | Blink { .. } | BasicSummon { .. } | TargetedEffect { .. } => 0,
         }
     }
 
@@ -1607,6 +1622,20 @@ impl From<(&CharacterAbility, AbilityInfo)> for CharacterState {
                 timer: Duration::default(),
                 stage_section: StageSection::Buildup,
             }),
+            CharacterAbility::TargetedEffect {
+                buildup_duration,
+                recover_duration,
+                max_range,
+            } => CharacterState::TargetedEffect(targeted_effect::Data {
+                static_data: targeted_effect::StaticData {
+                    buildup_duration: Duration::from_secs_f32(*buildup_duration),
+                    recover_duration: Duration::from_secs_f32(*recover_duration),
+                    max_range: *max_range,
+                    ability_info,
+                },
+                timer: Duration::default(),
+                stage_section: StageSection::Buildup,
+            }),
             CharacterAbility::BasicSummon {
                 buildup_duration,
                 cast_duration,
@@ -1626,6 +1655,7 @@ impl From<(&CharacterAbility, AbilityInfo)> for CharacterState {
                 timer: Duration::default(),
                 stage_section: StageSection::Buildup,
             }),
+        
         }
     }
 }

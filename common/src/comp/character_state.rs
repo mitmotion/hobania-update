@@ -97,11 +97,13 @@ pub enum CharacterState {
     Blink(blink::Data),
     /// Summons creatures that fight for the caster
     BasicSummon(basic_summon::Data),
+    /// Targets a specific entity
+    TargetedEffect(targeted_effect::Data),
 }
 
 impl CharacterState {
     pub fn is_wield(&self) -> bool {
-        matches!(
+        matches!(   
             self,
             CharacterState::Wielding
                 | CharacterState::BasicMelee(_)

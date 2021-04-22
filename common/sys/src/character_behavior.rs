@@ -314,6 +314,7 @@ impl<'a> System<'a> for Sys {
                     CharacterState::HealingBeam(data) => data.handle_event(&j, action),
                     CharacterState::Blink(data) => data.handle_event(&j, action),
                     CharacterState::BasicSummon(data) => data.handle_event(&j, action),
+                    CharacterState::TargetedEffect(data) => data.handle_event(&j, action),
                 };
                 local_emitter.append(&mut state_update.local_events);
                 server_emitter.append(&mut state_update.server_events);
@@ -368,6 +369,7 @@ impl<'a> System<'a> for Sys {
                 CharacterState::HealingBeam(data) => data.behavior(&j),
                 CharacterState::Blink(data) => data.behavior(&j),
                 CharacterState::BasicSummon(data) => data.behavior(&j),
+                CharacterState::TargetedEffect(data) => data.behavior(&j),
             };
 
             local_emitter.append(&mut state_update.local_events);
