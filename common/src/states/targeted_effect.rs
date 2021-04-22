@@ -1,5 +1,5 @@
 use crate::{
-    comp::{CharacterState, StateUpdate},
+    comp::{CharacterState, HealthSource, StateUpdate, HealthChange},
     event::ServerEvent,
     states::{
         behavior::{CharacterBehavior, JoinData},
@@ -20,6 +20,8 @@ pub struct StaticData {
     pub max_range: f32,
     /// Miscellaneous information about the ability
     pub ability_info: AbilityInfo,
+    /// Heal
+    pub heal: HealthChange,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -32,7 +34,6 @@ pub struct Data {
     /// What section the character stage is in
     pub stage_section: StageSection,
 }
-
 impl CharacterBehavior for Data {
     fn behavior(&self, data: &JoinData) -> StateUpdate {
         let mut update = StateUpdate::from(data);
@@ -56,10 +57,9 @@ impl CharacterBehavior for Data {
                                 entity: target,
                                 change: HealthChange {
                                     amount: self.static_data.heal as i32,
-                                    cause: HealthSource::Heal { by: Some(data.uid) },
-                            })};
+                                    cause: HealthSource::Heal { by: Some(*data.uid) },
+                             }});
                         }
-                    }
                     }
                     // Transitions to recover section of stage
                     update.character = CharacterState::TargetedEffect(Data {
@@ -92,4 +92,4 @@ impl CharacterBehavior for Data {
 
         update
     }
-}
+}   

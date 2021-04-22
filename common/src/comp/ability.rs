@@ -268,7 +268,6 @@ pub enum CharacterAbility {
         buildup_duration: f32,
         recover_duration: f32,
         max_range: f32,
-        // TODO: Replace with effect when targeted system created
         heal: f32, 
     },
 }
@@ -1625,13 +1624,13 @@ impl From<(&CharacterAbility, AbilityInfo)> for CharacterState {
             CharacterAbility::TargetedEffect {
                 buildup_duration,
                 recover_duration,
-                max_range,
-            } => CharacterState::TargetedEffect(targeted_effect::Data {
+                max_range, heal } => CharacterState::TargetedEffect(targeted_effect::Data {
                 static_data: targeted_effect::StaticData {
                     buildup_duration: Duration::from_secs_f32(*buildup_duration),
                     recover_duration: Duration::from_secs_f32(*recover_duration),
                     max_range: *max_range,
                     ability_info,
+                    heal,
                 },
                 timer: Duration::default(),
                 stage_section: StageSection::Buildup,
