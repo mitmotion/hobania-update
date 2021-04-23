@@ -1,11 +1,11 @@
 ItemDef(
-    name: "Cultist Slayer Belt",
+    name: "Righteous Champion Belt",
     description: "For light and honor.",
     kind: Armor((
         kind: Belt("CultistSlayer"),
         stats: (
-            protection: Normal(6.0),
-            poise_resilience: Normal(1.0),
+            protection: Normal(8.0),
+            poise_resilience: Normal(1.1),
         ),
     )),
     quality: Epic,

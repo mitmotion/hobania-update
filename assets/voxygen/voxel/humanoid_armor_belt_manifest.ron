@@ -97,7 +97,7 @@
             color: None
         ),
         "CultistSlayer": (
-            vox_spec: ("armor.cultist_slayer.belt", (-5.0, -4.0, 1.0)),
+            vox_spec: ("armor.cultist_slayer.belt", (-4.0, -4.0, 1.0)),
             color: None
         ),
     },

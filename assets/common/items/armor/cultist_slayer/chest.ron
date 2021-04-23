@@ -1,11 +1,11 @@
 ItemDef(
-    name: "Cultist Slayer Harness",
+    name: "Righteous Champion Harness",
     description: "For light and honor.",
     kind: Armor((
         kind: Chest("CultistSlayer"),
         stats: (
-            protection: Normal(30.0),
-            poise_resilience: Normal(1.0),
+            protection: Normal(34.0),
+            poise_resilience: Normal(1.4),
         ),
     )),
     quality: Epic,
