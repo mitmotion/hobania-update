@@ -138,7 +138,7 @@ impl Attack {
             accumulated_damage += applied_damage;
             emit_outcome(Outcome::Damage { pos: target.pos });
             if change.amount != 0 {
-                emit(ServerEvent::Damage {
+                emit(ServerEvent::HealthChange {
                     entity: target.entity,
                     change,
                 });
@@ -183,7 +183,7 @@ impl Attack {
                                     },
                                 };
                                 if change.amount != 0 {
-                                    emit(ServerEvent::Damage {
+                                    emit(ServerEvent::HealthChange {
                                         entity: attacker_entity,
                                         change,
                                     });
@@ -208,7 +208,7 @@ impl Attack {
                                 },
                             };
                             if change.amount != 0 {
-                                emit(ServerEvent::Damage {
+                                emit(ServerEvent::HealthChange {
                                     entity: target.entity,
                                     change,
                                 });
@@ -318,7 +318,7 @@ impl Attack {
                                 },
                             };
                             if change.amount != 0 {
-                                emit(ServerEvent::Damage {
+                                emit(ServerEvent::HealthChange {
                                     entity: attacker_entity,
                                     change,
                                 });
@@ -343,7 +343,7 @@ impl Attack {
                             },
                         };
                         if change.amount != 0 {
-                            emit(ServerEvent::Damage {
+                            emit(ServerEvent::HealthChange {
                                 entity: target.entity,
                                 change,
                             });

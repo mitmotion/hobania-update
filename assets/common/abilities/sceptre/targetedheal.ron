@@ -2,5 +2,6 @@ TargetedEffect(
     buildup_duration: 0.5,
     recover_duration: 0.5,
     max_range: 25.0,
-    effect: heal: 100.0,
+    heal: 100.0,
+    energy_cost:150,
 )

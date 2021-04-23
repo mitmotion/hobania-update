@@ -50,6 +50,5 @@ impl Component for Beam {
 pub enum FrontendSpecifier {
     Flamethrower,
     LifestealBeam,
-    HealingBeam,
     Cultist,
 }

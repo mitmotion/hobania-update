@@ -61,7 +61,7 @@
         "hud.skill.sc_heal_cost_title": "Stamina Cost",
         "hud.skill.sc_heal_cost": "Healing others requires 20% less stamina{SP}",
         "hud.skill.sc_heal_range_title": "Range",
-        "hud.skill.sc_heal_range": "Your beam reachs 20% further{SP}",
+        "hud.skill.sc_heal_range": "The duration is decreased by 15%{SP}",
         "hud.skill.sc_wardaura_unlock_title": "Warding Aura Unlock",
         "hud.skill.sc_wardaura_unlock": "Allows you to ward your allies against enemy attacks{SP}",
         "hud.skill.sc_wardaura_strength_title": "Strength",

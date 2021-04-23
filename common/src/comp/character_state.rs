@@ -92,8 +92,6 @@ pub enum CharacterState {
     /// beam as a large amount of functionality needed to be special cased
     /// specifically for the healing beam. There was also functionality present
     /// on basic beam which was unnecessary for the healing beam.
-    HealingBeam(healing_beam::Data),
-    /// A short teleport that targets either a position or entity
     Blink(blink::Data),
     /// Summons creatures that fight for the caster
     BasicSummon(basic_summon::Data),
@@ -119,7 +117,6 @@ impl CharacterState {
                 | CharacterState::Shockwave(_)
                 | CharacterState::BasicBeam(_)
                 | CharacterState::BasicAura(_)
-                | CharacterState::HealingBeam(_)
         )
     }
 
@@ -142,7 +139,6 @@ impl CharacterState {
                 | CharacterState::Shockwave(_)
                 | CharacterState::BasicBeam(_)
                 | CharacterState::BasicAura(_)
-                | CharacterState::HealingBeam(_)
         )
     }
 
@@ -163,7 +159,6 @@ impl CharacterState {
                 | CharacterState::Stunned(_)
                 | CharacterState::Wielding
                 | CharacterState::Talk
-                | CharacterState::HealingBeam(_)
         )
     }
 

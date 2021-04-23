@@ -76,7 +76,7 @@
     ),
     Sceptre: (
         primary: "common.abilities.sceptre.lifestealbeam",
-        secondary: "common.abilities.sceptre.healingbeam",
+        secondary: "common.abilities.sceptre.targetedheal",
         abilities: [
             (Some(Sceptre(UnlockAura)), "common.abilities.sceptre.wardingaura"),
         ],

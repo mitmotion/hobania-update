@@ -35,16 +35,12 @@ pub enum LocalEvent {
 
 #[allow(clippy::large_enum_variant)] // TODO: Pending review in #587
 pub enum ServerEvent {
-    HealthChange {
-        entity: EcsEntity,
-        change: comp::HealthChange,
-    },
     Explosion {
         pos: Vec3<f32>,
         explosion: Explosion,
         owner: Option<Uid>,
     },
-    Damage {
+    HealthChange {
         entity: EcsEntity,
         change: comp::HealthChange,
     },

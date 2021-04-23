@@ -92,7 +92,7 @@ impl Server {
                 ServerEvent::Knockback { entity, impulse } => {
                     handle_knockback(&self, entity, impulse)
                 },
-                ServerEvent::Damage { entity, change } => handle_damage(&self, entity, change),
+                ServerEvent::HealthChange { entity, change } => handle_damage(&self, entity, change),
                 ServerEvent::PoiseChange {
                     entity,
                     change,

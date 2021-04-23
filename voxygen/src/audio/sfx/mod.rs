@@ -390,7 +390,7 @@ impl SfxMgr {
                 audio.play_sfx(file_ref, *pos, None);
             },
             Outcome::Beam { pos, specifier } => match specifier {
-                beam::FrontendSpecifier::LifestealBeam | beam::FrontendSpecifier::HealingBeam => {
+                beam::FrontendSpecifier::LifestealBeam => {
                     let file_ref = "voxygen.audio.sfx.abilities.sceptre_channeling";
                     if thread_rng().gen_bool(0.5) {
                         audio.play_sfx(file_ref, *pos, None);

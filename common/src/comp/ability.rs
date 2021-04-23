@@ -30,6 +30,7 @@ pub enum CharacterAbilityType {
     BasicBeam,
     RepeaterRanged,
     BasicAura,
+
 }
 
 impl From<&CharacterState> for CharacterAbilityType {
@@ -48,7 +49,7 @@ impl From<&CharacterState> for CharacterAbilityType {
             CharacterState::Shockwave(_) => Self::Shockwave,
             CharacterState::BasicBeam(_) => Self::BasicBeam,
             CharacterState::RepeaterRanged(_) => Self::RepeaterRanged,
-            CharacterState::BasicAura(_) => Self::BasicAura,
+            CharacterState::BasicAura(_) => Self::BasicAura,    
             _ => Self::BasicMelee,
         }
     }
@@ -241,17 +242,6 @@ pub enum CharacterAbility {
         range: f32,
         energy_cost: f32,
     },
-    HealingBeam {
-        buildup_duration: f32,
-        recover_duration: f32,
-        beam_duration: f32,
-        heal: f32,
-        tick_rate: f32,
-        range: f32,
-        max_angle: f32,
-        energy_cost: f32,
-        specifier: beam::FrontendSpecifier,
-    },
     Blink {
         buildup_duration: f32,
         recover_duration: f32,
@@ -269,6 +259,7 @@ pub enum CharacterAbility {
         recover_duration: f32,
         max_range: f32,
         heal: f32, 
+        energy_cost: f32,
     },
 }
 
@@ -334,8 +325,15 @@ impl CharacterAbility {
                         .try_change_by(-(*energy_cost as i32), EnergySource::Ability)
                         .is_ok()
             },
-            CharacterAbility::HealingBeam { .. } => data.combo.counter() > 0,
-            _ => true,
+            CharacterAbility::TargetedEffect { energy_cost, .. } => {
+                data.combo.counter() > 0 &&
+                update
+                    .energy
+                    .try_change_by(-(*energy_cost as i32), EnergySource::Ability)
+                    .is_ok()
+            }
+                
+            _=> true,
         }
     }
 
@@ -538,18 +536,6 @@ impl CharacterAbility {
                 *recover_duration /= speed;
                 aura.strength *= power;
             },
-            HealingBeam {
-                ref mut buildup_duration,
-                ref mut recover_duration,
-                ref mut heal,
-                ref mut tick_rate,
-                ..
-            } => {
-                *buildup_duration /= speed;
-                *recover_duration /= speed;
-                *heal *= power;
-                *tick_rate *= speed;
-            },
             Blink {
                 ref mut buildup_duration,
                 ref mut recover_duration,
@@ -594,7 +580,6 @@ impl CharacterAbility {
             | ChargedMelee { energy_cost, .. }
             | ChargedRanged { energy_cost, .. }
             | Shockwave { energy_cost, .. }
-            | HealingBeam { energy_cost, .. }
             | BasicAura { energy_cost, .. } => *energy_cost as u32,
             BasicBeam { energy_drain, .. } => {
                 if *energy_drain > f32::EPSILON {
@@ -1075,26 +1060,6 @@ impl CharacterAbility {
                             (skillset.skill_level(Sceptre(LLifesteal)), damage_effect)
                         {
                             *lifesteal *= 1.15_f32.powi(level.into());
-                        }
-                    },
-                    HealingBeam {
-                        ref mut heal,
-                        ref mut energy_cost,
-                        ref mut range,
-                        ref mut beam_duration,
-                        ..
-                    } => {
-                        if let Ok(Some(level)) = skillset.skill_level(Sceptre(HHeal)) {
-                            *heal *= 1.2_f32.powi(level.into());
-                        }
-                        if let Ok(Some(level)) = skillset.skill_level(Sceptre(HRange)) {
-                            let range_mod = 1.2_f32.powi(level.into());
-                            *range *= range_mod;
-                            // Duration modified to keep velocity constant
-                            *beam_duration *= range_mod;
-                        }
-                        if let Ok(Some(level)) = skillset.skill_level(Sceptre(HCost)) {
-                            *energy_cost *= 0.8_f32.powi(level.into());
                         }
                     },
                     BasicAura {
@@ -1581,32 +1546,6 @@ impl From<(&CharacterAbility, AbilityInfo)> for CharacterState {
                 timer: Duration::default(),
                 stage_section: StageSection::Buildup,
             }),
-            CharacterAbility::HealingBeam {
-                buildup_duration,
-                recover_duration,
-                beam_duration,
-                heal,
-                tick_rate,
-                range,
-                max_angle,
-                energy_cost,
-                specifier,
-            } => CharacterState::HealingBeam(healing_beam::Data {
-                static_data: healing_beam::StaticData {
-                    buildup_duration: Duration::from_secs_f32(*buildup_duration),
-                    recover_duration: Duration::from_secs_f32(*recover_duration),
-                    beam_duration: Duration::from_secs_f32(*beam_duration),
-                    heal: *heal,
-                    tick_rate: *tick_rate,
-                    range: *range,
-                    max_angle: *max_angle,
-                    energy_cost: *energy_cost,
-                    ability_info,
-                    specifier: *specifier,
-                },
-                timer: Duration::default(),
-                stage_section: StageSection::Buildup,
-            }),
             CharacterAbility::Blink {
                 buildup_duration,
                 recover_duration,
@@ -1622,6 +1561,7 @@ impl From<(&CharacterAbility, AbilityInfo)> for CharacterState {
                 stage_section: StageSection::Buildup,
             }),
             CharacterAbility::TargetedEffect {
+                energy_cost,
                 buildup_duration,
                 recover_duration,
                 max_range, heal } => CharacterState::TargetedEffect(targeted_effect::Data {
@@ -1630,7 +1570,7 @@ impl From<(&CharacterAbility, AbilityInfo)> for CharacterState {
                     recover_duration: Duration::from_secs_f32(*recover_duration),
                     max_range: *max_range,
                     ability_info,
-                    heal,
+                    heal: *heal,
                 },
                 timer: Duration::default(),
                 stage_section: StageSection::Buildup,

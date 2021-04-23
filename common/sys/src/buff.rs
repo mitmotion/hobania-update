@@ -132,7 +132,7 @@ impl<'a> System<'a> for Sys {
                                             (health.maximum() as f32 * *accumulated) as i32
                                         },
                                     };
-                                    server_emitter.emit(ServerEvent::Damage {
+                                    server_emitter.emit(ServerEvent::HealthChange {
                                         entity,
                                         change: HealthChange { amount, cause },
                                     });
