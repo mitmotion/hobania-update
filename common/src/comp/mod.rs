@@ -68,7 +68,7 @@ pub use self::{
         InputKind, InventoryAction, InventoryEvent, InventoryManip, MountState, Mounting,
     },
     energy::{Energy, EnergyChange, EnergySource},
-    fluid_dynamics::{Fluid, RigidWings},
+    fluid_dynamics::Fluid,
     group::Group,
     home_chunk::HomeChunk,
     inputs::CanBuild,

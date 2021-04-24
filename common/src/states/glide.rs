@@ -1,6 +1,6 @@
 use super::utils::handle_climb;
 use crate::{
-    comp::{inventory::slot::EquipSlot, CharacterState, Ori, RigidWings, StateUpdate},
+    comp::{inventory::slot::EquipSlot, CharacterState, Ori, StateUpdate},
     states::behavior::{CharacterBehavior, JoinData},
     util::Dir,
 };
@@ -9,14 +9,19 @@ use vek::*;
 
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Data {
-    pub wings: RigidWings,
+    /// The aspect ratio is the ratio of the span squared to actual planform
+    /// area
+    pub aspect_ratio: f32,
+    pub planform_area: f32,
     pub ori: Ori,
 }
 
 impl Data {
     pub fn new(span_length: f32, chord_length: f32, ori: Ori) -> Self {
+        let planform_area = std::f32::consts::PI * chord_length * span_length * 0.25;
         Self {
-            wings: RigidWings::new(span_length, chord_length),
+            aspect_ratio: span_length.powi(2) / planform_area,
+            planform_area,
             ori,
         }
     }

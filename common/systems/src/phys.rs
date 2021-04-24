@@ -9,7 +9,6 @@ use common::{
     event::{EventBus, ServerEvent},
     outcome::Outcome,
     resources::DeltaTime,
-    states,
     terrain::{Block, TerrainGrid},
     uid::Uid,
     util::{Projection, SpatialGrid},
@@ -43,7 +42,6 @@ fn fluid_density(height: f32, fluid: &Fluid) -> Density {
 fn integrate_forces(
     dt: &DeltaTime,
     mut vel: Vel,
-    ori: &Ori,
     body: &Body,
     density: &Density,
     mass: &Mass,
@@ -61,17 +59,7 @@ fn integrate_forces(
     // Aerodynamic/hydrodynamic forces
     if !rel_flow.0.is_approx_zero() {
         debug_assert!(!rel_flow.0.map(|a| a.is_nan()).reduce_or());
-        let glider: Option<&states::glide::Data> = character_state.and_then(|cs| match cs {
-            CharacterState::Glide(data) => Some(data),
-            _ => None,
-        });
-        let impulse = dt.0
-            * body.aerodynamic_forces(
-                glider.map(|g| &g.ori).unwrap_or(ori),
-                &rel_flow,
-                fluid_density.0,
-                glider.map(|g| g.wings).as_ref(),
-            );
+        let impulse = dt.0 * body.aerodynamic_forces(&rel_flow, fluid_density.0, character_state);
         debug_assert!(!impulse.map(|a| a.is_nan()).reduce_or());
         if !impulse.is_approx_zero() {
             let new_v = vel.0 + impulse / mass.0;
@@ -576,7 +564,6 @@ impl<'a> PhysicsData<'a> {
         (
             positions,
             velocities,
-            &write.orientations,
             read.stickies.maybe(),
             &read.bodies,
             read.character_states.maybe(),
@@ -595,7 +582,6 @@ impl<'a> PhysicsData<'a> {
                  (
                     pos,
                     vel,
-                    ori,
                     sticky,
                     body,
                     character_state,
@@ -627,7 +613,6 @@ impl<'a> PhysicsData<'a> {
                                 vel.0 = integrate_forces(
                                     &dt,
                                     *vel,
-                                    ori,
                                     body,
                                     density,
                                     mass,
