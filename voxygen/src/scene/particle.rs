@@ -10,7 +10,7 @@ use common::{
     assets::{AssetExt, DotVoxAsset},
     comp::{
         self, aura, beam, body, buff, item::Reagent, object, BeamSegment, Body, CharacterState,
-        Ori, Pos, Shockwave, Vel,
+        Ori, Pos, Shockwave, Vel, PhysicsState,
     },
     figure::Segment,
     outcome::Outcome,
@@ -254,10 +254,11 @@ impl ParticleMgr {
             "ParticleMgr::maintain_body_particles"
         );
         let ecs = scene_data.state.ecs();
-        for (body, pos, vel) in (
+        for (body, pos, vel, physics_state) in (
             &ecs.read_storage::<Body>(),
             &ecs.read_storage::<Pos>(),
             ecs.read_storage::<Vel>().maybe(),
+            ecs.read_storage::<PhysicsState>().maybe(),
         )
             .join()
         {
@@ -289,6 +290,7 @@ impl ParticleMgr {
                     | object::Body::FireworkWhite
                     | object::Body::FireworkYellow,
                 ) => self.maintain_bomb_particles(scene_data, pos, vel),
+                Body::Humanoid(_) => self.maintain_dust_particles(scene_data, pos, vel, physics_state),
                 _ => {},
             }
         }
@@ -481,6 +483,30 @@ impl ParticleMgr {
                 ParticleMode::CampfireSmoke,
                 pos.0 + vel.map_or(Vec3::zero(), |v| -v.0 * dt * rng.gen::<f32>()),
             ));
+        }
+    }
+
+    fn maintain_dust_particles(&mut self, scene_data: &SceneData, pos: &Pos, vel: Option<&Vel>, physics_state: Option<&PhysicsState>) {
+        span!(
+            _guard,
+            "dust_particles",
+            "ParticleMgr::maintain_dust_particles"
+        );
+        let time = scene_data.state.get_time();
+        let dt = scene_data.state.get_delta_time();
+        let mut rng = thread_rng();
+
+        if let Some(vel) = vel.zip_with(physics_state.filter(|ps| ps.on_ground), |vel, ps| vel.0 - ps.ground_vel) {
+            for _ in 0..self.scheduler.heartbeats(Duration::from_millis((750.0 / (vel.magnitude() + 0.1)).clamped(10.0, 10000.0) as u64)) {
+                // Dust
+                self.particles.push(Particle::new_dust(
+                    Duration::from_millis(500),
+                    time,
+                    pos.0 + Vec2::<f32>::zero().map(|_| rng.gen_range(-0.4..0.4)).with_z(0.0)
+                         - vel * dt * rng.gen::<f32>(),
+                    Rgb::new(150.0, 125.0, 75.0),
+                ));
+            }
         }
     }
 
@@ -1236,6 +1262,23 @@ impl Particle {
                 mode,
                 pos1,
                 pos2,
+            ),
+        }
+    }
+
+    fn new_dust(
+        lifespan: Duration,
+        time: f64,
+        pos: Vec3<f32>,
+        color: Rgb<f32>,
+    ) -> Self {
+        Particle {
+            alive_until: time + lifespan.as_secs_f64(),
+            instance: ParticleInstance::new_dust(
+                time,
+                lifespan.as_secs_f32(),
+                pos,
+                color,
             ),
         }
     }

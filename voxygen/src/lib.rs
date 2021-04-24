@@ -8,7 +8,8 @@
     const_generics,
     drain_filter,
     once_cell,
-    or_patterns
+    or_patterns,
+    option_zip,
 )]
 #![recursion_limit = "2048"]
 

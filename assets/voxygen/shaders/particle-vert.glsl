@@ -64,6 +64,7 @@ const int LIFESTEAL_BEAM = 22;
 const int CULTIST_FLAME = 23;
 const int STATIC_SMOKE = 24;
 const int BLOOD = 25;
+const int DUST = 26;
 
 // meters per second squared (acceleration)
 const float earth_gravity = 9.807;
@@ -419,6 +420,16 @@ void main() {
             ),
             vec3((2.0 * (1 - slow_start(0.8)))),
             vec4(1, 0, 0, 1),
+            spin_in_axis(vec3(1,0,0),0)
+        );
+    } else if (inst_mode == DUST) {
+        attr = Attr(
+            linear_motion(
+                vec3(0),
+                vec3(rand2 * 0.1, rand3 * 0.1, 0.25 + rand4 * 0.5)
+            ),
+            vec3(pow(1.0 - abs(percent() - 0.5) * 2.0, 0.25) * 1.5),
+            vec4(/*inst_dir*/ vec3(0.5, 0.4, 0.1), 1),
             spin_in_axis(vec3(1,0,0),0)
         );
     } else {

@@ -122,6 +122,7 @@ pub enum ParticleMode {
     CultistFlame = 23,
     StaticSmoke = 24,
     Blood = 25,
+    Dust = 26,
 }
 
 impl ParticleMode {
@@ -161,6 +162,23 @@ impl Instance {
             inst_mode: inst_mode as i32,
             inst_pos: inst_pos.into_array(),
             inst_dir: (inst_pos2 - inst_pos).into_array(),
+        }
+    }
+
+    pub fn new_dust(
+        inst_time: f64,
+        lifespan: f32,
+        inst_pos: Vec3<f32>,
+        inst_color: Rgb<f32>,
+    ) -> Self {
+        use rand::Rng;
+        Self {
+            inst_time: inst_time as f32,
+            inst_lifespan: lifespan,
+            inst_entropy: rand::thread_rng().gen(),
+            inst_mode: ParticleMode::Dust as i32,
+            inst_pos: inst_pos.into_array(),
+            inst_dir: inst_color.into_array(),
         }
     }
 }
