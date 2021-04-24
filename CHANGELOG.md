@@ -47,7 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Missing translations can be displayed in English.
 - New large birds npcs
 - Day period dependant wildlife spawns
-- Lift is now calculated based on wing properties, resulting in aerodynamic flight (incl. gliders)
+- Lift is now calculated for gliders based on dimensions (currently same for all)
 
 ### Changed
 
