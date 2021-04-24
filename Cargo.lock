@@ -5473,7 +5473,6 @@ dependencies = [
  "hashbrown",
  "image",
  "indexmap",
- "inline_tweak",
  "lazy_static",
  "num-derive",
  "num-traits",
@@ -5574,7 +5573,6 @@ version = "0.9.0"
 dependencies = [
  "hashbrown",
  "indexmap",
- "inline_tweak",
  "ordered-float 2.1.1",
  "rand 0.8.3",
  "rayon",

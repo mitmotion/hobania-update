@@ -146,7 +146,8 @@ impl Body {
                             if ar > 25.0 {
                                 panic!(
                                     "Aerodynamic lift calculation does not work for aspect ratios \
-                                     > 25"
+                                     > 25. Either decrease span length or increase chord length. \
+                                     The formula for AR is `span^2 / (pi * span/2 * chord/2)`"
                                 );
                             };
                             // Oswald's efficiency factor (empirically derived--very magical)
@@ -275,11 +276,10 @@ fn angle_of_attack(ori: &Ori, rel_flow_dir: &Dir) -> f32 {
 pub fn lift_coefficient(aspect_ratio: f32, planform_area: f32, aoa: f32) -> f32 {
     let aoa_abs = aoa.abs();
     let stall_angle = PI * 0.1;
-    inline_tweak::tweak!(1.0)
-        * planform_area
+    planform_area
         * if aoa_abs < stall_angle {
             lift_slope(aspect_ratio, None) * aoa
-        } else if inline_tweak::tweak!(true) {
+        } else {
             // This is when flow separation and turbulence starts to kick in.
             // Going to just make something up (based on some data), as the alternative is
             // to just throw your hands up and return 0
@@ -294,8 +294,6 @@ pub fn lift_coefficient(aspect_ratio: f32, planform_area: f32, aoa: f32) -> f32 
                 // let's just say lift goes down linearly again until we're at 90°
                 Lerp::lerp(c_l_max, 0.0, (aoa_abs - deg_45) / deg_45) * aoa_s
             }
-        } else {
-            0.0
         }
 }
 

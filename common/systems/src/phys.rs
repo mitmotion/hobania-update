@@ -81,8 +81,7 @@ fn integrate_forces(
 
     // Hydrostatic/aerostatic forces
     // modify gravity to account for the effective density as a result of buoyancy
-    let down_force =
-        dt.0 * inline_tweak::tweak!(1.0) * gravity * (density.0 - fluid_density.0) / density.0;
+    let down_force = dt.0 * gravity * (density.0 - fluid_density.0) / density.0;
     vel.0.z -= down_force;
 
     vel

@@ -55,8 +55,8 @@ impl CharacterBehavior for Data {
                         mv_dir.y,
                         Lerp::lerp_unclamped(
                             0.0,
-                            data.inputs.look_dir.z + inline_tweak::tweak!(0.3),
-                            mv_dir.magnitude_squared() * inline_tweak::tweak!(2.0),
+                            data.inputs.look_dir.z + 0.3,
+                            mv_dir.magnitude_squared() * 2.0,
                         ),
                     )
                 })
