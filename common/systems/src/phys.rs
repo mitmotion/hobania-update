@@ -864,7 +864,7 @@ impl<'a> PhysicsData<'a> {
                                     vel: Vel::zero(),
                                 })
                                 .or_else(|| match physics_state.in_fluid {
-                                    Some(Fluid::Water { .. }) => Some(Fluid::Air {
+                                    Some(Fluid::Water { .. }) | None => Some(Fluid::Air {
                                         elevation: pos.0.z,
                                         vel: Vel::default(),
                                     }),
@@ -1541,7 +1541,7 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
             vel: Vel::zero(),
         })
         .or_else(|| match physics_state.in_fluid {
-            Some(Fluid::Water { .. }) => Some(Fluid::Air {
+            Some(Fluid::Water { .. }) | None => Some(Fluid::Air {
                 elevation: pos.0.z,
                 vel: Vel::default(),
             }),
