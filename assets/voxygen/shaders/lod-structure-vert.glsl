@@ -197,8 +197,8 @@ void main() {
     // ).xyz);
 
     const vec3 normals[8] = vec3[](vec3(-1,0,0), vec3(1,0,0), vec3(0,-1,0), vec3(0,1,0), vec3(0,0,-1), vec3(0,0,1), vec3(0,0,0), vec3(0,0,0));
-    vec3 norm = /*normalize*/normals[(v_norm_ao >> 1u) & 3u].xyz;
-    f_norm = mix(-norm, norm, v_norm_ao & 1u);
+    vec3 norm = /*normalize*/normals[(v_norm_ao >> 0u) & 3u].xyz;
+    f_norm = norm;//mix(-norm, norm, v_norm_ao & 1u);
 
     /* vec3 col = vec3((uvec3(v_col) >> uvec3(0, 8, 16)) & uvec3(0xFFu)) / 255.0;
     f_col = srgb_to_linear(col) * srgb_to_linear(inst_col);
