@@ -85,8 +85,8 @@ impl StructureGen2d {
         let freq_offset = Self::freq_offset(freq);
         assert!(freq_offset * 2 == freq);
 
-        let min_index = Self::sample_to_index_internal(freq, min) - 1;
-        let max_index = Self::sample_to_index_internal(freq, max) + 1;
+        let min_index = Self::sample_to_index_internal(freq, min - spread) - 1;
+        let max_index = Self::sample_to_index_internal(freq, max + spread) + 1;
         assert!(min_index.x < max_index.x);
         // NOTE: xlen > 0
         let xlen = (max_index.x - min_index.x) as u32;

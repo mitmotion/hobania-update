@@ -1617,7 +1617,7 @@ impl Client {
     }
 
     pub fn nearby_zones(&self) -> Option<impl Iterator<Item = Vec2<i32>>> {
-        const ZONE_RADIUS: u32 = 1;
+        const ZONE_RADIUS: u32 = 2;
         let player_zone = self.position()?.xy().map2(TerrainChunkSize::RECT_SIZE, |e, sz| e as i32 / (sz * LodZone::SIZE) as i32);
         Some(Spiral2d::new()
             .take((ZONE_RADIUS * 2 + 1).pow(2) as usize)

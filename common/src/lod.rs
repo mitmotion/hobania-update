@@ -8,7 +8,7 @@ pub struct LodZone {
 
 impl LodZone {
     /// Size in chunks
-    pub const SIZE: u32 = 64;
+    pub const SIZE: u32 = 32;
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

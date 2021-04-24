@@ -49,6 +49,7 @@ impl Lod {
                 Segment::from(&DotVoxAsset::load_expect("voxygen.voxel.mini_tree").read().0),
                 (&mut greedy, &mut mesh, false),
             );
+            println!("Tree mesh has {} vertices", mesh.vertices().len());
             (
                 renderer.create_model(&mesh).expect("Failed to upload sprite model data to the GPU!"),
                 ShadowPipeline::create_col_lights(renderer, &greedy.finalize())
