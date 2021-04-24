@@ -87,6 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed command: "debug", use "/kit debug" instead
 - Gravity component has been removed
 - In-air movement has been removed
+- Energy cost of deploying the glider has been removed
 
 ### Fixed
 
