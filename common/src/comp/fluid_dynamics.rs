@@ -143,6 +143,12 @@ impl Body {
 
                         // drag coefficient due to lift
                         let c_d = {
+                            if ar > 25.0 {
+                                panic!(
+                                    "Aerodynamic lift calculation does not work for aspect ratios \
+                                     > 25"
+                                );
+                            };
                             // Oswald's efficiency factor (empirically derived--very magical)
                             // (this definition should not be used for aspect ratios > 25)
                             let e = 1.78 * (1.0 - 0.045 * ar.powf(0.68)) - 0.64;
@@ -296,6 +302,7 @@ pub fn lift_coefficient(aspect_ratio: f32, planform_area: f32, aoa: f32) -> f32 
 /// The zero-lift profile drag coefficient is the parasite drag on the wings
 /// at the angle of attack which generates no lift
 pub fn zero_lift_drag_coefficient(planform_area: f32) -> f32 {
+    // TODO: verify that it's correct to multiply by planform
     // avg value for Harris' hawk (Parabuteo unicinctus) [1]
     planform_area * 0.02
 }
