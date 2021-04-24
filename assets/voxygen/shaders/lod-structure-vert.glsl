@@ -101,7 +101,7 @@ void main() {
     // float inst_wind_sway = wind_sway.w;
     // vec3 inst_offs = model_offs - focus_off.xyz;
 
-    f_inst_light = vec2(1);//inst_light.xy;
+    f_inst_light = vec2(1, 0);//inst_light.xy;
 
     // vec3 sprite_pos = floor(inst_mat3.xyz * SCALE) + inst_offs;
 
