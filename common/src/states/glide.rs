@@ -64,6 +64,7 @@ impl CharacterBehavior for Data {
                 .and_then(|tgt_dir| {
                     Dir::from_unnormalized(data.vel.0)
                         .and_then(|moving_dir| moving_dir.to_horizontal())
+                        .or_else(|| self.ori.look_dir().to_horizontal())
                         .map(|moving_dir| {
                             Ori::from(tgt_dir).rolled_right(
                                 (1.0 - moving_dir.dot(*tgt_dir).max(0.0))
