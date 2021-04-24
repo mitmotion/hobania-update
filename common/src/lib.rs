@@ -46,6 +46,7 @@ pub mod figure;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod generation;
 #[cfg(not(target_arch = "wasm32"))] pub mod grid;
+#[cfg(not(target_arch = "wasm32"))] pub mod lod;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod lottery;
 #[cfg(not(target_arch = "wasm32"))]

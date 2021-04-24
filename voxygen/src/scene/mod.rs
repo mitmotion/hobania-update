@@ -686,7 +686,7 @@ impl Scene {
             .expect("Failed to update post-process locals");
 
         // Maintain LoD.
-        self.lod.maintain(renderer);
+        self.lod.maintain(renderer, &scene_data);
 
         // Maintain the terrain.
         let (_visible_bounds, visible_light_volume, visible_psr_bounds) = self.terrain.maintain(
@@ -1076,7 +1076,7 @@ impl Scene {
             lod,
             camera_data,
         );
-        self.lod.render(renderer, global);
+        self.lod.render(renderer, global, lod, scene_data);
 
         // Render the skybox.
         renderer.render_skybox(&self.skybox.model, global, &self.skybox.locals, lod);

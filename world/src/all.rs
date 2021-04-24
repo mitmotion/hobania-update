@@ -86,6 +86,7 @@ impl ForestKind {
 
 pub struct TreeAttr {
     pub pos: Vec2<i32>,
+    pub alt_approx: f32,
     pub seed: u32,
     pub scale: f32,
     pub forest_kind: ForestKind,

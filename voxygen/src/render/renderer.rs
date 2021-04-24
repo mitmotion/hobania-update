@@ -5,7 +5,7 @@ use super::{
     mesh::Mesh,
     model::{DynamicModel, Model},
     pipelines::{
-        clouds, figure, fluid, lod_terrain, particle, postprocess, shadow, skybox, sprite, terrain,
+        clouds, figure, fluid, lod_terrain, lod_structure, particle, postprocess, shadow, skybox, sprite, terrain,
         ui, GlobalModel, Globals,
     },
     texture::Texture,
@@ -143,6 +143,8 @@ struct Shaders {
     fluid_frag_shiny: AssetHandle<Glsl>,
     sprite_vert: AssetHandle<Glsl>,
     sprite_frag: AssetHandle<Glsl>,
+    lod_structure_vert: AssetHandle<Glsl>,
+    lod_structure_frag: AssetHandle<Glsl>,
     particle_vert: AssetHandle<Glsl>,
     particle_frag: AssetHandle<Glsl>,
     ui_vert: AssetHandle<Glsl>,
@@ -203,6 +205,8 @@ impl assets::Compound for Shaders {
             fluid_frag_shiny: AssetExt::load("voxygen.shaders.fluid-frag.shiny")?,
             sprite_vert: AssetExt::load("voxygen.shaders.sprite-vert")?,
             sprite_frag: AssetExt::load("voxygen.shaders.sprite-frag")?,
+            lod_structure_vert: AssetExt::load("voxygen.shaders.lod-structure-vert")?,
+            lod_structure_frag: AssetExt::load("voxygen.shaders.lod-structure-frag")?,
             particle_vert: AssetExt::load("voxygen.shaders.particle-vert")?,
             particle_frag: AssetExt::load("voxygen.shaders.particle-frag")?,
             ui_vert: AssetExt::load("voxygen.shaders.ui-vert")?,
@@ -267,6 +271,7 @@ pub struct Renderer {
     terrain_pipeline: GfxPipeline<terrain::pipe::Init<'static>>,
     fluid_pipeline: GfxPipeline<fluid::pipe::Init<'static>>,
     sprite_pipeline: GfxPipeline<sprite::pipe::Init<'static>>,
+    lod_structure_pipeline: GfxPipeline<lod_structure::pipe::Init<'static>>,
     particle_pipeline: GfxPipeline<particle::pipe::Init<'static>>,
     ui_pipeline: GfxPipeline<ui::pipe::Init<'static>>,
     lod_terrain_pipeline: GfxPipeline<lod_terrain::pipe::Init<'static>>,
@@ -319,6 +324,7 @@ impl Renderer {
             terrain_pipeline,
             fluid_pipeline,
             sprite_pipeline,
+            lod_structure_pipeline,
             particle_pipeline,
             ui_pipeline,
             lod_terrain_pipeline,
@@ -415,6 +421,7 @@ impl Renderer {
             terrain_pipeline,
             fluid_pipeline,
             sprite_pipeline,
+            lod_structure_pipeline,
             particle_pipeline,
             ui_pipeline,
             lod_terrain_pipeline,
@@ -907,6 +914,7 @@ impl Renderer {
                 terrain_pipeline,
                 fluid_pipeline,
                 sprite_pipeline,
+                lod_structure_pipeline,
                 particle_pipeline,
                 ui_pipeline,
                 lod_terrain_pipeline,
@@ -922,6 +930,7 @@ impl Renderer {
                 self.terrain_pipeline = terrain_pipeline;
                 self.fluid_pipeline = fluid_pipeline;
                 self.sprite_pipeline = sprite_pipeline;
+                self.lod_structure_pipeline = lod_structure_pipeline;
                 self.particle_pipeline = particle_pipeline;
                 self.ui_pipeline = ui_pipeline;
                 self.lod_terrain_pipeline = lod_terrain_pipeline;
@@ -1673,6 +1682,69 @@ impl Renderer {
         );
     }
 
+    /// Queue the rendering of the provided lod structures in the upcoming
+    /// frame.
+    pub fn render_lod_structures(
+        &mut self,
+        model: &Model<lod_structure::LodStructurePipeline>,
+        col_lights: &Texture<ColLightFmt>,
+        global: &GlobalModel,
+        locals: &Consts<lod_structure::Locals>,
+        instances: &Instances<lod_structure::Instance>,
+        lod: &lod_terrain::LodData,
+    ) {
+        let (point_shadow_maps, directed_shadow_maps) =
+            if let Some(shadow_map) = &mut self.shadow_map {
+                (
+                    (
+                        shadow_map.point_res.clone(),
+                        shadow_map.point_sampler.clone(),
+                    ),
+                    (
+                        shadow_map.directed_res.clone(),
+                        shadow_map.directed_sampler.clone(),
+                    ),
+                )
+            } else {
+                (
+                    (self.noise_tex.srv.clone(), self.noise_tex.sampler.clone()),
+                    (self.noise_tex.srv.clone(), self.noise_tex.sampler.clone()),
+                )
+            };
+
+        self.encoder.draw(
+            &gfx::Slice {
+                start: model.vertex_range().start,
+                end: model.vertex_range().end,
+                base_vertex: 0,
+                instances: Some((instances.count() as u32, 0)),
+                buffer: gfx::IndexBuffer::Auto,
+            },
+            &self.lod_structure_pipeline.pso,
+            &lod_structure::pipe::Data {
+                vbuf: model.vbuf.clone(),
+                ibuf: instances.ibuf.clone(),
+                col_lights: (col_lights.srv.clone(), col_lights.sampler.clone()),
+                // NOTE: It would be nice if this wasn't needed and we could use a constant buffer
+                // offset into the sprite data.  Hopefully, when we switch to wgpu we can do this,
+                // as it offers the exact API we want (the equivalent can be done in OpenGL using
+                // glBindBufferOffset).
+                locals: locals.buf.clone(),
+                globals: global.globals.buf.clone(),
+                lights: global.lights.buf.clone(),
+                shadows: global.shadows.buf.clone(),
+                light_shadows: global.shadow_mats.buf.clone(),
+                point_shadow_maps,
+                directed_shadow_maps,
+                noise: (self.noise_tex.srv.clone(), self.noise_tex.sampler.clone()),
+                alt: (lod.alt.srv.clone(), lod.alt.sampler.clone()),
+                horizon: (lod.horizon.srv.clone(), lod.horizon.sampler.clone()),
+                tgt_color: self.tgt_color_view.clone(),
+                tgt_depth_stencil: (self.tgt_depth_stencil_view.clone()/* , (1, 1) */),
+            },
+        );
+    }
+
     /// Queue the rendering of the provided LoD terrain model in the upcoming
     /// frame.
     pub fn render_lod_terrain(
@@ -1880,6 +1952,7 @@ fn create_pipelines(
         GfxPipeline<terrain::pipe::Init<'static>>,
         GfxPipeline<fluid::pipe::Init<'static>>,
         GfxPipeline<sprite::pipe::Init<'static>>,
+        GfxPipeline<lod_structure::pipe::Init<'static>>,
         GfxPipeline<particle::pipe::Init<'static>>,
         GfxPipeline<ui::pipe::Init<'static>>,
         GfxPipeline<lod_terrain::pipe::Init<'static>>,
@@ -2007,6 +2080,16 @@ fn create_pipelines(
         sprite::pipe::new(),
         &shaders.sprite_vert.read().0,
         &shaders.sprite_frag.read().0,
+        &include_ctx,
+        gfx::state::CullFace::Back,
+    )?;
+
+    // Construct a pipeline for rendering LoD structures
+    let lod_structure_pipeline = create_pipeline(
+        factory,
+        lod_structure::pipe::new(),
+        &shaders.lod_structure_vert.read().0,
+        &shaders.lod_structure_frag.read().0,
         &include_ctx,
         gfx::state::CullFace::Back,
     )?;
@@ -2145,6 +2228,7 @@ fn create_pipelines(
         terrain_pipeline,
         fluid_pipeline,
         sprite_pipeline,
+        lod_structure_pipeline,
         particle_pipeline,
         ui_pipeline,
         lod_terrain_pipeline,

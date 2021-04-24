@@ -25,6 +25,7 @@ pub mod config;
 pub mod index;
 pub mod land;
 pub mod layer;
+pub mod lod;
 pub mod pathfinding;
 pub mod sim;
 pub mod sim2;
@@ -37,6 +38,7 @@ pub use crate::{
     canvas::{Canvas, CanvasInfo},
     config::CONFIG,
     land::Land,
+    lod::LodInfo,
 };
 pub use block::BlockGen;
 pub use column::ColumnSample;
@@ -67,6 +69,7 @@ pub enum Error {
 pub struct World {
     sim: sim::WorldSim,
     civs: civ::Civs,
+    lod: LodInfo,
 }
 
 #[derive(Deserialize)]
@@ -94,12 +97,16 @@ impl World {
 
         sim2::simulate(&mut index, &mut sim);
 
-        (Self { sim, civs }, IndexOwned::new(index))
+        let lod = LodInfo::new(&sim);
+
+        (Self { sim, civs, lod }, IndexOwned::new(index))
     }
 
     pub fn sim(&self) -> &sim::WorldSim { &self.sim }
 
     pub fn civs(&self) -> &civ::Civs { &self.civs }
+
+    pub fn lod(&self) -> &LodInfo { &self.lod }
 
     pub fn tick(&self, _dt: Duration) {
         // TODO

@@ -3,6 +3,7 @@ use crate::sync;
 use common::{
     character::{self, CharacterItem},
     comp::{self, invite::InviteKind, item::MaterialStatManifest},
+    lod::LodZone,
     outcome::Outcome,
     recipe::RecipeBook,
     resources::TimeOfDay,
@@ -109,6 +110,10 @@ pub enum ServerGeneral {
         chunk: Result<CompressedData<TerrainChunk>, ()>,
     },
     TerrainBlockUpdates(CompressedData<HashMap<Vec3<i32>, Block>>),
+    LodZone {
+        key: Vec2<i32>,
+        zone: Option<LodZone>,
+    },
     // Always possible
     PlayerListUpdate(PlayerListUpdate),
     /// A message to go into the client chat box. The client is responsible for
@@ -231,6 +236,7 @@ impl ServerMsg {
                         | ServerGeneral::InventoryUpdate(_, _)
                         | ServerGeneral::TerrainChunkUpdate { .. }
                         | ServerGeneral::TerrainBlockUpdates(_)
+                        | ServerGeneral::LodZone { .. }
                         | ServerGeneral::SetViewDistance(_)
                         | ServerGeneral::Outcomes(_)
                         | ServerGeneral::Knockback(_)

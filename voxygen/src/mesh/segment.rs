@@ -5,7 +5,7 @@ use crate::{
     },
     render::{
         self, FigurePipeline, Mesh, ParticlePipeline, ShadowPipeline, SpritePipeline,
-        TerrainPipeline,
+        TerrainPipeline, LodStructurePipeline,
     },
     scene::math,
 };
@@ -148,6 +148,143 @@ where
         self,
         (greedy, opaque_mesh, vertical_stripes): Self::Supplement,
     ) -> MeshGen<SpritePipeline, &'b mut GreedyMesh<'a>, Self> {
+        let max_size = greedy.max_size();
+        // NOTE: Required because we steal two bits from the normal in the shadow uint
+        // in order to store the bone index.  The two bits are instead taken out
+        // of the atlas coordinates, which is why we "only" allow 1 << 15 per
+        // coordinate instead of 1 << 16.
+        assert!(max_size.width.max(max_size.height) < 1 << 16);
+
+        let lower_bound = self.lower_bound();
+        let upper_bound = self.upper_bound();
+        assert!(
+            lower_bound.x <= upper_bound.x
+                && lower_bound.y <= upper_bound.y
+                && lower_bound.z <= upper_bound.z
+        );
+        // Lower bound coordinates must fit in an i16 (which means upper bound
+        // coordinates fit as integers in a f23).
+        assert!(
+            i16::try_from(lower_bound.x).is_ok()
+                && i16::try_from(lower_bound.y).is_ok()
+                && i16::try_from(lower_bound.z).is_ok(),
+            "Sprite offsets should fit in i16",
+        );
+        let greedy_size = upper_bound - lower_bound + 1;
+        // TODO: Should this be 16, 16, 64?
+        assert!(
+            greedy_size.x <= 32 && greedy_size.y <= 32 && greedy_size.z <= 64,
+            "Sprite size out of bounds: {:?} ≤ (31, 31, 63)",
+            greedy_size - 1
+        );
+
+        let (flat, flat_get) = {
+            let (w, h, d) = (greedy_size + 2).into_tuple();
+            let flat = {
+                let vol = self;
+
+                let mut flat = vec![Cell::empty(); (w * h * d) as usize];
+                let mut i = 0;
+                for x in -1..greedy_size.x + 1 {
+                    for y in -1..greedy_size.y + 1 {
+                        for z in -1..greedy_size.z + 1 {
+                            let wpos = lower_bound + Vec3::new(x, y, z);
+                            let block = vol.get(wpos).map(|b| *b).unwrap_or(Cell::empty());
+                            flat[i] = block;
+                            i += 1;
+                        }
+                    }
+                }
+                flat
+            };
+
+            let flat_get = move |flat: &Vec<Cell>, Vec3 { x, y, z }| match flat
+                .get((x * h * d + y * d + z) as usize)
+                .copied()
+            {
+                Some(b) => b,
+                None => panic!("x {} y {} z {} d {} h {}", x, y, z, d, h),
+            };
+
+            (flat, flat_get)
+        };
+
+        // NOTE: Cast to usize is safe because of previous check, since all values fit
+        // into u16 which is safe to cast to usize.
+        let greedy_size = greedy_size.as_::<usize>();
+
+        let greedy_size_cross = greedy_size;
+        let draw_delta = Vec3::new(1, 1, 1);
+
+        let get_light = move |flat: &mut _, pos: Vec3<i32>| {
+            if flat_get(flat, pos).is_empty() {
+                1.0
+            } else {
+                0.0
+            }
+        };
+        let get_glow = |_flat: &mut _, _pos: Vec3<i32>| 0.0;
+        let get_color = move |flat: &mut _, pos: Vec3<i32>| {
+            flat_get(flat, pos).get_color().unwrap_or(Rgb::zero())
+        };
+        let get_opacity = move |flat: &mut _, pos: Vec3<i32>| flat_get(flat, pos).is_empty();
+        let should_draw = move |flat: &mut _, pos: Vec3<i32>, delta: Vec3<i32>, uv| {
+            should_draw_greedy_ao(vertical_stripes, pos, delta, uv, |vox| flat_get(flat, vox))
+        };
+        // NOTE: Fits in i16 (much lower actually) so f32 is no problem (and the final
+        // position, pos + mesh_delta, is guaranteed to fit in an f32).
+        let mesh_delta = lower_bound.as_::<f32>();
+        let create_opaque = |atlas_pos, pos: Vec3<f32>, norm, _meta| {
+            SpriteVertex::new(atlas_pos, pos + mesh_delta, norm)
+        };
+
+        greedy.push(GreedyConfig {
+            data: flat,
+            draw_delta,
+            greedy_size,
+            greedy_size_cross,
+            get_light,
+            get_glow,
+            get_opacity,
+            should_draw,
+            push_quad: |atlas_origin, dim, origin, draw_dim, norm, meta: &bool| {
+                opaque_mesh.push_quad(greedy::create_quad(
+                    atlas_origin,
+                    dim,
+                    origin,
+                    draw_dim,
+                    norm,
+                    meta,
+                    |atlas_pos, pos, norm, &meta| create_opaque(atlas_pos, pos, norm, meta),
+                ));
+            },
+            make_face_texel: move |flat: &mut _, pos, light, glow| {
+                TerrainVertex::make_col_light(light, glow, get_color(flat, pos))
+            },
+        });
+
+        (Mesh::new(), Mesh::new(), Mesh::new(), ())
+    }
+}
+
+impl<'a: 'b, 'b, V: 'a> Meshable<LodStructurePipeline, &'b mut GreedyMesh<'a>> for V
+where
+    V: BaseVol<Vox = Cell> + ReadVol + SizedVol,
+    /* TODO: Use VolIterator instead of manually iterating
+     * &'a V: IntoVolIterator<'a> + IntoFullVolIterator<'a>,
+     * &'a V: BaseVol<Vox=Cell>, */
+{
+    type Pipeline = LodStructurePipeline;
+    type Result = ();
+    type ShadowPipeline = ShadowPipeline;
+    type Supplement = (&'b mut GreedyMesh<'a>, &'b mut Mesh<Self::Pipeline>, bool);
+    type TranslucentPipeline = LodStructurePipeline;
+
+    #[allow(clippy::or_fun_call)] // TODO: Pending review in #587
+    fn generate_mesh(
+        self,
+        (greedy, opaque_mesh, vertical_stripes): Self::Supplement,
+    ) -> MeshGen<LodStructurePipeline, &'b mut GreedyMesh<'a>, Self> {
         let max_size = greedy.max_size();
         // NOTE: Required because we steal two bits from the normal in the shadow uint
         // in order to store the bone index.  The two bits are instead taken out

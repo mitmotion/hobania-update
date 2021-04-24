@@ -74,8 +74,11 @@ pub enum ClientGeneral {
     RefundSkill(Skill),
     UnlockSkillGroup(SkillGroupKind),
     RequestSiteInfo(SiteId),
-    //Only in Game, via terrain stream
+    // Only in Game, via terrain stream
     TerrainChunkRequest {
+        key: Vec2<i32>,
+    },
+    LodZoneRequest {
         key: Vec2<i32>,
     },
     //Always possible
@@ -117,6 +120,7 @@ impl ClientMsg {
                         | ClientGeneral::ExitInGame
                         | ClientGeneral::PlayerPhysics { .. }
                         | ClientGeneral::TerrainChunkRequest { .. }
+                        | ClientGeneral::LodZoneRequest { .. }
                         | ClientGeneral::UnlockSkill(_)
                         | ClientGeneral::RefundSkill(_)
                         | ClientGeneral::RequestSiteInfo(_)

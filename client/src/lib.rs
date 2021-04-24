@@ -31,9 +31,11 @@ use common::{
     },
     event::{EventBus, LocalEvent},
     grid::Grid,
+    lod::LodZone,
     outcome::Outcome,
     recipe::RecipeBook,
     resources::{DeltaTime, PlayerEntity, TimeOfDay},
+    spiral::Spiral2d,
     terrain::{
         block::Block, map::MapConfig, neighbors, BiomeKind, SitesKind, SpriteKind, TerrainChunk,
         TerrainChunkSize,
@@ -186,8 +188,10 @@ pub struct Client {
     view_distance: Option<u32>,
     // TODO: move into voxygen
     loaded_distance: f32,
+    zones: HashMap<Vec2<i32>, Option<LodZone>>,
 
     pending_chunks: HashMap<Vec2<i32>, Instant>,
+    pending_zones: HashMap<Vec2<i32>, Instant>,
 }
 
 /// Holds data related to the current players characters, as well as some
@@ -685,8 +689,10 @@ impl Client {
             state,
             view_distance,
             loaded_distance: 0.0,
+            zones: HashMap::new(),
 
             pending_chunks: HashMap::new(),
+            pending_zones: HashMap::new(),
         })
     }
 
@@ -790,7 +796,8 @@ impl Client {
                     | ClientGeneral::UnlockSkillGroup(_)
                     | ClientGeneral::RequestPlayerPhysics { .. } => &mut self.in_game_stream,
                     //Only in game, terrain
-                    ClientGeneral::TerrainChunkRequest { .. } => &mut self.terrain_stream,
+                    ClientGeneral::TerrainChunkRequest { .. }
+                    | ClientGeneral::LodZoneRequest { .. }=> &mut self.terrain_stream,
                     //Always possible
                     ClientGeneral::ChatMsg(_) | ClientGeneral::Terminate => {
                         &mut self.general_stream
@@ -1334,6 +1341,7 @@ impl Client {
     pub fn clear_terrain(&mut self) {
         self.state.clear_terrain();
         self.pending_chunks.clear();
+        self.pending_zones.clear();
     }
 
     pub fn place_block(&mut self, pos: Vec3<i32>, block: Block) {
@@ -1486,6 +1494,8 @@ impl Client {
                 self.state.remove_chunk(key);
             }
 
+            let now = Instant::now();
+
             // Request chunks from the server.
             self.loaded_distance = ((view_distance * TerrainChunkSize::RECT_SIZE.x) as f32).powi(2);
             // +1 so we can find a chunk that's outside the vd for better fog
@@ -1523,7 +1533,7 @@ impl Client {
                                     self.send_msg_err(ClientGeneral::TerrainChunkRequest {
                                         key: *key,
                                     })?;
-                                    self.pending_chunks.insert(*key, Instant::now());
+                                    self.pending_chunks.insert(*key, now);
                                 } else {
                                     skip_mode = true;
                                 }
@@ -1546,10 +1556,29 @@ impl Client {
                     + (TerrainChunkSize::RECT_SIZE.y as f32 / 2.0).powi(2))
                 .sqrt();
 
+            // Load nearby zones
+            if let Some(zones) = self.nearby_zones() {
+                for zone in zones {
+                    if self.zones.get(&zone).is_none() {
+                        if self.pending_zones.len() > 2 {
+                            break;
+                        } else {
+                            self.send_msg_err(ClientGeneral::LodZoneRequest {
+                                key: zone,
+                            })?;
+                            self.pending_zones.insert(zone, Instant::now());
+                        }
+                    }
+                }
+            }
+
             // If chunks are taking too long, assume they're no longer pending.
-            let now = Instant::now();
             self.pending_chunks
-                .retain(|_, created| now.duration_since(*created) < Duration::from_secs(3));
+                .retain(|_, created| now.saturating_duration_since(*created) < Duration::from_secs(3));
+
+            // If zones are taking too long, assume they're no longer pending.
+            self.pending_zones
+                .retain(|_, created| now.saturating_duration_since(*created) < Duration::from_secs(8));
         }
 
         // Send a ping to the server once every second
@@ -1585,6 +1614,18 @@ impl Client {
         // 7) Finish the tick, pass control back to the frontend.
         self.tick += 1;
         Ok(frontend_events)
+    }
+
+    pub fn nearby_zones(&self) -> Option<impl Iterator<Item = Vec2<i32>>> {
+        const ZONE_RADIUS: u32 = 1;
+        let player_zone = self.position()?.xy().map2(TerrainChunkSize::RECT_SIZE, |e, sz| e as i32 / (sz * LodZone::SIZE) as i32);
+        Some(Spiral2d::new()
+            .take((ZONE_RADIUS * 2 + 1).pow(2) as usize)
+            .map(move |rpos| player_zone + rpos))
+    }
+
+    pub fn get_zone(&self, pos: Vec2<i32>) -> Option<&Option<LodZone>> {
+        self.zones.get(&pos)
     }
 
     /// Clean up the client after a tick.
@@ -1934,6 +1975,9 @@ impl Client {
                         self.state.set_block(pos, block);
                     });
                 }
+            },
+            ServerGeneral::LodZone { key, zone } => {
+                self.zones.insert(key, zone);
             },
             _ => unreachable!("Not a terrain message"),
         }

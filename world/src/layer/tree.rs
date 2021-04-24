@@ -66,6 +66,7 @@ pub fn apply_trees_to(canvas: &mut Canvas, dynamic_rng: &mut impl Rng) {
             scale,
             forest_kind,
             inhabited,
+            ..
         } in trees
         {
             let tree = if let Some(tree) = tree_cache.entry(pos).or_insert_with(|| {
@@ -75,15 +76,8 @@ pub fn apply_trees_to(canvas: &mut Canvas, dynamic_rng: &mut impl Rng) {
 
                 // Ensure that it's valid to place a *thing* here
                 if col.alt < col.water_level
-                    || col.spawn_rate < 0.9
                     || col.water_dist.map(|d| d < 8.0).unwrap_or(false)
                     || col.path.map(|(d, _, _, _)| d < 12.0).unwrap_or(false)
-                {
-                    return None;
-                }
-
-                // Ensure that it's valid to place a tree here
-                if !is_quirky && ((seed.wrapping_mul(13)) & 0xFF) as f32 / 256.0 > col.tree_density
                 {
                     return None;
                 }

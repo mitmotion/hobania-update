@@ -10,6 +10,7 @@ use common_net::msg::{ClientGeneral, CompressedData, ServerGeneral};
 use rayon::iter::ParallelIterator;
 use specs::{Entities, Join, ParJoin, Read, ReadExpect, ReadStorage};
 use tracing::{debug, trace};
+use std::sync::Arc;
 
 /// This system will handle new messages from clients
 #[derive(Default)]
@@ -19,6 +20,7 @@ impl<'a> System<'a> for Sys {
     type SystemData = (
         Entities<'a>,
         Read<'a, EventBus<ServerEvent>>,
+        ReadExpect<'a, Arc<world::World>>,
         ReadExpect<'a, TerrainGrid>,
         ReadExpect<'a, NetworkRequestMetrics>,
         ReadStorage<'a, Pos>,
@@ -35,6 +37,7 @@ impl<'a> System<'a> for Sys {
         (
             entities,
             server_event_bus,
+            world,
             terrain,
             network_metrics,
             positions,
@@ -90,6 +93,12 @@ impl<'a> System<'a> for Sys {
                             } else {
                                 network_metrics.chunks_request_dropped.inc();
                             }
+                        },
+                        ClientGeneral::LodZoneRequest { key } => {
+                            client.send(ServerGeneral::LodZone {
+                                key,
+                                zone: world.lod().get_zone(key).cloned(),
+                            })?;
                         },
                         _ => tracing::error!("not a client_terrain msg"),
                     }

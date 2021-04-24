@@ -2044,12 +2044,17 @@ impl WorldSim {
         self.get_nearest_way(wpos, |chunk| Some(chunk.cave))
     }
 
+    pub fn get_near_trees(&self, wpos: Vec2<i32>) -> impl Iterator<Item = TreeAttr> + '_ {
+        self.get_trees_area(wpos, wpos + 1)
+    }
+
     /// Return an iterator over candidate tree positions (note that only some of
     /// these will become trees since environmental parameters may forbid
     /// them spawning).
-    pub fn get_near_trees(&self, wpos: Vec2<i32>) -> impl Iterator<Item = TreeAttr> + '_ {
+    pub fn get_trees_area(&self, min: Vec2<i32>, max: Vec2<i32>) -> impl Iterator<Item = TreeAttr> + '_ {
         // Deterministic based on wpos
-        let normal_trees = std::array::IntoIter::new(self.gen_ctx.structure_gen.get(wpos))
+        let normal_trees = self.gen_ctx.structure_gen
+            .par_iter(min, max)
             .filter_map(move |(pos, seed)| {
                 let chunk = self.get_wpos(pos)?;
                 let env = Environment {
@@ -2061,29 +2066,40 @@ impl WorldSim {
                         0.0
                     },
                 };
-                Some(TreeAttr {
-                    pos,
-                    seed,
-                    scale: 1.0,
-                    forest_kind: *Lottery::from(
-                        ForestKind::into_enum_iter()
-                            .enumerate()
-                            .map(|(i, fk)| {
-                                const CLUSTER_SIZE: f64 = 48.0;
-                                let nz = (FastNoise2d::new(i as u32 * 37)
-                                    .get(pos.map(|e| e as f64) / CLUSTER_SIZE)
-                                    + 1.0)
-                                    / 2.0;
-                                (fk.proclivity(&env) * nz, Some(fk))
-                            })
-                            .chain(std::iter::once((0.001, None)))
-                            .collect::<Vec<_>>(),
-                    )
-                    .choose_seeded(seed)
-                    .as_ref()?,
-                    inhabited: false,
-                })
-            });
+                if !chunk.is_underwater()
+                    && ((seed.wrapping_mul(13)) & 0xFF) as f32 / 256.0 < chunk.tree_density
+                    && chunk.spawn_rate > 0.5
+                {
+                    Some(TreeAttr {
+                        pos,
+                        alt_approx: chunk.alt,
+                        seed,
+                        scale: 1.0,
+                        forest_kind: *Lottery::from(
+                            ForestKind::into_enum_iter()
+                                .enumerate()
+                                .map(|(i, fk)| {
+                                    const CLUSTER_SIZE: f64 = 48.0;
+                                    let nz = (FastNoise2d::new(i as u32 * 37)
+                                        .get(pos.map(|e| e as f64) / CLUSTER_SIZE)
+                                        + 1.0)
+                                        / 2.0;
+                                    (fk.proclivity(&env) * nz, Some(fk))
+                                })
+                                .chain(std::iter::once((0.001, None)))
+                                .collect::<Vec<_>>(),
+                        )
+                        .choose_seeded(seed)
+                        .as_ref()?,
+                        inhabited: false,
+                    })
+                } else {
+                    None
+                }
+            })
+            // TODO: don't do this, it's horrible and slow
+            .collect::<Vec<_>>()
+            .into_iter();
 
         // // For testing
         // let giant_trees =

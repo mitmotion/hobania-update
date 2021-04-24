@@ -2,6 +2,7 @@ pub mod clouds;
 pub mod figure;
 pub mod fluid;
 pub mod lod_terrain;
+pub mod lod_structure;
 pub mod particle;
 pub mod postprocess;
 pub mod shadow;
