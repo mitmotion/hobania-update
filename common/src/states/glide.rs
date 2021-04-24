@@ -17,6 +17,12 @@ pub struct Data {
 }
 
 impl Data {
+    /// A glider is modelled as an elliptical wing and has a span length
+    /// (distance from wing tip to wing tip) and a chord length (distance from
+    /// leading edge to trailing edge through its centre) measured in block
+    /// units.
+    ///
+    ///  https://en.wikipedia.org/wiki/Elliptical_wing
     pub fn new(span_length: f32, chord_length: f32, ori: Ori) -> Self {
         let planform_area = std::f32::consts::PI * chord_length * span_length * 0.25;
         Self {
