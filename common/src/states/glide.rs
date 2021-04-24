@@ -73,8 +73,7 @@ impl CharacterBehavior for Data {
                             )
                         })
                 })
-                .or_else(|| self.ori.look_dir().to_horizontal().map(Ori::from))
-                .unwrap_or_default();
+                .unwrap_or_else(|| self.ori.uprighted());
 
             let rate = {
                 let angle = self.ori.look_dir().angle_between(*data.inputs.look_dir);
