@@ -863,11 +863,12 @@ impl<'a> PhysicsData<'a> {
                                     depth,
                                     vel: Vel::zero(),
                                 })
-                                .or_else(|| {
-                                    Some(Fluid::Air {
+                                .or_else(|| match physics_state.in_fluid {
+                                    Some(Fluid::Water { .. }) => Some(Fluid::Air {
                                         elevation: pos.0.z,
-                                        vel: Vel::zero(),
-                                    })
+                                        vel: Vel::default(),
+                                    }),
+                                    fluid => fluid,
                                 });
 
                             tgt_pos = pos.0;
@@ -1539,11 +1540,12 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
             depth,
             vel: Vel::zero(),
         })
-        .or_else(|| {
-            Some(Fluid::Air {
+        .or_else(|| match physics_state.in_fluid {
+            Some(Fluid::Water { .. }) => Some(Fluid::Air {
                 elevation: pos.0.z,
-                vel: Vel::zero(),
-            })
+                vel: Vel::default(),
+            }),
+            fluid => fluid,
         });
 }
 
