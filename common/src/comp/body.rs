@@ -594,21 +594,6 @@ impl Body {
         }
     }
 
-    pub fn wings(&self) -> Option<RigidWings> {
-        matches!(
-            self,
-            Body::BirdMedium(_)
-                | Body::BirdSmall(_)
-                | Body::Dragon(_)
-                | Body::FishMedium(_)
-                | Body::FishSmall(_)
-        )
-        .then_some({
-            let dim = self.dimensions().xy();
-            RigidWings::new(dim.x, dim.y * 0.2)
-        })
-    }
-
     pub fn immune_to(&self, buff: BuffKind) -> bool {
         match buff {
             BuffKind::Bleeding => matches!(self, Body::Object(_) | Body::Golem(_) | Body::Ship(_)),
@@ -664,38 +649,4 @@ impl Body {
 
 impl Component for Body {
     type Storage = DerefFlaggedStorage<Self, IdvStorage<Self>>;
-}
-
-/// An elliptical fixed rigid wing. Plurally named simply because it's a shape
-/// typically composed of two wings forming an elliptical lift distribution.
-///
-/// Animal wings are technically flexible, not rigid, (difference being that the
-/// former's shape is affected by the flow) and usually has the ability to
-/// assume complex shapes with properties like curved camber line, span-wise
-/// twist, dihedral angle, sweep angle, and partitioned sections. However, we
-/// can make do with this model for fully extended animal wings, enabling them
-/// to glide.
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct RigidWings {
-    aspect_ratio: f32,
-    planform_area: f32,
-    // sweep_angle: Option<f32>,
-}
-
-impl RigidWings {
-    /// Wings from total span (wing-tip to wing-tip) and
-    /// chord length (leading edge to trailing edge)
-    pub fn new(span_length: f32, chord_length: f32) -> Self {
-        let planform_area = std::f32::consts::PI * chord_length * span_length * 0.25;
-        Self {
-            aspect_ratio: span_length.powi(2) / planform_area,
-            planform_area,
-        }
-    }
-
-    /// The aspect ratio is the ratio of the span squared to actual planform
-    /// area
-    pub fn aspect_ratio(&self) -> f32 { self.aspect_ratio }
-
-    pub fn planform_area(&self) -> f32 { self.planform_area }
 }

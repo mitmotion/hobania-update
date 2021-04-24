@@ -1,18 +1,11 @@
 use super::utils::handle_climb;
 use crate::{
     comp::{inventory::slot::EquipSlot, CharacterState, Ori, RigidWings, StateUpdate},
-    states::{
-        behavior::{CharacterBehavior, JoinData},
-        utils::fly_move,
-    },
+    states::behavior::{CharacterBehavior, JoinData},
     util::Dir,
 };
 use serde::{Deserialize, Serialize};
-use vek::Vec2;
-
-const GLIDE_ANTIGRAV: f32 = crate::consts::GRAVITY * 0.90;
-const GLIDE_ACCEL: f32 = 5.0;
-const GLIDE_MAX_SPEED: f32 = 30.0;
+use vek::*;
 
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Data {
@@ -36,50 +29,69 @@ impl CharacterBehavior for Data {
         // If player is on ground, end glide
         if data.physics.on_ground && data.vel.0.magnitude_squared() < 25.0 {
             update.character = CharacterState::GlideWield;
-            return update;
-        }
-        if data
+            update
+        } else if data
             .physics
             .in_liquid()
             .map(|depth| depth > 0.5)
             .unwrap_or(false)
+            || data.inventory.equipped(EquipSlot::Glider).is_none()
         {
             update.character = CharacterState::Idle;
-        }
-        if data.inventory.equipped(EquipSlot::Glider).is_none() {
-            update.character = CharacterState::Idle
-        };
-
-        if crate::lift_enabled() {
-            fly_move(data, &mut update, inline_tweak::tweak!(0.1));
+            update
+        } else if handle_climb(&data, &mut update) {
+            update
         } else {
-            let horiz_vel = Vec2::<f32>::from(update.vel.0);
-            let horiz_speed_sq = horiz_vel.magnitude_squared();
+            let tgt_ori = Some(data.inputs.move_dir)
+                .filter(|mv_dir| !mv_dir.is_approx_zero())
+                .map(|mv_dir| {
+                    Vec3::new(
+                        mv_dir.x,
+                        mv_dir.y,
+                        Lerp::lerp_unclamped(
+                            0.0,
+                            data.inputs.look_dir.z + inline_tweak::tweak!(0.3),
+                            mv_dir.magnitude_squared() * inline_tweak::tweak!(2.0),
+                        ),
+                    )
+                })
+                .and_then(Dir::from_unnormalized)
+                .and_then(|tgt_dir| {
+                    Dir::from_unnormalized(data.vel.0)
+                        .and_then(|moving_dir| moving_dir.to_horizontal())
+                        .map(|moving_dir| {
+                            Ori::from(tgt_dir).rolled_right(
+                                (1.0 - moving_dir.dot(*tgt_dir).max(0.0))
+                                    * self.ori.right().dot(*tgt_dir).signum()
+                                    * std::f32::consts::PI
+                                    / 3.0,
+                            )
+                        })
+                })
+                .or_else(|| self.ori.look_dir().to_horizontal().map(Ori::from))
+                .unwrap_or_default();
 
-            // Move player according to movement direction vector
-            if horiz_speed_sq < GLIDE_MAX_SPEED.powi(2) {
-                update.vel.0 += Vec2::broadcast(data.dt.0) * data.inputs.move_dir * GLIDE_ACCEL;
-            }
-
-            // Determine orientation vector from movement direction vector
-            if let Some(dir) = Dir::from_unnormalized(update.vel.0) {
-                update.ori = update.ori.slerped_towards(Ori::from(dir), 2.0 * data.dt.0);
+            let rate = {
+                let angle = self.ori.look_dir().angle_between(*data.inputs.look_dir);
+                0.4 * std::f32::consts::PI / angle
             };
 
-            // Apply Glide antigrav lift
-            if update.vel.0.z < 0.0 {
-                let lift = (GLIDE_ANTIGRAV + update.vel.0.z.powi(2) * 0.15)
-                    * (horiz_speed_sq * f32::powf(0.075, 2.0)).clamp(0.2, 1.0);
+            let ori = self
+                .ori
+                .slerped_towards(tgt_ori, (data.dt.0 * rate).min(0.1));
+            update.character = CharacterState::Glide(Self { ori, ..*self });
 
-                update.vel.0.z += lift * data.dt.0;
+            if let Some(char_ori) = ori.to_horizontal() {
+                let rate = {
+                    let angle = ori.look_dir().angle_between(*data.inputs.look_dir);
+                    data.body.base_ori_rate() * std::f32::consts::PI / angle
+                };
+                update.ori = update
+                    .ori
+                    .slerped_towards(char_ori, (data.dt.0 * rate).min(0.1));
             }
+            update
         }
-
-        // If there is a wall in front of character and they are trying to climb go to
-        // climb
-        handle_climb(&data, &mut update);
-
-        update
     }
 
     fn unwield(&self, data: &JoinData) -> StateUpdate {

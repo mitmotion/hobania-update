@@ -52,7 +52,7 @@ pub use self::{
     body::{
         biped_large, biped_small, bird_large, bird_medium, dragon, fish_medium, fish_small, golem,
         humanoid, object, quadruped_low, quadruped_medium, quadruped_small, ship, theropod,
-        AllBodies, Body, BodyData, RigidWings,
+        AllBodies, Body, BodyData,
     },
     buff::{
         Buff, BuffCategory, BuffChange, BuffData, BuffEffect, BuffId, BuffKind, BuffSource, Buffs,
@@ -68,7 +68,7 @@ pub use self::{
         InputKind, InventoryAction, InventoryEvent, InventoryManip, MountState, Mounting,
     },
     energy::{Energy, EnergyChange, EnergySource},
-    fluid_dynamics::Fluid,
+    fluid_dynamics::{Fluid, RigidWings},
     group::Group,
     home_chunk::HomeChunk,
     inputs::CanBuild,

@@ -65,19 +65,12 @@ fn integrate_forces(
             CharacterState::Glide(data) => Some(data),
             _ => None,
         });
-        // let wings: Option<(RigidWings, Ori)> =
-        // body.wings().map(|w| (w, ori)).or(character_state.and_then(|cs| {
-        //     match cs {
-        //         CharacterState::Glide(states::glide::Data{wings, ori}) =>
-        // Some((*wings, *ori)),         _ => None,
-        //     }
-        // }));
         let impulse = dt.0
             * body.aerodynamic_forces(
                 glider.map(|g| &g.ori).unwrap_or(ori),
                 &rel_flow,
                 fluid_density.0,
-                glider.map(|g| g.wings).or_else(|| body.wings()).as_ref(),
+                glider.map(|g| g.wings).as_ref(),
             );
         debug_assert!(!impulse.map(|a| a.is_nan()).reduce_or());
         if !impulse.is_approx_zero() {
