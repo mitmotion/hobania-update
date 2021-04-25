@@ -253,7 +253,7 @@ vec3 get_cloud_color(vec3 surf_color, vec3 dir, vec3 origin, const float time_of
         vec3 emission;
         float vapor = cloud_at(nearest, dist * t, emission).z;
 
-        float strength = attenuation_strength(difference) * 10.0 * vapor;
+        float strength = attenuation_strength(difference) * 0.1 * min(100.0 * vapor, 1);
 
         // Multiply the vec3 only once
         vec3 color = srgb_to_linear(L.light_col.rgb) * (strength * L.light_col.a);
