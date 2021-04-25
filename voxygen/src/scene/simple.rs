@@ -434,6 +434,7 @@ impl Scene {
         renderer.render_clouds(
             &self.clouds.model,
             &self.data.globals,
+                &self.data,
             &self.clouds.locals,
             &self.lod,
         );

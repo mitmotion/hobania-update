@@ -1,5 +1,6 @@
 #include <random.glsl>
 #include <lod.glsl>
+#include <light.glsl>
 
 float falloff(float x) {
     return pow(max(x > 0.577 ? (0.3849 / x - 0.1) : (0.9 - x * x), 0.0), 4);
@@ -232,6 +233,32 @@ vec3 get_cloud_color(vec3 surf_color, vec3 dir, vec3 origin, const float time_of
             get_moon_color() * moon_scatter * get_moon_brightness() * (moon_access * cloud_scatter_factor /*+ sky_color * global_scatter_factor*/) +
             sky_light * global_scatter_factor +
             emission * density_integrals.y;
+    }
+
+    for (uint i = 0u; i < light_shadow_count.x; i ++) {
+        // Only access the array once
+        Light L = lights[i];
+
+        vec3 light_pos = L.light_pos.xyz;// - focus_off.xyz;
+
+        float dist = max_dist;
+        float len_sq = pow(dist, 2);
+        float t = (dot(light_pos - origin, dir * dist) / len_sq);
+        t = clamp(t, 0, 1);
+
+        vec3 nearest = origin.xyz + dir * dist * t;
+
+        // Pre-calculate difference between light and fragment
+        vec3 difference = light_pos - nearest;
+        vec3 emission;
+        float vapor = cloud_at(nearest, dist * t, emission).z;
+
+        float strength = attenuation_strength(difference) * 10.0 * vapor;
+
+        // Multiply the vec3 only once
+        vec3 color = srgb_to_linear(L.light_col.rgb) * (strength * L.light_col.a);
+
+        surf_color += color;
     }
 
     return surf_color;

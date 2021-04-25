@@ -1097,6 +1097,7 @@ impl Scene {
         renderer.render_clouds(
             &self.clouds.model,
             &global.globals,
+            global,
             &self.clouds.locals,
             self.lod.get_data(),
         );

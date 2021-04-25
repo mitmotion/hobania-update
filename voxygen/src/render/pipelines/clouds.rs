@@ -1,6 +1,6 @@
 use super::{
     super::{Mesh, Pipeline, TgtColorFmt, TgtDepthStencilFmt, Tri},
-    Globals,
+    Globals, shadow, Light, Shadow,
 };
 use gfx::{
     self, gfx_constant_struct_meta, gfx_defines, gfx_impl_struct_meta, gfx_pipeline,
@@ -23,6 +23,11 @@ gfx_defines! {
 
         locals: gfx::ConstantBuffer<Locals> = "u_locals",
         globals: gfx::ConstantBuffer<Globals> = "u_globals",
+        lights: gfx::ConstantBuffer<Light> = "u_lights",
+        shadows: gfx::ConstantBuffer<Shadow> = "u_shadows",
+
+        point_shadow_maps: gfx::TextureSampler<f32> = "t_point_shadow_maps",
+        directed_shadow_maps: gfx::TextureSampler<f32> = "t_directed_shadow_maps",
 
         map: gfx::TextureSampler<[f32; 4]> = "t_map",
         alt: gfx::TextureSampler<[f32; 2]> = "t_alt",
@@ -32,6 +37,7 @@ gfx_defines! {
         depth_sampler: gfx::TextureSampler<<TgtDepthStencilFmt as gfx::format::Formatted>::View> = "src_depth",
 
         noise: gfx::TextureSampler<f32> = "t_noise",
+        light_shadows: gfx::ConstantBuffer<shadow::Locals> = "u_light_shadows",
 
         tgt_color: gfx::RenderTarget<TgtColorFmt> = "tgt_color",
     }

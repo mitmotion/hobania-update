@@ -20,7 +20,6 @@
 // Note: The sampler uniform is declared here because it differs for MSAA
 #include <anti-aliasing.glsl>
 #include <srgb.glsl>
-#include <cloud.glsl>
 
 //uniform sampler2D src_depth;
 

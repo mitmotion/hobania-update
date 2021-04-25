@@ -165,57 +165,65 @@ impl assets::Compound for Shaders {
         _: &assets::AssetCache<S>,
         _: &str,
     ) -> Result<Shaders, assets::Error> {
+        let load = |name| match AssetExt::load(name) {
+            Ok(asset) => Ok(asset),
+            Err(err) => {
+                println!("When loading {}...", name);
+                Err(err)
+            },
+        };
+
         Ok(Shaders {
-            constants: AssetExt::load("voxygen.shaders.include.constants")?,
-            globals: AssetExt::load("voxygen.shaders.include.globals")?,
-            sky: AssetExt::load("voxygen.shaders.include.sky")?,
-            light: AssetExt::load("voxygen.shaders.include.light")?,
-            srgb: AssetExt::load("voxygen.shaders.include.srgb")?,
-            random: AssetExt::load("voxygen.shaders.include.random")?,
-            lod: AssetExt::load("voxygen.shaders.include.lod")?,
-            shadows: AssetExt::load("voxygen.shaders.include.shadows")?,
+            constants: load("voxygen.shaders.include.constants")?,
+            globals: load("voxygen.shaders.include.globals")?,
+            sky: load("voxygen.shaders.include.sky")?,
+            light: load("voxygen.shaders.include.light")?,
+            srgb: load("voxygen.shaders.include.srgb")?,
+            random: load("voxygen.shaders.include.random")?,
+            lod: load("voxygen.shaders.include.lod")?,
+            shadows: load("voxygen.shaders.include.shadows")?,
 
-            anti_alias_none: AssetExt::load("voxygen.shaders.antialias.none")?,
-            anti_alias_fxaa: AssetExt::load("voxygen.shaders.antialias.fxaa")?,
-            anti_alias_msaa_x4: AssetExt::load("voxygen.shaders.antialias.msaa-x4")?,
-            anti_alias_msaa_x8: AssetExt::load("voxygen.shaders.antialias.msaa-x8")?,
-            anti_alias_msaa_x16: AssetExt::load("voxygen.shaders.antialias.msaa-x16")?,
-            cloud_none: AssetExt::load("voxygen.shaders.include.cloud.none")?,
-            cloud_regular: AssetExt::load("voxygen.shaders.include.cloud.regular")?,
-            figure_vert: AssetExt::load("voxygen.shaders.figure-vert")?,
+            anti_alias_none: load("voxygen.shaders.antialias.none")?,
+            anti_alias_fxaa: load("voxygen.shaders.antialias.fxaa")?,
+            anti_alias_msaa_x4: load("voxygen.shaders.antialias.msaa-x4")?,
+            anti_alias_msaa_x8: load("voxygen.shaders.antialias.msaa-x8")?,
+            anti_alias_msaa_x16: load("voxygen.shaders.antialias.msaa-x16")?,
+            cloud_none: load("voxygen.shaders.include.cloud.none")?,
+            cloud_regular: load("voxygen.shaders.include.cloud.regular")?,
+            figure_vert: load("voxygen.shaders.figure-vert")?,
 
-            terrain_point_shadow_vert: AssetExt::load("voxygen.shaders.light-shadows-vert")?,
-            terrain_directed_shadow_vert: AssetExt::load(
+            terrain_point_shadow_vert: load("voxygen.shaders.light-shadows-vert")?,
+            terrain_directed_shadow_vert: load(
                 "voxygen.shaders.light-shadows-directed-vert",
             )?,
-            figure_directed_shadow_vert: AssetExt::load(
+            figure_directed_shadow_vert: load(
                 "voxygen.shaders.light-shadows-figure-vert",
             )?,
-            directed_shadow_frag: AssetExt::load("voxygen.shaders.light-shadows-directed-frag")?,
+            directed_shadow_frag: load("voxygen.shaders.light-shadows-directed-frag")?,
 
-            skybox_vert: AssetExt::load("voxygen.shaders.skybox-vert")?,
-            skybox_frag: AssetExt::load("voxygen.shaders.skybox-frag")?,
-            figure_frag: AssetExt::load("voxygen.shaders.figure-frag")?,
-            terrain_vert: AssetExt::load("voxygen.shaders.terrain-vert")?,
-            terrain_frag: AssetExt::load("voxygen.shaders.terrain-frag")?,
-            fluid_vert: AssetExt::load("voxygen.shaders.fluid-vert")?,
-            fluid_frag_cheap: AssetExt::load("voxygen.shaders.fluid-frag.cheap")?,
-            fluid_frag_shiny: AssetExt::load("voxygen.shaders.fluid-frag.shiny")?,
-            sprite_vert: AssetExt::load("voxygen.shaders.sprite-vert")?,
-            sprite_frag: AssetExt::load("voxygen.shaders.sprite-frag")?,
-            particle_vert: AssetExt::load("voxygen.shaders.particle-vert")?,
-            particle_frag: AssetExt::load("voxygen.shaders.particle-frag")?,
-            ui_vert: AssetExt::load("voxygen.shaders.ui-vert")?,
-            ui_frag: AssetExt::load("voxygen.shaders.ui-frag")?,
-            lod_terrain_vert: AssetExt::load("voxygen.shaders.lod-terrain-vert")?,
-            lod_terrain_frag: AssetExt::load("voxygen.shaders.lod-terrain-frag")?,
-            clouds_vert: AssetExt::load("voxygen.shaders.clouds-vert")?,
-            clouds_frag: AssetExt::load("voxygen.shaders.clouds-frag")?,
-            postprocess_vert: AssetExt::load("voxygen.shaders.postprocess-vert")?,
-            postprocess_frag: AssetExt::load("voxygen.shaders.postprocess-frag")?,
-            player_shadow_frag: AssetExt::load("voxygen.shaders.player-shadow-frag")?,
-            light_shadows_geom: AssetExt::load("voxygen.shaders.light-shadows-geom")?,
-            light_shadows_frag: AssetExt::load("voxygen.shaders.light-shadows-frag")?,
+            skybox_vert: load("voxygen.shaders.skybox-vert")?,
+            skybox_frag: load("voxygen.shaders.skybox-frag")?,
+            figure_frag: load("voxygen.shaders.figure-frag")?,
+            terrain_vert: load("voxygen.shaders.terrain-vert")?,
+            terrain_frag: load("voxygen.shaders.terrain-frag")?,
+            fluid_vert: load("voxygen.shaders.fluid-vert")?,
+            fluid_frag_cheap: load("voxygen.shaders.fluid-frag.cheap")?,
+            fluid_frag_shiny: load("voxygen.shaders.fluid-frag.shiny")?,
+            sprite_vert: load("voxygen.shaders.sprite-vert")?,
+            sprite_frag: load("voxygen.shaders.sprite-frag")?,
+            particle_vert: load("voxygen.shaders.particle-vert")?,
+            particle_frag: load("voxygen.shaders.particle-frag")?,
+            ui_vert: load("voxygen.shaders.ui-vert")?,
+            ui_frag: load("voxygen.shaders.ui-frag")?,
+            lod_terrain_vert: load("voxygen.shaders.lod-terrain-vert")?,
+            lod_terrain_frag: load("voxygen.shaders.lod-terrain-frag")?,
+            clouds_vert: load("voxygen.shaders.clouds-vert")?,
+            clouds_frag: load("voxygen.shaders.clouds-frag")?,
+            postprocess_vert: load("voxygen.shaders.postprocess-vert")?,
+            postprocess_frag: load("voxygen.shaders.postprocess-frag")?,
+            player_shadow_frag: load("voxygen.shaders.player-shadow-frag")?,
+            light_shadows_geom: load("voxygen.shaders.light-shadows-geom")?,
+            light_shadows_frag: load("voxygen.shaders.light-shadows-frag")?,
         })
     }
 }
@@ -1803,9 +1811,28 @@ impl Renderer {
         &mut self,
         model: &Model<clouds::CloudsPipeline>,
         globals: &Consts<Globals>,
+        global: &GlobalModel,
         locals: &Consts<clouds::Locals>,
         lod: &lod_terrain::LodData,
     ) {
+        let (point_shadow_maps, directed_shadow_maps) =
+            if let Some(shadow_map) = &mut self.shadow_map {
+                (
+                    (
+                        shadow_map.point_res.clone(),
+                        shadow_map.point_sampler.clone(),
+                    ),
+                    (
+                        shadow_map.directed_res.clone(),
+                        shadow_map.directed_sampler.clone(),
+                    ),
+                )
+            } else {
+                (
+                    (self.noise_tex.srv.clone(), self.noise_tex.sampler.clone()),
+                    (self.noise_tex.srv.clone(), self.noise_tex.sampler.clone()),
+                )
+            };
         self.encoder.draw(
             &gfx::Slice {
                 start: model.vertex_range().start,
@@ -1819,6 +1846,9 @@ impl Renderer {
                 vbuf: model.vbuf.clone(),
                 locals: locals.buf.clone(),
                 globals: globals.buf.clone(),
+                lights: global.lights.buf.clone(),
+                shadows: global.shadows.buf.clone(),
+                light_shadows: global.shadow_mats.buf.clone(),
                 map: (lod.map.srv.clone(), lod.map.sampler.clone()),
                 alt: (lod.alt.srv.clone(), lod.alt.sampler.clone()),
                 horizon: (lod.horizon.srv.clone(), lod.horizon.sampler.clone()),
@@ -1826,6 +1856,8 @@ impl Renderer {
                 depth_sampler: (self.tgt_depth_res.clone(), self.sampler.clone()),
                 noise: (self.noise_tex.srv.clone(), self.noise_tex.sampler.clone()),
                 tgt_color: self.tgt_color_view_pp.clone(),
+                point_shadow_maps,
+                directed_shadow_maps,
             },
         )
     }
@@ -1944,17 +1976,31 @@ fn create_pipelines(
         _ => shaders.cloud_regular,
     };
 
+
     let mut include_ctx = IncludeContext::new();
-    include_ctx.include("constants.glsl", &constants);
-    include_ctx.include("globals.glsl", &shaders.globals.read().0);
-    include_ctx.include("shadows.glsl", &shaders.shadows.read().0);
-    include_ctx.include("sky.glsl", &shaders.sky.read().0);
-    include_ctx.include("light.glsl", &shaders.light.read().0);
-    include_ctx.include("srgb.glsl", &shaders.srgb.read().0);
-    include_ctx.include("random.glsl", &shaders.random.read().0);
-    include_ctx.include("lod.glsl", &shaders.lod.read().0);
-    include_ctx.include("anti-aliasing.glsl", &anti_alias.read().0);
-    include_ctx.include("cloud.glsl", &cloud.read().0);
+
+    let mut guard = |name: &str, code: &str| {
+        let define = name
+            .chars()
+            .map(|c| match c {
+                c if c.is_ascii_alphanumeric() => c,
+                _ => '_',
+            })
+            .collect::<String>();
+        let code = format!("#ifndef {}\n#define {}\n{}\n#endif", define, define, code);
+        include_ctx.include(name, &code);
+    };
+
+    guard("constants.glsl", &constants);
+    guard("globals.glsl", &shaders.globals.read().0);
+    guard("shadows.glsl", &shaders.shadows.read().0);
+    guard("sky.glsl", &shaders.sky.read().0);
+    guard("light.glsl", &shaders.light.read().0);
+    guard("srgb.glsl", &shaders.srgb.read().0);
+    guard("random.glsl", &shaders.random.read().0);
+    guard("lod.glsl", &shaders.lod.read().0);
+    guard("anti-aliasing.glsl", &anti_alias.read().0);
+    guard("cloud.glsl", &cloud.read().0);
 
     // Construct a pipeline for rendering skyboxes
     let skybox_pipeline = create_pipeline(

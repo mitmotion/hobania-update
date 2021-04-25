@@ -70,7 +70,7 @@ uniform u_bones {
     BoneData bones[16];
 };
 
-#include <cloud.glsl>
+//#include <cloud.glsl>
 #include <light.glsl>
 #include <lod.glsl>
 
