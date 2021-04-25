@@ -1,10 +1,14 @@
 use super::utils::handle_climb;
 use crate::{
-    comp::{inventory::slot::EquipSlot, CharacterState, Ori, StateUpdate},
+    comp::{
+        fluid_dynamics::angle_of_attack, inventory::slot::EquipSlot, CharacterState, Ori,
+        StateUpdate,
+    },
     states::behavior::{CharacterBehavior, JoinData},
-    util::Dir,
+    util::{Dir, Plane, Projection},
 };
 use serde::{Deserialize, Serialize};
+use std::f32::consts::PI;
 use vek::*;
 
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -24,7 +28,7 @@ impl Data {
     ///
     ///  https://en.wikipedia.org/wiki/Elliptical_wing
     pub fn new(span_length: f32, chord_length: f32, ori: Ori) -> Self {
-        let planform_area = std::f32::consts::PI * chord_length * span_length * 0.25;
+        let planform_area = PI * chord_length * span_length * 0.25;
         Self {
             aspect_ratio: span_length.powi(2) / planform_area,
             planform_area,
@@ -53,53 +57,54 @@ impl CharacterBehavior for Data {
         } else if handle_climb(&data, &mut update) {
             update
         } else {
-            let tgt_ori = Some(data.inputs.move_dir)
+            let slerp_s = {
+                let angle = self.ori.look_dir().angle_between(*data.inputs.look_dir);
+                let rate = 0.4 * PI / angle;
+                (data.dt.0 * rate).min(0.1)
+            };
+
+            let ori = Some(data.inputs.move_dir)
                 .filter(|mv_dir| !mv_dir.is_approx_zero())
-                .map(|mv_dir| {
-                    Vec3::new(
-                        mv_dir.x,
-                        mv_dir.y,
-                        Lerp::lerp_unclamped(
-                            0.0,
-                            data.inputs.look_dir.z + 0.3,
-                            mv_dir.magnitude_squared() * 2.0,
-                        ),
-                    )
-                })
+                .or_else(|| self.ori.look_dir().xy().try_normalized())
+                .map(|mv_dir| Vec3::new(mv_dir.x, mv_dir.y, (data.inputs.look_dir.z + 0.3) * 2.0))
                 .and_then(Dir::from_unnormalized)
                 .and_then(|tgt_dir| {
-                    Dir::from_unnormalized(data.vel.0)
-                        .and_then(|moving_dir| moving_dir.to_horizontal())
-                        .or_else(|| self.ori.look_dir().to_horizontal())
-                        .map(|moving_dir| {
-                            Ori::from(tgt_dir).rolled_right(
-                                (1.0 - moving_dir.dot(*tgt_dir).max(0.0))
-                                    * self.ori.right().dot(*tgt_dir).signum()
-                                    * std::f32::consts::PI
-                                    / 3.0,
+                    data.physics
+                        .in_fluid
+                        .map(|fluid| fluid.relative_flow(data.vel))
+                        .and_then(|air_flow| {
+                            let flow_dir = Dir::from_unnormalized(air_flow.0)?;
+                            let tgt_dir_ori = Ori::from(tgt_dir);
+                            let tgt_dir_up = tgt_dir_ori.up();
+                            let tgt_up = flow_dir.projected(&Plane::from(tgt_dir)).map(|d| {
+                                let ddot = d.dot(*tgt_dir_up);
+                                if ddot.is_sign_negative() {
+                                    Quaternion::rotation_3d(PI, *tgt_dir_ori.right()) * d
+                                } else {
+                                    d
+                                }
+                                .slerped_to(tgt_dir_up, 0.25 * ddot.abs().powf(0.25))
+                            })?;
+                            let global_roll = tgt_dir_up.rotation_between(tgt_up);
+                            Some(
+                                tgt_dir_ori
+                                    .prerotated(global_roll)
+                                    .pitched_up(angle_of_attack(&tgt_dir_ori, &flow_dir)),
                             )
                         })
                 })
-                .unwrap_or_else(|| self.ori.uprighted());
+                .map(|tgt_ori| self.ori.slerped_towards(tgt_ori, slerp_s))
+                .unwrap_or_else(|| self.ori.slerped_towards(self.ori.uprighted(), slerp_s));
 
-            let rate = {
-                let angle = self.ori.look_dir().angle_between(*data.inputs.look_dir);
-                0.4 * std::f32::consts::PI / angle
-            };
-
-            let ori = self
-                .ori
-                .slerped_towards(tgt_ori, (data.dt.0 * rate).min(0.1));
             update.character = CharacterState::Glide(Self { ori, ..*self });
 
             if let Some(char_ori) = ori.to_horizontal() {
-                let rate = {
+                let slerp_s = {
                     let angle = ori.look_dir().angle_between(*data.inputs.look_dir);
-                    data.body.base_ori_rate() * std::f32::consts::PI / angle
+                    let rate = data.body.base_ori_rate() * PI / angle;
+                    (data.dt.0 * rate).min(0.1)
                 };
-                update.ori = update
-                    .ori
-                    .slerped_towards(char_ori, (data.dt.0 * rate).min(0.1));
+                update.ori = update.ori.slerped_towards(char_ori, slerp_s);
             }
             update
         }
