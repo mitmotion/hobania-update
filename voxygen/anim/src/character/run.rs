@@ -161,7 +161,7 @@ impl Animation for RunAnimation {
         next.foot_l.position = Vec3::new(
             -s_a.foot.0 + footstrafel * sideabs * 3.0 + tilt * -2.0,
             s_a.foot.1
-                + (1.0 - sideabs) * (-1.5 * speednorm + foothoril * -10.5 * speednorm)
+                + (1.0 - sideabs) * (-0.5 * speednorm + foothoril * -7.5 * speednorm)
                 + (direction * 5.0).max(0.0),
             s_a.foot.2
                 + (1.0 - sideabs) * (2.0 * speednorm + ((footvertl * -2.1 * speednorm).max(-1.0)))
@@ -176,7 +176,7 @@ impl Animation for RunAnimation {
         next.foot_r.position = Vec3::new(
             s_a.foot.0 + footstrafer * sideabs * 3.0 + tilt * -2.0,
             s_a.foot.1
-                + (1.0 - sideabs) * (-1.5 * speednorm + foothorir * -10.5 * speednorm)
+                + (1.0 - sideabs) * (-0.5 * speednorm + foothorir * -7.5 * speednorm)
                 + (direction * 5.0).max(0.0),
             s_a.foot.2
                 + (1.0 - sideabs) * (2.0 * speednorm + ((footvertr * -2.1 * speednorm).max(-1.0)))
@@ -256,6 +256,23 @@ impl Animation for RunAnimation {
         next.lantern.scale = Vec3::one() * 0.65;
         next.hold.scale = Vec3::one() * 0.0;
 
+        if skeleton.holding_lantern {
+            next.hand_r.position = Vec3::new(
+                s_a.hand.0 + 1.0,
+                s_a.hand.1 + 2.0 - impact * 0.2,
+                s_a.hand.2 + 12.0 + impact * -0.1,
+            );
+            next.hand_r.orientation = Quaternion::rotation_x(2.25) * Quaternion::rotation_z(0.9);
+
+            let fast = (anim_time * 8.0).sin();
+            let fast2 = (anim_time * 6.0 + 8.0).sin();
+
+            next.lantern.position = Vec3::new(-0.5, -0.5, -2.5);
+            next.lantern.orientation = next.hand_r.orientation.inverse()
+                * Quaternion::rotation_x((fast + 0.5) * 1.0 * speednorm)
+                * Quaternion::rotation_y(tilt * 4.0 * fast + tilt * 3.0 + fast2 * speednorm * 0.25);
+        }
+
         next.torso.position = Vec3::new(0.0, 0.0, 0.0) * s_a.scaler;
         next.torso.scale = Vec3::one() / 11.0 * s_a.scaler;
 
@@ -274,9 +291,9 @@ impl Animation for RunAnimation {
         match hands {
             (None | Some(Hands::One), Some(Hands::One)) => match second_tool_kind {
                 Some(ToolKind::Axe) | Some(ToolKind::Hammer) | Some(ToolKind::Sword) => {
-                    next.second.position = Vec3::new(4.0, -5.5, 10.0);
+                    next.second.position = Vec3::new(4.0, -6.0, 10.0);
                     next.second.orientation =
-                        Quaternion::rotation_y(-2.35) * Quaternion::rotation_z(1.57);
+                        Quaternion::rotation_y(-2.5) * Quaternion::rotation_z(-1.57);
                 },
                 _ => {},
             },

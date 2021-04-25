@@ -6,7 +6,7 @@ use common::{
     vol::RectVolSize,
 };
 use common_ecs::{Job, Origin, ParMode, Phase, System};
-use common_net::msg::{ClientGeneral, ServerGeneral};
+use common_net::msg::{ClientGeneral, CompressedData, ServerGeneral};
 use rayon::iter::ParallelIterator;
 use specs::{Entities, Join, ParJoin, Read, ReadExpect, ReadStorage};
 use tracing::{debug, trace};
@@ -74,12 +74,12 @@ impl<'a> System<'a> for Sys {
                                 true
                             };
                             if in_vd {
-                                match terrain.get_key(key) {
+                                match terrain.get_key_arc(key) {
                                     Some(chunk) => {
                                         network_metrics.chunks_served_from_memory.inc();
                                         client.send(ServerGeneral::TerrainChunkUpdate {
                                             key,
-                                            chunk: Ok(Box::new(chunk.clone())),
+                                            chunk: Ok(CompressedData::compress(&chunk, 5)),
                                         })?
                                     },
                                     None => {

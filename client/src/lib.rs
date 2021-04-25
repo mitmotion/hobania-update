@@ -9,6 +9,7 @@ pub mod error;
 // Reexports
 pub use crate::error::Error;
 pub use authc::AuthClientError;
+pub use common_net::msg::ServerInfo;
 pub use specs::{
     join::Join,
     saveload::{Marker, MarkerAllocator},
@@ -49,13 +50,13 @@ use common_net::{
         world_msg::{EconomyInfo, SiteId, SiteInfo},
         ChatMsgValidationError, ClientGeneral, ClientMsg, ClientRegister, ClientType,
         DisconnectReason, InviteAnswer, Notification, PingMsg, PlayerInfo, PlayerListUpdate,
-        PresenceKind, RegisterError, ServerGeneral, ServerInfo, ServerInit, ServerRegisterAnswer,
+        PresenceKind, RegisterError, ServerGeneral, ServerInit, ServerRegisterAnswer,
         MAX_BYTES_CHAT_MSG,
     },
     sync::WorldSyncExt,
 };
 use common_state::State;
-use common_sys::add_local_systems;
+use common_systems::add_local_systems;
 use comp::BuffKind;
 use futures_util::FutureExt;
 use hashbrown::{HashMap, HashSet};
@@ -66,6 +67,7 @@ use rayon::prelude::*;
 use specs::Component;
 use std::{
     collections::{BTreeMap, VecDeque},
+    mem,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -204,6 +206,8 @@ impl Client {
         addr: ConnectionArgs,
         view_distance: Option<u32>,
         runtime: Arc<Runtime>,
+        // TODO: refactor to avoid needing to use this out parameter
+        mismatched_server_info: &mut Option<ServerInfo>,
     ) -> Result<Self, Error> {
         let network = Network::new(Pid::new(), &runtime);
 
@@ -235,8 +239,6 @@ impl Client {
 
         register_stream.send(ClientType::Game)?;
         let server_info: ServerInfo = register_stream.recv().await?;
-
-        // TODO: Display that versions don't match in Voxygen
         if server_info.git_hash != *common::util::GIT_HASH {
             warn!(
                 "Server is running {}[{}], you are running {}[{}], versions might be incompatible!",
@@ -245,6 +247,10 @@ impl Client {
                 common::util::GIT_HASH.to_string(),
                 common::util::GIT_DATE.to_string(),
             );
+
+            // Pass the server info back to the caller to ensure they can access it even
+            // if this function errors.
+            mem::swap(mismatched_server_info, &mut Some(server_info.clone()));
         }
         debug!("Auth Server: {:?}", server_info.auth_provider);
 
@@ -1923,15 +1929,17 @@ impl Client {
     fn handle_server_terrain_msg(&mut self, msg: ServerGeneral) -> Result<(), Error> {
         match msg {
             ServerGeneral::TerrainChunkUpdate { key, chunk } => {
-                if let Ok(chunk) = chunk {
-                    self.state.insert_chunk(key, *chunk);
+                if let Some(chunk) = chunk.ok().and_then(|c| c.decompress()) {
+                    self.state.insert_chunk(key, Arc::new(chunk));
                 }
                 self.pending_chunks.remove(&key);
             },
-            ServerGeneral::TerrainBlockUpdates(mut blocks) => {
-                blocks.drain().for_each(|(pos, block)| {
-                    self.state.set_block(pos, block);
-                });
+            ServerGeneral::TerrainBlockUpdates(blocks) => {
+                if let Some(mut blocks) = blocks.decompress() {
+                    blocks.drain().for_each(|(pos, block)| {
+                        self.state.set_block(pos, block);
+                    });
+                }
             },
             _ => unreachable!("Not a terrain message"),
         }
@@ -2447,6 +2455,7 @@ mod tests {
             ConnectionArgs::IpAndPort(vec![socket]),
             view_distance,
             runtime2,
+            &mut None,
         ));
 
         let _ = veloren_client.map(|mut client| {

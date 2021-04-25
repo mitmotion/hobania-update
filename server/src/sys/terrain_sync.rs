@@ -1,7 +1,7 @@
 use crate::{client::Client, presence::Presence};
 use common::{comp::Pos, terrain::TerrainGrid};
 use common_ecs::{Job, Origin, Phase, System};
-use common_net::msg::ServerGeneral;
+use common_net::msg::{CompressedData, ServerGeneral};
 use common_state::TerrainChanges;
 use specs::{Join, Read, ReadExpect, ReadStorage};
 
@@ -37,10 +37,10 @@ impl<'a> System<'a> for Sys {
                     if lazy_msg.is_none() {
                         lazy_msg = Some(client.prepare(ServerGeneral::TerrainChunkUpdate {
                             key: *chunk_key,
-                            chunk: Ok(Box::new(match terrain.get_key(*chunk_key) {
-                                Some(chunk) => chunk.clone(),
+                            chunk: Ok(match terrain.get_key(*chunk_key) {
+                                Some(chunk) => CompressedData::compress(&chunk, 5),
                                 None => break 'chunk,
-                            })),
+                            }),
                         }));
                     }
                     lazy_msg.as_ref().map(|ref msg| client.send_prepared(&msg));
@@ -50,14 +50,16 @@ impl<'a> System<'a> for Sys {
 
         // TODO: Don't send all changed blocks to all clients
         // Sync changed blocks
-        let mut lazy_msg = None;
-        for (_, client) in (&presences, &clients).join() {
-            if lazy_msg.is_none() {
-                lazy_msg = Some(client.prepare(ServerGeneral::TerrainBlockUpdates(
-                    terrain_changes.modified_blocks.clone(),
-                )));
+        if !terrain_changes.modified_blocks.is_empty() {
+            let mut lazy_msg = None;
+            for (_, client) in (&presences, &clients).join() {
+                if lazy_msg.is_none() {
+                    lazy_msg = Some(client.prepare(ServerGeneral::TerrainBlockUpdates(
+                        CompressedData::compress(&terrain_changes.modified_blocks, 2),
+                    )));
+                }
+                lazy_msg.as_ref().map(|ref msg| client.send_prepared(&msg));
             }
-            lazy_msg.as_ref().map(|ref msg| client.send_prepared(&msg));
         }
     }
 }

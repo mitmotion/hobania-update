@@ -571,7 +571,7 @@ impl Show {
     ) {
         self.selected_crafting_tab(tab);
         self.crafting(true);
-        self.craft_sprite = craft_sprite;
+        self.craft_sprite = self.craft_sprite.or(craft_sprite);
     }
 
     fn diary(&mut self, open: bool) {
@@ -797,7 +797,7 @@ impl Hud {
         // Load item images.
         let item_imgs = ItemImgs::new(&mut ui, imgs.not_found);
         // Load fonts.
-        let fonts = Fonts::load(&global_state.i18n.read().fonts, &mut ui)
+        let fonts = Fonts::load(global_state.i18n.read().fonts(), &mut ui)
             .expect("Impossible to load fonts!");
         // Get the server name.
         let server = &client.server_info().name;
@@ -889,7 +889,7 @@ impl Hud {
     }
 
     pub fn update_fonts(&mut self, i18n: &Localization) {
-        self.fonts = Fonts::load(&i18n.fonts, &mut self.ui).expect("Impossible to load fonts!");
+        self.fonts = Fonts::load(i18n.fonts(), &mut self.ui).expect("Impossible to load fonts!");
     }
 
     #[allow(clippy::assign_op_pattern)] // TODO: Pending review in #587
@@ -913,7 +913,7 @@ impl Hud {
         // FPS
         let fps = global_state.clock.stats().average_tps;
         let version = common::util::DISPLAY_VERSION_LONG.clone();
-        let i18n = &*global_state.i18n.read();
+        let i18n = &global_state.i18n.read();
         let key_layout = &global_state.window.key_layout;
 
         if self.show.ingame {
@@ -2267,6 +2267,7 @@ impl Hud {
         let healths = ecs.read_storage::<comp::Health>();
         let inventories = ecs.read_storage::<comp::Inventory>();
         let energies = ecs.read_storage::<comp::Energy>();
+        let skillsets = ecs.read_storage::<comp::SkillSet>();
         let character_states = ecs.read_storage::<comp::CharacterState>();
         let controllers = ecs.read_storage::<comp::Controller>();
         let ability_map = ecs.fetch::<comp::item::tool::AbilityMap>();
@@ -2289,12 +2290,14 @@ impl Hud {
             Some(health),
             Some(inventory),
             Some(energy),
+            Some(skillset),
             Some(_character_state),
             Some(_controller),
         ) = (
             healths.get(entity),
             inventories.get(entity),
             energies.get(entity),
+            skillsets.get(entity),
             character_states.get(entity),
             controllers.get(entity).map(|c| &c.inputs),
         ) {
@@ -2308,6 +2311,7 @@ impl Hud {
                 &health,
                 &inventory,
                 &energy,
+                &skillset,
                 //&character_state,
                 self.pulse,
                 //&controller,
@@ -2438,7 +2442,7 @@ impl Hud {
                     client,
                     &self.imgs,
                     &self.fonts,
-                    i18n,
+                    &*i18n,
                     self.pulse,
                     &self.rot_imgs,
                     item_tooltip_manager,

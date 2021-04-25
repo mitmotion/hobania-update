@@ -43,6 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Entities now have density
 - Buoyancy is calculated from the difference in density between an entity and surrounding fluid
 - Drag is now calculated based on physical properties
+- Terrain chunks are now deflate-compressed when sent over the network.
+- Missing translations can be displayed in English.
+- New large birds npcs
+- Day period dependant wildlife spawns
 
 ### Changed
 
@@ -74,6 +78,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Jump has been decreased in height but extended in length as a result of the new gravity
 - Fall damage has been adjusted with the new gravity in mind
 - Projectiles now generally have a different arc because they no longer have their own gravity modifier
+- Increased agent system target search efficiency speeding up the server
+- Added more parallelization to terrain serialization and removed extra cloning speeding up the server
 
 ### Removed
 
@@ -92,6 +98,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Minimap icons are now displayed in both map modes
 - Server now denies any running trades when a user exits to the character selection screen.
 - Sfx volume changes now also change the ambient sounds volume
+- Staff fire shockwave ability no longer has an unlimited vertical range
+- Skillbar buttons correctly account for skill points when checking if player has enough stamina for the ability.
 
 ## [0.9.0] - 2021-03-20
 

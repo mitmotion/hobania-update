@@ -69,7 +69,18 @@ skeleton_impls!(struct CharacterSkeleton {
     control,
     control_l,
     control_r,
+    :: // Begin non-bone fields
+    holding_lantern: bool,
 });
+
+impl CharacterSkeleton {
+    pub fn new(holding_lantern: bool) -> Self {
+        Self {
+            holding_lantern,
+            ..Self::default()
+        }
+    }
+}
 
 impl Skeleton for CharacterSkeleton {
     type Attr = SkeletonAttr;
@@ -93,9 +104,14 @@ impl Skeleton for CharacterSkeleton {
         let control_mat = chest_mat * Mat4::<f32>::from(self.control);
         let control_l_mat = control_mat * Mat4::<f32>::from(self.control_l);
         let control_r_mat = control_mat * Mat4::<f32>::from(self.control_r);
+        let hand_r_mat = control_r_mat * Mat4::<f32>::from(self.hand_r);
 
         let hand_l_mat = Mat4::<f32>::from(self.hand_l);
-        let lantern_mat = Mat4::<f32>::from(self.lantern);
+        let lantern_mat = if self.holding_lantern {
+            hand_r_mat
+        } else {
+            shorts_mat
+        } * Mat4::<f32>::from(self.lantern);
 
         *(<&mut [_; Self::BONE_COUNT]>::try_from(&mut buf[0..Self::BONE_COUNT]).unwrap()) = [
             make_bone(head_mat),
@@ -104,7 +120,7 @@ impl Skeleton for CharacterSkeleton {
             make_bone(chest_mat * Mat4::<f32>::from(self.back)),
             make_bone(shorts_mat),
             make_bone(control_l_mat * hand_l_mat),
-            make_bone(control_r_mat * Mat4::<f32>::from(self.hand_r)),
+            make_bone(hand_r_mat),
             make_bone(torso_mat * Mat4::<f32>::from(self.foot_l)),
             make_bone(torso_mat * Mat4::<f32>::from(self.foot_r)),
             make_bone(chest_mat * Mat4::<f32>::from(self.shoulder_l)),
@@ -112,12 +128,11 @@ impl Skeleton for CharacterSkeleton {
             make_bone(chest_mat * Mat4::<f32>::from(self.glider)),
             make_bone(control_l_mat * Mat4::<f32>::from(self.main)),
             make_bone(control_r_mat * Mat4::<f32>::from(self.second)),
-            make_bone(shorts_mat * lantern_mat),
+            make_bone(lantern_mat),
             // FIXME: Should this be control_l_mat?
             make_bone(control_mat * hand_l_mat * Mat4::<f32>::from(self.hold)),
         ];
-        // NOTE: lantern_mat.cols.w = lantern_mat * Vec4::unit_w()
-        Vec3::new(-0.3, 0.1, 0.8) + (lantern_mat.cols.w / 13.0).xyz()
+        (lantern_mat * Vec4::new(0.0, 0.0, -4.0, 1.0)).xyz()
     }
 }
 
@@ -201,18 +216,18 @@ impl<'a> From<&'a Body> for SkeletonAttr {
         Self {
             scaler: match (body.species, body.body_type) {
                 // TODO : Derive scale from body proportions
-                (Orc, Male) => 1.14,
-                (Orc, Female) => 1.02,
-                (Human, Male) => 1.02,
-                (Human, Female) => 0.96,
-                (Elf, Male) => 1.02,
-                (Elf, Female) => 0.96,
-                (Dwarf, Male) => 0.84,
-                (Dwarf, Female) => 0.78,
-                (Undead, Male) => 0.96,
-                (Undead, Female) => 0.9,
-                (Danari, Male) => 0.70,
-                (Danari, Female) => 0.70,
+                (Orc, Male) => 0.91,
+                (Orc, Female) => 0.81,
+                (Human, Male) => 0.81,
+                (Human, Female) => 0.76,
+                (Elf, Male) => 0.82,
+                (Elf, Female) => 0.76,
+                (Dwarf, Male) => 0.67,
+                (Dwarf, Female) => 0.62,
+                (Undead, Male) => 0.78,
+                (Undead, Female) => 0.72,
+                (Danari, Male) => 0.56,
+                (Danari, Female) => 0.56,
             },
             head_scale: match (body.species, body.body_type) {
                 (Orc, Male) => 0.9,
