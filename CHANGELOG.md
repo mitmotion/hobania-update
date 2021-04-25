@@ -81,6 +81,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Projectiles now generally have a different arc because they no longer have their own gravity modifier
 - Increased agent system target search efficiency speeding up the server
 - Added more parallelization to terrain serialization and removed extra cloning speeding up the server
+- Energy now recharges while gliding
 
 ### Removed
 
