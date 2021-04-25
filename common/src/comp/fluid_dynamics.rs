@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     consts::{AIR_DENSITY, WATER_DENSITY},
-    util::Dir,
+    util::{Dir, Plane, Projection},
 };
 use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
@@ -267,8 +267,16 @@ impl Body {
 }
 
 /// Geometric angle of attack
-fn angle_of_attack(ori: &Ori, rel_flow_dir: &Dir) -> f32 {
-    PI / 2.0 - ori.up().angle_between(rel_flow_dir.to_vec())
+///
+/// # Note
+/// This ignores spanwise flow (i.e. we remove the spanwise flow component).
+/// With greater yaw comes greater loss of accuracy as more flow goes
+/// unaccounted for.
+pub fn angle_of_attack(ori: &Ori, rel_flow_dir: &Dir) -> f32 {
+    rel_flow_dir
+        .projected(&Plane::from(ori.right()))
+        .map(|flow_dir| PI / 2.0 - ori.up().angle_between(flow_dir.to_vec()))
+        .unwrap_or(0.0)
 }
 
 /// Total lift coefficient for a finite wing of symmetric aerofoil shape and
