@@ -65,7 +65,7 @@ impl CharacterBehavior for Data {
 
             let ori = Some(data.inputs.move_dir)
                 .filter(|mv_dir| !mv_dir.is_approx_zero())
-                .or_else(|| self.ori.look_dir().xy().try_normalized())
+                .or_else(|| data.inputs.look_dir.xy().try_normalized())
                 .map(|mv_dir| Vec3::new(mv_dir.x, mv_dir.y, (data.inputs.look_dir.z + 0.3) * 2.0))
                 .and_then(Dir::from_unnormalized)
                 .and_then(|tgt_dir| {
