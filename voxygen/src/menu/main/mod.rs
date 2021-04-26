@@ -16,7 +16,7 @@ use crate::{
 use client::addr::ConnectionArgs;
 use client::{
     error::{InitProtocolError, NetworkConnectError, NetworkError},
-    ServerInfo,
+    Client, ServerInfo,
 };
 use client_init::{ClientConnArgs, ClientInit, Error as InitError, Msg as InitMsg};
 use common::comp;
@@ -27,10 +27,29 @@ use tokio::runtime;
 use tracing::error;
 use ui::{Event as MainMenuEvent, MainMenuUi};
 
+// TODO: show status messages for waiting on server creation, client init, and
+// pipeline creation (we can show progress of pipeline creation)
+enum InitState {
+    None,
+    // Waiting on the client initialization
+    Client(ClientInit),
+    // Client initialized but still waiting on Renderer pipeline creation
+    Pipeline(Client),
+}
+
+impl InitState {
+    fn client(&self) -> Option<&ClientInit> {
+        if let Self::Client(client_init) = &self {
+            Some(client_init)
+        } else {
+            None
+        }
+    }
+}
+
 pub struct MainMenuState {
     main_menu_ui: MainMenuUi,
-    // Used for client creation.
-    client_init: Option<ClientInit>,
+    init: InitState,
     scene: Scene,
 }
 
@@ -39,7 +58,7 @@ impl MainMenuState {
     pub fn new(global_state: &mut GlobalState) -> Self {
         Self {
             main_menu_ui: MainMenuUi::new(global_state),
-            client_init: None,
+            init: InitState::None,
             scene: Scene::new(global_state.window.renderer_mut()),
         }
     }
@@ -83,14 +102,14 @@ impl PlayState for MainMenuState {
                             "singleplayer".to_owned(),
                             "".to_owned(),
                             ClientConnArgs::Resolved(ConnectionArgs::Mpsc(14004)),
-                            &mut self.client_init,
+                            &mut self.init,
                             Some(runtime),
                         );
                     },
                     Ok(Err(e)) => {
                         error!(?e, "Could not start server");
                         global_state.singleplayer = None;
-                        self.client_init = None;
+                        self.init = InitState::None;
                         self.main_menu_ui.cancel_connection();
                         self.main_menu_ui.show_info(format!("Error: {:?}", e));
                     },
@@ -113,20 +132,15 @@ impl PlayState for MainMenuState {
             }
         }
         // Poll client creation.
-        match self.client_init.as_ref().and_then(|init| init.poll()) {
+        match self.init.client().and_then(|init| init.poll()) {
             Some(InitMsg::Done(Ok(mut client))) => {
-                self.client_init = None;
-                self.main_menu_ui.connected();
                 // Register voxygen components / resources
                 crate::ecs::init(client.state_mut().ecs_mut());
-                return PlayStateResult::Push(Box::new(CharSelectionState::new(
-                    global_state,
-                    std::rc::Rc::new(std::cell::RefCell::new(client)),
-                )));
+                self.init = InitState::Pipeline(client);
             },
             Some(InitMsg::Done(Err(err))) => {
                 let localized_strings = global_state.i18n.read();
-                self.client_init = None;
+                self.init = InitState::None;
                 global_state.info_message = Some({
                     let err = match err {
                         InitError::NoAddress => {
@@ -244,16 +258,71 @@ impl PlayState for MainMenuState {
                     .contains(&auth_server)
                 {
                     // Can't fail since we just polled it, it must be Some
-                    self.client_init
-                        .as_ref()
-                        .unwrap()
-                        .auth_trust(auth_server, true);
+                    self.init.client().unwrap().auth_trust(auth_server, true);
                 } else {
                     // Show warning that auth server is not trusted and prompt for approval
                     self.main_menu_ui.auth_trust_prompt(auth_server);
                 }
             },
             None => {},
+        }
+
+        // Tick the client to keep the connection alive if we are waiting on pipelines
+        let localized_strings = &global_state.i18n.read();
+        if let InitState::Pipeline(client) = &mut self.init {
+            match client.tick(
+                comp::ControllerInputs::default(),
+                global_state.clock.dt(),
+                |_| {},
+            ) {
+                Ok(events) => {
+                    for event in events {
+                        match event {
+                            client::Event::SetViewDistance(vd) => {
+                                global_state.settings.graphics.view_distance = vd;
+                                global_state.settings.save_to_file_warn();
+                            },
+                            client::Event::Disconnect => {
+                                global_state.info_message = Some(
+                                    localized_strings
+                                        .get("main.login.server_shut_down")
+                                        .to_owned(),
+                                );
+                                self.init = InitState::None;
+                            },
+                            _ => {},
+                        }
+                    }
+                },
+                Err(err) => {
+                    global_state.info_message =
+                        Some(localized_strings.get("common.connection_lost").to_owned());
+                    error!(?err, "[main menu] Failed to tick the client");
+                    self.init = InitState::None;
+                },
+            }
+        }
+
+        // Poll renderer pipeline creation
+        if let InitState::Pipeline(..) = &self.init {
+            // If not complete go to char select screen
+            if global_state
+                .window
+                .renderer()
+                .pipeline_creation_status()
+                .is_none()
+            {
+                // Always succeeds since we check above
+                if let InitState::Pipeline(client) =
+                    core::mem::replace(&mut self.init, InitState::None)
+                {
+                    self.main_menu_ui.connected();
+                    return PlayStateResult::Push(Box::new(CharSelectionState::new(
+                        global_state,
+                        std::rc::Rc::new(std::cell::RefCell::new(client)),
+                    )));
+                }
+            }
         }
 
         // Maintain the UI.
@@ -281,19 +350,19 @@ impl PlayState for MainMenuState {
                         username,
                         password,
                         ClientConnArgs::Host(server_address),
-                        &mut self.client_init,
+                        &mut self.init,
                         None,
                     );
                 },
                 MainMenuEvent::CancelLoginAttempt => {
-                    // client_init contains Some(ClientInit), which spawns a thread which contains a
-                    // TcpStream::connect() call This call is blocking
-                    // TODO fix when the network rework happens
+                    // init contains InitState::Client(ClientInit), which spawns a thread which
+                    // contains a TcpStream::connect() call This call is
+                    // blocking TODO fix when the network rework happens
                     #[cfg(feature = "singleplayer")]
                     {
                         global_state.singleplayer = None;
                     }
-                    self.client_init = None;
+                    self.init = InitState::None;
                     self.main_menu_ui.cancel_connection();
                 },
                 MainMenuEvent::ChangeLanguage(new_language) => {
@@ -329,8 +398,8 @@ impl PlayState for MainMenuState {
                             .insert(auth_server.clone());
                         global_state.settings.save_to_file_warn();
                     }
-                    self.client_init
-                        .as_ref()
+                    self.init
+                        .client()
                         .map(|init| init.auth_trust(auth_server, trust));
                 },
             }
@@ -393,7 +462,7 @@ fn attempt_login(
     username: String,
     password: String,
     connection_args: ClientConnArgs,
-    client_init: &mut Option<ClientInit>,
+    init: &mut InitState,
     runtime: Option<Arc<runtime::Runtime>>,
 ) {
     if let Err(err) = comp::Player::alias_validate(&username) {
@@ -402,8 +471,8 @@ fn attempt_login(
     }
 
     // Don't try to connect if there is already a connection in progress.
-    if client_init.is_none() {
-        *client_init = Some(ClientInit::new(
+    if let InitState::None = init {
+        *init = InitState::Client(ClientInit::new(
             connection_args,
             username,
             Some(settings.graphics.view_distance),
