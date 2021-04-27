@@ -447,6 +447,7 @@ impl Body {
                 bird_large::Species::Cockatrice => 4000,
                 bird_large::Species::Phoenix => 6000,
                 bird_large::Species::Roc => 5000,
+                bird_large::Species::FlameWyvern => 6000,
             },
             Body::Humanoid(_) => 750,
             _ => 1000,
