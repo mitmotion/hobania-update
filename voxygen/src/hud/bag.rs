@@ -20,7 +20,7 @@ use common::{
     combat::{combat_rating, Damage},
     comp::{
         inventory::InventorySortOrder,
-        item::{ItemDef, MaterialStatManifest, Quality},
+        item::{ItemDef, ItemTag, MaterialStatManifest, Quality},
         Body, Energy, Health, Inventory, Poise, SkillSet, Stats,
     },
 };
@@ -50,10 +50,10 @@ widget_ids! {
         bg_frame,
         char_ico,
         coin_ico,
-        //cheese_ico,
+        food_ico,
         space_txt,
         coin_txt,
-        //cheese_txt,
+        food_txt,
         inventory_title,
         inventory_title_bg,
         scrollbar_bg,
@@ -340,10 +340,18 @@ impl<'a> InventoryScroller<'a> {
         let bag_space_percentage = space_used as f32 / space_max as f32;
         let coin_itemdef = Arc::<ItemDef>::load_expect_cloned("common.items.utility.coins");
         let coin_count = self.inventory.item_count(&coin_itemdef);
-        // TODO: Reuse this to generally count a stackable item the player selected
-        //let cheese_itemdef =
-        // Arc::<ItemDef>::load_expect_cloned("common.items.food.cheese");
-        // let cheese_count = self.inventory.item_count(&cheese_itemdef);
+        let food_count: usize = self
+            .inventory
+            .slots()
+            .filter_map(|i| {
+                if let Some(i) = i {
+                    if i.tags.contains(&ItemTag::Food) && i.is_stackable() {
+                        return Some(i.amount() as usize);
+                    }
+                }
+                None
+            })
+            .sum();
 
         // Coin Icon and Coin Text
         Image::new(self.imgs.coin_ico)
@@ -356,19 +364,26 @@ impl<'a> InventoryScroller<'a> {
             .font_size(self.fonts.cyri.scale(14))
             .color(Color::Rgba(0.871, 0.863, 0.05, 1.0))
             .set(state.ids.coin_txt, ui);
-        // TODO: Add a customizable counter for stackable items here
-        // TODO: Cheese is funny until it's real
-        /*Image::new(self.imgs.cheese_ico)
+        let food_anim = [
+            self.imgs.food0_ico,
+            self.imgs.food1_ico,
+            self.imgs.food2_ico,
+        ];
+        Image::new(food_anim[self.pulse as usize % food_anim.len()])
             .w_h(16.0, 17.0)
             .bottom_left_with_margins_on(self.bg_ids.bg_frame, 2.0, 110.0)
-            .set(state.ids.cheese_ico, ui);
-        Text::new(&format!("{}", cheese_count))
+            .set(state.ids.food_ico, ui);
+        Text::new(&format!("{}", food_count))
             .bottom_left_with_margins_on(self.bg_ids.bg_frame, 6.0, 144.0)
             .font_id(self.fonts.cyri.conrod_id)
             .font_size(self.fonts.cyri.scale(14))
             .color(Color::Rgba(0.871, 0.863, 0.05, 1.0))
-            .set(state.ids.cheese_txt, ui);*/
-        //Free Bag-Space
+            .set(state.ids.food_txt, ui);
+        // TODO: Add counter for gems and potions (requires plumbing voxel/figure data
+        // here, since those inventory images use the figure machinery to render
+        // icons)
+
+        // Free Bag-Space
         Text::new(&bag_space)
             .bottom_right_with_margins_on(self.bg_ids.bg_frame, 6.0, 43.0)
             .font_id(self.fonts.cyri.conrod_id)
