@@ -5,7 +5,7 @@ use crate::{
     Tick,
 };
 use common::{
-    comp::{Collider, ForceUpdate, Inventory, InventoryUpdate, Last, Ori, Player, Pos, Vel},
+    comp::{Collider, ForceUpdate, Group, Inventory, InventoryUpdate, Last, Ori, Player, Pos, Vel},
     outcome::Outcome,
     region::{Event as RegionEvent, RegionMap},
     resources::{PlayerPhysicsSettings, TimeOfDay},
@@ -15,8 +15,9 @@ use common::{
 };
 use common_ecs::{Job, Origin, Phase, System};
 use common_net::{msg::ServerGeneral, sync::CompSyncPackage};
+use hashbrown::HashMap;
 use itertools::Either;
-use specs::{Entities, Join, Read, ReadExpect, ReadStorage, Write, WriteStorage};
+use specs::{Entities, Entity, Join, Read, ReadExpect, ReadStorage, Write, WriteStorage};
 use vek::*;
 
 /// This system will send physics updates to the client
@@ -37,6 +38,7 @@ impl<'a> System<'a> for Sys {
         ReadStorage<'a, RegionSubscription>,
         ReadStorage<'a, Presence>,
         ReadStorage<'a, Collider>,
+        ReadStorage<'a, Group>,
         WriteStorage<'a, Last<Pos>>,
         WriteStorage<'a, Last<Vel>>,
         WriteStorage<'a, Last<Ori>>,
@@ -70,6 +72,7 @@ impl<'a> System<'a> for Sys {
             subscriptions,
             presences,
             colliders,
+            groups,
             mut last_pos,
             mut last_vel,
             mut last_ori,
@@ -86,11 +89,12 @@ impl<'a> System<'a> for Sys {
     ) {
         let tick = tick.0;
         // To send entity updates
-        // 1. Iterate through regions
-        // 2. Iterate through region subscribers (ie clients)
+        // 1. Build an efficient index for group membership
+        // 2. Iterate through regions
+        // 3. Iterate through region subscribers (ie clients)
         //     - Collect a list of entity ids for clients who are subscribed to this
         //       region (hash calc to check each)
-        // 3. Iterate through events from that region
+        // 4. Iterate through events from that region
         //     - For each entity entered event, iterate through the client list and
         //       check if they are subscribed to the source (hash calc per subscribed
         //       client per entity event), if not subscribed to the source send a entity
@@ -98,9 +102,18 @@ impl<'a> System<'a> for Sys {
         //     - For each entity left event, iterate through the client list and check
         //       if they are subscribed to the destination (hash calc per subscribed
         //       client per entity event)
-        // 4. Iterate through entities in that region
-        // 5. Inform clients of the component changes for that entity
-        //     - Throttle update rate base on distance to each client
+        // 5. Iterate through clients in that region
+        // 6. Inform clients of component changes for group members
+        // 7. Inform clients of the component changes for each entity within the region
+        //     - Throttle update rate base on distance to each entity
+
+        // Build group index
+        let mut group_index: HashMap<Group, Vec<Entity>> = HashMap::new();
+        // Only allocate for entities with clients, to avoid adding NPC groups to the
+        // index
+        for (entity, group, _) in (&entities, &groups, &clients).join() {
+            group_index.entry(*group).or_default().push(entity);
+        }
 
         // Sync physics
         // via iterating through regions
@@ -113,11 +126,12 @@ impl<'a> System<'a> for Sys {
                 presences.maybe(),
                 &subscriptions,
                 &positions,
+                groups.maybe(),
             )
                 .join()
-                .filter_map(|(client, entity, presence, subscription, pos)| {
+                .filter_map(|(client, entity, presence, subscription, pos, group)| {
                     if presence.is_some() && subscription.regions.contains(&key) {
-                        Some((client, &subscription.regions, entity, *pos))
+                        Some((client, &subscription.regions, entity, *pos, group))
                     } else {
                         None
                     }
@@ -145,7 +159,7 @@ impl<'a> System<'a> for Sys {
                             })
                         {
                             let create_msg = ServerGeneral::CreateEntity(pkg);
-                            for (client, regions, client_entity, _) in &mut subscribers {
+                            for (client, regions, client_entity, _, _) in &mut subscribers {
                                 if maybe_key
                                     .as_ref()
                                     .map(|key| !regions.contains(key))
@@ -161,7 +175,7 @@ impl<'a> System<'a> for Sys {
                     RegionEvent::Left(id, maybe_key) => {
                         // Lookup UID for entity
                         if let Some(&uid) = uids.get(entities.entity(*id)) {
-                            for (client, regions, _, _) in &mut subscribers {
+                            for (client, regions, _, _, _) in &mut subscribers {
                                 if maybe_key
                                     .as_ref()
                                     .map(|key| !regions.contains(key))
@@ -187,7 +201,7 @@ impl<'a> System<'a> for Sys {
             // We lazily initializethe the synchronization messages in case there are no
             // clients.
             let mut entity_comp_sync = Either::Left((entity_sync_package, comp_sync_package));
-            for (client, _, _, _) in &mut subscribers {
+            for (client, _, _, _, _) in &mut subscribers {
                 let msg =
                     entity_comp_sync.right_or_else(|(entity_sync_package, comp_sync_package)| {
                         (
@@ -202,21 +216,42 @@ impl<'a> System<'a> for Sys {
                 entity_comp_sync = Either::Right(msg);
             }
 
-            for (client, _, client_entity, client_pos) in &mut subscribers {
+            for (client, _, client_entity, client_pos, client_group) in &mut subscribers {
                 let mut comp_sync_package = CompSyncPackage::new();
 
-                for (_, entity, &uid, (&pos, last_pos), vel, ori, force_update, collider) in (
-                    region.entities(),
-                    &entities,
-                    &uids,
-                    (&positions, last_pos.mask().maybe()),
-                    (&velocities, last_vel.mask().maybe()).maybe(),
-                    (&orientations, last_vel.mask().maybe()).maybe(),
-                    force_updates.mask().maybe(),
-                    colliders.maybe(),
-                )
-                    .join()
+                // Unconditionally send updates for group members, even outside the region.
+                // Uses `get` instead of `join` to avoid O(n^2) behavior.
+                if let Some(members) = client_group.and_then(|g| group_index.get(g)) {
+                    for entity in members.iter() {
+                        if let Some(package) = tracked_comps.create_entity_package(
+                            *entity,
+                            positions.get(*entity).copied(),
+                            velocities.get(*entity).copied(),
+                            orientations.get(*entity).copied(),
+                        ) {
+                            client.send_fallible(ServerGeneral::CreateEntity(package));
+                        }
+                    }
+                }
+
+                for (_, entity, &uid, (&pos, last_pos), vel, ori, force_update, collider, group) in
+                    (
+                        region.entities(),
+                        &entities,
+                        &uids,
+                        (&positions, last_pos.mask().maybe()),
+                        (&velocities, last_vel.mask().maybe()).maybe(),
+                        (&orientations, last_vel.mask().maybe()).maybe(),
+                        force_updates.mask().maybe(),
+                        colliders.maybe(),
+                        groups.maybe(),
+                    )
+                        .join()
                 {
+                    // Skip sending group updates here, since we sent them in the previous loop
+                    if client_group.is_some() && *client_group == group {
+                        continue;
+                    }
                     // Decide how regularly to send physics updates.
                     let send_now = if client_entity == &entity {
                         let player_physics_setting = players
