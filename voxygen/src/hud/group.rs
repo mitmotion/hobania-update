@@ -789,6 +789,10 @@ impl<'a> Widget for Group<'a> {
                     .localized_strings
                     .get("hud.group.invite_to_join")
                     .replace("{name}", &name),
+                InviteKind::JoinGroup => self
+                    .localized_strings
+                    .get("hud.group.invite_to_join_your_group")
+                    .replace("{name}", &name),
                 InviteKind::Trade => self
                     .localized_strings
                     .get("hud.group.invite_to_trade")

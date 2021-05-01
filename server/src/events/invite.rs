@@ -211,6 +211,27 @@ pub fn handle_invite_accept(server: &mut Server, entity: specs::Entity) {
                     },
                 );
             },
+            InviteKind::JoinGroup => {
+                let mut group_manager = state.ecs().write_resource::<GroupManager>();
+                group_manager.add_group_member(
+                    entity,
+                    inviter,
+                    &state.ecs().entities(),
+                    &mut state.ecs().write_storage(),
+                    &state.ecs().read_storage(),
+                    &uids,
+                    |entity, group_change| {
+                        clients
+                            .get(entity)
+                            .and_then(|c| {
+                                group_change
+                                    .try_map(|e| uids.get(e).copied())
+                                    .map(|g| (g, c))
+                            })
+                            .map(|(g, c)| c.send(ServerGeneral::GroupUpdate(g)));
+                    },
+                );
+            },
             InviteKind::Trade => {
                 if let (Some(inviter_uid), Some(invitee_uid)) =
                     (uids.get(inviter).copied(), uids.get(entity).copied())

@@ -37,6 +37,8 @@ pub enum MemoryItem {
     // such as clothing worn, weapon used, etc.
     CharacterInteraction { name: String },
     CharacterFight { name: String },
+    /// A contract with another character to join their group and fight for them
+    MercenaryContract { name: String },
     Mood { state: MoodState },
 }
 

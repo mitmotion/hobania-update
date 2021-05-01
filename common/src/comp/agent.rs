@@ -1,5 +1,5 @@
 use crate::{
-    comp::{humanoid, quadruped_low, quadruped_medium, quadruped_small, Body},
+    comp::{chat::GenericChatMsg, humanoid, quadruped_low, quadruped_medium, quadruped_small, Body},
     path::Chaser,
     rtsim::RtSimController,
     trade::{PendingTrade, ReducedInventory, SiteId, SitePrices, TradeId, TradeResult},
@@ -8,6 +8,7 @@ use crate::{
 use specs::{Component, Entity as EcsEntity};
 use specs_idvs::IdvStorage;
 use std::collections::VecDeque;
+use hashbrown::HashMap;
 use vek::*;
 
 use super::dialogue::Subject;
@@ -266,6 +267,7 @@ impl<'a> From<&'a Body> for Psyche {
 #[derive(Clone, Debug)]
 /// Events that affect agent behavior from other entities/players/environment
 pub enum AgentEvent {
+    IncomingChat(GenericChatMsg<String>),
     /// Engage in conversation with entity with Uid
     Talk(Uid, Subject),
     TradeInvite(Uid),
@@ -290,6 +292,14 @@ pub struct Target {
     pub selected_at: f64,
 }
 
+#[derive(Clone, Debug)]
+pub enum Occupation {
+    Traveler,
+    TravelingMercenary,
+    Merchant,
+    TravelingMerchant,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Agent {
     pub rtsim_controller: RtSimController,
@@ -301,6 +311,19 @@ pub struct Agent {
     pub inbox: VecDeque<AgentEvent>,
     pub action_timer: f32,
     pub bearing: Vec2<f32>,
+    pub offer: Option<InteractionOffer>,
+}
+
+#[derive(Clone, Debug)]
+pub enum InteractionOffer {
+    Trade,
+    MercenaryHire,
+    FetchQuest(FetchResult),
+}
+
+#[derive(Clone, Debug)]
+pub struct FetchResult {
+    items: HashMap<String, u32>,
 }
 
 impl Agent {

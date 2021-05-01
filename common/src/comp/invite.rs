@@ -6,6 +6,7 @@ use specs_idvs::IdvStorage;
 pub enum InviteKind {
     Group,
     Trade,
+    JoinGroup,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]

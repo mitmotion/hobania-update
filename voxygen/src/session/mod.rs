@@ -146,6 +146,7 @@ impl SessionState {
                     // not be grammatical in some languages)
                     let kind_str = match kind {
                         InviteKind::Group => "Group",
+                        InviteKind::JoinGroup => "Join Group",
                         InviteKind::Trade => "Trade",
                     };
                     let target_name = match client.player_list().get(&target) {

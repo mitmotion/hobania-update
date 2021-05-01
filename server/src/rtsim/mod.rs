@@ -120,6 +120,7 @@ pub fn init(state: &mut State, #[cfg(feature = "worldgen")] world: &world::World
             controller: RtSimController::default(),
             last_tick: 0,
             brain: Default::default(),
+            occupation: None,
         });
     }
 

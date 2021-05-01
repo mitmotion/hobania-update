@@ -1,6 +1,6 @@
 use super::*;
 use common::{
-    comp::inventory::loadout_builder::LoadoutBuilder,
+    comp::{agent::Occupation, inventory::loadout_builder::LoadoutBuilder},
     resources::Time,
     rtsim::{Memory, MemoryItem},
     store::Id,
@@ -23,6 +23,7 @@ pub struct Entity {
     pub controller: RtSimController,
 
     pub brain: Brain,
+    pub occupation: Option<Occupation>,
 }
 
 const PERM_SPECIES: u32 = 0;
@@ -30,6 +31,7 @@ const PERM_BODY: u32 = 1;
 const PERM_LOADOUT: u32 = 2;
 const PERM_LEVEL: u32 = 3;
 const PERM_GENUS: u32 = 4;
+const PERM_OCCUPATION: u32 = 5;
 
 impl Entity {
     pub fn rng(&self, perm: u32) -> impl Rng { RandomPerm::new(self.seed + perm) }
@@ -56,6 +58,18 @@ impl Entity {
                     .unwrap();
                 comp::humanoid::Body::random_with(&mut self.rng(PERM_BODY), &species).into()
             },
+        }
+    }
+
+    pub fn get_occupation(&self) -> Option<Occupation> {
+        // If the body is humanoid
+        if self.rng(PERM_GENUS).gen::<f32>() > 0.50 {
+            match self.rng(PERM_OCCUPATION).gen::<f32>() {
+                x if x < 0.5 => Some(Occupation::TravelingMercenary),
+                _ => Some(Occupation::Traveler),
+            }
+        } else {
+            None
         }
     }
 
@@ -120,9 +134,15 @@ impl Entity {
             )),
         };
 
-        let chest = Some(comp::Item::new_from_asset_expect(
+        let chest = if matches!(self.get_occupation(), Some(Occupation::TravelingMercenary)) {
+            Some(comp::Item::new_from_asset_expect(
+            "common.items.armor.plate.chest",
+        ))
+        } else {
+            Some(comp::Item::new_from_asset_expect(
             "common.items.npc_armor.chest.leather_blue",
-        ));
+        ))
+        };
         let pants = Some(comp::Item::new_from_asset_expect(
             "common.items.npc_armor.pants.leather_blue",
         ));

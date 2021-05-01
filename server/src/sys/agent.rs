@@ -2,10 +2,11 @@ use crate::rtsim::{Entity as RtSimData, RtSim};
 use common::{
     comp::{
         self,
-        agent::{AgentEvent, Tactic, Target, DEFAULT_INTERACTION_TIME, TRADE_INTERACTION_TIME},
+        agent::{InteractionOffer, Occupation, AgentEvent, Tactic, Target, DEFAULT_INTERACTION_TIME, TRADE_INTERACTION_TIME},
         buff::{BuffKind, Buffs},
         compass::{Direction, Distance},
         dialogue::{MoodContext, MoodState, Subject},
+        chat::ChatType,
         group,
         inventory::{item::ItemTag, slot::EquipSlot},
         invite::{InviteKind, InviteResponse},
@@ -562,6 +563,7 @@ impl<'a> AgentData<'a> {
             {
                 self.interact(agent, controller, &read_data, event_emitter);
             } else {
+                agent.offer = None;
                 agent.action_timer = 0.0;
                 agent.target = None;
                 controller.actions.push(ControlAction::Stand);
@@ -710,119 +712,121 @@ impl<'a> AgentData<'a> {
         }
 
         agent.action_timer = 0.0;
-        if let Some((travel_to, _destination)) = &agent.rtsim_controller.travel_to {
-            // if it has an rtsim destination and can fly then it should
-            // if it is flying and bumps something above it then it should move down
-            if self.traversal_config.can_fly
-                && !read_data
-                    .terrain
-                    .ray(self.pos.0, self.pos.0 + (Vec3::unit_z() * 3.0))
-                    .until(Block::is_solid)
-                    .cast()
-                    .1
-                    .map_or(true, |b| b.is_some())
-            {
-                controller
-                    .actions
-                    .push(ControlAction::basic_input(InputKind::Fly));
-            } else {
-                controller
-                    .actions
-                    .push(ControlAction::CancelInput(InputKind::Fly))
-            }
-
-            if let Some((bearing, speed)) = agent.chaser.chase(
-                &*read_data.terrain,
-                self.pos.0,
-                self.vel.0,
-                *travel_to,
-                TraversalConfig {
-                    min_tgt_dist: 1.25,
-                    ..self.traversal_config
-                },
-            ) {
-                controller.inputs.move_dir =
-                    bearing.xy().try_normalized().unwrap_or_else(Vec2::zero)
-                        * speed.min(agent.rtsim_controller.speed_factor);
-                self.jump_if(controller, bearing.z > 1.5 || self.traversal_config.can_fly);
-                controller.inputs.climb = Some(comp::Climb::Up);
-                //.filter(|_| bearing.z > 0.1 || self.physics_state.in_liquid().is_some());
-
-                controller.inputs.move_z = bearing.z
-                    + if self.traversal_config.can_fly {
-                        // NOTE: costs 4 us (imbris)
-                        let obstacle_ahead = read_data
-                            .terrain
-                            .ray(
-                                self.pos.0 + Vec3::unit_z(),
-                                self.pos.0
-                                    + bearing.try_normalized().unwrap_or_else(Vec3::unit_y) * 80.0
-                                    + Vec3::unit_z(),
-                            )
-                            .until(Block::is_solid)
-                            .cast()
-                            .1
-                            .map_or(true, |b| b.is_some());
-
-                        let mut ground_too_close = self
-                            .body
-                            .map(|body| {
-                                #[cfg(feature = "worldgen")]
-                                let height_approx = self.pos.0.y
-                                    - read_data
-                                        .world
-                                        .sim()
-                                        .get_alt_approx(self.pos.0.xy().map(|x: f32| x as i32))
-                                        .unwrap_or(0.0);
-                                #[cfg(not(feature = "worldgen"))]
-                                let height_approx = self.pos.0.y;
-
-                                height_approx < body.flying_height()
-                            })
-                            .unwrap_or(false);
-
-                        const NUM_RAYS: usize = 5;
-
-                        // NOTE: costs 15-20 us (imbris)
-                        for i in 0..=NUM_RAYS {
-                            let magnitude = self.body.map_or(20.0, |b| b.flying_height());
-                            // Lerp between a line straight ahead and straight down to detect a
-                            // wedge of obstacles we might fly into (inclusive so that both vectors
-                            // are sampled)
-                            if let Some(dir) = Lerp::lerp(
-                                -Vec3::unit_z(),
-                                Vec3::new(bearing.x, bearing.y, 0.0),
-                                i as f32 / NUM_RAYS as f32,
-                            )
-                            .try_normalized()
-                            {
-                                ground_too_close |= read_data
-                                    .terrain
-                                    .ray(self.pos.0, self.pos.0 + magnitude * dir)
-                                    .until(|b: &Block| b.is_solid() || b.is_liquid())
-                                    .cast()
-                                    .1
-                                    .map_or(false, |b| b.is_some())
-                            }
-                        }
-
-                        if obstacle_ahead || ground_too_close {
-                            1.0 //fly up when approaching obstacles
-                        } else {
-                            -0.1
-                        } //flying things should slowly come down from the stratosphere
-                    } else {
-                        0.05 //normal land traveller offset
-                    };
-
-                // Put away weapon
-                if thread_rng().gen_bool(0.1)
-                    && matches!(
-                        read_data.char_states.get(*self.entity),
-                        Some(CharacterState::Wielding)
-                    )
+        if agent.rtsim_controller.travel_to.is_some() && !matches!(self.alignment, Some(Alignment::Owned(_))) {
+            if let Some((travel_to, _destination)) = &agent.rtsim_controller.travel_to {
+                // if it has an rtsim destination and can fly then it should
+                // if it is flying and bumps something above it then it should move down
+                if self.traversal_config.can_fly
+                    && !read_data
+                        .terrain
+                        .ray(self.pos.0, self.pos.0 + (Vec3::unit_z() * 3.0))
+                        .until(Block::is_solid)
+                        .cast()
+                        .1
+                        .map_or(true, |b| b.is_some())
                 {
-                    controller.actions.push(ControlAction::Unwield);
+                    controller
+                        .actions
+                        .push(ControlAction::basic_input(InputKind::Fly));
+                } else {
+                    controller
+                        .actions
+                        .push(ControlAction::CancelInput(InputKind::Fly))
+                }
+
+                if let Some((bearing, speed)) = agent.chaser.chase(
+                    &*read_data.terrain,
+                    self.pos.0,
+                    self.vel.0,
+                    *travel_to,
+                    TraversalConfig {
+                        min_tgt_dist: 1.25,
+                        ..self.traversal_config
+                    },
+                ) {
+                    controller.inputs.move_dir =
+                        bearing.xy().try_normalized().unwrap_or_else(Vec2::zero)
+                            * speed.min(agent.rtsim_controller.speed_factor);
+                    self.jump_if(controller, bearing.z > 1.5 || self.traversal_config.can_fly);
+                    controller.inputs.climb = Some(comp::Climb::Up);
+                    //.filter(|_| bearing.z > 0.1 || self.physics_state.in_liquid().is_some());
+
+                    controller.inputs.move_z = bearing.z
+                        + if self.traversal_config.can_fly {
+                            // NOTE: costs 4 us (imbris)
+                            let obstacle_ahead = read_data
+                                .terrain
+                                .ray(
+                                    self.pos.0 + Vec3::unit_z(),
+                                    self.pos.0
+                                        + bearing.try_normalized().unwrap_or_else(Vec3::unit_y) * 80.0
+                                        + Vec3::unit_z(),
+                                )
+                                .until(Block::is_solid)
+                                .cast()
+                                .1
+                                .map_or(true, |b| b.is_some());
+
+                            let mut ground_too_close = self
+                                .body
+                                .map(|body| {
+                                    #[cfg(feature = "worldgen")]
+                                    let height_approx = self.pos.0.y
+                                        - read_data
+                                            .world
+                                            .sim()
+                                            .get_alt_approx(self.pos.0.xy().map(|x: f32| x as i32))
+                                            .unwrap_or(0.0);
+                                    #[cfg(not(feature = "worldgen"))]
+                                    let height_approx = self.pos.0.y;
+
+                                    height_approx < body.flying_height()
+                                })
+                                .unwrap_or(false);
+
+                            const NUM_RAYS: usize = 5;
+
+                            // NOTE: costs 15-20 us (imbris)
+                            for i in 0..=NUM_RAYS {
+                                let magnitude = self.body.map_or(20.0, |b| b.flying_height());
+                                // Lerp between a line straight ahead and straight down to detect a
+                                // wedge of obstacles we might fly into (inclusive so that both vectors
+                                // are sampled)
+                                if let Some(dir) = Lerp::lerp(
+                                    -Vec3::unit_z(),
+                                    Vec3::new(bearing.x, bearing.y, 0.0),
+                                    i as f32 / NUM_RAYS as f32,
+                                )
+                                .try_normalized()
+                                {
+                                    ground_too_close |= read_data
+                                        .terrain
+                                        .ray(self.pos.0, self.pos.0 + magnitude * dir)
+                                        .until(|b: &Block| b.is_solid() || b.is_liquid())
+                                        .cast()
+                                        .1
+                                        .map_or(false, |b| b.is_some())
+                                }
+                            }
+
+                            if obstacle_ahead || ground_too_close {
+                                1.0 //fly up when approaching obstacles
+                            } else {
+                                -0.1
+                            } //flying things should slowly come down from the stratosphere
+                        } else {
+                            0.05 //normal land traveller offset
+                        };
+
+                    // Put away weapon
+                    if thread_rng().gen_bool(0.1)
+                        && matches!(
+                            read_data.char_states.get(*self.entity),
+                            Some(CharacterState::Wielding)
+                        )
+                    {
+                        controller.actions.push(ControlAction::Unwield);
+                    }
                 }
             }
         } else {
@@ -860,7 +864,11 @@ impl<'a> AgentData<'a> {
                 };
 
             if agent.bearing.magnitude_squared() > 0.5f32.powi(2) {
-                controller.inputs.move_dir = agent.bearing * 0.65;
+                if matches!(Some(Alignment::Owned(_)), data.alignment) {
+                    controller.inputs.move_dir = agent.bearing * 0.30;
+                } else {
+                    controller.inputs.move_dir = agent.bearing * 0.65;
+                }
             }
 
             // Put away weapon
@@ -901,9 +909,71 @@ impl<'a> AgentData<'a> {
         //         .events
         //         .push(ControlEvent::InviteResponse(InviteResponse::Decline));
         // }
-        agent.action_timer += read_data.dt.0;
+        // TODO allow npcs to handle more than one msg per tick
+        if agent.target.is_some() {
+            agent.action_timer += read_data.dt.0 / 10.0;
+        } else {
+            agent.action_timer += read_data.dt.0;
+        }
         let msg = agent.inbox.pop_back();
+        if msg.is_some() {
+            println!("agent message: {:?}", msg);
+        }
         match msg {
+            Some(AgentEvent::IncomingChat(chat_msg)) => {
+                if agent.behavior.can(BehaviorCapability::SPEAK) {
+                    if let ChatType::Say(by) = chat_msg.chat_type {
+                        if let Some(target) = read_data.uid_allocator.retrieve_entity_internal(by.id())
+                        {
+                            agent.target = Some(Target {
+                                target,
+                                hostile: false,
+                                selected_at: read_data.time.0,
+                            });
+                            match agent.offer {
+                                Some(InteractionOffer::Trade) => {
+                                    if chat_msg.message == "yes".to_string() {
+                                        let msg = "Come see my wares".to_string();
+                                        event_emitter.emit(ServerEvent::Chat(
+                                            UnresolvedChatMsg::npc(*self.uid, msg),
+                                        ));
+                                        controller.events.push(ControlEvent::InitiateInvite(
+                                            by,
+                                            InviteKind::Trade,
+                                        ));
+                                    }
+                                },
+                                Some(InteractionOffer::MercenaryHire) => {
+                                    if chat_msg.message == "yes".to_string() {
+                                        if let Some(target) = read_data.uid_allocator.retrieve_entity_internal(by.id()) {
+                                            if let Some(tgt_stats) = read_data.stats.get(target) {
+                                                agent.rtsim_controller.events.push(
+                                                    RtSimEvent::AddMemory(Memory {
+                                                        item: MemoryItem::MercenaryContract {
+                                                            name: tgt_stats.name.clone(),
+                                                        },
+                                                        time_to_forget: read_data.time.0 + 1440.0,
+                                                    }),
+                                                );
+                                            }
+                                        }
+                                        controller.events.push(ControlEvent::InitiateInvite(
+                                            by,
+                                            InviteKind::Trade,
+                                        ));
+                                        agent.behavior.set(BehaviorState::TRADING);
+                                    }
+                                },
+                                _ => {
+                                    event_emitter.emit(ServerEvent::Chat(
+                                        UnresolvedChatMsg::npc(*self.uid, chat_msg.message),
+                                    ));
+                                },
+                            }
+                        }
+                    }
+                }
+            },
             Some(AgentEvent::Talk(by, subject)) => {
                 if agent.behavior.can(BehaviorCapability::SPEAK) {
                     if let Some(target) = read_data.uid_allocator.retrieve_entity_internal(by.id())
@@ -934,21 +1004,29 @@ impl<'a> AgentData<'a> {
                                                         time_to_forget: read_data.time.0 + 600.0,
                                                     }),
                                                 );
-                                                if rtsim_entity
-                                                    .brain
-                                                    .remembers_character(&tgt_stats.name)
-                                                {
-                                                    format!(
-                                                        "Greetings fair {}! It has been far too \
-                                                         long since last I saw you. I'm going to \
-                                                         {} right now.",
-                                                        &tgt_stats.name, destination_name
-                                                    )
-                                                } else {
-                                                    format!(
-                                                        "I'm heading to {}! Want to come along?",
-                                                        destination_name
-                                                    )
+                                                match rtsim_entity.get_occupation() {
+                                                    Some(Occupation::TravelingMercenary) => {
+                                                        agent.offer = Some(InteractionOffer::MercenaryHire);
+                                                        "You look like an adventurer in need of an armed consort. For 1000 c. I will protect you for the next 24 hours.".to_string()
+                                                    },
+                                                    _ => {
+                                                        if rtsim_entity
+                                                            .brain
+                                                            .remembers_character(&tgt_stats.name)
+                                                        {
+                                                            format!(
+                                                                "Greetings fair {}! It has been far too \
+                                                                 long since last I saw you. I'm going to \
+                                                                 {} right now.",
+                                                                &tgt_stats.name, destination_name
+                                                            )
+                                                        } else {
+                                                            format!(
+                                                                "I'm heading to {}! Want to come along?",
+                                                                destination_name
+                                                            )
+                                                        }
+                                                    },
                                                 }
                                             } else {
                                                 format!(
@@ -964,6 +1042,7 @@ impl<'a> AgentData<'a> {
                                         event_emitter.emit(ServerEvent::Chat(
                                             UnresolvedChatMsg::npc(*self.uid, msg),
                                         ));
+                                        agent.offer = Some(InteractionOffer::Trade);
                                     } else {
                                         let msg = "npc.speech.villager".to_string();
                                         event_emitter.emit(ServerEvent::Chat(
@@ -1165,6 +1244,14 @@ impl<'a> AgentData<'a> {
                 }
             },
             Some(AgentEvent::TradeAccepted(with)) => {
+                                        //let msg = "I will guard you with my life until the contract ends or your coffers run dry".to_string();
+                                        //event_emitter.emit(ServerEvent::Chat(
+                                        //    UnresolvedChatMsg::npc(*self.uid, msg),
+                                        //));
+                                        //controller.events.push(ControlEvent::InitiateInvite(
+                                        //    by,
+                                        //    InviteKind::JoinGroup,
+                                        //));
                 if !agent.behavior.is(BehaviorState::TRADING) {
                     if let Some(target) =
                         read_data.uid_allocator.retrieve_entity_internal(with.id())
@@ -1183,10 +1270,26 @@ impl<'a> AgentData<'a> {
                 if agent.behavior.is(BehaviorState::TRADING) {
                     match result {
                         TradeResult::Completed => {
-                            event_emitter.emit(ServerEvent::Chat(UnresolvedChatMsg::npc(
-                                *self.uid,
-                                "npc.speech.merchant_trade_successful".to_string(),
-                            )))
+                            if matches!(agent.offer, Some(InteractionOffer::MercenaryHire)) {
+                                agent.offer = None;
+                                let msg = "I will guard you with my life until the contract ends or your coffers run dry".to_string();
+                                event_emitter.emit(ServerEvent::Chat(
+                                    UnresolvedChatMsg::npc(*self.uid, msg),
+                                ));
+                                if let Some(target) = &agent.target {
+                                    if let Some(by) = read_data.uids.get(target.target) {
+                                        controller.events.push(ControlEvent::InitiateInvite(
+                                            *by,
+                                            InviteKind::JoinGroup,
+                                        ));
+                                    }
+                                }
+                            } else {
+                                event_emitter.emit(ServerEvent::Chat(UnresolvedChatMsg::npc(
+                                    *self.uid,
+                                    "npc.speech.merchant_trade_successful".to_string(),
+                                )));
+                            }
                         },
                         _ => event_emitter.emit(ServerEvent::Chat(UnresolvedChatMsg::npc(
                             *self.uid,
@@ -1194,6 +1297,7 @@ impl<'a> AgentData<'a> {
                         ))),
                     }
                     agent.behavior.unset(BehaviorState::TRADING);
+                    agent.action_timer = DEFAULT_INTERACTION_TIME + read_data.dt.0;
                 }
             },
             Some(AgentEvent::UpdatePendingTrade(boxval)) => {

@@ -7,6 +7,7 @@ use common::{
     combat,
     comp::{
         self,
+        Agent, agent::AgentEvent,
         skills::{GeneralSkill, Skill},
         Group, Inventory,
     },
@@ -579,6 +580,11 @@ impl StateExt for State {
                     for (client, pos) in (&ecs.read_storage::<Client>(), &positions).join() {
                         if is_within(comp::ChatMsg::SAY_DISTANCE, pos, speaker_pos) {
                             client.send_fallible(ServerGeneral::ChatMsg(resolved_msg.clone()));
+                        }
+                    }
+                    for (agent, pos) in (&mut ecs.write_storage::<Agent>(), &positions).join() {
+                        if is_within(comp::ChatMsg::SAY_DISTANCE, pos, speaker_pos) {
+                            agent.inbox.push_front(AgentEvent::IncomingChat(resolved_msg.clone()));
                         }
                     }
                 }

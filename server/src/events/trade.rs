@@ -32,21 +32,37 @@ fn notify_agent_prices(
     entity: EcsEntity,
     event: AgentEvent,
 ) {
-    if let Some((Some(site_id), agent)) = agents.get_mut(entity).map(|a| (a.behavior.trade_site, a))
-    {
-        let prices = index.get_site_prices(site_id);
-        if let AgentEvent::UpdatePendingTrade(boxval) = event {
-            // Box<(tid, pend, _, inventories)>) = event {
-            agent
-                .inbox
-                .push_front(AgentEvent::UpdatePendingTrade(Box::new((
-                    // Prefer using this Agent's price data, but use the counterparty's price
-                    // data if we don't have price data
-                    boxval.0,
-                    boxval.1,
-                    prices.unwrap_or(boxval.2),
-                    boxval.3,
-                ))));
+    if let Some(agent) = agents.get_mut(entity) {
+        if let Some(site_id) = agent.behavior.trade_site
+        {
+            let prices = index.get_site_prices(site_id);
+            if let AgentEvent::UpdatePendingTrade(boxval) = event {
+                // Box<(tid, pend, _, inventories)>) = event {
+                agent
+                    .inbox
+                    .push_front(AgentEvent::UpdatePendingTrade(Box::new((
+                        // Prefer using this Agent's price data, but use the counterparty's price
+                        // data if we don't have price data
+                        boxval.0,
+                        boxval.1,
+                        prices.unwrap_or(boxval.2),
+                        boxval.3,
+                    ))));
+            }
+        } else if agent.offer.is_some() {
+            if let AgentEvent::UpdatePendingTrade(boxval) = event {
+                // Box<(tid, pend, _, inventories)>) = event {
+                agent
+                    .inbox
+                    .push_front(AgentEvent::UpdatePendingTrade(Box::new((
+                        // Prefer using this Agent's price data, but use the counterparty's price
+                        // data if we don't have price data
+                        boxval.0,
+                        boxval.1,
+                        boxval.2,
+                        boxval.3,
+                    ))));
+            }
         }
     }
 }
@@ -58,6 +74,7 @@ pub fn handle_process_trade_action(
     trade_id: TradeId,
     action: TradeAction,
 ) {
+    println!("trade action: {:?}", action);
     if let Some(uid) = server.state.ecs().uid_from_entity(entity) {
         let mut trades = server.state.ecs().write_resource::<Trades>();
         if let TradeAction::Decline = action {
@@ -86,8 +103,10 @@ pub fn handle_process_trade_action(
                 trades.process_trade_action(trade_id, uid, action, get_inventory);
             }
             if let Entry::Occupied(entry) = trades.trades.entry(trade_id) {
+                println!("trade entry occupied: {:?}", entry);
                 let parties = entry.get().parties;
                 if entry.get().should_commit() {
+                    println!("trade should be committed");
                     let result = commit_trade(server.state.ecs(), entry.get());
                     entry.remove();
                     for party in parties.iter() {
@@ -101,6 +120,7 @@ pub fn handle_process_trade_action(
                         }
                     }
                 } else {
+                    println!("trade is not ready to be committed");
                     let mut entities: [Option<specs::Entity>; 2] = [None, None];
                     let mut inventories: [Option<ReducedInventory>; 2] = [None, None];
                     let mut prices = None;
@@ -132,6 +152,7 @@ pub fn handle_process_trade_action(
                     drop(agents);
                     for party in entities.iter() {
                         if let Some(e) = *party {
+                            println!("sending trade update");
                             server.notify_client(
                                 e,
                                 ServerGeneral::UpdatePendingTrade(
