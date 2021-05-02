@@ -44,6 +44,7 @@ pub mod explosion;
 pub mod figure;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod generation;
+pub mod glider;
 #[cfg(not(target_arch = "wasm32"))] pub mod grid;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod lottery;
@@ -87,5 +88,6 @@ pub use combat::{DamageKind, DamageSource};
 pub use comp::inventory::loadout_builder::LoadoutBuilder;
 #[cfg(not(target_arch = "wasm32"))]
 pub use explosion::{Explosion, RadiusEffect};
+pub use glider::Glider;
 #[cfg(not(target_arch = "wasm32"))]
 pub use skillset_builder::SkillSetBuilder;

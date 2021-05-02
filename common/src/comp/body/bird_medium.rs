@@ -1,6 +1,6 @@
 use crate::{
     comp::{
-        fluid_dynamics::{Drag, WingShape, WingState, Glide},
+        fluid_dynamics::{Drag, Glide, WingShape, WingState},
         Ori,
     },
     make_case_elim, make_proj_elim,
