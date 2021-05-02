@@ -21,7 +21,11 @@ impl CharacterBehavior for Data {
 
         // If not on the ground while wielding glider enter gliding state
         if data.physics.on_ground.is_none() {
-            update.character = CharacterState::Glide(glide::Data::new(10.0, 0.6, *data.ori));
+            update.character = CharacterState::Glide(glide::Data::new(
+                data.body.dimensions().z * 3.0,
+                data.body.dimensions().z / 3.0,
+                *data.ori,
+            ));
         }
         if data
             .physics
