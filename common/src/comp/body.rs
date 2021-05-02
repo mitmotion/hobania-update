@@ -200,21 +200,19 @@ impl Body {
             Body::FishMedium(_) => 5.0,
             Body::FishSmall(_) => 1.0,
             Body::Golem(_) => 10_000.0,
-            Body::Humanoid(humanoid) => {
-                match (humanoid.species, humanoid.body_type) {
-                    (humanoid::Species::Orc, humanoid::BodyType::Male) => 120.0,
-                    (humanoid::Species::Orc, humanoid::BodyType::Female) => 120.0,
-                    (humanoid::Species::Human, humanoid::BodyType::Male) => 77.0, // ~✅
-                    (humanoid::Species::Human, humanoid::BodyType::Female) => 59.0, // ~✅
-                    (humanoid::Species::Elf, humanoid::BodyType::Male) => 77.0,
-                    (humanoid::Species::Elf, humanoid::BodyType::Female) => 59.0,
-                    (humanoid::Species::Dwarf, humanoid::BodyType::Male) => 70.0,
-                    (humanoid::Species::Dwarf, humanoid::BodyType::Female) => 70.0,
-                    (humanoid::Species::Undead, humanoid::BodyType::Male) => 70.0,
-                    (humanoid::Species::Undead, humanoid::BodyType::Female) => 50.0,
-                    (humanoid::Species::Danari, humanoid::BodyType::Male) => 80.0,
-                    (humanoid::Species::Danari, humanoid::BodyType::Female) => 60.0,
-                }
+            Body::Humanoid(humanoid) => match (humanoid.species, humanoid.body_type) {
+                (humanoid::Species::Orc, humanoid::BodyType::Male) => 99.0,
+                (humanoid::Species::Orc, humanoid::BodyType::Female) => 68.0,
+                (humanoid::Species::Human, humanoid::BodyType::Male) => 70.0,
+                (humanoid::Species::Human, humanoid::BodyType::Female) => 56.0,
+                (humanoid::Species::Elf, humanoid::BodyType::Male) => 73.0,
+                (humanoid::Species::Elf, humanoid::BodyType::Female) => 56.0,
+                (humanoid::Species::Dwarf, humanoid::BodyType::Male) => 40.0,
+                (humanoid::Species::Dwarf, humanoid::BodyType::Female) => 30.0,
+                (humanoid::Species::Undead, humanoid::BodyType::Male) => 63.0,
+                (humanoid::Species::Undead, humanoid::BodyType::Female) => 48.0,
+                (humanoid::Species::Danari, humanoid::BodyType::Male) => 23.0,
+                (humanoid::Species::Danari, humanoid::BodyType::Female) => 22.0,
             },
             Body::Object(obj) => obj.mass().0,
             Body::QuadrupedLow(body) => match body.species {
@@ -325,21 +323,21 @@ impl Body {
             Body::FishSmall(_) => Vec3::new(0.3, 1.2, 0.6),
             Body::Golem(_) => Vec3::new(5.0, 5.0, 7.5),
             Body::Humanoid(humanoid) => {
-                let height = match (humanoid.species, humanoid.body_type) {
-                    (humanoid::Species::Orc, humanoid::BodyType::Male) => 2.0,
-                    (humanoid::Species::Orc, humanoid::BodyType::Female) => 1.9,
-                    (humanoid::Species::Human, humanoid::BodyType::Male) => 1.8,
-                    (humanoid::Species::Human, humanoid::BodyType::Female) => 1.7,
-                    (humanoid::Species::Elf, humanoid::BodyType::Male) => 1.9,
-                    (humanoid::Species::Elf, humanoid::BodyType::Female) => 1.8,
-                    (humanoid::Species::Dwarf, humanoid::BodyType::Male) => 1.6,
-                    (humanoid::Species::Dwarf, humanoid::BodyType::Female) => 1.5,
-                    (humanoid::Species::Undead, humanoid::BodyType::Male) => 1.9,
-                    (humanoid::Species::Undead, humanoid::BodyType::Female) => 1.8,
-                    (humanoid::Species::Danari, humanoid::BodyType::Male) => 1.5,
-                    (humanoid::Species::Danari, humanoid::BodyType::Female) => 1.4,
+                let scale = match (humanoid.species, humanoid.body_type) {
+                    (humanoid::Species::Orc, humanoid::BodyType::Male) => 0.91,
+                    (humanoid::Species::Orc, humanoid::BodyType::Female) => 0.81,
+                    (humanoid::Species::Human, humanoid::BodyType::Male) => 0.81,
+                    (humanoid::Species::Human, humanoid::BodyType::Female) => 0.76,
+                    (humanoid::Species::Elf, humanoid::BodyType::Male) => 0.82,
+                    (humanoid::Species::Elf, humanoid::BodyType::Female) => 0.76,
+                    (humanoid::Species::Dwarf, humanoid::BodyType::Male) => 0.67,
+                    (humanoid::Species::Dwarf, humanoid::BodyType::Female) => 0.62,
+                    (humanoid::Species::Undead, humanoid::BodyType::Male) => 0.78,
+                    (humanoid::Species::Undead, humanoid::BodyType::Female) => 0.72,
+                    (humanoid::Species::Danari, humanoid::BodyType::Male) => 0.56,
+                    (humanoid::Species::Danari, humanoid::BodyType::Female) => 0.56,
                 };
-                Vec3::new(1.5, 0.5, height)
+                Vec3::new(0.7 * scale, 0.4 * scale, 2.15 * scale)
             },
             Body::Object(object) => object.dimensions(),
             Body::QuadrupedMedium(body) => match body.species {
