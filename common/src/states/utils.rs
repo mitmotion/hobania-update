@@ -169,7 +169,7 @@ impl Body {
             Body::FishMedium(_) => Some(50.0 * self.mass().0),
             Body::FishSmall(_) => Some(50.0 * self.mass().0),
             Body::Dragon(_) => Some(200.0 * self.mass().0),
-            Body::Humanoid(_) => Some(200.0 * self.mass().0),
+            Body::Humanoid(_) => Some(100.0 * self.mass().0),
             Body::Theropod(body) => match body.species {
                 theropod::Species::Sandraptor
                 | theropod::Species::Snowraptor
