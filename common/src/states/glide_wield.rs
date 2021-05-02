@@ -1,6 +1,7 @@
 use super::utils::*;
 use crate::{
     comp::{slot::EquipSlot, CharacterState, InventoryAction, StateUpdate},
+    glider::Glider,
     states::{
         behavior::{CharacterBehavior, JoinData},
         glide,
@@ -21,11 +22,12 @@ impl CharacterBehavior for Data {
 
         // If not on the ground while wielding glider enter gliding state
         if data.physics.on_ground.is_none() {
-            update.character = CharacterState::Glide(glide::Data::new(
+            let glider = Glider::new(
                 data.body.dimensions().z * 3.0,
                 data.body.dimensions().z / 3.0,
                 *data.ori,
-            ));
+            );
+            update.character = CharacterState::Glide(glide::Data::new(glider, data.ori));
         }
         if data
             .physics

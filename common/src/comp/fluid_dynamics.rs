@@ -136,9 +136,13 @@ pub trait Drag: Clone {
     }
 }
 
+/// An implementation of Glide is the ability for a winged body to glide in a
+/// fixed-wing configuration.
+///
+/// NOTE: Wing (singular) implies the full span of a complete wing; a wing in
+/// two parts (one on each side of a fuselage or other central body) is
+/// considered a single wing.
 pub trait Glide: Drag {
-    const STALL_ANGLE: f32 = PI * 0.1;
-
     fn wing_shape(&self) -> &WingShape;
 
     fn planform_area(&self) -> f32;
@@ -147,67 +151,56 @@ pub trait Glide: Drag {
 
     fn is_gliding(&self) -> bool;
 
-    /// Total lift coefficient for a finite wing of symmetric aerofoil shape and
-    /// elliptical pressure distribution. (Multiplied by reference area.)
-    fn lift_coefficient(&self, angle_of_attack: f32) -> f32 {
-        let aoa_abs = angle_of_attack.abs();
-        self.planform_area()
-            * if self.is_gliding() { 1.0 } else { 0.2 }
-            * if aoa_abs <= Self::STALL_ANGLE {
-                self.wing_shape().lift_slope() * angle_of_attack
-            } else {
-                // This is when flow separation and turbulence starts to kick in.
-                // Going to just make something up (based on some data), as the alternative is
-                // to just throw your hands up and return 0
-                let aoa_s = angle_of_attack.signum();
-                let c_l_max = self.wing_shape().lift_slope() * Self::STALL_ANGLE;
-                let deg_45 = PI / 4.0;
-                if aoa_abs < deg_45 {
-                    // drop directly to 0.6 * max lift at stall angle
-                    // then climb back to max at 45°
-                    Lerp::lerp(0.6 * c_l_max, c_l_max, aoa_abs / deg_45) * aoa_s
-                } else {
-                    // let's just say lift goes down linearly again until we're at 90°
-                    Lerp::lerp(c_l_max, 0.0, (aoa_abs - deg_45) / deg_45) * aoa_s
-                }
-            }
-    }
-
-    /// Total drag coefficient (multiplied by reference area)
-    fn drag_coefficient(&self, aspect_ratio: f32, lift_coefficient: f32) -> f32 {
-        self.parasite_drag_coefficient() + induced_drag_coefficient(aspect_ratio, lift_coefficient)
-    }
-
     fn aerodynamic_forces(&self, rel_flow: &Vel, fluid_density: f32) -> Vec3<f32> {
-        let v_sq = rel_flow.0.magnitude_squared();
-        if v_sq < 0.1 {
-            // don't bother with miniscule forces
-            Vec3::zero()
+        if self.is_gliding() {
+            let ori = self.ori();
+            let planform_area = self.planform_area();
+            let parasite_drag_coefficient = self.parasite_drag_coefficient();
+
+            let f = |flow_v: Vec3<f32>, wing_shape: &WingShape| -> Vec3<f32> {
+                let v_sq = flow_v.magnitude_squared();
+                if v_sq < std::f32::EPSILON {
+                    Vec3::zero()
+                } else {
+                    let freestream_dir = Dir::new(flow_v / v_sq.sqrt());
+
+                    let ar = wing_shape.aspect_ratio();
+                    // aoa will be positive when we're pitched up and negative otherwise
+                    let aoa = angle_of_attack(ori, &freestream_dir);
+                    // c_l will be positive when aoa is positive (we have positive lift,
+                    // producing an upward force) and negative otherwise
+                    let c_l = lift_coefficient(
+                        planform_area,
+                        aoa,
+                        wing_shape.lift_slope(),
+                        wing_shape.stall_angle(),
+                    );
+
+                    let c_d = parasite_drag_coefficient + induced_drag_coefficient(ar, c_l);
+
+                    0.5 * fluid_density
+                        * v_sq
+                        * (c_l * *lift_dir(ori, ar, c_l, aoa) + c_d * *freestream_dir)
+                }
+            };
+
+            let wing_shape = self.wing_shape();
+            let lateral = f(
+                rel_flow.0.projected(&Plane::from(self.ori().look_dir())),
+                &wing_shape.with_aspect_ratio(1.0 / wing_shape.aspect_ratio()),
+            );
+            let longitudinal = f(
+                rel_flow.0.projected(&Plane::from(self.ori().right())),
+                &wing_shape,
+            );
+            lateral + longitudinal
         } else {
-            let q = 0.5 * fluid_density * v_sq;
-            let rel_flow_dir = Dir::new(rel_flow.0 / v_sq.sqrt());
-            if self.is_gliding() {
-                let ori = self.ori();
-                let ar = self.wing_shape().aspect_ratio();
-                // aoa will be positive when we're pitched up and negative otherwise
-                let aoa = angle_of_attack(ori, &rel_flow_dir);
-                // c_l will be positive when aoa is positive (we have positive lift,
-                // producing an upward force) and negative otherwise
-                let c_l = self.lift_coefficient(aoa);
-
-                let lift = q * c_l * *lift_dir(ori, ar, c_l, aoa);
-                let drag = q * self.drag_coefficient(ar, c_l) * *rel_flow_dir;
-
-                lift + drag
-            } else {
-                q * self.parasite_drag_coefficient() * *rel_flow_dir
-            }
+            self.drag(rel_flow, fluid_density)
         }
     }
 }
 
-
-pub fn lift_dir(ori: &Ori, aspect_ratio: f32, lift_coefficient: f32, angle_of_attack: f32) -> Dir {
+fn lift_dir(ori: &Ori, aspect_ratio: f32, lift_coefficient: f32, angle_of_attack: f32) -> Dir {
     // lift dir will be orthogonal to the local relative flow vector. Local relative
     // flow is the resulting vector of (relative) freestream flow + downwash
     // (created by the vortices of the wing tips)
@@ -226,16 +219,45 @@ pub fn lift_dir(ori: &Ori, aspect_ratio: f32, lift_coefficient: f32, angle_of_at
 }
 
 /// Geometric angle of attack
-///
-/// # Note
-/// This ignores spanwise flow (i.e. we remove the spanwise flow component).
-/// With greater yaw comes greater loss of accuracy as more flow goes
-/// unaccounted for.
 pub fn angle_of_attack(ori: &Ori, rel_flow_dir: &Dir) -> f32 {
-    rel_flow_dir
-        .projected(&Plane::from(ori.right()))
-        .map(|flow_dir| PI / 2.0 - ori.up().angle_between(flow_dir.to_vec()))
-        .unwrap_or(0.0)
+    if inline_tweak::tweak!(true) {
+        PI / 2.0 - ori.up().angle_between(rel_flow_dir.to_vec())
+    } else {
+        rel_flow_dir
+            .projected(&Plane::from(ori.right()))
+            .map(|flow_dir| PI / 2.0 - ori.up().angle_between(flow_dir.to_vec()))
+            .unwrap_or(0.0)
+    }
+}
+
+/// Total lift coefficient for a finite wing of symmetric aerofoil shape and
+/// elliptical pressure distribution. (Multiplied by reference area.)
+fn lift_coefficient(
+    planform_area: f32,
+    angle_of_attack: f32,
+    lift_slope: f32,
+    stall_angle: f32,
+) -> f32 {
+    let aoa_abs = angle_of_attack.abs();
+    planform_area
+        * if aoa_abs <= stall_angle {
+            lift_slope * angle_of_attack
+        } else {
+            // This is when flow separation and turbulence starts to kick in.
+            // Going to just make something up (based on some data), as the alternative is
+            // to just throw your hands up and return 0
+            let aoa_s = angle_of_attack.signum();
+            let c_l_max = lift_slope * stall_angle;
+            let deg_45 = PI / 4.0;
+            if aoa_abs < deg_45 {
+                // drop directly to 0.6 * max lift at stall angle
+                // then climb back to max at 45°
+                Lerp::lerp(0.6 * c_l_max, c_l_max, aoa_abs / deg_45) * aoa_s
+            } else {
+                // let's just say lift goes down linearly again until we're at 90°
+                Lerp::lerp(c_l_max, 0.0, (aoa_abs - deg_45) / deg_45) * aoa_s
+            }
+        }
 }
 
 #[derive(Copy, Clone)]
@@ -254,7 +276,22 @@ pub enum WingShape {
 }
 
 impl WingShape {
-    pub fn aspect_ratio(&self) -> f32 {
+    pub const fn stall_angle(&self) -> f32 {
+        // PI/10 or 18°
+        0.3141592653589793
+    }
+
+    pub const fn with_aspect_ratio(self, aspect_ratio: f32) -> Self {
+        match self {
+            Self::Elliptical { .. } => Self::Elliptical { aspect_ratio },
+            Self::Swept { angle, .. } => Self::Swept {
+                aspect_ratio,
+                angle,
+            },
+        }
+    }
+
+    pub const fn aspect_ratio(&self) -> f32 {
         match self {
             Self::Elliptical { aspect_ratio } => *aspect_ratio,
             Self::Swept { aspect_ratio, .. } => *aspect_ratio,
@@ -318,7 +355,7 @@ impl WingShape {
 }
 
 /// Induced drag coefficient (drag due to lift)
-pub fn induced_drag_coefficient(aspect_ratio: f32, lift_coefficient: f32) -> f32 {
+fn induced_drag_coefficient(aspect_ratio: f32, lift_coefficient: f32) -> f32 {
     let ar = aspect_ratio;
     if ar > 25.0 {
         tracing::warn!(

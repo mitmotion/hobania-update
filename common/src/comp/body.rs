@@ -741,18 +741,13 @@ impl Component for Body {
 }
 
 impl Body {
-    pub fn aerodynamic_forces(
-        &self,
-        ori: Option<&Ori>,
-        rel_flow: &Vel,
-        fluid_density: f32,
-    ) -> Vec3<f32> {
-        match (self, ori) {
-            (Body::BirdMedium(bird), Some(ori)) => bird_medium::FlyingBirdMedium::from((bird, ori))
+    pub fn aerodynamic_forces(&self, ori: &Ori, rel_flow: &Vel, fluid_density: f32) -> Vec3<f32> {
+        match self {
+            Body::BirdMedium(bird) => bird_medium::FlyingBirdMedium::from((bird, ori))
                 .aerodynamic_forces(rel_flow, fluid_density),
-            (Body::BirdLarge(bird), Some(ori)) => bird_large::FlyingBirdLarge::from((bird, ori))
+            Body::BirdLarge(bird) => bird_large::FlyingBirdLarge::from((bird, ori))
                 .aerodynamic_forces(rel_flow, fluid_density),
-            (Body::Dragon(not_bird), Some(ori)) => dragon::FlyingDragon::from((not_bird, ori))
+            Body::Dragon(not_bird) => dragon::FlyingDragon::from((not_bird, ori))
                 .aerodynamic_forces(rel_flow, fluid_density),
             _ => self.drag(rel_flow, fluid_density),
         }
@@ -772,8 +767,8 @@ impl Drag for Body {
         match self {
             // Cross-section, head/feet first
             Body::BipedLarge(_) | Body::BipedSmall(_) | Body::Golem(_) | Body::Humanoid(_) => {
-                const SCALE: f32 = 0.7;
-                let radius = self.dimensions().xy().map(|a| SCALE * a * 0.5);
+                // const SCALE: f32 = 0.7;
+                let radius = self.dimensions().xy().map(|a| inline_tweak::tweak!(0.6) * a * 0.5);
                 const CD: f32 = 0.7;
                 CD * PI * radius.x * radius.y
             },

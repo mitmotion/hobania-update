@@ -11,11 +11,12 @@ use common::{
     resources::DeltaTime,
     terrain::{Block, TerrainGrid},
     uid::Uid,
-    util::{Projection, SpatialGrid},
+    util::{Dir, Projection, SpatialGrid},
     vol::{BaseVol, ReadVol},
 };
 use common_base::{prof_span, span};
 use common_ecs::{Job, Origin, ParMode, Phase, PhysicsMetrics, System};
+use inline_tweak::tweak;
 use rayon::iter::ParallelIterator;
 use specs::{
     shred::{ResourceId, World},
@@ -38,18 +39,59 @@ fn fluid_density(height: f32, fluid: &Fluid) -> Density {
     Density(fluid.density().0 * immersion + AIR_DENSITY * (1.0 - immersion))
 }
 
+fn integrate_glider_forces(
+    dt: &DeltaTime,
+    dv: Vec3<f32>,
+    vel: &mut Vel,
+    ori: &mut Ori,
+    mass: &Mass,
+    character_state: &CharacterState,
+    rel_wind: &Vel,
+) -> Option<()> {
+    let glider = match character_state {
+        CharacterState::Glide(glider) => Some(glider.glider),
+        _ => None,
+    }?;
+
+    let dv_ = Some(dt.0 * glider.aerodynamic_forces(&rel_wind, AIR_DENSITY))
+        .filter(|imp| !imp.is_approx_zero())
+        .map(|imp| imp / mass.0 - dv)?;
+
+    vel.0 += dv_;
+
+    {
+        let glider_dir = ori.up();
+        let glider_dist = tweak!(2.5);
+        let glider_pos = *glider_dir * glider_dist;
+        if let Some(rot) = Dir::from_unnormalized(glider_pos + dv_)
+            .map(|u| {
+                let s = glider_dir.dot(*u).powf(tweak!(10.0) * dt.0);
+                glider_dir.slerped_to(
+                    u,
+                    tweak!(-0.7) + tweak!(1.0) * s.max(0.0) + tweak!(0.0) * s.min(0.0),
+                )
+            })
+            .map(|u| glider_dir.rotation_between(u))
+        {
+            *ori = ori.prerotated(rot);
+        }
+    }
+
+    Some(())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn integrate_forces(
     dt: &DeltaTime,
-    mut vel: Vel,
-    ori: Option<&Ori>,
+    vel: &mut Vel,
+    ori: &mut Ori,
     body: &Body,
     character_state: Option<&CharacterState>,
     density: &Density,
     mass: &Mass,
     fluid: &Fluid,
     gravity: f32,
-) -> Vel {
+) {
     let dim = body.dimensions();
     let height = dim.z;
     let rel_flow = fluid.relative_flow(&vel);
@@ -60,15 +102,7 @@ fn integrate_forces(
     // Aerodynamic/hydrodynamic forces
     if !rel_flow.0.is_approx_zero() {
         debug_assert!(!rel_flow.0.map(|a| a.is_nan()).reduce_or());
-        let aerodynamic_forces = body.aerodynamic_forces(ori, &rel_flow, fluid_density.0)
-            + match character_state {
-                Some(CharacterState::Glide(glider)) => {
-                    glider.aerodynamic_forces(&rel_flow, fluid_density.0)
-                },
-                _ => Vec3::zero(),
-            };
-        // let impulse = dt.0 * body.aerodynamic_forces(ori, &rel_flow,
-        // fluid_density.0);
+        let aerodynamic_forces = body.aerodynamic_forces(ori, &rel_flow, fluid_density.0);
         debug_assert!(!aerodynamic_forces.map(|a| a.is_nan()).reduce_or());
         if !aerodynamic_forces.is_approx_zero() {
             let new_v = vel.0 + dt.0 * aerodynamic_forces / mass.0;
@@ -84,6 +118,9 @@ fn integrate_forces(
             } else {
                 vel.0 = new_v;
             }
+            character_state.and_then(|cs| {
+                integrate_glider_forces(dt, new_v - vel.0, vel, ori, mass, cs, &rel_flow)
+            });
         };
         debug_assert!(!vel.0.map(|a| a.is_nan()).reduce_or());
     };
@@ -91,8 +128,6 @@ fn integrate_forces(
     // Hydrostatic/aerostatic forces
     // modify gravity to account for the effective density as a result of buoyancy
     vel.0.z -= dt.0 * gravity * (density.0 - fluid_density.0) / density.0;
-
-    vel
 }
 
 fn calc_z_limit(
@@ -572,7 +607,11 @@ impl<'a> PhysicsData<'a> {
 
         // Apply movement inputs
         span!(guard, "Apply movement");
-        let (positions, velocities) = (&write.positions, &mut write.velocities);
+        let (positions, velocities, orientations) = (
+            &write.positions,
+            &mut write.velocities,
+            &mut write.orientations,
+        );
 
         // First pass: update velocity using air resistance and gravity for each entity.
         // We do this in a first pass because it helps keep things more stable for
@@ -585,7 +624,7 @@ impl<'a> PhysicsData<'a> {
             read.character_states.maybe(),
             &write.physics_states,
             &read.masses,
-            write.orientations.maybe(),
+            orientations,
             &read.densities,
             !&read.mountings,
         )
@@ -628,9 +667,9 @@ impl<'a> PhysicsData<'a> {
                                 vel.0.z -= dt.0 * GRAVITY;
                             },
                             Some(fluid) => {
-                                vel.0 = integrate_forces(
+                                integrate_forces(
                                     &dt,
-                                    *vel,
+                                    vel,
                                     ori,
                                     body,
                                     character_state,
@@ -638,8 +677,7 @@ impl<'a> PhysicsData<'a> {
                                     mass,
                                     &fluid,
                                     GRAVITY,
-                                )
-                                .0
+                                );
                             },
                         }
                     }
@@ -680,7 +718,6 @@ impl<'a> PhysicsData<'a> {
             &read.colliders,
             positions,
             velocities,
-            orientations,
             read.bodies.maybe(),
             read.character_states.maybe(),
             &mut write.physics_states,
@@ -703,7 +740,6 @@ impl<'a> PhysicsData<'a> {
                     collider,
                     pos,
                     vel,
-                    _ori,
                     body,
                     character_state,
                     mut physics_state,

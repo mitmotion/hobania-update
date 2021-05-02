@@ -1491,7 +1491,7 @@ impl FigureMgr {
                         CharacterState::Glide(data) => {
                             anim::character::GlidingAnimation::update_skeleton(
                                 &target_base,
-                                (rel_vel, ori, data.ori.into(), time, state.acc_vel),
+                                (rel_vel, ori, data.glider.ori.into(), time, state.acc_vel),
                                 state.state_time,
                                 &mut state_animation_rate,
                                 skeleton_attr,
