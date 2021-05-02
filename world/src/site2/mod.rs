@@ -67,7 +67,7 @@ impl Site {
     }
 
     pub fn bounds(&self) -> Aabr<i32> {
-        let border = 1;
+        let border = 2;
         Aabr {
             min: self.origin + self.tile_wpos(self.tiles.bounds.min - border),
             max: self.origin + self.tile_wpos(self.tiles.bounds.max + 1 + border),
@@ -287,7 +287,7 @@ impl Site {
 
         site.make_plaza(land, &mut rng);
 
-        let build_chance = Lottery::from(vec![(64.0, 1), (5.0, 2), (8.0, 3), (0.75, 4)]);
+        let build_chance = Lottery::from(vec![(128.0, 1), (5.0, 2), (8.0, 3), (0.75, 4)]);
 
         let mut castles = 0;
 
@@ -606,8 +606,8 @@ impl Site {
                     if let TileKind::Road { a, b, w } = &tile.kind {
                         if let Some(PlotKind::Road(path)) = tile.plot.map(|p| &self.plot(p).kind) {
                             Some((LineSegment2 {
-                                start: self.tile_center_wpos(path.nodes()[*a as usize]).map(|e| e as f32),
-                                end: self.tile_center_wpos(path.nodes()[*b as usize]).map(|e| e as f32),
+                                start: self.tile_center_wpos(path.nodes()[*a as usize]).map(|e| e as f32) - TILE_SIZE as f32 / 2.0,
+                                end: self.tile_center_wpos(path.nodes()[*b as usize]).map(|e| e as f32) - TILE_SIZE as f32 / 2.0,
                             }, *w))
                         } else {
                             None
@@ -622,16 +622,19 @@ impl Site {
                 .map(|(line, w)| (line.distance_to_point(wpos2df) - w as f32 * 2.0).max(0.0))
                 .min_by_key(|d| (*d * 100.0) as i32);
 
-            if dist.map_or(false, |d| d <= 0.75) {
-                let alt = canvas.col(wpos2d).map_or(0, |col| col.alt as i32);
+            if let Some(col) = canvas.col(wpos2d).filter(|_| dist.map_or(false, |d| d <= 0.75)) {
+                let surf = col.alt.max(col.water_level + 5.0) as i32;
+                let is_pier = col.water_dist.map_or(false, |d| d < 3.0);
                 (-6..4).for_each(|z| canvas.map(
-                    Vec3::new(wpos2d.x, wpos2d.y, alt + z),
+                    Vec3::new(wpos2d.x, wpos2d.y, surf + z),
                     |b| if z >= 0 {
                         if b.is_filled() {
                             Block::empty()
                         } else {
                             b.with_sprite(SpriteKind::Empty)
                         }
+                    } else if is_pier {
+                        Block::new(BlockKind::Wood, Rgb::new(110, 65, 15))
                     } else {
                         Block::new(BlockKind::Rock, Rgb::new(55, 45, 50))
                     },
@@ -720,8 +723,12 @@ impl Site {
                     for y in aabb.min.y..aabb.max.y {
                         for z in aabb.min.z..aabb.max.z {
                             let pos = Vec3::new(x, y, z);
+                            let is_plot = self.wpos_tile(pos.xy()).plot == Some(plot);
+                            let is_void = self.wpos_tile(pos.xy()).is_void();
 
-                            if let Some(block) = fill.sample_at(&prim_tree, prim, pos) {
+                            if let Some(block) =
+                                fill.sample_at(&prim_tree, prim, pos, |_| is_plot, |_| is_void)
+                            {
                                 canvas.set(pos, block);
                             }
                         }

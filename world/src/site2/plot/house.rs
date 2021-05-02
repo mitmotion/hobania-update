@@ -11,6 +11,7 @@ pub struct House {
     alt: i32,
     levels: u32,
     roof_color: Rgb<u8>,
+    roof_inset: Vec2<bool>,
 }
 
 impl House {
@@ -42,6 +43,11 @@ impl House {
                 ];
                 *colors.choose(rng).unwrap()
             },
+            roof_inset: match rng.gen_range(0..3) {
+                0 => Vec2::new(true, false),
+                1 => Vec2::new(false, true),
+                _ => Vec2::new(true, true),
+            },
         }
     }
 }
@@ -56,6 +62,13 @@ impl Structure for House {
         let storey = 5;
         let roof = storey * self.levels as i32;
         let foundations = 12;
+        let plot = prim(Primitive::Plot);
+        let void = prim(Primitive::Void);
+        let can_spill = prim(Primitive::Or(plot, void));
+
+        //let wall_block = Fill::Brick(BlockKind::Rock, Rgb::new(80, 75, 85), 24);
+        let wall_block = Fill::Brick(BlockKind::Rock, Rgb::new(158, 150, 121), 24);
+        let structural_wood = Fill::Block(Block::new(BlockKind::Wood, Rgb::new(55, 25, 8)));
 
         // Walls
         let inner = prim(Primitive::Aabb(Aabb {
@@ -66,10 +79,7 @@ impl Structure for House {
             min: self.bounds.min.with_z(self.alt - foundations),
             max: (self.bounds.max + 1).with_z(self.alt + roof),
         }));
-        fill(
-            outer,
-            Fill::Brick(BlockKind::Rock, Rgb::new(80, 75, 85), 24),
-        );
+        fill(outer, wall_block);
         fill(inner, Fill::Block(Block::empty()));
         let walls = prim(Primitive::Xor(outer, inner));
 
@@ -97,10 +107,7 @@ impl Structure for House {
             pillars_x = prim(Primitive::Or(pillars_x, pillar));
         }
         let pillars = prim(Primitive::And(pillars_x, pillars_y));
-        fill(
-            pillars,
-            Fill::Block(Block::new(BlockKind::Wood, Rgb::new(55, 25, 8))),
-        );
+        fill(pillars, structural_wood);
 
         // For each storey...
         for i in 0..self.levels + 1 {
@@ -147,13 +154,20 @@ impl Structure for House {
             }
 
             // Floor
+            let floor = prim(Primitive::Aabb(Aabb {
+                min: (self.bounds.min + 1).with_z(self.alt + height),
+                max: self.bounds.max.with_z(self.alt + height + 1),
+            }));
             fill(
-                prim(Primitive::Aabb(Aabb {
-                    min: (self.bounds.min + 1).with_z(self.alt + height),
-                    max: self.bounds.max.with_z(self.alt + height + 1),
-                })),
+                floor,
                 Fill::Block(Block::new(BlockKind::Rock, Rgb::new(89, 44, 14))),
             );
+
+            let slice = prim(Primitive::Aabb(Aabb {
+                min: self.bounds.min.with_z(self.alt + height),
+                max: (self.bounds.max + 1).with_z(self.alt + height + 1),
+            }));
+            fill(prim(Primitive::AndNot(slice, floor)), structural_wood);
         }
 
         let roof_lip = 2;
@@ -165,23 +179,32 @@ impl Structure for House {
             + 1;
 
         // Roof
+        let roof_vol = prim(Primitive::Pyramid {
+            aabb: Aabb {
+                min: (self.bounds.min - roof_lip).with_z(self.alt + roof),
+                max: (self.bounds.max + 1 + roof_lip).with_z(self.alt + roof + roof_height),
+            },
+            inset: self.roof_inset.map(|e| if e { roof_height } else { 0 }),
+        });
+        let eaves = prim(Primitive::Offset(roof_vol, -Vec3::unit_z()));
+        let tiles = prim(Primitive::AndNot(roof_vol, eaves));
         fill(
-            prim(Primitive::Pyramid {
-                aabb: Aabb {
-                    min: (self.bounds.min - roof_lip).with_z(self.alt + roof),
-                    max: (self.bounds.max + 1 + roof_lip).with_z(self.alt + roof + roof_height),
-                },
-                inset: roof_height,
-            }),
+            prim(Primitive::And(tiles, can_spill)),
             Fill::Block(Block::new(BlockKind::Wood, self.roof_color)),
         );
+        let roof_inner = prim(Primitive::Aabb(Aabb {
+            min: self.bounds.min.with_z(self.alt + roof),
+            max: (self.bounds.max + 1).with_z(self.alt + roof + roof_height),
+        }));
+        fill(prim(Primitive::And(eaves, roof_inner)), wall_block);
 
         // Foundations
+        let foundations = prim(Primitive::Aabb(Aabb {
+            min: (self.bounds.min - 1).with_z(self.alt - foundations),
+            max: (self.bounds.max + 2).with_z(self.alt + 1),
+        }));
         fill(
-            prim(Primitive::Aabb(Aabb {
-                min: (self.bounds.min - 1).with_z(self.alt - foundations),
-                max: (self.bounds.max + 2).with_z(self.alt + 1),
-            })),
+            prim(Primitive::And(foundations, can_spill)),
             Fill::Block(Block::new(BlockKind::Rock, Rgb::new(31, 33, 32))),
         );
     }

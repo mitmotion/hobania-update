@@ -10,9 +10,12 @@ use vek::*;
 pub enum Primitive {
     Empty, // Placeholder
 
+    Plot, // A primitive that fits the floor plan of the plot
+    Void, // A primitive that fits the floor plan of void tiles
+
     // Shapes
     Aabb(Aabb<i32>),
-    Pyramid { aabb: Aabb<i32>, inset: i32 },
+    Pyramid { aabb: Aabb<i32>, inset: Vec2<i32> },
     Cylinder(Aabb<i32>),
     Cone(Aabb<i32>),
     Sphere(Aabb<i32>),
@@ -20,21 +23,31 @@ pub enum Primitive {
 
     // Combinators
     And(Id<Primitive>, Id<Primitive>),
+    AndNot(Id<Primitive>, Id<Primitive>), // Not second
     Or(Id<Primitive>, Id<Primitive>),
     Xor(Id<Primitive>, Id<Primitive>),
     // Not commutative
     Diff(Id<Primitive>, Id<Primitive>),
     // Operators
     Rotate(Id<Primitive>, Mat3<i32>),
+    Offset(Id<Primitive>, Vec3<i32>),
 }
 
+#[derive(Copy, Clone)]
 pub enum Fill {
     Block(Block),
     Brick(BlockKind, Rgb<u8>, u8),
 }
 
 impl Fill {
-    fn contains_at(&self, tree: &Store<Primitive>, prim: Id<Primitive>, pos: Vec3<i32>) -> bool {
+    fn contains_at(
+        &self,
+        tree: &Store<Primitive>,
+        prim: Id<Primitive>,
+        pos: Vec3<i32>,
+        is_plot: &impl Fn(Vec2<i32>) -> bool,
+        is_void: &impl Fn(Vec2<i32>) -> bool,
+    ) -> bool {
         // Custom closure because vek's impl of `contains_point` is inclusive :(
         let aabb_contains = |aabb: Aabb<i32>, pos: Vec3<i32>| {
             (aabb.min.x..aabb.max.x).contains(&pos.x)
@@ -45,18 +58,21 @@ impl Fill {
         match &tree[prim] {
             Primitive::Empty => false,
 
+            Primitive::Plot => is_plot(pos.xy()),
+            Primitive::Void => is_void(pos.xy()),
+
             Primitive::Aabb(aabb) => aabb_contains(*aabb, pos),
             Primitive::Pyramid { aabb, inset } => {
-                let inset = (*inset).max(aabb.size().reduce_min());
+                let inset = inset.map2(Vec2::new(aabb.size().w, aabb.size().h), |i, sz| i.min(sz));
                 let inner = Aabr {
                     min: aabb.min.xy() - 1 + inset,
                     max: aabb.max.xy() - inset,
                 };
                 aabb_contains(*aabb, pos)
-                    && (inner.projected_point(pos.xy()) - pos.xy())
+                    && ((inner.projected_point(pos.xy()) - pos.xy())
                         .map(|e| e.abs())
-                        .reduce_max() as f32
-                        / (inset as f32)
+                        .map2(inset, |e, i| e as f32 / (i as f32).max(0.00001))
+                        .reduce_partial_max() as f32)
                         < 1.0
                             - ((pos.z - aabb.min.z) as f32 + 0.5) / (aabb.max.z - aabb.min.z) as f32
             },
@@ -96,21 +112,38 @@ impl Fill {
                                 .dot(*gradient) as i32)
             },
             Primitive::And(a, b) => {
-                self.contains_at(tree, *a, pos) && self.contains_at(tree, *b, pos)
+                self.contains_at(tree, *a, pos, is_plot, is_void)
+                    && self.contains_at(tree, *b, pos, is_plot, is_void)
+            },
+            Primitive::AndNot(a, b) => {
+                self.contains_at(tree, *a, pos, is_plot, is_void)
+                    && !self.contains_at(tree, *b, pos, is_plot, is_void)
             },
             Primitive::Or(a, b) => {
-                self.contains_at(tree, *a, pos) || self.contains_at(tree, *b, pos)
+                self.contains_at(tree, *a, pos, is_plot, is_void)
+                    || self.contains_at(tree, *b, pos, is_plot, is_void)
             },
             Primitive::Xor(a, b) => {
-                self.contains_at(tree, *a, pos) ^ self.contains_at(tree, *b, pos)
+                self.contains_at(tree, *a, pos, is_plot, is_void)
+                    ^ self.contains_at(tree, *b, pos, is_plot, is_void)
             },
             Primitive::Diff(a, b) => {
-                self.contains_at(tree, *a, pos) && !self.contains_at(tree, *b, pos)
+                self.contains_at(tree, *a, pos, is_plot, is_void)
+                    && !self.contains_at(tree, *b, pos, is_plot, is_void)
             },
             Primitive::Rotate(prim, mat) => {
                 let aabb = self.get_bounds(tree, *prim);
                 let diff = pos - (aabb.min + mat.cols.map(|x| x.reduce_min()));
-                self.contains_at(tree, *prim, aabb.min + mat.transposed() * diff)
+                self.contains_at(
+                    tree,
+                    *prim,
+                    aabb.min + mat.transposed() * diff,
+                    is_plot,
+                    is_void,
+                )
+            },
+            Primitive::Offset(prim, offset) => {
+                self.contains_at(tree, *prim, pos - offset, is_plot, is_void)
             },
         }
     }
@@ -120,8 +153,10 @@ impl Fill {
         tree: &Store<Primitive>,
         prim: Id<Primitive>,
         pos: Vec3<i32>,
+        is_plot: impl Fn(Vec2<i32>) -> bool,
+        is_void: impl Fn(Vec2<i32>) -> bool,
     ) -> Option<Block> {
-        if self.contains_at(tree, prim, pos) {
+        if self.contains_at(tree, prim, pos, &is_plot, &is_void) {
             match self {
                 Fill::Block(block) => Some(*block),
                 Fill::Brick(bk, col, range) => Some(Block::new(
@@ -146,7 +181,7 @@ impl Fill {
         }
 
         Some(match &tree[prim] {
-            Primitive::Empty => return None,
+            Primitive::Empty | Primitive::Plot | Primitive::Void => return None,
             Primitive::Aabb(aabb) => *aabb,
             Primitive::Pyramid { aabb, .. } => *aabb,
             Primitive::Cylinder(aabb) => *aabb,
@@ -174,6 +209,7 @@ impl Fill {
                 self.get_bounds_inner(tree, *b),
                 |a, b| a.intersection(b),
             )?,
+            Primitive::AndNot(a, _) => self.get_bounds_inner(tree, *a)?,
             Primitive::Or(a, b) | Primitive::Xor(a, b) => or_zip_with(
                 self.get_bounds_inner(tree, *a),
                 self.get_bounds_inner(tree, *b),
@@ -188,6 +224,13 @@ impl Fill {
                     max: aabb.min + extent,
                 };
                 new_aabb.made_valid()
+            },
+            Primitive::Offset(prim, offset) => {
+                let aabb = self.get_bounds_inner(tree, *prim)?;
+                Aabb {
+                    min: aabb.min - offset,
+                    max: aabb.max - offset,
+                }
             },
         })
     }
