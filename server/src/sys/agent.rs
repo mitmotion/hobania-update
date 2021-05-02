@@ -864,7 +864,7 @@ impl<'a> AgentData<'a> {
                 };
 
             if agent.bearing.magnitude_squared() > 0.5f32.powi(2) {
-                if matches!(Some(Alignment::Owned(_)), data.alignment) {
+                if matches!(self.alignment, Some(Alignment::Owned(_))) {
                     controller.inputs.move_dir = agent.bearing * 0.30;
                 } else {
                     controller.inputs.move_dir = agent.bearing * 0.65;

@@ -33,6 +33,7 @@ pub mod invite;
 #[cfg(not(target_arch = "wasm32"))] pub mod poise;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod projectile;
+pub mod quest;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod shockwave;
 #[cfg(not(target_arch = "wasm32"))]

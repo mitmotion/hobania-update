@@ -21,7 +21,6 @@ pub struct Entity {
     pub seed: u32,
     pub last_tick: u64,
     pub controller: RtSimController,
-
     pub brain: Brain,
     pub occupation: Option<Occupation>,
 }
