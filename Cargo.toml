@@ -29,7 +29,7 @@ opt-level = 2
 overflow-checks = true
 debug-assertions = true
 panic = "abort"
-debug = false
+debug = true
 codegen-units = 8
 lto = false
 # TEMP false to avoid fingerprints bug

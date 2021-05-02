@@ -184,7 +184,7 @@ impl Structure for Castle {
                                             max: (wpos + ts + 3 + roof_lip)
                                                 .with_z(tower_total_height + roof_height),
                                         },
-                                        inset: roof_height,
+                                        inset: Vec2::broadcast(roof_height),
                                     }),
                                     Fill::Brick(BlockKind::Wood, Rgb::new(40, 5, 11), 10),
                                 );
