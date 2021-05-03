@@ -230,7 +230,8 @@ pub struct LocalizationHandle {
 // RAII guard returned from Localization::read(), resembles AssetGuard
 pub struct LocalizationGuard {
     active: AssetGuard<Language>,
-    fallback: Option<AssetGuard<Language>>,
+    fallback: Option<AssetGuard<Language>>, // optional display for missing translations
+    reference: Option<AssetGuard<Language>>, // to determine missing translations
 }
 
 // arbitrary choice to minimize changing all of veloren
@@ -271,7 +272,7 @@ impl LocalizationGuard {
 
     /// Return the missing keys compared to the reference language
     fn list_missing_entries(&self) -> (HashSet<String>, HashSet<String>) {
-        if let Some(ref_lang) = &self.fallback {
+        if let Some(ref_lang) = self.fallback.as_ref().or(self.reference.as_ref()) {
             let reference_string_keys: HashSet<_> = ref_lang.string_map.keys().cloned().collect();
             let string_keys: HashSet<_> = self.active.string_map.keys().cloned().collect();
             let strings = reference_string_keys
@@ -325,6 +326,11 @@ impl LocalizationHandle {
         LocalizationGuard {
             active: self.active.read(),
             fallback: if self.use_english_fallback {
+                self.fallback.map(|f| f.read())
+            } else {
+                None
+            },
+            reference: if !self.use_english_fallback {
                 self.fallback.map(|f| f.read())
             } else {
                 None
