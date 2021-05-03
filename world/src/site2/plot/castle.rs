@@ -41,7 +41,7 @@ impl Castle {
     }
 }
 
-impl Structure for Castle {
+impl Render for Castle {
     #[allow(clippy::identity_op)]
     fn render<F: FnMut(Primitive) -> Id<Primitive>, G: FnMut(Id<Primitive>, Fill)>(
         &self,

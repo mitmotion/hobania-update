@@ -241,7 +241,7 @@ impl Fill {
     }
 }
 
-pub trait Structure {
+pub trait Render {
     fn render<F: FnMut(Primitive) -> Id<Primitive>, G: FnMut(Id<Primitive>, Fill)>(
         &self,
         site: &Site,

@@ -52,7 +52,7 @@ impl House {
     }
 }
 
-impl Structure for House {
+impl Render for House {
     fn render<F: FnMut(Primitive) -> Id<Primitive>, G: FnMut(Id<Primitive>, Fill)>(
         &self,
         site: &Site,

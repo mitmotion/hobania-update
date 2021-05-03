@@ -75,8 +75,11 @@ impl TileGrid {
         &self,
         center: Vec2<i32>,
         area_range: Range<u32>,
-        min_dims: Extent2<u32>,
+        min_dims: impl Into<Extent2<u32>>,
+        radius: u32,
     ) -> Result<Aabr<i32>, Aabr<i32>> {
+        let min_dims = min_dims.into() + radius * 2;
+
         let mut aabr = Aabr {
             min: center,
             max: center + 1,
@@ -86,15 +89,16 @@ impl TileGrid {
             return Err(aabr);
         };
 
+        let inner_size = |aabr: Aabr<i32>| aabr.size().map(|e| e.saturating_sub(radius as i32 * 2));
+
         let mut last_growth = 0;
         for i in 0..32 {
             if i - last_growth >= 4
-                || aabr.size().product()
-                    + if i % 2 == 0 {
-                        aabr.size().h
+                || (inner_size(aabr) + if i % 2 == 0 {
+                        Extent2::new(0, 1)
                     } else {
-                        aabr.size().w
-                    }
+                        Extent2::new(1, 0)
+                    }).product()
                     > area_range.end as i32
             {
                 break;
@@ -130,13 +134,19 @@ impl TileGrid {
             }
         }
 
-        if aabr.size().product() as u32 >= area_range.start
+        let inner_size = inner_size(aabr);
+        let inner_aabr = Aabr {
+            min: aabr.min + radius as i32,
+            max: aabr.min + radius as i32 + inner_size,
+        };
+
+        if inner_size.product() as u32 >= area_range.start
             && aabr.size().w as u32 >= min_dims.w
             && aabr.size().h as u32 >= min_dims.h
         {
-            Ok(aabr)
+            Ok(inner_aabr)
         } else {
-            Err(aabr)
+            Err(inner_aabr)
         }
     }
 

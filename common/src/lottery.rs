@@ -33,11 +33,16 @@ use crate::{
 use rand::prelude::*;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tracing::warn;
+use std::{
+    convert::AsRef,
+    marker::PhantomData,
+};
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
-pub struct Lottery<T> {
-    items: Vec<(f32, T)>,
+pub struct Lottery<T, Items: AsRef<[(f32, T)]> = Vec<(f32, T)>> {
+    items: Items,
     total: f32,
+    phantom: PhantomData<T>,
 }
 
 impl<T: DeserializeOwned + Send + Sync + 'static> assets::Asset for Lottery<T> {
@@ -55,15 +60,29 @@ impl<T> From<Vec<(f32, T)>> for Lottery<T> {
             *rate = total - *rate;
         }
 
-        Self { items, total }
+        Self { items, total, phantom: PhantomData }
     }
 }
 
-impl<T> Lottery<T> {
+impl<'a, T> Lottery<T, &'a mut [(f32, T)]> {
+    pub fn from_slice(items: &'a mut [(f32, T)]) -> Self {
+        let mut total = 0.0;
+
+        for (rate, _) in items.iter_mut() {
+            total += *rate;
+            *rate = total - *rate;
+        }
+
+        Self { items, total, phantom: PhantomData }
+    }
+}
+
+impl<T, Items: AsRef<[(f32, T)]>> Lottery<T, Items> {
     pub fn choose_seeded(&self, seed: u32) -> &T {
         let x = ((seed % 65536) as f32 / 65536.0) * self.total;
-        &self.items[self
+        &self.items.as_ref()[self
             .items
+            .as_ref()
             .binary_search_by(|(y, _)| y.partial_cmp(&x).unwrap())
             .unwrap_or_else(|i| i.saturating_sub(1))]
         .1
@@ -71,7 +90,7 @@ impl<T> Lottery<T> {
 
     pub fn choose(&self) -> &T { self.choose_seeded(thread_rng().gen()) }
 
-    pub fn iter(&self) -> impl Iterator<Item = &(f32, T)> { self.items.iter() }
+    pub fn iter(&self) -> impl Iterator<Item = &(f32, T)> { self.items.as_ref().iter() }
 
     pub fn total(&self) -> f32 { self.total }
 }

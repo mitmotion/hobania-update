@@ -1,9 +1,11 @@
 mod gen;
+mod planning;
 mod plot;
+mod structure;
 mod tile;
 
 use self::{
-    gen::{Fill, Primitive, Structure},
+    gen::{Fill, Primitive, Render},
     plot::{Plot, PlotKind},
     tile::{HazardKind, KeepKind, Ori, RoofKind, Tile, TileGrid, TileKind, TILE_SIZE},
 };
@@ -166,7 +168,7 @@ impl Site {
     ) -> Option<(Aabr<i32>, Vec2<i32>)> {
         self.tiles.find_near(search_pos, |center, _| {
             self.tiles
-                .grow_aabr(center, area_range.clone(), min_dims)
+                .grow_aabr(center, area_range.clone(), min_dims, 0)
                 .ok()
                 .filter(|aabr| {
                     (aabr.min.x..aabr.max.x)
@@ -285,6 +287,13 @@ impl Site {
 
         site.demarcate_obstacles(land);
 
+        for _ in 0..100 {
+            site.tick(land, &mut rng);
+        }
+
+        return site;
+
+        /*
         site.make_plaza(land, &mut rng);
 
         let build_chance = Lottery::from(vec![(128.0, 1), (5.0, 2), (8.0, 3), (0.75, 4)]);
@@ -523,6 +532,7 @@ impl Site {
         }
 
         site
+        */
     }
 
     pub fn wpos_tile_pos(&self, wpos2d: Vec2<i32>) -> Vec2<i32> {
@@ -711,6 +721,7 @@ impl Site {
 
         for plot in plots_to_render {
             let (prim_tree, fills) = match &self.plots[plot].kind {
+                PlotKind::Hut(hut) => hut.render_collect(self),
                 PlotKind::House(house) => house.render_collect(self),
                 PlotKind::Castle(castle) => castle.render_collect(self),
                 _ => continue,
