@@ -41,7 +41,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
     }
 
     let scatter: &[Entry<R>] = &[
-        // Tundra snow pack ennemies
+        // Tundra snow pack enemies
         Entry {
             make_entity: |pos, rng| {
                 EntityInfo::at(pos)
@@ -72,7 +72,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
                     * 1.0
             },
         },
-        // Tundra solitary ennemies
+        // Tundra solitary enemies
         Entry {
             make_entity: |pos, rng| {
                 EntityInfo::at(pos)
@@ -101,7 +101,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
                 close(c.temp, CONFIG.snow_temp, 0.3) * col.tree_density * BASE_DENSITY * 1.4
             },
         },
-        // Tundra rare solitary ennemies
+        // Tundra rare solitary enemies
         Entry {
             make_entity: |pos, rng| {
                 EntityInfo::at(pos)
@@ -115,7 +115,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
             day_period: vec![Night, Morning, Noon, Evening],
             get_density: |c, _col| close(c.temp, CONFIG.snow_temp, 0.15) * BASE_DENSITY * 0.5,
         },
-        // Tundra rarer solitary ennemies
+        // Tundra rarer solitary enemies
         Entry {
             make_entity: |pos, rng| {
                 EntityInfo::at(pos)
@@ -129,7 +129,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
             day_period: vec![Night, Morning, Noon, Evening],
             get_density: |c, _col| close(c.temp, CONFIG.snow_temp, 0.15) * BASE_DENSITY * 0.1,
         },
-        // Tundra rock solitary ennemies
+        // Tundra rock solitary enemies
         Entry {
             make_entity: |pos, rng| {
                 EntityInfo::at(pos)
@@ -146,7 +146,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
                 close(c.temp, CONFIG.snow_temp, 0.15) * BASE_DENSITY * col.rock * 1.0
             },
         },
-        // Taiga rare solitary ennemies
+        // Taiga rare solitary enemies
         Entry {
             make_entity: |pos, rng| {
                 EntityInfo::at(pos)
@@ -168,7 +168,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
                 close(c.temp, CONFIG.snow_temp + 0.2, 0.2) * col.tree_density * BASE_DENSITY * 0.4
             },
         },
-        // Taiga pack ennemies
+        // Taiga pack enemies
         Entry {
             make_entity: |pos, rng| {
                 EntityInfo::at(pos)
@@ -252,7 +252,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
             day_period: vec![Night, Morning, Noon, Evening],
             get_density: |c, _col| close(c.temp, CONFIG.snow_temp + 0.2, 0.6) * BASE_DENSITY * 5.0,
         },
-        // Temperate solitary ennemies
+        // Temperate solitary enemies
         Entry {
             make_entity: |pos, rng| {
                 EntityInfo::at(pos)
@@ -505,7 +505,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
                     }
             },
         },
-        // Temperate rare river ennemies
+        // Temperate rare river enemies
         Entry {
             make_entity: |pos, rng| {
                 EntityInfo::at(pos)
@@ -530,7 +530,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
                     }
             },
         },
-        // Temperate river ennemies
+        // Temperate river enemies
         Entry {
             make_entity: |pos, rng| {
                 EntityInfo::at(pos)
@@ -552,7 +552,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
                     }
             },
         },
-        // Tropical rock solitary ennemies
+        // Tropical rock solitary enemies
         Entry {
             make_entity: |pos, rng| {
                 EntityInfo::at(pos)
@@ -572,7 +572,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
                 close(c.temp, CONFIG.tropical_temp + 0.1, 0.5) * col.rock * BASE_DENSITY * 5.0
             },
         },
-        // Jungle solitary ennemies
+        // Jungle solitary enemies
         Entry {
             make_entity: |pos, rng| {
                 EntityInfo::at(pos)
@@ -601,7 +601,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
                     * 2.8
             },
         },
-        // Jungle solitary ennemies day
+        // Jungle solitary enemies day
         Entry {
             make_entity: |pos, rng| {
                 EntityInfo::at(pos)

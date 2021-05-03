@@ -315,6 +315,10 @@
                 keyword: "undead",
                 generic: "Undead"
             )
+            draugr: (
+                keyword: "draugr",
+                generic: "Draugr"
+            )
         )
     ),
     quadruped_medium: (

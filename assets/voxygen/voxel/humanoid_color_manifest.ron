@@ -140,6 +140,33 @@
             (48, 61, 52),    // Dark Green
             (20, 19, 17),    // Black
         ],
+        Draugr: [
+            //(245, 232, 175), // Cream Blonde
+            (228, 208, 147), // Gold Blonde
+            //(228, 223, 141), // Platinum Blonde
+            (176, 106, 41),  // Summer Blonde
+            (107, 76, 51),   // Oak
+            (203, 154, 98),  // Light
+            (64, 32, 18),    // Skin7
+            (86, 72, 71),    // Ash
+            (57, 56, 61),    // Raven Black
+            (101, 83, 95),   // Matte Purple
+            (101, 57, 90),   // Witch Purple
+            (111, 54, 117),  // Punky Purple
+            (135, 38, 39),   // Dark Red
+            (88, 26, 29),    // Wine Red
+            (103, 191, 254), // Ice Blue
+            (92, 80, 144),   // Kingfisher Blue
+            (146, 198, 238), // Lagoon Blue
+            (66, 66, 59),    // Decayed Grey
+            //(80, 156, 211), // Candy Pink
+            (216, 146, 114), // Matte Pink
+            (0, 131, 122),   // Rotten Green
+            (146, 166, 172), // Matte Green
+            (84, 139, 107),  // Grass Green
+            (48, 61, 52),    // Dark Green
+            (20, 19, 17),    // Black
+        ],
     ),
     eye_colors_light: (
         VigorousBlack: (71, 59, 49),

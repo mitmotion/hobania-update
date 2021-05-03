@@ -103,6 +103,8 @@ image_ids_ice! {
         elf_f: "voxygen.element.ui.char_select.portraits.elf_f",
         danari_m: "voxygen.element.ui.char_select.portraits.danari_m",
         danari_f: "voxygen.element.ui.char_select.portraits.danari_f",
+        draugr_m: "voxygen.element.ui.char_select.portraits.ud_m",
+        draugr_f: "voxygen.element.ui.char_select.portraits.ud_f",
         // Icon Borders
         icon_border: "voxygen.element.ui.generic.buttons.border",
         icon_border_mo: "voxygen.element.ui.generic.buttons.border_mo",
@@ -752,6 +754,7 @@ impl Controls {
                     humanoid::Species::Elf => (imgs.elf_m, imgs.elf_f),
                     humanoid::Species::Undead => (imgs.undead_m, imgs.undead_f),
                     humanoid::Species::Danari => (imgs.danari_m, imgs.danari_f),
+                    humanoid::Species::Draugr => (imgs.undead_m, imgs.undead_f),
                 };
 
                 let [ref mut body_m_button, ref mut body_f_button] = body_type_buttons;
@@ -836,10 +839,10 @@ impl Controls {
                         .into(),
                         icon_button_tooltip(
                             undead_button,
-                            matches!(body.species, humanoid::Species::Undead),
-                            Message::Species(humanoid::Species::Undead),
+                            matches!(body.species, humanoid::Species::Draugr),
+                            Message::Species(humanoid::Species::Draugr),
                             undead_icon,
-                            "common.species.undead",
+                            "common.species.draugr",
                         )
                         .into(),
                         icon_button_tooltip(

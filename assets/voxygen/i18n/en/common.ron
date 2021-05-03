@@ -57,6 +57,7 @@ Is the client up to date?"#,
         "common.species.elf": "Elf",
         "common.species.undead": "Undead",
         "common.species.danari": "Danari",
+        "common.species.draugr": "Draugr",
 
         "common.weapons.axe": "Axe",
         "common.weapons.sword": "Sword",

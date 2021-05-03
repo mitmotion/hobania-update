@@ -80,6 +80,7 @@ make_case_elim!(
         Human = 3,
         Orc = 4,
         Undead = 5,
+        Draugr = 6,
     }
 );
 
@@ -94,6 +95,7 @@ pub struct AllSpecies<SpeciesMeta> {
     pub human: SpeciesMeta,
     pub orc: SpeciesMeta,
     pub undead: SpeciesMeta,
+    pub draugr: SpeciesMeta,
 }
 
 impl<'a, SpeciesMeta> core::ops::Index<&'a Species> for AllSpecies<SpeciesMeta> {
@@ -108,17 +110,19 @@ impl<'a, SpeciesMeta> core::ops::Index<&'a Species> for AllSpecies<SpeciesMeta> 
             Species::Human => &self.human,
             Species::Orc => &self.orc,
             Species::Undead => &self.undead,
+            Species::Draugr => &self.draugr,
         }
     }
 }
 
-pub const ALL_SPECIES: [Species; 6] = [
+pub const ALL_SPECIES: [Species; 7] = [
     Species::Danari,
     Species::Dwarf,
     Species::Elf,
     Species::Human,
     Species::Orc,
     Species::Undead,
+    Species::Draugr,
 ];
 
 impl<'a, SpeciesMeta: 'a> IntoIterator for &'a AllSpecies<SpeciesMeta> {
@@ -189,6 +193,7 @@ pub const HUMAN_SKIN_COLORS: [Skin; 18] = [
 ];
 pub const ORC_SKIN_COLORS: [Skin; 4] = [Skin::OrcOne, Skin::OrcTwo, Skin::OrcThree, Skin::OrcFour];
 pub const UNDEAD_SKIN_COLORS: [Skin; 3] = [Skin::UndeadOne, Skin::UndeadTwo, Skin::UndeadThree];
+pub const DRAUGR_SKIN_COLORS: [Skin; 3] = [Skin::UndeadOne, Skin::UndeadTwo, Skin::UndeadThree];
 
 // Eye colors
 pub const DANARI_EYE_COLORS: [EyeColor; 3] = [
@@ -228,6 +233,13 @@ pub const UNDEAD_EYE_COLORS: [EyeColor; 5] = [
     EyeColor::MagicPurple,
     EyeColor::ToxicGreen,
 ];
+pub const DRAUGR_EYE_COLORS: [EyeColor; 5] = [
+    EyeColor::ViciousRed,
+    EyeColor::PumpkinOrange,
+    EyeColor::GhastlyYellow,
+    EyeColor::MagicPurple,
+    EyeColor::ToxicGreen,
+];
 
 impl Species {
     fn skin_colors(self) -> &'static [Skin] {
@@ -238,6 +250,7 @@ impl Species {
             Species::Human => &HUMAN_SKIN_COLORS,
             Species::Orc => &ORC_SKIN_COLORS,
             Species::Undead => &UNDEAD_SKIN_COLORS,
+            Species::Draugr => &DRAUGR_SKIN_COLORS,
         }
     }
 
@@ -249,6 +262,7 @@ impl Species {
             Species::Human => &HUMAN_EYE_COLORS,
             Species::Orc => &ORC_EYE_COLORS,
             Species::Undead => &UNDEAD_EYE_COLORS,
+            Species::Draugr => &DRAUGR_EYE_COLORS,
         }
     }
 
@@ -265,6 +279,7 @@ impl Species {
             Species::Human => 22,
             Species::Orc => 11,
             Species::Undead => 22,
+            Species::Draugr => 22,
         }
     }
 
@@ -300,6 +315,8 @@ impl Species {
             (Species::Orc, BodyType::Male) => 8,
             (Species::Undead, BodyType::Female) => 6,
             (Species::Undead, BodyType::Male) => 5,
+            (Species::Draugr, BodyType::Female) => 0,
+            (Species::Draugr, BodyType::Male) => 0,
         }
     }
 
@@ -317,6 +334,8 @@ impl Species {
             (Species::Orc, BodyType::Male) => 6,
             (Species::Undead, BodyType::Female) => 2,
             (Species::Undead, BodyType::Male) => 2,
+            (Species::Draugr, BodyType::Female) => 0,
+            (Species::Draugr, BodyType::Male) => 0,
         }
     }
 
@@ -336,6 +355,8 @@ impl Species {
             (Species::Orc, BodyType::Male) => 2,
             (Species::Undead, BodyType::Female) => 3,
             (Species::Undead, BodyType::Male) => 4,
+            (Species::Draugr, BodyType::Female) => 1,
+            (Species::Draugr, BodyType::Male) => 1,
         }
     }
 
@@ -353,6 +374,8 @@ impl Species {
             (Species::Orc, BodyType::Male) => 3,
             (Species::Undead, BodyType::Female) => 1,
             (Species::Undead, BodyType::Male) => 1,
+            (Species::Draugr, BodyType::Female) => 0,
+            (Species::Draugr, BodyType::Male) => 0,
         }
     }
 }

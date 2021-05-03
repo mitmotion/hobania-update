@@ -228,6 +228,8 @@ impl<'a> From<&'a Body> for SkeletonAttr {
                 (Undead, Female) => 0.72,
                 (Danari, Male) => 0.56,
                 (Danari, Female) => 0.56,
+                (Draugr, Male) => 0.56,
+                (Draugr, Female) => 0.56,
             },
             head_scale: match (body.species, body.body_type) {
                 (Orc, Male) => 0.9,
@@ -242,6 +244,8 @@ impl<'a> From<&'a Body> for SkeletonAttr {
                 (Undead, Female) => 0.9,
                 (Danari, Male) => 1.15,
                 (Danari, Female) => 1.15,
+                (Draugr, Male) => 0.56,
+                (Draugr, Female) => 0.56,
             },
             head: match (body.species, body.body_type) {
                 (Orc, Male) => (-2.0, 9.0),
@@ -256,6 +260,8 @@ impl<'a> From<&'a Body> for SkeletonAttr {
                 (Undead, Female) => (-1.5, 9.5),
                 (Danari, Male) => (-1.5, 7.0),
                 (Danari, Female) => (-1.5, 7.0),
+                (Draugr, Male) => (-1.5, 7.0),
+                (Draugr, Female) => (-1.5, 7.0),
             },
             chest: match (body.species, body.body_type) {
                 _ => (0.0, 8.0),

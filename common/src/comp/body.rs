@@ -206,6 +206,8 @@ impl Body {
                     (humanoid::Species::Undead, humanoid::BodyType::Female) => 50.0,
                     (humanoid::Species::Danari, humanoid::BodyType::Male) => 80.0,
                     (humanoid::Species::Danari, humanoid::BodyType::Female) => 60.0,
+                    (humanoid::Species::Draugr, humanoid::BodyType::Male) => 70.0,
+                    (humanoid::Species::Draugr, humanoid::BodyType::Female) => 50.0,
                 }
             },
             Body::Object(obj) => obj.mass().0,
@@ -301,6 +303,8 @@ impl Body {
                     (humanoid::Species::Undead, humanoid::BodyType::Female) => 2.1,
                     (humanoid::Species::Danari, humanoid::BodyType::Male) => 1.5,
                     (humanoid::Species::Danari, humanoid::BodyType::Female) => 1.4,
+                    (humanoid::Species::Draugr, humanoid::BodyType::Male) => 2.2,
+                    (humanoid::Species::Draugr, humanoid::BodyType::Female) => 2.1,
                 };
                 Vec3::new(1.5, 0.5, height)
             },

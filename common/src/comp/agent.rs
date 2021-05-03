@@ -173,6 +173,7 @@ impl<'a> From<&'a Body> for Psyche {
                     humanoid::Species::Human => 0.6,
                     humanoid::Species::Orc => 0.9,
                     humanoid::Species::Undead => 0.9,
+                    humanoid::Species::Draugr => 0.9,
                 },
                 Body::QuadrupedSmall(quadruped_small) => match quadruped_small.species {
                     quadruped_small::Species::Pig => 0.5,

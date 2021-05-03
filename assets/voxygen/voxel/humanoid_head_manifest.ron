@@ -377,5 +377,25 @@
         accessory: [            
             Some(("figure.accessory.danari.horns-0", (4, 9, 8))),]
     ),
-    // More here
+    (Draugr, Male): (
+        offset: (-9.0, -4.0, -2.0),
+        head: ("figure.head.draugr.male", (0, 2, 2)),
+        eyes: [
+            Some(("figure.eyes.general.female_default-0", (4, 9, 4))),                                               
+            ],
+        hair: [None],
+        beard: [None],
+        accessory: [None],
+    ),	
+    (Draugr, Female): (
+        offset: (-9.0, -4.0, -2.0),
+        head: ("figure.head.draugr.female", (0, 2, 2)),
+        eyes: [
+            Some(("figure.eyes.general.female_default-0", (4, 9, 4))),                                               
+            ],
+        hair: [None],
+        beard: [None],
+        accessory: [None],
+    ),
+    // Add here: Morx, Aunqa
 })
