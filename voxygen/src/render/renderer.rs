@@ -1138,10 +1138,6 @@ impl Renderer {
         }
     }
 
-    pub fn egui_renderpass_mut(&mut self) -> &mut egui_wgpu_backend::RenderPass {
-        &mut self.egui_renderpass
-    }
-
     // Consider reenabling at some time
     //
     // /// Queue the rendering of the player silhouette in the upcoming frame.

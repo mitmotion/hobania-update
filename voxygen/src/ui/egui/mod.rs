@@ -1,7 +1,6 @@
 use egui_winit_platform::{Platform, PlatformDescriptor};
 use crate::window::Window;
 use egui::FontDefinitions;
-use winit::event::Event;
 use client::Client;
 use crate::hud::DebugInfo;
 

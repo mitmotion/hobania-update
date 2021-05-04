@@ -546,7 +546,7 @@ pub struct Window {
 
 impl Window {
     pub fn new(settings: &Settings) -> Result<(Window, EventLoop), Error> {
-        let event_loop = EventLoop::with_user_event();
+        let event_loop = EventLoop::new();
 
         let size = settings.graphics.window_size;
 

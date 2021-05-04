@@ -9,7 +9,6 @@ use crate::{
     i18n::LocalizationHandle, render::Renderer, settings::Settings, window::Event, Direction,
     GlobalState, PlayState, PlayStateResult,
 };
-use chrono::Timelike;
 #[cfg(feature = "singleplayer")]
 use client::addr::ConnectionArgs;
 use client::{
@@ -25,7 +24,6 @@ use std::sync::Arc;
 use tokio::runtime;
 use tracing::error;
 use ui::{Event as MainMenuEvent, MainMenuUi};
-use egui::CentralPanel;
 
 // TODO: show status messages for waiting on server creation, client init, and
 // pipeline creation (we can show progress of pipeline creation)
@@ -338,7 +336,6 @@ impl PlayState for MainMenuState {
         if let Some(mut ui_drawer) = third_pass.draw_ui() {
             self.main_menu_ui.render(&mut ui_drawer);
         };
-        drop(third_pass);
     }
 }
 

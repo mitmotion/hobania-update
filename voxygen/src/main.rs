@@ -18,8 +18,6 @@ use common::{
     assets::{self},
     clock::Clock,
 };
-use egui::FontDefinitions;
-use egui_winit_platform::{Platform, PlatformDescriptor};
 use std::panic;
 use tracing::{error, info, warn};
 use veloren_voxygen::ui::egui::EguiState;
@@ -188,7 +186,7 @@ fn main() {
 
     let lazy_init = SpriteRenderContext::new(window.renderer_mut());
 
-    let mut egui_state = EguiState::new(&window);
+    let egui_state = EguiState::new(&window);
 
     let global_state = GlobalState {
         audio,
