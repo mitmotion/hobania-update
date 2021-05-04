@@ -96,6 +96,7 @@ pub enum Interface {
     SpeechBubbleIcon(bool),
     ToggleHelp(bool),
     ToggleDebug(bool),
+    ToggleHitboxes(bool),
     ToggleTips(bool),
 
     CrosshairTransp(f32),
@@ -444,6 +445,9 @@ impl SettingsChange {
                     },
                     Interface::ToggleDebug(toggle_debug) => {
                         settings.interface.toggle_debug = toggle_debug;
+                    },
+                    Interface::ToggleHitboxes(toggle_hitboxes) => {
+                        settings.interface.toggle_hitboxes = toggle_hitboxes;
                     },
                     Interface::ToggleTips(loading_tips) => {
                         settings.interface.loading_tips = loading_tips;
