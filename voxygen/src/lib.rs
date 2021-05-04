@@ -41,9 +41,9 @@ use crate::singleplayer::Singleplayer;
 use crate::{
     audio::AudioFrontend,
     profile::Profile,
-    run::ExampleRepaintSignal,
     settings::Settings,
     window::{Event, Window},
+    ui::egui::EguiState,
 };
 use common::clock::Clock;
 use common_base::span;
@@ -56,7 +56,7 @@ pub struct GlobalState {
     pub settings: Settings,
     pub profile: Profile,
     pub window: Window,
-    pub egui_platform: Platform,
+    pub egui_state: EguiState,
     pub lazy_init: scene::terrain::SpriteRenderContextLazy,
     pub audio: AudioFrontend,
     pub info_message: Option<String>,
@@ -70,8 +70,6 @@ pub struct GlobalState {
     // enter the game before confirmation of successful character load
     /// An error returned by Client that needs to be displayed by the UI
     pub client_error: Option<String>,
-    pub egui_demo_app: egui_demo_lib::WrapApp, // TODO: Remove
-    pub repaint_signal: Option<Arc<ExampleRepaintSignal>>,
 }
 
 impl GlobalState {

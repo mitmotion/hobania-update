@@ -66,6 +66,7 @@ egui_demo_lib = "0.11"
 # egui_wgpu_backend = "0.7"
 egui_wgpu_backend = { path = "../../egui_wgpu_backend" }
 egui_winit_platform = "0.6"
+#egui_winit_platform = { path = "../../egui_winit_platform" }
 epi = "0.11"
 
 # ECS

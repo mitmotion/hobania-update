@@ -1,10 +1,8 @@
 mod ui;
 
 use crate::{
-    render::Renderer,
     scene::simple::{self as scene, Scene},
     session::SessionState,
-    settings::Settings,
     window::Event as WinEvent,
     Direction, GlobalState, PlayState, PlayStateResult,
 };
@@ -269,11 +267,5 @@ impl PlayState for CharSelectionState {
         if let Some(mut ui_drawer) = third_pass.draw_ui() {
             self.char_selection_ui.render(&mut ui_drawer);
         };
-
-        // drawer.draw_egui(
-        //     egui_platform,
-        //     egui_paint_jobs,
-        //     1.0, /* TODO: pass in winit window scale factor */
-        // );
     }
 }

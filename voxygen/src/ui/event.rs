@@ -1,4 +1,3 @@
-use crate::run::CustomEvent;
 use conrod_core::{event::Input, input::Button};
 use vek::*;
 
@@ -6,7 +5,7 @@ use vek::*;
 pub struct Event(pub Input);
 impl Event {
     pub fn try_from(
-        event: &winit::event::Event<CustomEvent>,
+        event: &winit::event::Event<()>,
         window: &winit::window::Window,
     ) -> Option<Self> {
         use conrod_winit::*;

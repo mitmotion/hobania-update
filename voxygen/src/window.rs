@@ -1,7 +1,6 @@
 use crate::{
     controller::*,
     render::Renderer,
-    run::CustomEvent,
     settings::{ControlSettings, Settings},
     ui, Error,
 };
@@ -319,7 +318,7 @@ pub enum Event {
 
 pub type MouseButton = winit::event::MouseButton;
 pub type PressState = winit::event::ElementState;
-pub type EventLoop = winit::event_loop::EventLoop<CustomEvent>;
+pub type EventLoop = winit::event_loop::EventLoop<()>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum KeyMouse {

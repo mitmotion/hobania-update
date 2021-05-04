@@ -1014,6 +1014,9 @@ impl PlayState for SessionState {
                 self.interactable,
             );
 
+            // Maintain egui (debug interface)
+            global_state.egui_state.maintain(&self.client.borrow(), &debug_info,);
+
             // Look for changes in the localization files
             if global_state.i18n.reloaded() {
                 hud_events.push(HudEvent::SettingsChange(
@@ -1393,6 +1396,7 @@ impl PlayState for SessionState {
     /// This method should be called once per frame.
 
     fn render(&mut self, global_state: &mut GlobalState) {
+        let scale_factor = global_state.window.window().scale_factor() as f32;
         let renderer = global_state.window.renderer_mut();
         let settings = &global_state.settings;
 
@@ -1452,46 +1456,9 @@ impl PlayState for SessionState {
 
         drop(third_pass);
 
-        global_state.egui_platform.begin_frame();
-        let mut app_output = epi::backend::AppOutput::default();
-        let mut frame = epi::backend::FrameBuilder {
-            info: epi::IntegrationInfo {
-                web_info: None,
-                cpu_usage: None, // TODO
-                seconds_since_midnight: Some(seconds_since_midnight()),
-                native_pixels_per_point: Some(1.25 /* TODO */),
-            },
-            tex_allocator: drawer.egui_renderpass(),
-            output: &mut app_output,
-            repaint_signal: global_state.repaint_signal.as_ref().unwrap().clone(),
-        }
-        .build();
-
-        // let ctx = &global_state.egui_platform.context();
-        // egui::Window::new("Test Window")
-        //     .default_width(200.0)
-        //     .default_height(200.0)
-        //     .show(ctx, |ui| {
-        //         ui.label("Hello World!");
-        //     });
-
-        global_state
-            .egui_demo_app
-            .update(&global_state.egui_platform.context(), &mut frame);
-
-        let (_output, paint_commands) = global_state.egui_platform.end_frame();
-        let paint_jobs = global_state
-            .egui_platform
-            .context()
-            .tessellate(paint_commands);
-        // let frame_time = (Instant::now() - egui_start).as_secs_f64() as f32;
-        // previous_frame_time = Some(frame_time);
-        println!("drawing {} paint jobs from session", paint_jobs.len());
         drawer.draw_egui(
-            //  renderer.egui_renderpass(),
-            &global_state.egui_platform,
-            &paint_jobs,
-            1.25, /* TODO: pass in winit window scale factor */
+            &mut global_state.egui_state.platform,
+            scale_factor,
         );
     }
 }

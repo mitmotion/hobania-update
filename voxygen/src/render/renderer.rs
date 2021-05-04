@@ -364,7 +364,7 @@ impl Renderer {
         profiler.enable_debug_marker = mode.profiler_enabled;
 
         let egui_renderpass =
-            egui_wgpu_backend::RenderPass::new(&device, TextureFormat::Bgra8UnormSrgb);
+            egui_wgpu_backend::RenderPass::new(&*device, TextureFormat::Bgra8UnormSrgb);
 
         Ok(Self {
             device,

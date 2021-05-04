@@ -9,6 +9,7 @@ pub mod img_ids;
 pub mod fonts;
 pub mod ice;
 pub mod keyed_jobs;
+pub mod egui;
 
 pub use event::Event;
 pub use graphic::{Graphic, Id as GraphicId, Rotation, SampleStrat, Transform};

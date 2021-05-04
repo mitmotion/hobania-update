@@ -15,7 +15,6 @@ use egui_wgpu_backend::ScreenDescriptor;
 use egui_winit_platform::Platform;
 use std::sync::Arc;
 use vek::Aabr;
-use wgpu::TextureFormat;
 use wgpu_profiler::scope::{ManualOwningScope, OwningScope, Scope};
 
 // Currently available pipelines
@@ -70,7 +69,7 @@ struct RendererBorrow<'frame> {
 pub struct Drawer<'frame> {
     encoder: Option<ManualOwningScope<'frame, wgpu::CommandEncoder>>,
     borrow: RendererBorrow<'frame>,
-    pub swap_tex: wgpu::SwapChainTexture,
+    swap_tex: wgpu::SwapChainTexture,
     globals: &'frame GlobalsBindGroup,
     // Texture and other info for taking a screenshot
     // Writes to this instead in the third pass if it is present
@@ -130,10 +129,6 @@ impl<'frame> Drawer<'frame> {
 
     /// Get the render mode.
     pub fn render_mode(&self) -> &super::super::RenderMode { self.borrow.mode }
-
-    // pub fn encoder(&mut self) -> &mut ManualOwningScope<wgpu::CommandEncoder> {
-    //     self.encoder.as_mut().unwrap()
-    // }
 
     /// Returns None if the shadow renderer is not enabled at some level or the
     /// pipelines are not available yet
@@ -271,27 +266,21 @@ impl<'frame> Drawer<'frame> {
         }
     }
 
-    pub fn egui_pass(&mut self) -> EguiPassDrawer {
-        let render_pass =
-            egui_wgpu_backend::RenderPass::new(self.borrow.device, TextureFormat::Bgra8UnormSrgb);
-
-        EguiPassDrawer {
-            render_pass,
-            borrow: &self.borrow,
-        }
-    }
-
     pub fn draw_egui(
         &mut self,
-        //egui_renderpass: &mut egui_wgpu_backend::RenderPass,
-        platform: &Platform,
-        paint_jobs: &[egui::paint::ClippedMesh],
+        platform: &mut Platform,
         scale_factor: f32,
     ) {
+        let (_output, paint_commands) = platform.end_frame();
+
+        let paint_jobs = platform
+            .context()
+            .tessellate(paint_commands);
+
         let screen_descriptor = ScreenDescriptor {
             physical_width: self.borrow.sc_desc.width,
             physical_height: self.borrow.sc_desc.height,
-            scale_factor,
+            scale_factor: scale_factor as f32,
         };
 
         self.borrow.egui_render_pass.update_texture(
@@ -310,10 +299,9 @@ impl<'frame> Drawer<'frame> {
         );
 
         self.borrow.egui_render_pass.execute(
-            self.encoder.as_mut().unwrap(),
-            self.borrow.device,
+            &mut self.encoder.as_mut().unwrap(),
             &self.swap_tex.view,
-            paint_jobs,
+            &paint_jobs,
             &screen_descriptor,
             None,
         );
@@ -858,11 +846,6 @@ impl<'pass> ThirdPassDrawer<'pass> {
 
         Some(UiDrawer { render_pass })
     }
-}
-
-pub struct EguiPassDrawer<'pass> {
-    render_pass: egui_wgpu_backend::RenderPass,
-    borrow: &'pass RendererBorrow<'pass>,
 }
 
 pub struct UiDrawer<'pass_ref, 'pass: 'pass_ref> {

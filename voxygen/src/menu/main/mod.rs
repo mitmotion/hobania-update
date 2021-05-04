@@ -20,12 +20,12 @@ use client::{
 use client_init::{ClientInit, Error as InitError, Msg as InitMsg};
 use common::comp;
 use common_base::span;
-use egui_wgpu_backend::epi::App;
 use scene::Scene;
 use std::sync::Arc;
 use tokio::runtime;
 use tracing::error;
 use ui::{Event as MainMenuEvent, MainMenuUi};
+use egui::CentralPanel;
 
 // TODO: show status messages for waiting on server creation, client init, and
 // pipeline creation (we can show progress of pipeline creation)
@@ -322,7 +322,7 @@ impl PlayState for MainMenuState {
     fn name(&self) -> &'static str { "Title" }
 
     fn render(&mut self, global_state: &mut GlobalState) {
-        let mut renderer = global_state.window.renderer_mut();
+        let renderer = global_state.window.renderer_mut();
 
         let mut drawer = match renderer
             .start_recording_frame(self.scene.global_bind_group())
@@ -339,55 +339,7 @@ impl PlayState for MainMenuState {
             self.main_menu_ui.render(&mut ui_drawer);
         };
         drop(third_pass);
-
-        global_state.egui_platform.begin_frame();
-        let mut app_output = epi::backend::AppOutput::default();
-        let mut frame = epi::backend::FrameBuilder {
-            info: epi::IntegrationInfo {
-                web_info: None,
-                cpu_usage: None, // TODO
-                seconds_since_midnight: Some(seconds_since_midnight()),
-                native_pixels_per_point: Some(1.25 /* TODO */),
-            },
-            tex_allocator: drawer.egui_renderpass(),
-            output: &mut app_output,
-            repaint_signal: global_state.repaint_signal.as_ref().unwrap().clone(),
-        }
-        .build();
-
-        // let ctx = &global_state.egui_platform.context();
-        // egui::Window::new("Test Window")
-        //     .default_width(200.0)
-        //     .default_height(200.0)
-        //     .show(ctx, |ui| {
-        //         ui.label("Hello World!");
-        //     });
-
-        global_state
-            .egui_demo_app
-            .update(&global_state.egui_platform.context(), &mut frame);
-
-        let (_output, paint_commands) = global_state.egui_platform.end_frame();
-        let paint_jobs = global_state
-            .egui_platform
-            .context()
-            .tessellate(paint_commands);
-        // let frame_time = (Instant::now() - egui_start).as_secs_f64() as f32;
-        // previous_frame_time = Some(frame_time);
-
-        drawer.draw_egui(
-            //  renderer.egui_renderpass(),
-            &global_state.egui_platform,
-            &paint_jobs,
-            1.25, /* TODO: pass in winit window scale factor */
-        );
     }
-}
-
-/// Time of day as seconds since midnight. Used for clock in demo app.
-pub fn seconds_since_midnight() -> f64 {
-    let time = chrono::Local::now().time();
-    time.num_seconds_from_midnight() as f64 + 1e-9 * (time.nanosecond() as f64)
 }
 
 fn get_client_msg_error(e: client_init::Error, localized_strings: &LocalizationHandle) -> String {
