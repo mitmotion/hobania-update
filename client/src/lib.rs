@@ -3,6 +3,7 @@
 #![feature(label_break_value, option_zip)]
 
 pub mod addr;
+pub mod chonk_cache;
 pub mod cmd;
 pub mod error;
 
@@ -18,6 +19,7 @@ pub use specs::{
 
 use crate::addr::ConnectionArgs;
 use byteorder::{ByteOrder, LittleEndian};
+use chonk_cache::ChonkCache;
 use common::{
     character::{CharacterId, CharacterItem},
     comp::{
@@ -192,6 +194,8 @@ pub struct Client {
 
     pending_chunks: HashMap<Vec2<i32>, Instant>,
     target_time_of_day: Option<TimeOfDay>,
+
+    chonk_cache: ChonkCache,
 }
 
 /// Holds data related to the current players characters, as well as some
@@ -699,6 +703,8 @@ impl Client {
 
             pending_chunks: HashMap::new(),
             target_time_of_day: None,
+
+            chonk_cache: ChonkCache::new_in_memory(),
         })
     }
 
@@ -1564,6 +1570,13 @@ impl Client {
                                         key: *key,
                                     })?;
                                     self.pending_chunks.insert(*key, Instant::now());
+                                    if let Some(chunk) = self
+                                        .chonk_cache
+                                        .get_cached_chonk(*key)
+                                        .and_then(|c| c.to_chunk())
+                                    {
+                                        self.state.insert_chunk(*key, Arc::new(chunk));
+                                    }
                                 } else {
                                     skip_mode = true;
                                 }
@@ -1961,8 +1974,19 @@ impl Client {
     fn handle_server_terrain_msg(&mut self, msg: ServerGeneral) -> Result<(), Error> {
         match msg {
             ServerGeneral::TerrainChunkUpdate { key, chunk } => {
-                if let Some(chunk) = chunk.ok().and_then(|c| c.to_chunk()) {
-                    self.state.insert_chunk(key, Arc::new(chunk));
+                if let Ok(wirechonk) = chunk {
+                    let should_insert = match self.chonk_cache.received_chonk(key, &wirechonk) {
+                        Ok(cache_hit) => !cache_hit,
+                        Err(e) => {
+                            warn!("Failed to insert chonk at {:?} into cache: {:?}", key, e);
+                            true
+                        },
+                    };
+                    if should_insert {
+                        if let Some(chunk) = wirechonk.to_chunk() {
+                            self.state.insert_chunk(key, Arc::new(chunk));
+                        }
+                    }
                 }
                 self.pending_chunks.remove(&key);
             },

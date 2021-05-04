@@ -5484,6 +5484,7 @@ version = "0.9.0"
 dependencies = [
  "async-channel",
  "authc",
+ "bincode",
  "byteorder",
  "clap",
  "futures-util",
@@ -5492,6 +5493,7 @@ dependencies = [
  "num 0.4.0",
  "rayon",
  "ron",
+ "rusqlite",
  "rustyline",
  "serde",
  "specs",
