@@ -11,8 +11,11 @@ use super::{
     Renderer, ShadowMap, ShadowMapRenderer,
 };
 use core::{num::NonZeroU32, ops::Range};
+use egui_wgpu_backend::ScreenDescriptor;
+use egui_winit_platform::Platform;
 use std::sync::Arc;
 use vek::Aabr;
+use wgpu::TextureFormat;
 use wgpu_profiler::scope::{ManualOwningScope, OwningScope, Scope};
 
 // Currently available pipelines
@@ -53,6 +56,7 @@ impl<'frame> Pipelines<'frame> {
 struct RendererBorrow<'frame> {
     queue: &'frame wgpu::Queue,
     device: &'frame wgpu::Device,
+    sc_desc: &'frame wgpu::SwapChainDescriptor,
     shadow: Option<&'frame super::Shadow>,
     pipelines: Pipelines<'frame>,
     locals: &'frame super::locals::Locals,
@@ -60,12 +64,13 @@ struct RendererBorrow<'frame> {
     mode: &'frame super::super::RenderMode,
     quad_index_buffer_u16: &'frame Buffer<u16>,
     quad_index_buffer_u32: &'frame Buffer<u32>,
+    egui_render_pass: &'frame mut egui_wgpu_backend::RenderPass,
 }
 
 pub struct Drawer<'frame> {
     encoder: Option<ManualOwningScope<'frame, wgpu::CommandEncoder>>,
     borrow: RendererBorrow<'frame>,
-    swap_tex: wgpu::SwapChainTexture,
+    pub swap_tex: wgpu::SwapChainTexture,
     globals: &'frame GlobalsBindGroup,
     // Texture and other info for taking a screenshot
     // Writes to this instead in the third pass if it is present
@@ -100,6 +105,7 @@ impl<'frame> Drawer<'frame> {
         let borrow = RendererBorrow {
             queue: &renderer.queue,
             device: &renderer.device,
+            sc_desc: &renderer.sc_desc,
             shadow,
             pipelines,
             locals: &renderer.locals,
@@ -107,6 +113,7 @@ impl<'frame> Drawer<'frame> {
             mode: &renderer.mode,
             quad_index_buffer_u16: &renderer.quad_index_buffer_u16,
             quad_index_buffer_u32: &renderer.quad_index_buffer_u32,
+            egui_render_pass: &mut renderer.egui_renderpass,
         };
 
         let encoder =
@@ -123,6 +130,10 @@ impl<'frame> Drawer<'frame> {
 
     /// Get the render mode.
     pub fn render_mode(&self) -> &super::super::RenderMode { self.borrow.mode }
+
+    // pub fn encoder(&mut self) -> &mut ManualOwningScope<wgpu::CommandEncoder> {
+    //     self.encoder.as_mut().unwrap()
+    // }
 
     /// Returns None if the shadow renderer is not enabled at some level or the
     /// pipelines are not available yet
@@ -258,6 +269,58 @@ impl<'frame> Drawer<'frame> {
             render_pass,
             borrow: &self.borrow,
         }
+    }
+
+    pub fn egui_pass(&mut self) -> EguiPassDrawer {
+        let render_pass =
+            egui_wgpu_backend::RenderPass::new(self.borrow.device, TextureFormat::Bgra8UnormSrgb);
+
+        EguiPassDrawer {
+            render_pass,
+            borrow: &self.borrow,
+        }
+    }
+
+    pub fn draw_egui(
+        &mut self,
+        //egui_renderpass: &mut egui_wgpu_backend::RenderPass,
+        platform: &Platform,
+        paint_jobs: &[egui::paint::ClippedMesh],
+        scale_factor: f32,
+    ) {
+        let screen_descriptor = ScreenDescriptor {
+            physical_width: self.borrow.sc_desc.width,
+            physical_height: self.borrow.sc_desc.height,
+            scale_factor,
+        };
+
+        self.borrow.egui_render_pass.update_texture(
+            self.borrow.device,
+            self.borrow.queue,
+            &platform.context().texture(),
+        );
+        self.borrow
+            .egui_render_pass
+            .update_user_textures(self.borrow.device, self.borrow.queue);
+        self.borrow.egui_render_pass.update_buffers(
+            self.borrow.device,
+            self.borrow.queue,
+            &paint_jobs,
+            &screen_descriptor,
+        );
+
+        self.borrow.egui_render_pass.execute(
+            self.encoder.as_mut().unwrap(),
+            self.borrow.device,
+            &self.swap_tex.view,
+            paint_jobs,
+            &screen_descriptor,
+            None,
+        );
+    }
+
+    pub fn egui_renderpass(&mut self) -> &mut egui_wgpu_backend::RenderPass {
+        self.borrow.egui_render_pass
     }
 
     /// Does nothing if the shadow pipelines are not available or shadow map
@@ -795,6 +858,11 @@ impl<'pass> ThirdPassDrawer<'pass> {
 
         Some(UiDrawer { render_pass })
     }
+}
+
+pub struct EguiPassDrawer<'pass> {
+    render_pass: egui_wgpu_backend::RenderPass,
+    borrow: &'pass RendererBorrow<'pass>,
 }
 
 pub struct UiDrawer<'pass_ref, 'pass: 'pass_ref> {

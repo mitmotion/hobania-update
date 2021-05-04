@@ -18,6 +18,8 @@ use common::{
     assets::{self},
     clock::Clock,
 };
+use egui::FontDefinitions;
+use egui_winit_platform::{Platform, PlatformDescriptor};
 use std::panic;
 use tracing::{error, info, warn};
 
@@ -185,10 +187,19 @@ fn main() {
 
     let lazy_init = SpriteRenderContext::new(window.renderer_mut());
 
+    let mut egui_platform = Platform::new(PlatformDescriptor {
+        physical_width: window.window().inner_size().width as u32,
+        physical_height: window.window().inner_size().height as u32,
+        scale_factor: window.scale_factor(),
+        font_definitions: FontDefinitions::default(),
+        style: Default::default(),
+    });
+
     let global_state = GlobalState {
         audio,
         profile,
         window,
+        egui_platform,
         lazy_init,
         clock: Clock::new(std::time::Duration::from_secs_f64(
             1.0 / get_fps(settings.graphics.max_fps) as f64,
@@ -200,6 +211,8 @@ fn main() {
         i18n,
         clipboard,
         client_error: None,
+        egui_demo_app: egui_demo_lib::WrapApp::default(),
+        repaint_signal: None,
     };
 
     run::run(global_state, event_loop);

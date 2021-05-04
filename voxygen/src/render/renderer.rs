@@ -30,6 +30,7 @@ use super::{
 use common::assets::{self, AssetExt, AssetHandle};
 use common_base::span;
 use core::convert::TryFrom;
+use egui_wgpu_backend::wgpu::TextureFormat;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 use vek::*;
@@ -135,6 +136,8 @@ pub struct Renderer {
     profiler: wgpu_profiler::GpuProfiler,
     profile_times: Vec<wgpu_profiler::GpuTimerScopeResult>,
     profiler_features_enabled: bool,
+
+    egui_renderpass: egui_wgpu_backend::RenderPass,
 }
 
 impl Renderer {
@@ -360,6 +363,9 @@ impl Renderer {
         profiler.enable_timer = mode.profiler_enabled;
         profiler.enable_debug_marker = mode.profiler_enabled;
 
+        let egui_renderpass =
+            egui_wgpu_backend::RenderPass::new(&device, TextureFormat::Bgra8UnormSrgb);
+
         Ok(Self {
             device,
             queue,
@@ -391,6 +397,7 @@ impl Renderer {
             profiler,
             profile_times: Vec::new(),
             profiler_features_enabled,
+            egui_renderpass,
         })
     }
 
@@ -1129,6 +1136,10 @@ impl Renderer {
                 info!("Saved GPU timing snapshot as: {}", file_name);
             }
         }
+    }
+
+    pub fn egui_renderpass_mut(&mut self) -> &mut egui_wgpu_backend::RenderPass {
+        &mut self.egui_renderpass
     }
 
     // Consider reenabling at some time

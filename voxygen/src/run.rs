@@ -9,6 +9,23 @@ use common_base::{no_guard_span, span, GuardlessSpan};
 use std::{mem, time::Duration};
 use tracing::debug;
 
+pub struct ExampleRepaintSignal(std::sync::Mutex<winit::event_loop::EventLoopProxy<CustomEvent>>);
+
+/// A custom event type for the winit app.
+pub enum CustomEvent {
+    RequestRedraw,
+}
+
+impl epi::RepaintSignal for ExampleRepaintSignal {
+    fn request_repaint(&self) {
+        self.0
+            .lock()
+            .unwrap()
+            .send_event(CustomEvent::RequestRedraw)
+            .ok();
+    }
+}
+
 pub fn run(mut global_state: GlobalState, event_loop: EventLoop) {
     // Set up the initial play state.
     let mut states: Vec<Box<dyn PlayState>> = vec![Box::new(MainMenuState::new(&mut global_state))];
@@ -27,10 +44,15 @@ pub fn run(mut global_state: GlobalState, event_loop: EventLoop) {
     let mut poll_span = None;
     let mut event_span = None;
 
+    global_state.repaint_signal = Some(std::sync::Arc::new(ExampleRepaintSignal(
+        std::sync::Mutex::new(event_loop.create_proxy()),
+    )));
+
     event_loop.run(move |event, _, control_flow| {
         // Continuously run loop since we handle sleeping
         *control_flow = winit::event_loop::ControlFlow::Poll;
 
+        global_state.egui_platform.handle_event(&event);
         // Get events for the ui.
         if let Some(event) = ui::Event::try_from(&event, global_state.window.window()) {
             global_state.window.send_event(Event::Ui(event));
@@ -167,10 +189,8 @@ fn handle_main_events_cleared(
     drop(guard);
     if let Some(last) = states.last_mut() {
         span!(guard, "Render");
-        let renderer = global_state.window.renderer_mut();
         // Render the screen using the global renderer
-        last.render(renderer, &global_state.settings);
-
+        last.render(global_state);
         drop(guard);
     }
 

@@ -41,19 +41,22 @@ use crate::singleplayer::Singleplayer;
 use crate::{
     audio::AudioFrontend,
     profile::Profile,
-    render::Renderer,
+    run::ExampleRepaintSignal,
     settings::Settings,
     window::{Event, Window},
 };
 use common::clock::Clock;
 use common_base::span;
+use egui_winit_platform::Platform;
 use i18n::LocalizationHandle;
+use std::sync::Arc;
 
 /// A type used to store state that is shared between all play states.
 pub struct GlobalState {
     pub settings: Settings,
     pub profile: Profile,
     pub window: Window,
+    pub egui_platform: Platform,
     pub lazy_init: scene::terrain::SpriteRenderContextLazy,
     pub audio: AudioFrontend,
     pub info_message: Option<String>,
@@ -67,6 +70,8 @@ pub struct GlobalState {
     // enter the game before confirmation of successful character load
     /// An error returned by Client that needs to be displayed by the UI
     pub client_error: Option<String>,
+    pub egui_demo_app: egui_demo_lib::WrapApp, // TODO: Remove
+    pub repaint_signal: Option<Arc<ExampleRepaintSignal>>,
 }
 
 impl GlobalState {
@@ -133,5 +138,5 @@ pub trait PlayState {
     fn name(&self) -> &'static str;
 
     /// Draw the play state.
-    fn render(&mut self, renderer: &mut Renderer, settings: &Settings);
+    fn render(&mut self, global_state: &mut GlobalState);
 }

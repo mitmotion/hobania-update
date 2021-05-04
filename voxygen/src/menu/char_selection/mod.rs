@@ -232,7 +232,9 @@ impl PlayState for CharSelectionState {
 
     fn name(&self) -> &'static str { "Character Selection" }
 
-    fn render(&mut self, renderer: &mut Renderer, _: &Settings) {
+    fn render(&mut self, global_state: &mut GlobalState) {
+        let renderer = global_state.window.renderer_mut();
+
         let mut drawer = match renderer
             .start_recording_frame(self.scene.global_bind_group())
             .expect("Unrecoverable render error when starting a new frame!")
@@ -267,5 +269,11 @@ impl PlayState for CharSelectionState {
         if let Some(mut ui_drawer) = third_pass.draw_ui() {
             self.char_selection_ui.render(&mut ui_drawer);
         };
+
+        // drawer.draw_egui(
+        //     egui_platform,
+        //     egui_paint_jobs,
+        //     1.0, /* TODO: pass in winit window scale factor */
+        // );
     }
 }

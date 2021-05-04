@@ -37,13 +37,14 @@ use crate::{
     audio::sfx::SfxEvent,
     hud::{DebugInfo, Event as HudEvent, Hud, HudInfo, LootMessage, PromptDialogSettings},
     key_state::KeyState,
-    menu::char_selection::CharSelectionState,
+    menu::{char_selection::CharSelectionState, main::seconds_since_midnight},
     render::Renderer,
-    scene::{camera, terrain::Interaction, CameraMode, DebugShapeId, Scene, SceneData},
+    scene::{camera, terrain::Interaction, CameraMode, Scene, SceneData},
     settings::Settings,
     window::{AnalogGameInput, Event, GameInput},
     Direction, Error, GlobalState, PlayState, PlayStateResult,
 };
+use egui_wgpu_backend::epi::App;
 use hashbrown::HashMap;
 use settings_change::Language::ChangeLanguage;
 
@@ -1390,7 +1391,11 @@ impl PlayState for SessionState {
     /// Render the session to the screen.
     ///
     /// This method should be called once per frame.
-    fn render(&mut self, renderer: &mut Renderer, settings: &Settings) {
+
+    fn render(&mut self, global_state: &mut GlobalState) {
+        let renderer = global_state.window.renderer_mut();
+        let settings = &global_state.settings;
+
         span!(_guard, "render", "<Session as PlayState>::render");
         let mut drawer = match renderer
             .start_recording_frame(self.scene.global_bind_group())
@@ -1444,6 +1449,50 @@ impl PlayState for SessionState {
         if let Some(mut ui_drawer) = third_pass.draw_ui() {
             self.hud.render(&mut ui_drawer);
         }; // Note: this semicolon is needed for the third_pass borrow to be dropped before it's lifetime ends
+
+        drop(third_pass);
+
+        global_state.egui_platform.begin_frame();
+        let mut app_output = epi::backend::AppOutput::default();
+        let mut frame = epi::backend::FrameBuilder {
+            info: epi::IntegrationInfo {
+                web_info: None,
+                cpu_usage: None, // TODO
+                seconds_since_midnight: Some(seconds_since_midnight()),
+                native_pixels_per_point: Some(1.25 /* TODO */),
+            },
+            tex_allocator: drawer.egui_renderpass(),
+            output: &mut app_output,
+            repaint_signal: global_state.repaint_signal.as_ref().unwrap().clone(),
+        }
+        .build();
+
+        // let ctx = &global_state.egui_platform.context();
+        // egui::Window::new("Test Window")
+        //     .default_width(200.0)
+        //     .default_height(200.0)
+        //     .show(ctx, |ui| {
+        //         ui.label("Hello World!");
+        //     });
+
+        global_state
+            .egui_demo_app
+            .update(&global_state.egui_platform.context(), &mut frame);
+
+        let (_output, paint_commands) = global_state.egui_platform.end_frame();
+        let paint_jobs = global_state
+            .egui_platform
+            .context()
+            .tessellate(paint_commands);
+        // let frame_time = (Instant::now() - egui_start).as_secs_f64() as f32;
+        // previous_frame_time = Some(frame_time);
+        println!("drawing {} paint jobs from session", paint_jobs.len());
+        drawer.draw_egui(
+            //  renderer.egui_renderpass(),
+            &global_state.egui_platform,
+            &paint_jobs,
+            1.25, /* TODO: pass in winit window scale factor */
+        );
     }
 }
 

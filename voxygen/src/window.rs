@@ -1,6 +1,7 @@
 use crate::{
     controller::*,
     render::Renderer,
+    run::CustomEvent,
     settings::{ControlSettings, Settings},
     ui, Error,
 };
@@ -14,7 +15,6 @@ use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
 use vek::*;
 use winit::monitor::VideoMode;
-
 /// Represents a key that the game recognises after input mapping.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
 pub enum GameInput {
@@ -319,7 +319,7 @@ pub enum Event {
 
 pub type MouseButton = winit::event::MouseButton;
 pub type PressState = winit::event::ElementState;
-pub type EventLoop = winit::event_loop::EventLoop<()>;
+pub type EventLoop = winit::event_loop::EventLoop<CustomEvent>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum KeyMouse {
@@ -547,7 +547,7 @@ pub struct Window {
 
 impl Window {
     pub fn new(settings: &Settings) -> Result<(Window, EventLoop), Error> {
-        let event_loop = EventLoop::new();
+        let event_loop = EventLoop::with_user_event();
 
         let size = settings.graphics.window_size;
 
