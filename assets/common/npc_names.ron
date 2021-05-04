@@ -314,7 +314,7 @@
             undead: (
                 keyword: "undead",
                 generic: "Undead"
-            )
+            ),
             draugr: (
                 keyword: "draugr",
                 generic: "Draugr"

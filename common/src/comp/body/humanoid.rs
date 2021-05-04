@@ -315,8 +315,8 @@ impl Species {
             (Species::Orc, BodyType::Male) => 8,
             (Species::Undead, BodyType::Female) => 6,
             (Species::Undead, BodyType::Male) => 5,
-            (Species::Draugr, BodyType::Female) => 0,
-            (Species::Draugr, BodyType::Male) => 0,
+            (Species::Draugr, BodyType::Female) => 1,
+            (Species::Draugr, BodyType::Male) => 1,
         }
     }
 
@@ -334,8 +334,8 @@ impl Species {
             (Species::Orc, BodyType::Male) => 6,
             (Species::Undead, BodyType::Female) => 2,
             (Species::Undead, BodyType::Male) => 2,
-            (Species::Draugr, BodyType::Female) => 0,
-            (Species::Draugr, BodyType::Male) => 0,
+            (Species::Draugr, BodyType::Female) => 1,
+            (Species::Draugr, BodyType::Male) => 1,
         }
     }
 
@@ -374,8 +374,8 @@ impl Species {
             (Species::Orc, BodyType::Male) => 3,
             (Species::Undead, BodyType::Female) => 1,
             (Species::Undead, BodyType::Male) => 1,
-            (Species::Draugr, BodyType::Female) => 0,
-            (Species::Draugr, BodyType::Male) => 0,
+            (Species::Draugr, BodyType::Female) => 1,
+            (Species::Draugr, BodyType::Male) => 1,
         }
     }
 }
