@@ -23,6 +23,7 @@ buildInputs = ["xorg.libxcb"]
 
 [features]
 hot-anim = ["anim/use-dyn-lib"]
+hot-egui = ["egui/use-dyn-lib"]
 singleplayer = ["server"]
 simd = ["vek/platform_intrinsics"]
 tracy = ["profiling", "profiling/profile-with-tracy", "common/tracy", "common-ecs/tracy", "common-frontend/tracy", "common-net/tracy", "common-systems/tracy", "common-state/tracy", "client/tracy"]
@@ -42,6 +43,7 @@ common-state = {package = "veloren-common-state", path = "../common/state"}
 
 anim = {package = "veloren-voxygen-anim", path = "anim"}
 i18n = {package = "veloren-i18n", path = "i18n"}
+voxygen-egui = {package = "veloren-voxygen-egui", path = "egui"}
 
 # Graphics
 winit = {version = "0.24.0", features = ["serde"]}

@@ -6348,6 +6348,7 @@ dependencies = [
  "veloren-i18n",
  "veloren-server",
  "veloren-voxygen-anim",
+ "veloren-voxygen-egui",
  "veloren-world",
  "wgpu 0.8.0 (git+https://github.com/gfx-rs/wgpu-rs.git?rev=7486bdad64bb5d17b709ecccb41e063469efff88)",
  "wgpu-profiler",
@@ -6375,6 +6376,17 @@ name = "veloren-voxygen-anim-dyn"
 version = "0.9.0"
 dependencies = [
  "veloren-voxygen-anim",
+]
+
+[[package]]
+name = "veloren-voxygen-egui"
+version = "0.9.0"
+dependencies = [
+ "find_folder",
+ "lazy_static",
+ "libloading 0.7.0",
+ "notify 5.0.0-pre.6",
+ "tracing",
 ]
 
 [[package]]

@@ -20,6 +20,7 @@ members = [
     "voxygen/anim",
     "voxygen/anim/dyn",
     "voxygen/i18n",
+    "voxygen/egui",
     "world",
     "network",
     "network/protocol",
