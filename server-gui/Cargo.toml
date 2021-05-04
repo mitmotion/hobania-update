@@ -1,0 +1,20 @@
+[package]
+name = "server-gui"
+version = "0.7.0"
+authors = ["Joshua Barretto <joshua.s.barretto@gmail.com>"]
+edition = "2018"
+
+[features]
+worldgen = ["server/worldgen"]
+default = ["worldgen"]
+
+[dependencies]
+server = { package = "veloren-server", path = "../server", default-features = false }
+common = { package = "veloren-common", path = "../common" }
+world = { package = "veloren-world", path = "../world" }
+
+tracing = { version = "0.1", default-features = false }
+tracing-subscriber = { version = "0.2.3", default-features = false, features = ["env-filter", "fmt", "chrono", "ansi", "smallvec"] }
+vek = { version = "0.12.0", features = ["platform_intrinsics", "serde"] }
+
+iced = { git = "https://github.com/hecrj/iced.git", features = ["image", "debug", "tokio"] }
