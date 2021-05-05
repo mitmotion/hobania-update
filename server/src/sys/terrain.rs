@@ -15,7 +15,7 @@ use common::{
 };
 use common_ecs::{Job, Origin, Phase, System};
 use common_net::msg::{SerializedTerrainChunk, ServerGeneral};
-use common_state::TerrainChanges;
+use common_state::{insert_terrain_chunk, TerrainChanges};
 use comp::Behavior;
 use specs::{Join, Read, ReadExpect, ReadStorage, Write, WriteExpect};
 use std::sync::Arc;
@@ -150,14 +150,10 @@ impl<'a> System<'a> for Sys {
             // Add to list of chunks to send to nearby players.
             new_chunks.push((key, Arc::clone(&chunk)));
 
-            // TODO: code duplication for chunk insertion between here and state.rs
             // Insert the chunk into terrain changes
-            if terrain.insert(key, chunk).is_some() {
-                terrain_changes.modified_chunks.insert(key);
-            } else {
-                terrain_changes.new_chunks.insert(key);
+            insert_terrain_chunk(&mut terrain, &mut terrain_changes, key, chunk, || {
                 rtsim.hook_load_chunk(key);
-            }
+            });
 
             // Handle chunk supplement
             for entity in supplement.entities {

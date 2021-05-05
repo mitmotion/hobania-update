@@ -78,6 +78,21 @@ impl TerrainChanges {
     }
 }
 
+pub fn insert_terrain_chunk<'a>(
+    terrain_grid: &mut specs::WriteExpect<'a, TerrainGrid>,
+    terrain_changes: &mut specs::Write<'a, TerrainChanges>,
+    key: Vec2<i32>,
+    chunk: Arc<TerrainChunk>,
+    new_hook: impl FnOnce(),
+) {
+    if terrain_grid.insert(key, chunk).is_some() {
+        terrain_changes.modified_chunks.insert(key);
+    } else {
+        terrain_changes.new_chunks.insert(key);
+        new_hook();
+    }
+}
+
 /// A type used to represent game state stored on both the client and the
 /// server. This includes things like entity components, terrain data, and
 /// global states like weather, time of day, etc.
@@ -384,22 +399,13 @@ impl State {
 
     /// Insert the provided chunk into this state's terrain.
     pub fn insert_chunk(&mut self, key: Vec2<i32>, chunk: Arc<TerrainChunk>) {
-        if self
-            .ecs
-            .write_resource::<TerrainGrid>()
-            .insert(key, chunk)
-            .is_some()
-        {
-            self.ecs
-                .write_resource::<TerrainChanges>()
-                .modified_chunks
-                .insert(key);
-        } else {
-            self.ecs
-                .write_resource::<TerrainChanges>()
-                .new_chunks
-                .insert(key);
-        }
+        insert_terrain_chunk(
+            &mut self.ecs.write_resource::<TerrainGrid>().into(),
+            &mut self.ecs.write_resource::<TerrainChanges>().into(),
+            key,
+            chunk,
+            || (),
+        );
     }
 
     /// Remove the chunk with the given key from this state's terrain, if it
