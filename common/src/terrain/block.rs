@@ -167,6 +167,15 @@ impl Block {
     }
 
     #[inline]
+    pub fn get_growth(&self) -> Option<u8> {
+        if self.get_sprite()?.get_growth_spec().is_some() {
+            Some((self.attr[1] >> 3) & ((1 << 5) - 1))
+        } else {
+            None
+        }
+    }
+
+    #[inline]
     pub fn get_glow(&self) -> Option<u8> {
         match self.get_sprite()? {
             SpriteKind::StreetLamp | SpriteKind::StreetLampTall => Some(24),
@@ -266,6 +275,18 @@ impl Block {
     pub fn with_sprite(mut self, sprite: SpriteKind) -> Self {
         if !self.is_filled() {
             self.attr[0] = sprite as u8;
+        }
+        self
+    }
+
+    /// If this block is a growable sprite, set its growth
+    #[inline]
+    pub fn with_sprite_growth(mut self, growth: u8) -> Self {
+        if self
+            .get_sprite()
+            .map_or(false, |s| s.get_growth_spec().is_some())
+        {
+            self.attr[1] |= (growth & ((1 << 5) - 1)) << 3;
         }
         self
     }
