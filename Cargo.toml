@@ -21,6 +21,7 @@ members = [
     "voxygen/anim/dyn",
     "voxygen/i18n",
     "voxygen/egui",
+    "voxygen/egui/dyn",
     "world",
     "network",
     "network/protocol",

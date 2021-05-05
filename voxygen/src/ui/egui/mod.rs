@@ -2,7 +2,7 @@ use egui_winit_platform::{Platform, PlatformDescriptor};
 use crate::window::Window;
 use egui::FontDefinitions;
 use client::Client;
-use crate::hud::DebugInfo;
+use common::debug_info::DebugInfo;
 
 pub struct EguiState {
     pub platform: Platform,
@@ -26,22 +26,6 @@ impl EguiState {
     pub fn maintain(&mut self,
                     client: &Client,
                     debug_info: &Option<DebugInfo>) {
-        self.platform.begin_frame();
-
-        egui::Window::new("Test Window")
-            .default_width(200.0)
-            .default_height(200.0)
-            .show(&self.platform.context(), |ui| {
-                ui.heading("My egui Application");
-                ui.horizontal(|ui| {
-                    ui.label("Your name: ");
-                    ui.text_edit_singleline(&mut "hello".to_owned());
-                });
-                ui.add(egui::Slider::new(&mut 99, 0..=120).text("age"));
-                if ui.button("Click each year").clicked() {
-                    println!("button clicked");
-                }
-                ui.label(format!("Hello '{}', age {}", "Ben", 99));
-            });
+        voxygen_egui::maintain(&mut self.platform, client, debug_info);
     }
 }

@@ -23,7 +23,7 @@ buildInputs = ["xorg.libxcb"]
 
 [features]
 hot-anim = ["anim/use-dyn-lib"]
-hot-egui = ["egui/use-dyn-lib"]
+hot-egui = ["voxygen-egui/use-dyn-lib"]
 singleplayer = ["server"]
 simd = ["vek/platform_intrinsics"]
 tracy = ["profiling", "profiling/profile-with-tracy", "common/tracy", "common-ecs/tracy", "common-frontend/tracy", "common-net/tracy", "common-systems/tracy", "common-state/tracy", "client/tracy"]

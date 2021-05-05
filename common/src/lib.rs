@@ -77,6 +77,7 @@ pub mod uid;
 #[cfg(not(target_arch = "wasm32"))] pub mod vol;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod volumes;
+pub mod debug_info;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use cached_spatial_grid::CachedSpatialGrid;

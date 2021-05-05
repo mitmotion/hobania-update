@@ -151,6 +151,10 @@ fn main() {
     #[cfg(feature = "hot-anim")]
     anim::init();
 
+    // Initialise watcher for egui hotreloading
+    #[cfg(feature = "hot-egui")]
+    voxygen_egui::init();
+
     // Setup audio
     let mut audio = match settings.audio.output {
         AudioOutput::Off => AudioFrontend::no_audio(),

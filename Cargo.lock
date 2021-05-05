@@ -6382,11 +6382,22 @@ dependencies = [
 name = "veloren-voxygen-egui"
 version = "0.9.0"
 dependencies = [
+ "egui",
+ "egui_winit_platform",
  "find_folder",
  "lazy_static",
  "libloading 0.7.0",
  "notify 5.0.0-pre.6",
  "tracing",
+ "veloren-client",
+ "veloren-common",
+]
+
+[[package]]
+name = "veloren-voxygen-egui-dyn"
+version = "0.9.0"
+dependencies = [
+ "veloren-voxygen-egui",
 ]
 
 [[package]]

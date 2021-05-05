@@ -35,7 +35,7 @@ use common_net::{
 
 use crate::{
     audio::sfx::SfxEvent,
-    hud::{DebugInfo, Event as HudEvent, Hud, HudInfo, LootMessage, PromptDialogSettings},
+    hud::{Event as HudEvent, Hud, HudInfo, LootMessage, PromptDialogSettings},
     key_state::KeyState,
     menu::{char_selection::CharSelectionState, main::seconds_since_midnight},
     render::Renderer,
@@ -47,6 +47,7 @@ use crate::{
 use egui_wgpu_backend::epi::App;
 use hashbrown::HashMap;
 use settings_change::Language::ChangeLanguage;
+use common::debug_info::DebugInfo;
 
 /// The action to perform after a tick
 enum TickAction {
