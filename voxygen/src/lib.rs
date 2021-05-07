@@ -42,6 +42,7 @@ use crate::{
     audio::AudioFrontend,
     profile::Profile,
     settings::Settings,
+    ui::egui::EguiState,
     window::{Event, Window},
     ui::egui::EguiState,
 };
