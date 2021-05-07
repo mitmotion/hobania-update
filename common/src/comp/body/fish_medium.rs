@@ -25,6 +25,15 @@ impl Body {
     }
 }
 
+impl Default for Body {
+    fn default() -> Self {
+        Self {
+            species: Species::Marlin,
+            body_type: BodyType::Female,
+        }
+    }
+}
+
 impl From<Body> for super::Body {
     fn from(body: Body) -> Self { super::Body::FishMedium(body) }
 }

@@ -70,12 +70,14 @@ skeleton_impls!(struct CharacterSkeleton {
     control_l,
     control_r,
     :: // Begin non-bone fields
+    body: Body,
     holding_lantern: bool,
 });
 
 impl CharacterSkeleton {
-    pub fn new(holding_lantern: bool) -> Self {
+    pub fn new(body: Body, holding_lantern: bool) -> Self {
         Self {
+            body,
             holding_lantern,
             ..Self::default()
         }
@@ -97,7 +99,10 @@ impl Skeleton for CharacterSkeleton {
         base_mat: Mat4<f32>,
         buf: &mut [FigureBoneData; super::MAX_BONE_COUNT],
     ) -> Vec3<f32> {
-        let torso_mat = base_mat * Mat4::<f32>::from(self.torso);
+        let torso_mat = base_mat
+            * Mat4::<f32>::from(self.torso)
+            * Mat4::scaling_3d(1.0 / 11.0)
+            * Mat4::scaling_3d(SkeletonAttr::from(&self.body).scaler);
         let chest_mat = torso_mat * Mat4::<f32>::from(self.chest);
         let head_mat = chest_mat * Mat4::<f32>::from(self.head);
         let shorts_mat = chest_mat * Mat4::<f32>::from(self.shorts);

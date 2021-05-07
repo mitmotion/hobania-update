@@ -89,6 +89,10 @@ impl Body {
     }
 }
 
+impl Default for Body {
+    fn default() -> Self { Body::Arrow }
+}
+
 pub const ALL_OBJECTS: [Body; 67] = [
     Body::Arrow,
     Body::Bomb,

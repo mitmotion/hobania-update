@@ -25,6 +25,15 @@ impl Body {
     }
 }
 
+impl Default for Body {
+    fn default() -> Self {
+        Self {
+            species: Species::Crocodile,
+            body_type: BodyType::Female,
+        }
+    }
+}
+
 impl From<Body> for super::Body {
     fn from(body: Body) -> Self { super::Body::QuadrupedLow(body) }
 }

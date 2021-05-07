@@ -54,6 +54,10 @@ impl Body {
     pub fn mass(&self) -> Mass { Mass((self.hull_vol() + self.balloon_vol()) * self.density().0) }
 }
 
+impl Default for Body {
+    fn default() -> Self { Body::DefaultAirship }
+}
+
 /// Terrain is 11.0 scale relative to small-scale voxels,
 /// airship scale is multiplied by 11 to reach terrain scale.
 pub const AIRSHIP_SCALE: f32 = 11.0;

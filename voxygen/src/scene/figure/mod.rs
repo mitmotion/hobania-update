@@ -773,7 +773,10 @@ impl FigureMgr {
                         .character_states
                         .entry(entity)
                         .or_insert_with(|| {
-                            FigureState::new(renderer, CharacterSkeleton::new(holding_lantern))
+                            FigureState::new(
+                                renderer,
+                                CharacterSkeleton::new(*body, holding_lantern),
+                            )
                         });
 
                     // Average velocity relative to the current ground
@@ -795,7 +798,7 @@ impl FigureMgr {
                     ) {
                         // Standing
                         (true, false, false) => anim::character::StandAnimation::update_skeleton(
-                            &CharacterSkeleton::new(holding_lantern),
+                            &CharacterSkeleton::new(*body, holding_lantern),
                             (active_tool_kind, second_tool_kind, hands, time, rel_avg_vel),
                             state.state_time,
                             &mut state_animation_rate,
@@ -803,7 +806,7 @@ impl FigureMgr {
                         ),
                         // Running
                         (true, true, false) => anim::character::RunAnimation::update_skeleton(
-                            &CharacterSkeleton::new(holding_lantern),
+                            &CharacterSkeleton::new(*body, holding_lantern),
                             (
                                 active_tool_kind,
                                 second_tool_kind,
@@ -822,7 +825,7 @@ impl FigureMgr {
                         ),
                         // In air
                         (false, _, false) => anim::character::JumpAnimation::update_skeleton(
-                            &CharacterSkeleton::new(holding_lantern),
+                            &CharacterSkeleton::new(*body, holding_lantern),
                             (
                                 active_tool_kind,
                                 second_tool_kind,
@@ -839,7 +842,7 @@ impl FigureMgr {
                         ),
                         // Swim
                         (_, _, true) => anim::character::SwimAnimation::update_skeleton(
-                            &CharacterSkeleton::new(holding_lantern),
+                            &CharacterSkeleton::new(*body, holding_lantern),
                             (
                                 active_tool_kind,
                                 second_tool_kind,

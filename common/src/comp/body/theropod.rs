@@ -25,6 +25,15 @@ impl From<Body> for super::Body {
     fn from(body: Body) -> Self { super::Body::Theropod(body) }
 }
 
+impl Default for Body {
+    fn default() -> Self {
+        Self {
+            species: Species::Archaeos,
+            body_type: BodyType::Female,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u32)]
 pub enum Species {

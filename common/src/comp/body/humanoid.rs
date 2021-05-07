@@ -65,6 +65,22 @@ impl Body {
     }
 }
 
+impl Default for Body {
+    fn default() -> Self {
+        Self {
+            species: Species::Danari,
+            body_type: BodyType::Female,
+            hair_style: 0,
+            beard: 0,
+            accessory: 0,
+            hair_color: 0,
+            skin: 0,
+            eye_color: 0,
+            eyes: 0,
+        }
+    }
+}
+
 impl From<Body> for super::Body {
     fn from(body: Body) -> Self { super::Body::Humanoid(body) }
 }
