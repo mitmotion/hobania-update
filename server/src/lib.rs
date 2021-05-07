@@ -31,6 +31,7 @@ pub mod settings;
 pub mod state_ext;
 pub mod sys;
 #[cfg(not(feature = "worldgen"))] mod test_world;
+pub mod windsim;
 pub mod wiring;
 
 // Reexports

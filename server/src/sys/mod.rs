@@ -10,6 +10,7 @@ pub mod subscription;
 pub mod terrain;
 pub mod terrain_sync;
 pub mod waypoint;
+pub mod windsim;
 pub mod wiring;
 
 use common_ecs::{dispatch, run_now, System};
@@ -32,6 +33,7 @@ pub fn add_server_systems(dispatch_builder: &mut DispatcherBuilder) {
     dispatch::<persistence::Sys>(dispatch_builder, &[]);
     dispatch::<object::Sys>(dispatch_builder, &[]);
     dispatch::<wiring::Sys>(dispatch_builder, &[]);
+    dispatch::<windsim::Sys>(dispatch_builder, &[]);
 }
 
 pub fn run_sync_systems(ecs: &mut specs::World) {
