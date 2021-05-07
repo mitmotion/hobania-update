@@ -46,7 +46,13 @@ pub fn dispatch_actions(system_data: &mut WiringData) {
                             physics_state,
                             entities_died_last_tick,
                             pos,
-                        ) >= wiring_action.threshold
+                        ) >= compute_output(
+                            &wiring_action.threshold,
+                            &wiring_element.inputs,
+                            physics_state,
+                            entities_died_last_tick,
+                            pos,
+                        )
                     })
                     .for_each(|wiring_action| {
                         dispatch_action(

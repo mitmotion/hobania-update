@@ -4,7 +4,7 @@
 
 use crate::{
     settings::{BanRecord, EditableSetting},
-    wiring::{Logic, OutputFormula},
+    wiring::{BoxConst, Const, Input, Logic, OutputFormula},
     Server, SpawnPoint, StateExt,
 };
 use assets::AssetExt;
@@ -1723,57 +1723,40 @@ fn handle_spawn_wiring(
     pos.0.x += 3.0;
 
     let mut outputs1 = HashMap::new();
-    outputs1.insert(
-        "deaths_last_tick".to_string(),
-        wiring::OutputFormula::OnDeath {
-            value: 1.0,
-            radius: 30.0,
-        },
-    );
+    outputs1.insert("deaths_last_tick".to_string(), OutputFormula::OnDeath {
+        value: BoxConst(1.0),
+        radius: BoxConst(30.0),
+    });
     outputs1.insert(
         "deaths_accumulated".to_string(),
         OutputFormula::Logic(Box::new(Logic {
             kind: wiring::LogicKind::Sum,
             left: OutputFormula::Logic(Box::new(Logic {
                 kind: wiring::LogicKind::Sub,
-                left: OutputFormula::Input {
-                    name: "deaths_accumulated".to_string(),
-                },
+                left: Input("deaths_accumulated"),
                 right: OutputFormula::Logic(Box::new(Logic {
                     kind: wiring::LogicKind::Min,
-                    left: OutputFormula::Input {
-                        name: "pressed".to_string(),
-                    },
-                    right: OutputFormula::Input {
-                        name: "deaths_accumulated".to_string(),
-                    },
+                    left: Input("pressed"),
+                    right: Input("deaths_accumulated"),
                 })),
             })),
-            right: OutputFormula::Input {
-                name: "deaths_last_tick".to_string(),
-            },
+            right: Input("deaths_last_tick"),
         })),
     );
     outputs1.insert("pressed".to_string(), OutputFormula::OnCollide {
-        value: f32::MAX,
+        value: Box::new(OutputFormula::Constant { value: f32::MAX }),
     });
 
     let builder1 = server
         .state
         .create_wiring(pos, comp::object::Body::Coins, WiringElement {
             actions: vec![WiringAction {
-                formula: wiring::OutputFormula::Constant { value: 1.0 },
-                threshold: 1.0,
+                formula: Const(1.0),
+                threshold: Const(1.0),
                 effects: vec![WiringActionEffect::SetLight {
-                    r: wiring::OutputFormula::Input {
-                        name: String::from("color"),
-                    },
-                    g: wiring::OutputFormula::Input {
-                        name: String::from("color"),
-                    },
-                    b: wiring::OutputFormula::Input {
-                        name: String::from("color"),
-                    },
+                    r: Input("color"),
+                    g: Input("color"),
+                    b: Input("color"),
                 }],
             }],
             inputs: HashMap::new(),
@@ -1788,10 +1771,8 @@ fn handle_spawn_wiring(
         .create_wiring(pos, comp::object::Body::Coins, WiringElement {
             actions: vec![
                 WiringAction {
-                    formula: wiring::OutputFormula::Input {
-                        name: String::from("deaths_accumulated"),
-                    },
-                    threshold: 5.0,
+                    formula: Input("deaths_accumulated"),
+                    threshold: Const(5.0),
                     effects: vec![WiringActionEffect::SpawnProjectile {
                         constr: comp::ProjectileConstructor::Arrow {
                             damage: 1.0,
@@ -1801,18 +1782,12 @@ fn handle_spawn_wiring(
                     }],
                 },
                 WiringAction {
-                    formula: wiring::OutputFormula::Constant { value: 1.0 },
-                    threshold: 1.0,
+                    formula: Const(1.0),
+                    threshold: Const(1.0),
                     effects: vec![WiringActionEffect::SetLight {
-                        r: wiring::OutputFormula::Input {
-                            name: String::from("color"),
-                        },
-                        g: wiring::OutputFormula::Input {
-                            name: String::from("color"),
-                        },
-                        b: wiring::OutputFormula::Input {
-                            name: String::from("color"),
-                        },
+                        r: Input("color"),
+                        g: Input("color"),
+                        b: Input("color"),
                     }],
                 },
             ],

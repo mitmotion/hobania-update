@@ -22,14 +22,28 @@ pub struct Circuit {
 }
 
 pub enum OutputFormula {
-    Constant { value: f32 },
-    Input { name: String },
+    Constant {
+        value: f32,
+    },
+    Input {
+        name: String,
+    },
     Logic(Box<Logic>),
 
-    SineWave { amplitude: f32, frequency: f32 },
-    OnCollide { value: f32 },
-    OnInteract { value: f32 },
-    OnDeath { value: f32, radius: f32 },
+    SineWave {
+        amplitude: Box<OutputFormula>,
+        frequency: Box<OutputFormula>,
+    },
+    OnCollide {
+        value: Box<OutputFormula>,
+    },
+    OnInteract {
+        value: Box<OutputFormula>,
+    },
+    OnDeath {
+        value: Box<OutputFormula>,
+        radius: Box<OutputFormula>,
+    },
 }
 
 pub enum LogicKind {
@@ -42,7 +56,7 @@ pub enum LogicKind {
 
 pub struct WiringAction {
     pub formula: OutputFormula,
-    pub threshold: f32,
+    pub threshold: OutputFormula,
     pub effects: Vec<WiringActionEffect>,
 }
 
@@ -74,4 +88,20 @@ impl Component for WiringElement {
 
 impl Component for Circuit {
     type Storage = IdvStorage<Self>;
+}
+
+pub fn BoxConst(constant_value: f32) -> Box<OutputFormula> { Box::new(Const(constant_value)) }
+
+pub fn Const(constant_value: f32) -> OutputFormula {
+    OutputFormula::Constant {
+        value: constant_value,
+    }
+}
+
+pub fn BoxInput(name: &str) -> Box<OutputFormula> { Box::new(Input(name)) }
+
+pub fn Input(name: &str) -> OutputFormula {
+    OutputFormula::Input {
+        name: name.to_string(),
+    }
 }
