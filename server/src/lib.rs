@@ -377,6 +377,12 @@ impl Server {
         state.ecs_mut().insert(Arc::clone(&world));
         state.ecs_mut().insert(index.clone());
 
+        // begin wind simulation
+        state
+            .ecs_mut()
+            .insert(windsim::WindSim::new(&world.sim().get_size()));
+        tracing::info!("Initiated wind simulation");
+
         // Set starting time for the server.
         state.ecs_mut().write_resource::<TimeOfDay>().0 = settings.start_time;
 

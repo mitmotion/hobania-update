@@ -5,7 +5,6 @@ use common::{terrain::TerrainChunkSize, vol::RectVolSize};
 pub use fluid::step_fluid;
 use types::{WindGrid, X_SIZE, Y_SIZE, Z_SIZE};
 use vek::*;
-use world::sim::WorldSim;
 
 use common::{
     comp::{Pos, Vel},
@@ -20,10 +19,10 @@ pub struct WindSim {
 }
 
 impl WindSim {
-    pub fn new(world_sim: &WorldSim) -> Self {
+    pub fn new(world_size: &Vec2<u32>) -> Self {
         Self {
             grid: WindGrid::default(),
-            blocks_per_cell: cell_size_in_blocks(world_sim),
+            blocks_per_cell: cell_size_in_blocks(world_size),
         }
     }
 
@@ -48,8 +47,9 @@ impl WindSim {
 
     pub fn tick(&mut self, sources: Vec<(Pos, Vel)>, dt: &DeltaTime) {
         for (pos, vel) in sources {
-            self.grid
-                .add_velocity_source(pos.0.map(|e| e as usize), vel.0)
+            let cell_pos = self.world_to_grid(pos).unwrap_or(Vec3{x:0, y:0, z:0});
+            let cell_vel = vel.0.map2(self.blocks_per_cell, |vi, si| vi / si as f32);
+            self.grid.add_velocity_source(cell_pos, cell_vel)
         }
         step_fluid(
             &mut self.grid.density,
@@ -63,10 +63,9 @@ impl WindSim {
     }
 }
 
-fn cell_size_in_blocks(world_sim: &WorldSim) -> Vec3<u32> {
-    let world_chunks: Vec2<u32> = world_sim.get_size();
+fn cell_size_in_blocks(world_chunks: &Vec2<u32>) -> Vec3<u32> {
+    // world_blocks = world_chunks / blocks_per_chunk
     let blocks_per_chunk: Vec2<u32> = TerrainChunkSize::RECT_SIZE;
-
     let world_blocks: Vec2<u32> = world_chunks.map2(blocks_per_chunk, |ai, bi| ai * bi);
 
     let grid_size = Vec3 {
@@ -81,15 +80,3 @@ fn cell_size_in_blocks(world_sim: &WorldSim) -> Vec3<u32> {
         z: 500,
     }
 }
-
-// pub fn init(state: &mut State) {
-//     let mut grid = WindGrid {
-//         x_vel: vec![0_f32; SIZE_1D].into_boxed_slice(),
-//         y_vel: vec![0_f32; SIZE_1D].into_boxed_slice(),
-//         z_vel: vec![0_f32; SIZE_1D].into_boxed_slice(),
-//         density: vec![0_f32; SIZE_1D].into_boxed_slice(),
-//     };
-//
-//     state.ecs_mut().insert(grid);
-//
-// }
