@@ -58,9 +58,11 @@
     "cultist_slayer": [
         ("common.items.armor.cultist_slayer.chest",1),
         ("common.items.armor.cultist_slayer.pants",1),
+        ("common.items.armor.cultist_slayer.kilt",1),
         ("common.items.armor.cultist_slayer.hand",1),
         ("common.items.armor.cultist_slayer.foot",1),
         ("common.items.armor.cultist_slayer.shoulder",1),
+        ("common.items.armor.cultist_slayer.shoulder_0",1),
         ("common.items.armor.cultist_slayer.belt",1),
         ("common.items.armor.cultist_slayer.back",1),        
     ],

@@ -1135,6 +1135,10 @@
         "voxel.armor.cultist_slayer.pants",
         (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.2,
     ),
+    Armor(Pants("CultistSlayer0")): VoxTrans(
+        "voxel.armor.cultist_slayer.pants_0",
+        (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.2,
+    ),
     Armor(Belt("CultistSlayer")): VoxTrans(
         "voxel.armor.cultist_slayer.belt",
         (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.4,
@@ -1149,6 +1153,10 @@
     ),
     Armor(Shoulder("CultistSlayer")): VoxTrans(
         "voxel.armor.cultist_slayer.shoulder_r",
+        (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.2,
+    ),
+    Armor(Shoulder("CultistSlayer0")): VoxTrans(
+        "voxel.armor.cultist_slayer.shoulder_l_0",
         (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.2,
     ),
     Armor(Chest("CultistSlayer")): VoxTrans(

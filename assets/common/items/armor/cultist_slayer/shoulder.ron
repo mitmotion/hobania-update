@@ -4,8 +4,8 @@ ItemDef(
     kind: Armor((
         kind: Shoulder("CultistSlayer"),
         stats: (
-            protection: Normal(22.0),
-            poise_resilience: Normal(1.5),
+            protection: Normal(16.0),
+            poise_resilience: Normal(10.0),
         ),
     )),
     quality: Epic,
