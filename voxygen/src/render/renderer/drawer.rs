@@ -266,16 +266,10 @@ impl<'frame> Drawer<'frame> {
         }
     }
 
-    pub fn draw_egui(
-        &mut self,
-        platform: &mut Platform,
-        scale_factor: f32,
-    ) {
+    pub fn draw_egui(&mut self, platform: &mut Platform, scale_factor: f32) {
         let (_output, paint_commands) = platform.end_frame();
 
-        let paint_jobs = platform
-            .context()
-            .tessellate(paint_commands);
+        let paint_jobs = platform.context().tessellate(paint_commands);
 
         let screen_descriptor = ScreenDescriptor {
             physical_width: self.borrow.sc_desc.width,
@@ -300,7 +294,9 @@ impl<'frame> Drawer<'frame> {
 
         self.borrow.egui_render_pass.execute(
             &mut self.encoder.as_mut().unwrap(),
-            &self.swap_tex.view,
+            self.taking_screenshot
+                .as_ref()
+                .map_or(&self.swap_tex.view, |s| s.texture_view()),
             &paint_jobs,
             &screen_descriptor,
             None,

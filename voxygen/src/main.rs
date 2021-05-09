@@ -19,6 +19,7 @@ use common::{
     clock::Clock,
 };
 use std::panic;
+#[cfg(feature = "hot-anim")] use std::sync::Arc;
 use tracing::{error, info, warn};
 use veloren_voxygen::ui::egui::EguiState;
 

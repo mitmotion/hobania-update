@@ -15,6 +15,7 @@ use egui::{
 use egui_winit_platform::Platform;
 #[cfg(feature = "use-dyn-lib")]
 use lazy_static::lazy_static;
+#[cfg(feature = "use-dyn-lib")]
 use std::ffi::CStr;
 #[cfg(feature = "use-dyn-lib")]
 use std::sync::Arc;

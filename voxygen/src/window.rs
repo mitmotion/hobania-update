@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
 use vek::*;
 use winit::monitor::VideoMode;
+
 /// Represents a key that the game recognises after input mapping.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
 pub enum GameInput {
