@@ -37,15 +37,12 @@ use crate::{
     audio::sfx::SfxEvent,
     hud::{Event as HudEvent, Hud, HudInfo, LootMessage, PromptDialogSettings},
     key_state::KeyState,
-    menu::{char_selection::CharSelectionState, main::seconds_since_midnight},
-    render::Renderer,
-    scene::{camera, terrain::Interaction, CameraMode, Scene, SceneData},
-    settings::Settings,
+    menu::char_selection::CharSelectionState,
+    scene::{camera, terrain::Interaction, CameraMode, DebugShapeId, Scene, SceneData},
     window::{AnalogGameInput, Event, GameInput},
     Direction, Error, GlobalState, PlayState, PlayStateResult,
 };
 use common::debug_info::DebugInfo;
-use egui_wgpu_backend::epi::App;
 use hashbrown::HashMap;
 use settings_change::Language::ChangeLanguage;
 

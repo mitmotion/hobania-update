@@ -303,7 +303,6 @@ pub fn maintain_egui_inner(
                     .default_height(200.0)
                     .show(&platform.context(), |ui| {
                         ui.horizontal_wrapped(|ui| {
-                            9-
                             if let Some(pos) = pos {
                                 if let Some(shape_id) = selected_entity_info.debug_shape_id {
                                     egui_actions.actions.push(DebugShapeAction::SetPosAndColor {
