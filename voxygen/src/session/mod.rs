@@ -44,10 +44,10 @@ use crate::{
     window::{AnalogGameInput, Event, GameInput},
     Direction, Error, GlobalState, PlayState, PlayStateResult,
 };
+use common::debug_info::DebugInfo;
 use egui_wgpu_backend::epi::App;
 use hashbrown::HashMap;
 use settings_change::Language::ChangeLanguage;
-use common::debug_info::DebugInfo;
 
 /// The action to perform after a tick
 enum TickAction {
@@ -1016,7 +1016,9 @@ impl PlayState for SessionState {
             );
 
             // Maintain egui (debug interface)
-            global_state.egui_state.maintain(&self.client.borrow(), &debug_info,);
+            global_state
+                .egui_state
+                .maintain(&self.client.borrow(), &mut self.scene, &debug_info);
 
             // Look for changes in the localization files
             if global_state.i18n.reloaded() {
@@ -1457,10 +1459,7 @@ impl PlayState for SessionState {
 
         drop(third_pass);
 
-        drawer.draw_egui(
-            &mut global_state.egui_state.platform,
-            scale_factor,
-        );
+        drawer.draw_egui(&mut global_state.egui_state.platform, scale_factor);
     }
 }
 

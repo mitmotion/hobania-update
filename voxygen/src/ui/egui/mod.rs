@@ -1,13 +1,18 @@
-use crate::window::Window;
+use crate::{
+    scene::{DebugShape, DebugShapeId, Scene},
+    window::Window,
+};
 use client::Client;
 use common::debug_info::DebugInfo;
+use core::mem;
 use egui::FontDefinitions;
 use egui_winit_platform::{Platform, PlatformDescriptor};
-use voxygen_egui::EguiInnerState;
+use voxygen_egui::{DebugShapeAction, EguiInnerState};
 
 pub struct EguiState {
     pub platform: Platform,
     egui_inner_state: EguiInnerState,
+    new_debug_shape_id: Option<u64>,
 }
 
 impl EguiState {
@@ -22,20 +27,36 @@ impl EguiState {
 
         Self {
             platform,
-            egui_inner_state: EguiInnerState {
-                read_ecs: false,
-                selected_entity_id: 0,
-                max_entity_distance: 17000.0,
-            },
+            egui_inner_state: EguiInnerState::new(),
+            new_debug_shape_id: None,
         }
     }
 
-    pub fn maintain(&mut self, client: &Client, debug_info: &Option<DebugInfo>) {
-        voxygen_egui::maintain(
+    pub fn maintain(&mut self, client: &Client, scene: &mut Scene, debug_info: &Option<DebugInfo>) {
+        let egui_actions = voxygen_egui::maintain(
             &mut self.platform,
             &mut self.egui_inner_state,
             client,
             debug_info,
+            mem::take(&mut self.new_debug_shape_id),
         );
+
+        egui_actions.actions.iter().for_each(|action| match action {
+            DebugShapeAction::AddCylinder { height, radius } => {
+                let shape_id = scene.debug.add_shape(DebugShape::Cylinder {
+                    height: *height,
+                    radius: *radius,
+                });
+                self.new_debug_shape_id = Some(shape_id.0);
+            },
+            DebugShapeAction::RemoveCylinder(debug_shape_id) => {
+                scene.debug.remove_shape(DebugShapeId(*debug_shape_id));
+            },
+            DebugShapeAction::SetPosAndColor { id, pos, color } => {
+                scene
+                    .debug
+                    .set_pos_and_color(DebugShapeId(*id), pos.clone(), color.clone());
+            },
+        })
     }
 }
