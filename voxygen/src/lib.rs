@@ -44,7 +44,6 @@ use crate::{
     settings::Settings,
     ui::egui::EguiState,
     window::{Event, Window},
-    ui::egui::EguiState,
 };
 use common::clock::Clock;
 use common_base::span;
