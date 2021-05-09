@@ -6138,6 +6138,7 @@ dependencies = [
  "veloren-i18n",
  "veloren-server",
  "veloren-voxygen-anim",
+ "veloren-voxygen-dynlib",
  "veloren-voxygen-egui",
  "veloren-world",
  "wgpu",
@@ -6159,6 +6160,7 @@ dependencies = [
  "tracing",
  "vek",
  "veloren-common",
+ "veloren-voxygen-dynlib",
 ]
 
 [[package]]
@@ -6166,6 +6168,17 @@ name = "veloren-voxygen-anim-dyn"
 version = "0.9.0"
 dependencies = [
  "veloren-voxygen-anim",
+]
+
+[[package]]
+name = "veloren-voxygen-dynlib"
+version = "0.1.0"
+dependencies = [
+ "find_folder",
+ "lazy_static",
+ "libloading 0.7.0",
+ "notify 5.0.0-pre.6",
+ "tracing",
 ]
 
 [[package]]
@@ -6181,6 +6194,7 @@ dependencies = [
  "tracing",
  "veloren-client",
  "veloren-common",
+ "veloren-voxygen-dynlib",
 ]
 
 [[package]]

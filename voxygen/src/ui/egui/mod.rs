@@ -27,7 +27,7 @@ impl EguiState {
 
         Self {
             platform,
-            egui_inner_state: EguiInnerState::new(),
+            egui_inner_state: EguiInnerState::default(),
             new_debug_shape_id: None,
         }
     }
@@ -55,7 +55,7 @@ impl EguiState {
             DebugShapeAction::SetPosAndColor { id, pos, color } => {
                 scene
                     .debug
-                    .set_pos_and_color(DebugShapeId(*id), pos.clone(), color.clone());
+                    .set_pos_and_color(DebugShapeId(*id), *pos, *color);
             },
         })
     }

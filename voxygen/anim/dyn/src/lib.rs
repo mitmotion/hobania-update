@@ -8,7 +8,7 @@
 //! start earlier since a cdylib doesn't pipeline with it's dependencies.
 //!
 //! NOTE: the `be-dyn-lib` feature must be used for this crate to be useful, it
-//! is not on by default becaue this causes cargo to switch the feature on in
+//! is not on by default because this causes cargo to switch the feature on in
 //! the anim crate when compiling the static lib into voxygen.
 #[cfg(feature = "be-dyn-lib")]
 pub use veloren_voxygen_anim::*;

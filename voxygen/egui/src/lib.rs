@@ -1,27 +1,35 @@
-use client::{Client, Join, WorldExt};
-use common::debug_info::DebugInfo;
-use egui_winit_platform::Platform;
 #[cfg(all(feature = "be-dyn-lib", feature = "use-dyn-lib"))]
 compile_error!("Can't use both \"be-dyn-lib\" and \"use-dyn-lib\" features at once");
-
-#[cfg(feature = "use-dyn-lib")] pub mod dyn_lib;
-
+use client::{Client, Join, WorldExt};
 use common::{
     comp,
     comp::{Poise, PoiseState},
+    debug_info::DebugInfo,
 };
 use core::mem;
-#[cfg(feature = "use-dyn-lib")]
-pub use dyn_lib::init;
 use egui::{
     plot::{Plot, Value},
     widgets::plot::Curve,
     Color32, Grid, ScrollArea, Slider, Ui,
 };
-use std::{cmp::Ordering, ffi::CStr};
+use egui_winit_platform::Platform;
+#[cfg(feature = "use-dyn-lib")]
+use lazy_static::lazy_static;
+use std::ffi::CStr;
+#[cfg(feature = "use-dyn-lib")]
+use std::sync::Arc;
+#[cfg(feature = "use-dyn-lib")]
+use std::sync::Mutex;
+#[cfg(feature = "use-dyn-lib")]
+use voxygen_dynlib::LoadedLib;
 
 #[cfg(feature = "use-dyn-lib")]
-const MAINTAIN_EGUI_FN: &'static [u8] = b"maintain_egui_inner\0";
+lazy_static! {
+    pub static ref LIB: Arc<Mutex<Option<LoadedLib>>> = Arc::new(Mutex::new(None));
+}
+
+#[cfg(feature = "use-dyn-lib")]
+const MAINTAIN_EGUI_FN: &[u8] = b"maintain_egui_inner\0";
 
 pub fn maintain(
     platform: &mut Platform,
@@ -32,20 +40,21 @@ pub fn maintain(
 ) -> EguiActions {
     #[cfg(not(feature = "use-dyn-lib"))]
     {
-        return maintain_egui_inner(
+        maintain_egui_inner(
             platform,
             egui_state,
             client,
             debug_info,
             added_cylinder_shape_id,
-        );
+        )
     }
 
     #[cfg(feature = "use-dyn-lib")]
     {
-        let lock = dyn_lib::LIB.lock().unwrap();
+        let lock = LIB.lock().unwrap();
         let lib = &lock.as_ref().unwrap().lib;
 
+        #[allow(clippy::type_complexity)]
         let maintain_fn: libloading::Symbol<
             fn(
                 &mut Platform,
@@ -65,13 +74,13 @@ pub fn maintain(
             )
         });
 
-        return maintain_fn(
+        maintain_fn(
             platform,
             egui_state,
             client,
             debug_info,
             added_cylinder_shape_id,
-        );
+        )
     }
 }
 
@@ -97,8 +106,8 @@ pub struct EguiInnerState {
     frame_times: Vec<f32>,
 }
 
-impl EguiInnerState {
-    pub fn new() -> Self {
+impl Default for EguiInnerState {
+    fn default() -> Self {
         Self {
             read_ecs: false,
             selected_entity_info: None,
@@ -149,12 +158,14 @@ pub fn maintain_egui_inner(
         }
     }
 
-    debug_info.as_ref().map(|x| {
-        egui_state.frame_times.push(x.frame_time.as_nanos() as f32);
+    if let Some(debug_info) = debug_info.as_ref() {
+        egui_state
+            .frame_times
+            .push(debug_info.frame_time.as_nanos() as f32);
         if egui_state.frame_times.len() > 250 {
             egui_state.frame_times.remove(0);
         }
-    });
+    };
 
     if egui_state.read_ecs {
         let ecs = client.state().ecs();
@@ -181,8 +192,8 @@ pub fn maintain_egui_inner(
                         .text("Cylinder height"),
                 );
 
-                let mut scroll_area = ScrollArea::from_max_height(800.0);
-                let (current_scroll, max_scroll) = scroll_area.show(ui, |ui| {
+                let scroll_area = ScrollArea::from_max_height(800.0);
+                let (_current_scroll, _max_scroll) = scroll_area.show(ui, |ui| {
                     // if scroll_top {
                     //     ui.scroll_to_cursor(Align::TOP);
                     // }
@@ -198,7 +209,7 @@ pub fn maintain_egui_inner(
                             ui.label("Body");
                             ui.label("Poise");
                             ui.end_row();
-                            for (entity, body, stats, pos, ori, vel, poise) in (
+                            for (entity, _body, stats, pos, _ori, vel, poise) in (
                                 &ecs.entities(),
                                 ecs.read_storage::<comp::Body>().maybe(),
                                 ecs.read_storage::<comp::Stats>().maybe(),
@@ -282,7 +293,7 @@ pub fn maintain_egui_inner(
             if !selected_entity.gen().is_alive() {
                 previous_selected_entity = mem::take(&mut egui_state.selected_entity_info);
             } else {
-                for (entity, body, stats, pos, ori, vel, poise, buffs) in (
+                for (_entity, _body, stats, pos, _ori, _vel, poise, buffs) in (
                     &ecs.entities(),
                     ecs.read_storage::<comp::Body>().maybe(),
                     ecs.read_storage::<comp::Stats>().maybe(),
@@ -371,7 +382,7 @@ pub fn maintain_egui_inner(
                                                 ui.label("Time");
                                                 ui.label("Source");
                                                 ui.end_row();
-                                                buffs.buffs.iter().for_each(|(k, v)| {
+                                                buffs.buffs.iter().for_each(|(_, v)| {
                                                     ui.label(format!("{:?}", v.kind));
                                                     ui.label(
                                                         v.time.map_or("-".to_string(), |time| {
@@ -432,7 +443,9 @@ pub fn maintain_egui_inner(
 
     if let Some(selected_entity) = &egui_state.selected_entity_info {
         if let Some(debug_shape_id) = selected_entity.debug_shape_id {
-            if egui_state.selected_entity_cylinder_height != selected_entity_cylinder_height {
+            if (egui_state.selected_entity_cylinder_height - selected_entity_cylinder_height).abs()
+                > f32::EPSILON
+            {
                 egui_actions
                     .actions
                     .push(DebugShapeAction::RemoveCylinder(debug_shape_id));

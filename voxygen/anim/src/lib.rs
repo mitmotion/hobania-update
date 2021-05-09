@@ -54,7 +54,6 @@ pub mod bird_large;
 pub mod bird_medium;
 pub mod character;
 pub mod dragon;
-#[cfg(feature = "use-dyn-lib")] pub mod dyn_lib;
 pub mod fish_medium;
 pub mod fish_small;
 pub mod fixture;
@@ -68,13 +67,18 @@ pub mod theropod;
 pub mod vek;
 
 #[cfg(feature = "use-dyn-lib")]
-pub use dyn_lib::init;
-
-#[cfg(feature = "use-dyn-lib")]
 use std::ffi::CStr;
 
 use self::vek::*;
 use bytemuck::{Pod, Zeroable};
+#[cfg(feature = "use-dyn-lib")]
+use lazy_static::lazy_static;
+#[cfg(feature = "use-dyn-lib")]
+use std::sync::Arc;
+#[cfg(feature = "use-dyn-lib")]
+use std::sync::Mutex;
+#[cfg(feature = "use-dyn-lib")]
+use voxygen_dynlib::LoadedLib;
 
 type MatRaw = [[f32; 4]; 4];
 
@@ -90,6 +94,11 @@ fn make_bone(mat: Mat4<f32>) -> FigureBoneData {
 }
 
 pub type Bone = Transform<f32, f32, f32>;
+
+#[cfg(feature = "use-dyn-lib")]
+lazy_static! {
+    pub static ref LIB: Arc<Mutex<Option<LoadedLib>>> = Arc::new(Mutex::new(None));
+}
 
 pub trait Skeleton: Send + Sync + 'static {
     type Attr;
@@ -118,9 +127,10 @@ pub fn compute_matrices<S: Skeleton>(
     }
     #[cfg(feature = "use-dyn-lib")]
     {
-        let lock = dyn_lib::LIB.lock().unwrap();
+        let lock = LIB.lock().unwrap();
         let lib = &lock.as_ref().unwrap().lib;
 
+        #[allow(clippy::type_complexity)]
         let compute_fn: libloading::Symbol<
             fn(&S, Mat4<f32>, &mut [FigureBoneData; MAX_BONE_COUNT]) -> Vec3<f32>,
         > = unsafe { lib.get(S::COMPUTE_FN) }.unwrap_or_else(|e| {
@@ -169,9 +179,10 @@ pub trait Animation {
         }
         #[cfg(feature = "use-dyn-lib")]
         {
-            let lock = dyn_lib::LIB.lock().unwrap();
+            let lock = LIB.lock().unwrap();
             let lib = &lock.as_ref().unwrap().lib;
 
+            #[allow(clippy::type_complexity)]
             let update_fn: libloading::Symbol<
                 fn(
                     &Self::Skeleton,
@@ -183,9 +194,8 @@ pub trait Animation {
             > = unsafe {
                 //let start = std::time::Instant::now();
                 // Overhead of 0.5-5 us (could use hashmap to mitigate if this is an issue)
-                let f = lib.get(Self::UPDATE_FN);
+                lib.get(Self::UPDATE_FN)
                 //println!("{}", start.elapsed().as_nanos());
-                f
             }
             .unwrap_or_else(|e| {
                 panic!(

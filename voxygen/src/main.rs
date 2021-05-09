@@ -149,11 +149,25 @@ fn main() {
 
     // Initialise watcher for animation hotreloading
     #[cfg(feature = "hot-anim")]
-    anim::init();
+    {
+        voxygen_dynlib::init(
+            Arc::clone(&anim::LIB),
+            "veloren-voxygen-anim",
+            "veloren-voxygen-anim-dyn",
+            "anim",
+        );
+    }
 
     // Initialise watcher for egui hotreloading
     #[cfg(feature = "hot-egui")]
-    voxygen_egui::init();
+    {
+        voxygen_dynlib::init(
+            Arc::clone(&voxygen_egui::LIB),
+            "veloren-voxygen-egui",
+            "veloren-voxygen-egui-dyn",
+            "egui",
+        );
+    }
 
     // Setup audio
     let mut audio = match settings.audio.output {
