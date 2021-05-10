@@ -67,7 +67,7 @@ impl Fill {
                 let inner = Aabr {
                     min: aabb.min.xy() - 1 + inset,
                     max: aabb.max.xy() - inset,
-                };
+                }.made_valid();
                 aabb_contains(*aabb, pos)
                     && ((inner.projected_point(pos.xy()) - pos.xy())
                         .map(|e| e.abs())
@@ -241,7 +241,7 @@ impl Fill {
     }
 }
 
-pub trait Structure {
+pub trait Render {
     fn render<F: FnMut(Primitive) -> Id<Primitive>, G: FnMut(Id<Primitive>, Fill)>(
         &self,
         site: &Site,

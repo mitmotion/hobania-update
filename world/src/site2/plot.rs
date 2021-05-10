@@ -2,6 +2,7 @@ mod castle;
 mod house;
 
 pub use self::{castle::Castle, house::House};
+pub use super::structure::Hut;
 
 use super::*;
 use crate::util::DHashSet;
@@ -26,6 +27,7 @@ impl Plot {
 }
 
 pub enum PlotKind {
+    Hut(Hut),
     House(House),
     Plaza,
     Castle(Castle),
