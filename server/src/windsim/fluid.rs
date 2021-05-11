@@ -1,10 +1,10 @@
-use super::types::*;
+use super::wind_grid::*;
 /// Macro for indexing into a 1D array using 3D coordinates.
 macro_rules! IX {
     ( $x: expr, $y: expr,  $z: expr ) => {{ $x as usize + (X_SIZE + 2) * ($y as usize + (Y_SIZE + 2) * $z as usize) }};
 }
 
-/// 
+///
 /// * `b` - The type of border. 1 for vertical vel walls, 2 for side vel walls,
 ///   3 for back-front walls, 0 for dens.
 fn set_borders(grid: &mut Box<[f32]>, b: u8) {

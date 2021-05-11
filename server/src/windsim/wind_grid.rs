@@ -43,7 +43,7 @@ impl WindGrid {
         x + (X_SIZE + 2) * (y + (Y_SIZE + 2) * z)
     }
 
-    // Takes 3D grid position (not a world position)
+    // Takes 3D grid position (not a world position) returns grid velocity
     pub fn get_velocity(&self, pos: Vec3<usize>) -> Vec3<f32> {
         let index = Self::get_index(pos.x, pos.y, pos.z);
         let x = self.x_vel[index] as f32;

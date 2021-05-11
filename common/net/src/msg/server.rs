@@ -160,6 +160,8 @@ pub enum ServerGeneral {
         chunk: Result<SerializedTerrainChunk, ()>,
     },
     TerrainBlockUpdates(CompressedData<HashMap<Vec3<i32>, Block>>),
+    // Windupdates from the WindGrid on server
+    WindUpdate(Vec3<f32>),
     // Always possible
     PlayerListUpdate(PlayerListUpdate),
     /// A message to go into the client chat box. The client is responsible for
@@ -282,6 +284,7 @@ impl ServerMsg {
                         | ServerGeneral::InventoryUpdate(_, _)
                         | ServerGeneral::TerrainChunkUpdate { .. }
                         | ServerGeneral::TerrainBlockUpdates(_)
+                        | ServerGeneral::WindUpdate(_)
                         | ServerGeneral::SetViewDistance(_)
                         | ServerGeneral::Outcomes(_)
                         | ServerGeneral::Knockback(_)

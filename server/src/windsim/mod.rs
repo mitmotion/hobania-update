@@ -1,16 +1,18 @@
 #![allow(dead_code)]
 pub mod fluid;
-mod types;
+mod wind_grid;
 use common::{terrain::TerrainChunkSize, vol::RectVolSize};
 pub use fluid::step_fluid;
-use types::{WindGrid, X_SIZE, Y_SIZE, Z_SIZE};
 use vek::*;
+use wind_grid::{WindGrid, X_SIZE, Y_SIZE, Z_SIZE};
 
 use common::{
     comp::{Pos, Vel},
     resources::DeltaTime,
 };
 //use common_state::State;
+
+pub const DEFAULT_POS: Vec3<usize> = Vec3 { x: 0, y: 0, z: 0 };
 
 #[derive(Default)]
 pub struct WindSim {
@@ -45,9 +47,17 @@ impl WindSim {
         }
     }
 
+    // Takes  a world position and returns a world velocity
+    pub fn get_velocity(&self, pos: Pos) -> Vec3<f32> {
+        let cell_pos = self.world_to_grid(pos).unwrap_or(DEFAULT_POS);
+        let cell_vel = self.grid.get_velocity(cell_pos);
+        cell_vel.map2(self.blocks_per_cell, |vi, si| vi * si as f32)
+    }
+
+    // Abstraction for running the simulation
     pub fn tick(&mut self, sources: Vec<(Pos, Vel)>, dt: &DeltaTime) {
         for (pos, vel) in sources {
-            let cell_pos = self.world_to_grid(pos).unwrap_or(Vec3{x:0, y:0, z:0});
+            let cell_pos = self.world_to_grid(pos).unwrap_or(DEFAULT_POS);
             let cell_vel = vel.0.map2(self.blocks_per_cell, |vi, si| vi / si as f32);
             self.grid.add_velocity_source(cell_pos, cell_vel)
         }

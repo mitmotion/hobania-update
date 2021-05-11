@@ -88,6 +88,7 @@ pub enum ClientGeneral {
     RequestLossyTerrainCompression {
         lossy_terrain_compression: bool,
     },
+    WindRequest(comp::Pos),
 }
 
 impl ClientMsg {
@@ -126,9 +127,11 @@ impl ClientMsg {
                         | ClientGeneral::RequestSiteInfo(_)
                         | ClientGeneral::UnlockSkillGroup(_)
                         | ClientGeneral::RequestPlayerPhysics { .. }
+                        | ClientGeneral::WindRequest(_)
                         | ClientGeneral::RequestLossyTerrainCompression { .. } => {
                             c_type == ClientType::Game && presence.is_some()
                         },
+
                         //Always possible
                         ClientGeneral::ChatMsg(_)
                         | ClientGeneral::Command(_, _)

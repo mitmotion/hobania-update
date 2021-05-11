@@ -1,4 +1,4 @@
-use crate::{client::Client, presence::Presence, Settings};
+use crate::{client::Client, presence::Presence, windsim::WindSim, Settings};
 use common::{
     comp::{
         Admin, CanBuild, ControlEvent, Controller, ForceUpdate, Health, Ori, Player, Pos, SkillSet,
@@ -38,6 +38,7 @@ impl Sys {
         player_physics_settings: &mut Write<'_, PlayerPhysicsSettings>,
         maybe_player: &Option<&Player>,
         maybe_admin: &Option<&Admin>,
+        wind_sim: &Read<'_, WindSim>,
         msg: ClientGeneral,
     ) -> Result<(), crate::error::Error> {
         let presence = match maybe_presence {
@@ -258,6 +259,9 @@ impl Sys {
             } => {
                 presence.lossy_terrain_compression = lossy_terrain_compression;
             },
+            ClientGeneral::WindRequest(pos) => {
+                client.send(ServerGeneral::WindUpdate(wind_sim.get_velocity(pos)))?;
+            },
             _ => tracing::error!("not a client_in_game msg"),
         }
         Ok(())
@@ -289,6 +293,7 @@ impl<'a> System<'a> for Sys {
         Write<'a, PlayerPhysicsSettings>,
         ReadStorage<'a, Player>,
         ReadStorage<'a, Admin>,
+        Read<'a, WindSim>,
     );
 
     const NAME: &'static str = "msg::in_game";
@@ -317,6 +322,7 @@ impl<'a> System<'a> for Sys {
             mut player_physics_settings,
             players,
             admins,
+            wind_sim,
         ): Self::SystemData,
     ) {
         let mut server_emitter = server_event_bus.emitter();
@@ -351,6 +357,7 @@ impl<'a> System<'a> for Sys {
                     &mut player_physics_settings,
                     &player,
                     &maybe_admin,
+                    &wind_sim,
                     msg,
                 )
             });

@@ -802,6 +802,7 @@ impl Client {
                     | ClientGeneral::RequestSiteInfo(_)
                     | ClientGeneral::UnlockSkillGroup(_)
                     | ClientGeneral::RequestPlayerPhysics { .. }
+                    | ClientGeneral::WindRequest(_)
                     | ClientGeneral::RequestLossyTerrainCompression { .. } => {
                         &mut self.in_game_stream
                     },
