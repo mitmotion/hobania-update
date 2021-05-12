@@ -55,12 +55,16 @@ impl WindSim {
         cell_vel.map2(self.blocks_per_cell, |vi, si| vi * si as f32)
     }
 
+    pub fn add_velocity_source(&mut self, pos: Pos, vel: Vel) {
+        let cell_pos = self.world_to_grid(pos).unwrap_or(DEFAULT_POS);
+        let cell_vel = vel.0.map2(self.blocks_per_cell, |vi, si| vi / si as f32);
+        self.grid.add_velocity_source(cell_pos, cell_vel)
+    }
+
     // Abstraction for running the simulation
     pub fn tick(&mut self, sources: Vec<(Pos, Vel)>, dt: &DeltaTime) {
         for (pos, vel) in sources {
-            let cell_pos = self.world_to_grid(pos).unwrap_or(DEFAULT_POS);
-            let cell_vel = vel.0.map2(self.blocks_per_cell, |vi, si| vi / si as f32);
-            self.grid.add_velocity_source(cell_pos, cell_vel)
+            self.add_velocity_source(pos, vel);
         }
         step_fluid(
             &mut self.grid.density,
