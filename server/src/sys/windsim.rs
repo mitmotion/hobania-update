@@ -1,12 +1,12 @@
 #![allow(dead_code)]
 use crate::windsim::{WindSim, MS_BETWEEN_TICKS};
 use common::{
-    comp::{Pos, Vel},
+    comp::{Fluid, PhysicsState, Pos, Vel},
     resources::DeltaTime,
 };
 use common_ecs::{Job, Origin, Phase, System};
 use rand::Rng;
-use specs::{Read, Write};
+use specs::{join::Join, Read, ReadStorage, Write, WriteStorage};
 use vek::*;
 
 /// This system updates the wind grid for the entire map
@@ -14,13 +14,21 @@ use vek::*;
 pub struct Sys;
 impl<'a> System<'a> for Sys {
     #[allow(clippy::type_complexity)]
-    type SystemData = (Read<'a, DeltaTime>, Write<'a, WindSim>);
+    type SystemData = (
+        Read<'a, DeltaTime>,
+        Write<'a, WindSim>,
+        ReadStorage<'a, Pos>,
+        WriteStorage<'a, PhysicsState>,
+    );
 
     const NAME: &'static str = "windsim";
     const ORIGIN: Origin = Origin::Server;
     const PHASE: Phase = Phase::Create;
 
-    fn run(_job: &mut Job<Self>, (dt, mut windsim): Self::SystemData) {
+    fn run(
+        _job: &mut Job<Self>,
+        (dt, mut windsim, positions, mut physics_states): Self::SystemData,
+    ) {
         let mut rng = rand::thread_rng();
         // 1000 chunks
         let wind_sources: Vec<(Pos, Vel)> = (0..1000)
@@ -47,6 +55,18 @@ impl<'a> System<'a> for Sys {
             windsim.tick(wind_sources, &DeltaTime((MS_BETWEEN_TICKS / 1000) as f32));
         } else {
             windsim.ms_since_update += (dt.0 * 1000.0) as u32;
+        }
+
+        for (pos, physics_state) in (&positions, &mut physics_states).join() {
+            physics_state.in_fluid = physics_state
+                .in_fluid
+                .filter(|fluid| !matches!(fluid, Fluid::Air { .. }))
+                .or_else(|| {
+                    Some(Fluid::Air {
+                        elevation: pos.0.z,
+                        vel: Vel(windsim.get_velocity(*pos)),
+                    })
+                });
         }
     }
 }
