@@ -23,13 +23,13 @@ impl<'a> System<'a> for Sys {
         let wind_sources: Vec<(Pos, Vel)> = vec![(
             Pos(Vec3 {
                 x: 9999.0,
-                y: 9999.0,
+                y: 9599.0,
                 z: 200.0,
             }),
             Vel(Vec3 {
                 x: 100.0,
                 y: 100.0,
-                z: 100.0,
+                z: 500.0,
             }),
         )];
         windsim.tick(wind_sources, &dt);

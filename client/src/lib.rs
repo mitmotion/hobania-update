@@ -27,8 +27,9 @@ use common::{
         invite::{InviteKind, InviteResponse},
         skills::Skill,
         slot::Slot,
-        ChatMode, ControlAction, ControlEvent, Controller, ControllerInputs, GroupManip, InputKind,
-        InventoryAction, InventoryEvent, InventoryUpdateEvent, UtteranceKind,
+        ChatMode, ControlAction, ControlEvent, Controller, ControllerInputs, Fluid, GroupManip,
+        InputKind, InventoryAction, InventoryEvent, InventoryUpdateEvent, PhysicsState,
+        UtteranceKind, Vel,
     },
     event::{EventBus, LocalEvent},
     grid::Grid,
@@ -1985,6 +1986,20 @@ impl Client {
             },
             ServerGeneral::WindUpdate(vel) => {
                 println!("Windupdate {}", vel);
+                let player_entity = self.entity();
+                self.state
+                    .ecs_mut()
+                    .write_storage::<PhysicsState>()
+                    .get_mut(player_entity)
+                    .map(|physics_state| {
+                        physics_state.in_fluid = physics_state
+                            .in_fluid
+                            .filter(|fluid| matches!(fluid, Fluid::Water { .. }))
+                            .or(Some(Fluid::Air {
+                                elevation: 0.0,
+                                vel: Vel(vel),
+                            }));
+                    });
             },
             _ => unreachable!("Not a in_game message"),
         }
