@@ -13,6 +13,11 @@ use common::{
 //use common_state::State;
 
 pub const DEFAULT_POS: Vec3<usize> = Vec3 { x: 0, y: 0, z: 0 };
+pub const GRID_SIZE: Vec3<usize> = Vec3 {
+    x: X_SIZE,
+    y: Y_SIZE,
+    z: Z_SIZE,
+};
 
 #[derive(Default)]
 pub struct WindSim {
@@ -31,17 +36,13 @@ impl WindSim {
     /// Converts world positions, to 3D grid positions.
     /// Returns None if out of bounds, for example negative positions.
     pub fn world_to_grid(&self, pos: Pos) -> Option<Vec3<usize>> {
-        if pos
+        let p = |pi, ci, gi| pi >= 0.0 && ci <= gi;
+
+        let cell_pos = pos
             .0
-            .map2(self.blocks_per_cell, |pi, si| {
-                pi >= 0.0 && pi <= (pi / si as f32)
-            })
-            .reduce_and()
-        {
-            Some(
-                pos.0
-                    .map2(self.blocks_per_cell, |pi, si| pi as usize / si as usize),
-            )
+            .map2(self.blocks_per_cell, |pi, si| pi as usize / si as usize);
+        if pos.0.map3(cell_pos, GRID_SIZE, p).reduce_and() {
+            Some(cell_pos)
         } else {
             None
         }

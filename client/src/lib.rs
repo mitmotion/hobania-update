@@ -1612,6 +1612,8 @@ impl Client {
             let now = Instant::now();
             self.pending_chunks
                 .retain(|_, created| now.duration_since(*created) < Duration::from_secs(3));
+
+            self.send_msg_err(ClientGeneral::WindRequest(pos))?;
         }
 
         // Send a ping to the server once every second
@@ -1980,6 +1982,9 @@ impl Client {
                 if let Some(rich) = self.sites_mut().get_mut(&economy.id) {
                     rich.economy = Some(economy);
                 }
+            },
+            ServerGeneral::WindUpdate(vel) => {
+                println!("Windupdate {}", vel);
             },
             _ => unreachable!("Not a in_game message"),
         }
