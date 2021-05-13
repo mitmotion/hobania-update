@@ -30,7 +30,7 @@ use std::sync::Arc;
 use vek::*;
 
 pub struct VoxelMinimap {
-    chunk_minimaps: HashMap<Vec2<i32>, (i32, Vec<Grid<[u8; 4]>>)>,
+    chunk_minimaps: HashMap<Vec2<i32>, (i32, Vec<Grid<Vec4<u8>>>)>,
     composited: RgbaImage,
     image_id: img_ids::Rotations,
     last_pos: Vec3<i32>,
@@ -56,6 +56,8 @@ impl VoxelMinimap {
         }
     }
 
+    fn composite() {}
+
     pub fn maintain(&mut self, client: &Client, ui: &mut Ui) {
         let terrain = client.state().terrain();
         for (key, chunk) in terrain.iter() {
@@ -63,12 +65,26 @@ impl VoxelMinimap {
                 let mut layers = Vec::new();
                 for z in chunk.get_min_z()..chunk.get_max_z() {
                     let grid = Grid::populate_from(Vec2::new(32, 32), |v| {
-                        chunk
-                            .get(Vec3::new(v.x, v.y, z))
-                            .ok()
-                            .and_then(|block| block.get_color())
-                            .map(|rgb| [rgb.r, rgb.g, rgb.b, 192])
-                            .unwrap_or([0, 0, 0, 0])
+                        /*chunk
+                        .get(Vec3::new(v.x, v.y, z))
+                        .ok()
+                        .and_then(|block| block.get_color())
+                        .map(|rgb| [rgb.r, rgb.g, rgb.b, 192])
+                        .unwrap_or([0, 0, 0, 0])*/
+                        let mut rgba = Vec4::<u16>::zero();
+                        let (weights, zoff) = (&[2, 4, 1, 1, 1][..], -1);
+                        for dz in 0..weights.len() {
+                            let color = chunk
+                                .get(Vec3::new(v.x, v.y, dz as i32 + z + zoff))
+                                .ok()
+                                .and_then(|block| block.get_color())
+                                .map(|rgb| [rgb.r, rgb.g, rgb.b, 192])
+                                .map(|c| Vec4::<u8>::from(c).as_())
+                                .unwrap_or(Vec4::one());
+                            rgba += color.as_() * weights[z as usize];
+                        }
+                        let rgba: Vec4<u8> = (rgba / weights.iter().sum::<u16>()).as_();
+                        rgba
                     });
                     layers.push(grid);
                 }
@@ -87,7 +103,7 @@ impl VoxelMinimap {
                         let voff = Vec2::new(x as f32, y as f32);
                         let coff: Vec2<i32> = voff.map(|i| (i as i32).div_euclid(32));
                         let cmod: Vec2<i32> = voff.map(|i| (i as i32).rem_euclid(32));
-                        let mut rgba = Vec4::<u16>::zero();
+                        /*let mut rgba = Vec4::<u16>::zero();
                         let (weights, zoff) =
                             if (x as i32 - VOXEL_MINIMAP_SIDELENGTH as i32 / 2).abs() < 96
                                 && (y as i32 - VOXEL_MINIMAP_SIDELENGTH as i32 / 2).abs() < 96
@@ -114,7 +130,13 @@ impl VoxelMinimap {
                         let color = {
                             let rgba: Vec4<u8> = (rgba / weights.iter().sum::<u16>()).as_();
                             image::Rgba([rgba.x, rgba.y, rgba.z, rgba.w])
-                        };
+                        };*/
+                        let color = self
+                            .chunk_minimaps
+                            .get(&(cpos + coff))
+                            .and_then(|(zlo, g)| g.get((pos.z as i32 - zlo) as usize))
+                            .and_then(|grid| grid.get(cmod).map(|c| c.as_()))
+                            .unwrap_or(Vec4::one());
                         self.composited
                             .put_pixel(x, VOXEL_MINIMAP_SIDELENGTH - y - 1, color);
                     }
