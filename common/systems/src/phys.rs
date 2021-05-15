@@ -103,7 +103,7 @@ fn integrate_forces(
             if new_v.dot(vel.0) < 0.0 {
                 // Multiply by a factor to prevent full stop, as this can cause things to get
                 // stuck in high-density medium
-                vel.0 -= vel.0.projected(&impulse) * 0.7;
+                vel.0 -= vel.0.projected(&impulse) * 0.9;
             } else {
                 vel.0 = new_v;
             }
