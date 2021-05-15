@@ -75,12 +75,21 @@ pub fn handle_knockback(server: &Server, entity: EcsEntity, impulse: Vec3<f32>) 
                 0.4
             };
         if let Some(mass) = ecs.read_storage::<comp::Mass>().get(entity) {
-            impulse /= mass.0;
+            // we go easy on the little ones (because they fly so far)
+            impulse /= mass.0.max(40.0);
         }
         let mut velocities = ecs.write_storage::<comp::Vel>();
         if let Some(vel) = velocities.get_mut(entity) {
             vel.0 += impulse;
         }
+        /*
+        // Breaks bird AI (they need to learn how to toggle flight first)
+        if let Some(controller) = ecs.write_storage::<comp::Controller>().get_mut(entity) {
+            controller
+                .actions
+                .push(comp::ControlAction::CancelInput(comp::InputKind::Fly));
+        }
+        */
         if let Some(client) = clients.get(entity) {
             client.send_fallible(ServerGeneral::Knockback(impulse));
         }

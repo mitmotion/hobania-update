@@ -1,14 +1,16 @@
 use common::{
     comp::{
         body::ship::figuredata::{VoxelCollider, VOXEL_COLLIDER_MANIFEST},
-        BeamSegment, Body, CharacterState, Collider, Density, Fluid, Mass, Mounting, Ori,
-        PhysicsState, Pos, PosVelDefer, PreviousPhysCache, Projectile, Scale, Shockwave, Sticky,
-        Vel,
+        fluid_dynamics::{Fluid, Wings},
+        BeamSegment, Body, CharacterState, Collider, Controller, Density, InputKind, Mass,
+        Mounting, Ori, PhysicsState, Pos, PosVelDefer, PreviousPhysCache, Projectile, Scale,
+        Shockwave, Sticky, Vel,
     },
     consts::{AIR_DENSITY, FRIC_GROUND, GRAVITY},
     event::{EventBus, ServerEvent},
     outcome::Outcome,
     resources::DeltaTime,
+    states,
     terrain::{Block, TerrainGrid},
     uid::Uid,
     util::{Projection, SpatialGrid},
@@ -38,14 +40,44 @@ fn fluid_density(height: f32, fluid: &Fluid) -> Density {
     Density(fluid.density().0 * immersion + AIR_DENSITY * (1.0 - immersion))
 }
 
+fn get_wings(
+    character_state: Option<&CharacterState>,
+    controller: Option<&Controller>,
+    body: &Body,
+) -> Option<Wings> {
+    match *character_state? {
+        CharacterState::Glide(states::glide::Data {
+            aspect_ratio,
+            planform_area,
+            ori,
+            ..
+        }) => Some(Wings::Gliding {
+            aspect_ratio,
+            planform_area,
+            ori,
+        }),
+
+        _ => {
+            if body.fly_thrust().is_some() {
+                if controller?.queued_inputs.contains_key(&InputKind::Fly) {
+                    Some(Wings::Flying)
+                } else {
+                    Some(Wings::Folded)
+                }
+            } else {
+                None
+            }
+        },
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn integrate_forces(
     dt: &DeltaTime,
     mut vel: Vel,
-    body: &Body,
+    (body, wings): (&Body, Option<&Wings>),
     density: &Density,
     mass: &Mass,
-    character_state: Option<&CharacterState>,
     fluid: &Fluid,
     gravity: f32,
 ) -> Vel {
@@ -59,7 +91,7 @@ fn integrate_forces(
     // Aerodynamic/hydrodynamic forces
     if !rel_flow.0.is_approx_zero() {
         debug_assert!(!rel_flow.0.map(|a| a.is_nan()).reduce_or());
-        let impulse = dt.0 * body.aerodynamic_forces(&rel_flow, fluid_density.0, character_state);
+        let impulse = dt.0 * body.aerodynamic_forces(&rel_flow, fluid_density.0, wings);
         debug_assert!(!impulse.map(|a| a.is_nan()).reduce_or());
         if !impulse.is_approx_zero() {
             let new_v = vel.0 + impulse / mass.0;
@@ -71,7 +103,7 @@ fn integrate_forces(
             if new_v.dot(vel.0) < 0.0 {
                 // Multiply by a factor to prevent full stop, as this can cause things to get
                 // stuck in high-density medium
-                vel.0 -= vel.0.projected(&impulse) * 0.7;
+                vel.0 -= vel.0.projected(&impulse) * 0.9;
             } else {
                 vel.0 = new_v;
             }
@@ -116,6 +148,7 @@ pub struct PhysicsRead<'a> {
     stickies: ReadStorage<'a, Sticky>,
     masses: ReadStorage<'a, Mass>,
     colliders: ReadStorage<'a, Collider>,
+    controllers: ReadStorage<'a, Controller>,
     mountings: ReadStorage<'a, Mounting>,
     projectiles: ReadStorage<'a, Projectile>,
     beams: ReadStorage<'a, BeamSegment>,
@@ -574,6 +607,7 @@ impl<'a> PhysicsData<'a> {
             &read.bodies,
             read.character_states.maybe(),
             &write.physics_states,
+            read.controllers.maybe(),
             &read.masses,
             &read.densities,
             !&read.mountings,
@@ -592,6 +626,7 @@ impl<'a> PhysicsData<'a> {
                     body,
                     character_state,
                     physics_state,
+                    controller,
                     mass,
                     density,
                     _,
@@ -616,13 +651,13 @@ impl<'a> PhysicsData<'a> {
                                 vel.0.z -= dt.0 * GRAVITY;
                             },
                             Some(fluid) => {
+                                let wings = get_wings(character_state, controller, body);
                                 vel.0 = integrate_forces(
                                     &dt,
                                     *vel,
-                                    body,
+                                    (body, wings.as_ref()),
                                     density,
                                     mass,
-                                    character_state,
                                     &fluid,
                                     GRAVITY,
                                 )
