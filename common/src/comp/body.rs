@@ -240,13 +240,33 @@ impl Body {
                 _ => 200.0,
             },
             Body::QuadrupedSmall(body) => match body.species {
-                quadruped_small::Species::Batfox => 50.0,
+                quadruped_small::Species::Axolotl => 1.0,
+                quadruped_small::Species::Batfox => 10.0,
+                quadruped_small::Species::Beaver => 10.0,
                 quadruped_small::Species::Boar => 80.0, // ~✅ (60-100 kg)
-                quadruped_small::Species::Dodarock => 150.0,
-                quadruped_small::Species::Holladon => 150.0,
+                quadruped_small::Species::Cat => 4.0,   // ~✅ (4-5 kg)
+                quadruped_small::Species::Dodarock => 70.0,
+                quadruped_small::Species::Dog => 30.0, // ~✅ (German Shepherd: 30-40 kg)
+                quadruped_small::Species::Fox => 10.0,
+                quadruped_small::Species::Frog => 1.0,
+                quadruped_small::Species::Fungome => 10.0,
+                quadruped_small::Species::Gecko => 1.0,
+                quadruped_small::Species::Goat => 50.0,
+                quadruped_small::Species::Hare => 10.0,
+                quadruped_small::Species::Holladon => 60.0,
                 quadruped_small::Species::Hyena => 70.0, // ~✅ (vaguely)
-                quadruped_small::Species::Truffler => 150.0,
-                _ => 80.0,
+                quadruped_small::Species::Jackalope => 10.0,
+                quadruped_small::Species::Pig => 20.0,
+                quadruped_small::Species::Porcupine => 5.0,
+                quadruped_small::Species::Quokka => 10.0,
+                quadruped_small::Species::Rabbit => 2.0,
+                quadruped_small::Species::Raccoon => 30.0,
+                quadruped_small::Species::Rat => 1.0,
+                quadruped_small::Species::Sheep => 50.0,
+                quadruped_small::Species::Skunk => 5.0,
+                quadruped_small::Species::Squirrel => 1.0,
+                quadruped_small::Species::Truffler => 70.0,
+                quadruped_small::Species::Turtle => 40.0,
             },
             Body::Theropod(body) => match body.species {
                 // for reference, elephants are in the range of 2.6-6.9 tons

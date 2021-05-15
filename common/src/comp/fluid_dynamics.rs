@@ -1,6 +1,6 @@
 use super::{
     body::{object, Body},
-    CharacterState, Density, Ori, Vel,
+    Density, Ori, Vel,
 };
 use crate::{
     consts::{AIR_DENSITY, WATER_DENSITY},
@@ -87,12 +87,22 @@ impl Default for Fluid {
     }
 }
 
+pub enum Wings {
+    Flying,
+    Gliding {
+        aspect_ratio: f32,
+        planform_area: f32,
+        ori: Ori,
+    },
+    Folded,
+}
+
 impl Body {
     pub fn aerodynamic_forces(
         &self,
         rel_flow: &Vel,
         fluid_density: f32,
-        character_state: Option<&CharacterState>,
+        wings: Option<&Wings>,
     ) -> Vec3<f32> {
         let v_sq = rel_flow.0.magnitude_squared();
         if v_sq < 0.25 {
@@ -103,22 +113,23 @@ impl Body {
             // All the coefficients come pre-multiplied by their reference area
             0.5 * fluid_density
                 * v_sq
-                * character_state
-                    .and_then(|cs| match cs {
-                        CharacterState::Glide(data) => {
-                            Some((data.aspect_ratio, data.planform_area, data.ori))
+                * wings
+                    .and_then(|wings| match *wings {
+                        Wings::Gliding {
+                            aspect_ratio,
+                            planform_area,
+                            ori,
+                        } => {
+                            if aspect_ratio > 25.0 {
+                                tracing::warn!(
+                                    "Calculating lift for wings with an aspect ratio of {}. The \
+                                     formulas are only valid for aspect ratios below 25.",
+                                    aspect_ratio
+                                )
+                            };
+                            Some((aspect_ratio.min(24.0), planform_area, ori))
                         },
                         _ => None,
-                    })
-                    .map(|(ar, area, ori)| {
-                        if ar > 25.0 {
-                            tracing::warn!(
-                                "Calculating lift for wings with an aspect ratio of {}. The \
-                                 formulas are only valid for aspect ratios below 25.",
-                                ar
-                            )
-                        };
-                        (ar.min(24.0), area, ori)
                     })
                     .map(|(ar, area, ori)| {
                         // We have an elliptical wing; proceed to calculate its lift and drag
@@ -158,7 +169,7 @@ impl Body {
                             let e = 1.78 * (1.0 - 0.045 * ar.powf(0.68)) - 0.64;
 
                             zero_lift_drag_coefficient(area)
-                                + self.parasite_drag_coefficient()
+                                + self.parasite_drag_coefficient(wings)
                                 + c_l.powi(2) / (PI * e * ar)
                         };
                         debug_assert!(c_d.is_sign_positive());
@@ -166,7 +177,7 @@ impl Body {
 
                         c_l * *lift_dir + c_d * *rel_flow_dir
                     })
-                    .unwrap_or_else(|| self.parasite_drag_coefficient() * *rel_flow_dir)
+                    .unwrap_or_else(|| self.parasite_drag_coefficient(wings) * *rel_flow_dir)
         }
     }
 
@@ -174,7 +185,7 @@ impl Body {
     /// Skin friction is the drag arising from the shear forces between a fluid
     /// and a surface, while pressure drag is due to flow separation. Both are
     /// viscous effects.
-    fn parasite_drag_coefficient(&self) -> f32 {
+    fn parasite_drag_coefficient(&self, wings: Option<&Wings>) -> f32 {
         // Reference area and drag coefficient assumes best-case scenario of the
         // orientation producing least amount of drag
         match self {
@@ -201,12 +212,16 @@ impl Body {
             // Cross-section, zero-lift angle; exclude the wings (width * 0.2)
             Body::BirdMedium(_) | Body::BirdLarge(_) | Body::Dragon(_) => {
                 let dim = self.dimensions().map(|a| a * 0.5);
-                // "Field Estimates of Body Drag Coefficient on the Basis of Dives in Passerine
-                // Birds", Anders Hedenström and Felix Liechti, 2001
-                let cd = match self {
-                    Body::BirdLarge(_) | Body::BirdMedium(_) => 0.2,
-                    // arbitrary
-                    _ => 0.7,
+                let cd = if matches!(wings, Some(Wings::Folded) | None) {
+                    0.7
+                } else {
+                    // "Field Estimates of Body Drag Coefficient on the Basis of Dives in Passerine
+                    // Birds", Anders Hedenström and Felix Liechti, 2001
+                    match self {
+                        Body::BirdLarge(_) | Body::BirdMedium(_) => 0.2,
+                        // arbitrary
+                        _ => 0.7,
+                    }
                 };
                 cd * PI * dim.x * 0.2 * dim.z
             },
