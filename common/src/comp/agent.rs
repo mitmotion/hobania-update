@@ -272,15 +272,23 @@ pub struct Sound {
     pub pos: Vec3<f32>,
     pub vol: f32,
     pub time: f64,
+    pub owner: Option<EcsEntity>,
 }
 
 impl Sound {
-    pub fn new(kind: SoundKind, pos: Vec3<f32>, vol: f32, time: f64) -> Self {
+    pub fn new(
+        kind: SoundKind,
+        pos: Vec3<f32>,
+        vol: f32,
+        time: f64,
+        owner: Option<EcsEntity>,
+    ) -> Self {
         Sound {
             kind,
             pos,
             vol,
             time,
+            owner,
         }
     }
 
@@ -301,6 +309,8 @@ pub enum SoundKind {
     Beam,
     Shockwave,
     Utterance(UtteranceKind, Body),
+    // TODO: unify VillagerAlarm with Utterance
+    VillagerAlarm,
 }
 
 #[derive(Clone, Debug)]

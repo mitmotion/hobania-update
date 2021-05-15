@@ -88,7 +88,7 @@ impl<'a> System<'a> for Sys {
             let mut rng = thread_rng();
             if rng.gen_bool(0.05) {
                 server_emitter.emit(ServerEvent::Sound {
-                    sound: Sound::new(SoundKind::Shockwave, pos.0, 16.0, time),
+                    sound: Sound::new(SoundKind::Shockwave, pos.0, 16.0, time, Some(entity)),
                 });
             }
 

@@ -692,10 +692,20 @@ pub fn handle_explosion(server: &Server, pos: Vec3<f32>, explosion: Explosion, o
     let ecs = &server.state.ecs();
     let server_eventbus = ecs.read_resource::<EventBus<ServerEvent>>();
     let time = ecs.read_resource::<Time>();
+    let owner_entity = owner.and_then(|uid| {
+        ecs.read_resource::<UidAllocator>()
+            .retrieve_entity_internal(uid.into())
+    });
 
     let explosion_volume = 2.5 * explosion.radius;
     server_eventbus.emit_now(ServerEvent::Sound {
-        sound: Sound::new(SoundKind::Explosion, pos, explosion_volume, time.0),
+        sound: Sound::new(
+            SoundKind::Explosion,
+            pos,
+            explosion_volume,
+            time.0,
+            owner_entity,
+        ),
     });
 
     // Add an outcome
@@ -711,10 +721,6 @@ pub fn handle_explosion(server: &Server, pos: Vec3<f32>, explosion: Explosion, o
             .iter()
             .any(|e| matches!(e, RadiusEffect::Attack(_))),
         reagent: explosion.reagent,
-    });
-    let owner_entity = owner.and_then(|uid| {
-        ecs.read_resource::<UidAllocator>()
-            .retrieve_entity_internal(uid.into())
     });
     let groups = ecs.read_storage::<comp::Group>();
 

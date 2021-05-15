@@ -94,7 +94,7 @@ impl<'a> System<'a> for Sys {
             let mut rng = thread_rng();
             if rng.gen_bool(0.005) {
                 server_events.push(ServerEvent::Sound {
-                    sound: Sound::new(SoundKind::Beam, pos.0, 7.0, time),
+                    sound: Sound::new(SoundKind::Beam, pos.0, 7.0, time, Some(entity)),
                 });
             }
 
