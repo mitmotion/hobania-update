@@ -295,7 +295,8 @@ pub enum Event {
     MouseButton(MouseButton, PressState),
     /// The camera has been requested to zoom.
     Zoom(f32),
-    /// A key that the game recognises has been pressed or released.
+    /// A key that the game recognizes has been pressed (true) or released
+    /// (false).
     InputUpdate(GameInput, bool),
     /// Event that the ui uses.
     Ui(ui::Event),
