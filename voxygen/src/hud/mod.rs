@@ -3413,14 +3413,20 @@ impl Hud {
 
             WinEvent::InputUpdate(GameInput::Chat, true) => {
                 self.ui.focus_widget(if self.typing() {
+                    // regrab cursor when done typing
+                    self.force_ungrab = false;
                     None
                 } else {
+                    // ungrab cursor when activating typing
+                    self.force_ungrab = true;
                     Some(self.ids.chat)
                 });
                 true
             },
             WinEvent::InputUpdate(GameInput::Escape, true) => {
                 if self.typing() {
+                    // If we were typing, the cursor was ungrabbed, so regrab it.
+                    self.force_ungrab = false;
                     self.ui.focus_widget(None);
                 } else if self.show.trade {
                     self.events.push(Event::TradeAction(TradeAction::Decline));
