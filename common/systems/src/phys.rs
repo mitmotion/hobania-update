@@ -53,12 +53,12 @@ fn collision(
             // deformation
             let v = (m1 * u1 + m2 * u2) / (m1 + m2);
             (Vel(v1 - u1 + v), Vel(v2 - u2 + v))
-            // (Vel(v + vp1), Vel(v + vp2))
         },
 
         CollisionKind::Elastic => {
             // combined mass
             let m = m1 + m2;
+            // preserves total kinetic energy
             (
                 Vel(v1 - u1 + ((m1 - m2) * u1 + 2.0 * m2 * u2) / m),
                 Vel(v2 - u2 + ((m2 - m1) * u2 + 2.0 * m1 * u1) / m),
@@ -523,40 +523,31 @@ impl<'a> PhysicsData<'a> {
                                             let dir_from_other =
                                                 Dir::from_unnormalized(pos - pos_other)
                                                     .or(rel_mv_dir);
-                                            let d = rel_mv_dir
+
+                                            // only collide if moving towards the other
+                                            if rel_mv_dir
                                                 .and_then(|rel_vel| {
                                                     Some(rel_vel.dot(*dir_from_other?))
                                                 })
-                                                .unwrap_or_default();
-
-                                            if d < inline_tweak::tweak!(-0.01) {
-                                                // temp hack to avoid refactor
+                                                .map_or(false, |d| d.is_sign_negative())
+                                            {
+                                                // temp hack to avoid more refactoring
                                                 let vel_other = Vel(previous_cache_other
                                                     .velocity_dt
                                                     / read.dt.0.max(0.001));
-                                                // Change velocity
+                                                // Set new velocity
                                                 vel.0 = collision(
                                                     (mass, *vel),
                                                     (mass_other, vel_other),
-                                                    CollisionKind::Inelastic,
+                                                    if inline_tweak::tweak!(true) {
+                                                        CollisionKind::Inelastic
+                                                    } else {
+                                                        CollisionKind::Elastic
+                                                    },
                                                     dir_from_other.unwrap_or_default(),
                                                 )
-                                                .0
+                                                .0 // yes, a waste
                                                 .0;
-                                            }
-
-                                            // Pushback
-                                            if inline_tweak::tweak!(false) {
-                                                let speed: f32 = inline_tweak::tweak!(10.0);
-                                                let overlap = collision_dist - diff.magnitude();
-                                                // let a: f32 = inline_tweak::tweak!(-1.0);
-                                                if overlap.is_sign_positive() {
-                                                    vel.0 += *dir_from_other.unwrap_or_default()
-                                                        * speed
-                                                        * mass_other.0
-                                                        / (mass.0 + mass_other.0)
-                                                        * step_delta;
-                                                }
                                             }
                                         }
 
