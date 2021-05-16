@@ -644,9 +644,9 @@ impl<'a> AgentData<'a> {
                 let dist_sqrd = self.pos.0.distance_squared(tgt_pos.0);
                 // Should the agent flee?
                 if 1.0 - agent.psyche.aggro > self.damage && self.flees {
-                    if agent.action_state.timer == 0.0 {
+                    if agent.action_state.timer == 0.0 && can_speak(agent) {
                         let msg = "npc.speech.villager_under_attack".to_string();
-                        self.chat_general_if_can_speak(agent, msg, event_emitter);
+                        self.chat_general(msg, event_emitter);
                         self.emit_villager_alarm(read_data.time.0, event_emitter);
                         agent.action_state.timer = 0.01;
                     } else if agent.action_state.timer < FLEE_DURATION || dist_sqrd < MAX_FLEE_DIST
