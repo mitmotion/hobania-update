@@ -644,21 +644,10 @@ impl<'a> AgentData<'a> {
                 let dist_sqrd = self.pos.0.distance_squared(tgt_pos.0);
                 // Should the agent flee?
                 if 1.0 - agent.psyche.aggro > self.damage && self.flees {
-                    if agent.action_state.timer == 0.0
-                        && agent.behavior.can(BehaviorCapability::SPEAK)
-                    {
+                    if agent.action_state.timer == 0.0 {
                         let msg = "npc.speech.villager_under_attack".to_string();
-                        event_emitter
-                            .emit(ServerEvent::Chat(UnresolvedChatMsg::npc(*self.uid, msg)));
-                        event_emitter.emit(ServerEvent::Sound {
-                            sound: Sound::new(
-                                SoundKind::VillagerAlarm,
-                                self.pos.0,
-                                100.0,
-                                read_data.time.0,
-                                Some(*self.entity),
-                            ),
-                        });
+                        self.chat_general_if_can_speak(agent, msg, event_emitter);
+                        self.emit_villager_alarm(read_data.time.0, event_emitter);
                         agent.action_state.timer = 0.01;
                     } else if agent.action_state.timer < FLEE_DURATION || dist_sqrd < MAX_FLEE_DIST
                     {
@@ -681,6 +670,7 @@ impl<'a> AgentData<'a> {
                                 .emit(ServerEvent::Chat(UnresolvedChatMsg::npc(*self.uid, msg)));
                         }
                         agent.target = None;
+                        self.idle(agent, controller, &read_data);
                     // Choose a new target every 10 seconds, but only for
                     // enemies
                     // TODO: This should be more principled. Consider factoring
@@ -956,7 +946,7 @@ impl<'a> AgentData<'a> {
         let msg = agent.inbox.pop_front();
         match msg {
             Some(AgentEvent::Talk(by, subject)) => {
-                if agent.behavior.can(BehaviorCapability::SPEAK) {
+                if can_speak(agent) {
                     if let Some(target) = read_data.uid_allocator.retrieve_entity_internal(by.id())
                     {
                         agent.target = build_target(target, false, read_data.time.0);
@@ -1005,19 +995,13 @@ impl<'a> AgentData<'a> {
                                                     destination_name
                                                 )
                                             };
-                                        event_emitter.emit(ServerEvent::Chat(
-                                            UnresolvedChatMsg::npc(*self.uid, msg),
-                                        ));
+                                        self.chat_general(msg, event_emitter);
                                     } else if agent.behavior.can_trade() {
                                         let msg = "npc.speech.merchant_advertisement".to_string();
-                                        event_emitter.emit(ServerEvent::Chat(
-                                            UnresolvedChatMsg::npc(*self.uid, msg),
-                                        ));
+                                        self.chat_general(msg, event_emitter);
                                     } else {
                                         let msg = "npc.speech.villager".to_string();
-                                        event_emitter.emit(ServerEvent::Chat(
-                                            UnresolvedChatMsg::npc(*self.uid, msg),
-                                        ));
+                                        self.chat_general(msg, event_emitter);
                                     }
                                 },
                                 Subject::Trade => {
@@ -1029,26 +1013,16 @@ impl<'a> AgentData<'a> {
                                             ));
                                             let msg =
                                                 "npc.speech.merchant_advertisement".to_string();
-                                            event_emitter.emit(ServerEvent::Chat(
-                                                UnresolvedChatMsg::npc(*self.uid, msg),
-                                            ));
+                                            self.chat_general(msg, event_emitter);
                                         } else {
-                                            event_emitter.emit(ServerEvent::Chat(
-                                                UnresolvedChatMsg::npc(
-                                                    *self.uid,
-                                                    "npc.speech.merchant_busy".to_string(),
-                                                ),
-                                            ));
+                                            let msg = "npc.speech.merchant_busy".to_string();
+                                            self.chat_general(msg, event_emitter);
                                         }
                                     } else {
                                         // TODO: maybe make some travellers willing to trade with
                                         // simpler goods like potions
-                                        event_emitter.emit(ServerEvent::Chat(
-                                            UnresolvedChatMsg::npc(
-                                                *self.uid,
-                                                "npc.speech.villager_decline_trade".to_string(),
-                                            ),
-                                        ));
+                                        let msg = "npc.speech.villager_decline_trade".to_string();
+                                        self.chat_general(msg, event_emitter);
                                     }
                                 },
                                 Subject::Mood => {
@@ -1097,33 +1071,21 @@ impl<'a> AgentData<'a> {
                                                 MemoryItem::Mood { state } => state.describe(),
                                                 _ => "".to_string(),
                                             };
-                                            event_emitter.emit(ServerEvent::Chat(
-                                                UnresolvedChatMsg::npc(*self.uid, msg),
-                                            ));
+                                            self.chat_general(msg, event_emitter);
                                         }
                                     }
                                 },
                                 Subject::Location(location) => {
                                     if let Some(tgt_pos) = read_data.positions.get(target) {
-                                        event_emitter.emit(ServerEvent::Chat(
-                                            UnresolvedChatMsg::npc(
-                                                *self.uid,
-                                                format!(
-                                                    "{} ? I think it's {} {} from here!",
-                                                    location.name,
-                                                    Distance::from_dir(
-                                                        location.origin.as_::<f32>()
-                                                            - tgt_pos.0.xy()
-                                                    )
-                                                    .name(),
-                                                    Direction::from_dir(
-                                                        location.origin.as_::<f32>()
-                                                            - tgt_pos.0.xy()
-                                                    )
-                                                    .name()
-                                                ),
-                                            ),
-                                        ));
+                                        let raw_dir = location.origin.as_::<f32>() - tgt_pos.0.xy();
+                                        let dist = Distance::from_dir(raw_dir).name();
+                                        let dir = Direction::from_dir(raw_dir).name();
+
+                                        let msg = format!(
+                                            "{} ? I think it's {} {} from here!",
+                                            location.name, dist, dir
+                                        );
+                                        self.chat_general(msg, event_emitter);
                                     }
                                 },
                                 Subject::Person(person) => {
@@ -1158,9 +1120,7 @@ impl<'a> AgentData<'a> {
                                                 person.name()
                                             )
                                         };
-                                        event_emitter.emit(ServerEvent::Chat(
-                                            UnresolvedChatMsg::npc(*self.uid, msg),
-                                        ));
+                                        self.chat_general(msg, event_emitter);
                                     }
                                 },
                                 Subject::Work => {},
@@ -1189,24 +1149,16 @@ impl<'a> AgentData<'a> {
                         controller
                             .events
                             .push(ControlEvent::InviteResponse(InviteResponse::Decline));
-                        if agent.behavior.can(BehaviorCapability::SPEAK) {
-                            event_emitter.emit(ServerEvent::Chat(UnresolvedChatMsg::npc(
-                                *self.uid,
-                                "npc.speech.merchant_busy".to_string(),
-                            )));
-                        }
+                        let msg = "npc.speech.merchant_busy".to_string();
+                        self.chat_general_if_can_speak(agent, msg, event_emitter);
                     }
                 } else {
                     // TODO: Provide a hint where to find the closest merchant?
                     controller
                         .events
                         .push(ControlEvent::InviteResponse(InviteResponse::Decline));
-                    if agent.behavior.can(BehaviorCapability::SPEAK) {
-                        event_emitter.emit(ServerEvent::Chat(UnresolvedChatMsg::npc(
-                            *self.uid,
-                            "npc.speech.villager_decline_trade".to_string(),
-                        )));
-                    }
+                    let msg = "npc.speech.villager_decline_trade".to_string();
+                    self.chat_general_if_can_speak(agent, msg, event_emitter);
                 }
             },
             Some(AgentEvent::TradeAccepted(with)) => {
@@ -1224,15 +1176,13 @@ impl<'a> AgentData<'a> {
                 if agent.behavior.is(BehaviorState::TRADING) {
                     match result {
                         TradeResult::Completed => {
-                            event_emitter.emit(ServerEvent::Chat(UnresolvedChatMsg::npc(
-                                *self.uid,
-                                "npc.speech.merchant_trade_successful".to_string(),
-                            )))
+                            let msg = "npc.speech.merchant_trade_successful".to_string();
+                            self.chat_general(msg, event_emitter);
                         },
-                        _ => event_emitter.emit(ServerEvent::Chat(UnresolvedChatMsg::npc(
-                            *self.uid,
-                            "npc.speech.merchant_trade_declined".to_string(),
-                        ))),
+                        _ => {
+                            let msg = "npc.speech.merchant_trade_declined".to_string();
+                            self.chat_general(msg, event_emitter);
+                        },
                     }
                     agent.behavior.unset(BehaviorState::TRADING);
                 }
@@ -1269,6 +1219,7 @@ impl<'a> AgentData<'a> {
                                 balance0 / balance1 * 100.0
                             );
                             if let Some(tgt_data) = &agent.target {
+                                // If talking with someone in particular, "tell" it only to them
                                 if let Some(with) = read_data.uids.get(tgt_data.target) {
                                     event_emitter.emit(ServerEvent::Chat(
                                         UnresolvedChatMsg::npc_tell(*self.uid, *with, msg),
@@ -1297,7 +1248,7 @@ impl<'a> AgentData<'a> {
                 }
             },
             _ => {
-                if agent.behavior.can(BehaviorCapability::SPEAK) {
+                if can_speak(agent) {
                     // No new events, continue looking towards the last interacting player for some
                     // time
                     if let Some(Target { target, .. }) = &agent.target {
@@ -1463,7 +1414,7 @@ impl<'a> AgentData<'a> {
                     && !invulnerability_is_in_buffs(read_data.buffs.get(*e))
                     && (try_owner_alignment(self.alignment, read_data).and_then(|a| try_owner_alignment(*e_alignment, read_data).map(|b| a.hostile_towards(*b))).unwrap_or(false) || (
                             if let Some(rtsim_entity) = &self.rtsim_entity {
-                                if agent.behavior.can(BehaviorCapability::SPEAK) {
+                                if can_speak(agent) {
                                     if rtsim_entity.brain.remembers_fight_with_character(&e_stats.name) {
                                         agent.rtsim_controller.events.push(
                                             RtSimEvent::AddMemory(Memory {
@@ -1472,7 +1423,7 @@ impl<'a> AgentData<'a> {
                                             })
                                         );
                                         let msg = format!("{}! How dare you cross me again!", e_stats.name.clone());
-                                        event_emitter.emit(ServerEvent::Chat(UnresolvedChatMsg::npc(*self.uid, msg)));
+                                        self.chat_general(msg, event_emitter);
                                         true
                                     } else {
                                         false
@@ -1487,7 +1438,7 @@ impl<'a> AgentData<'a> {
                         (
                             self.alignment.map_or(false, |alignment| {
                                 if matches!(alignment, Alignment::Npc) && e_inventory.equipped_items().filter(|item| item.tags().contains(&ItemTag::Cultist)).count() > 2 {
-                                    if agent.behavior.can(BehaviorCapability::SPEAK) {
+                                    if can_speak(agent) {
                                         if self.rtsim_entity.is_some() {
                                             agent.rtsim_controller.events.push(
                                                 RtSimEvent::AddMemory(Memory {
@@ -1497,16 +1448,8 @@ impl<'a> AgentData<'a> {
                                             );
                                         }
                                         let msg = "npc.speech.villager_cultist_alarm".to_string();
-                                        event_emitter.emit(ServerEvent::Chat(UnresolvedChatMsg::npc(*self.uid, msg)));
-                                        event_emitter.emit(ServerEvent::Sound {
-                                            sound: Sound::new(
-                                                SoundKind::VillagerAlarm,
-                                                self.pos.0,
-                                                100.0,
-                                                read_data.time.0,
-                                                Some(*self.entity),
-                                            ),
-                                        });
+                                        self.chat_general(msg, event_emitter);
+                                        self.emit_villager_alarm(read_data.time.0, event_emitter);
                                     }
                                     true
                                 } else {
@@ -4001,6 +3944,20 @@ impl<'a> AgentData<'a> {
         }
     }
 
+    fn chat_general_if_can_speak(
+        &self,
+        agent: &Agent,
+        msg: String,
+        event_emitter: &mut Emitter<'_, ServerEvent>,
+    ) -> bool {
+        if can_speak(agent) {
+            event_emitter.emit(ServerEvent::Chat(UnresolvedChatMsg::npc(*self.uid, msg)));
+            true
+        } else {
+            false
+        }
+    }
+
     fn jump_if(&self, controller: &mut Controller, condition: bool) {
         if condition {
             controller
@@ -4011,6 +3968,22 @@ impl<'a> AgentData<'a> {
                 .actions
                 .push(ControlAction::CancelInput(InputKind::Jump))
         }
+    }
+
+    fn chat_general(&self, msg: String, event_emitter: &mut Emitter<'_, ServerEvent>) {
+        event_emitter.emit(ServerEvent::Chat(UnresolvedChatMsg::npc(*self.uid, msg)));
+    }
+
+    fn emit_villager_alarm(&self, time: f64, event_emitter: &mut Emitter<'_, ServerEvent>) {
+        event_emitter.emit(ServerEvent::Sound {
+            sound: Sound::new(
+                SoundKind::VillagerAlarm,
+                self.pos.0,
+                100.0,
+                time,
+                Some(*self.entity),
+            ),
+        });
     }
 }
 
@@ -4133,3 +4106,5 @@ fn build_target_data<'a>(
         scale: read_data.scales.get(target),
     }
 }
+
+fn can_speak(agent: &Agent) -> bool { agent.behavior.can(BehaviorCapability::SPEAK) }
