@@ -13,7 +13,7 @@ use common::{
     states,
     terrain::{Block, TerrainGrid},
     uid::Uid,
-    util::{Projection, SpatialGrid},
+    util::{Dir, Plane, Projection, SpatialGrid},
     vol::{BaseVol, ReadVol},
 };
 use common_base::{prof_span, span};
@@ -26,6 +26,46 @@ use specs::{
 };
 use std::ops::Range;
 use vek::*;
+
+enum CollisionKind {
+    Inelastic, // when coefficient of restitution is zero
+    Elastic,   // when coefficient of restitution is 1
+}
+
+/// Collision between two objects, resulting in a change in their respective
+/// trajectories.
+fn collision(
+    (mass, vel): (&Mass, Vel),
+    (mass_other, vel_other): (&Mass, Vel),
+    collision_kind: CollisionKind, // coefficient_of_restitution: f32,
+    collision_normal: Dir,
+) -> (Vel, Vel) {
+    let (m1, m2) = (mass.0, mass_other.0);
+    let (v1, v2) = (vel.0, vel_other.0);
+    // velocities projected along the collision normal
+    let (u1, u2) = (
+        v1.projected(&collision_normal),
+        v2.projected(&collision_normal),
+    );
+    match collision_kind {
+        CollisionKind::Inelastic => {
+            // Breaks conservation of energy as we do not account for internal heat or
+            // deformation
+            let v = (m1 * u1 + m2 * u2) / (m1 + m2);
+            (Vel(v1 - u1 + v), Vel(v2 - u2 + v))
+            // (Vel(v + vp1), Vel(v + vp2))
+        },
+
+        CollisionKind::Elastic => {
+            // combined mass
+            let m = m1 + m2;
+            (
+                Vel(v1 - u1 + ((m1 - m2) * u1 + 2.0 * m2 * u2) / m),
+                Vel(v2 - u2 + ((m2 - m1) * u2 + 2.0 * m1 * u1) / m),
+            )
+        },
+    }
+}
 
 /// The density of the fluid as a function of submersion ratio in given fluid
 /// where it is assumed that any unsubmersed part is is air.
@@ -305,7 +345,7 @@ impl<'a> PhysicsData<'a> {
     }
 
     #[allow(clippy::nonminimal_bool)]
-    fn apply_pushback(&mut self, job: &mut Job<Sys>, spatial_grid: &SpatialGrid) {
+    fn collide_entities(&mut self, job: &mut Job<Sys>, spatial_grid: &SpatialGrid) {
         span!(_guard, "Apply pushback");
         job.cpu_stats.measure(ParMode::Rayon);
         let PhysicsData {
@@ -372,7 +412,7 @@ impl<'a> PhysicsData<'a> {
 
                     let is_projectile = projectile.is_some();
 
-                    let mut vel_delta = Vec3::zero();
+                    // let initial_vel = vel.clone();
 
                     let query_center = previous_cache.center.xy();
                     let query_radius = previous_cache.collision_boundary;
@@ -390,6 +430,7 @@ impl<'a> PhysicsData<'a> {
                                         entity,
                                         uid,
                                         pos,
+                                        // write.velocities.get(entity),
                                         previous_cache,
                                         mass,
                                         read.colliders.get(entity),
@@ -402,6 +443,7 @@ impl<'a> PhysicsData<'a> {
                                 entity_other,
                                 other,
                                 pos_other,
+                                // vel_other,
                                 previous_cache_other,
                                 mass_other,
                                 collider_other,
@@ -457,15 +499,14 @@ impl<'a> PhysicsData<'a> {
                                             entity_entity_collisions += 1;
                                         }
 
-                                        // Don't apply repulsive force to projectiles or if
-                                        // we're
-                                        // colliding
-                                        // with a terrain-like entity, or if we are a
-                                        // terrain-like
-                                        // entity
+                                        // Don't apply repulsive force to projectiles or if we're
+                                        // colliding with a terrain-like entity, or if we are a
+                                        // terrain-like entity
                                         //
                                         // Don't apply force when entity is a sticky which is on the
                                         // ground (or on the wall)
+                                        //
+                                        // Don't collide entities moving away from each other
                                         if !(is_sticky && !is_mid_air)
                                             && diff.magnitude_squared() > 0.0
                                             && !is_projectile
@@ -475,13 +516,48 @@ impl<'a> PhysicsData<'a> {
                                             )
                                             && !matches!(collider, Some(Collider::Voxel { .. }))
                                         {
-                                            let force = 400.0
-                                                * (collision_dist - diff.magnitude())
-                                                * mass_other.0
-                                                / (mass.0 + mass_other.0);
+                                            let rel_mv_dir = Dir::from_unnormalized(
+                                                previous_cache.velocity_dt
+                                                    - previous_cache_other.velocity_dt,
+                                            );
+                                            let dir_from_other =
+                                                Dir::from_unnormalized(pos - pos_other)
+                                                    .or(rel_mv_dir);
+                                            let d = rel_mv_dir
+                                                .and_then(|rel_vel| {
+                                                    Some(rel_vel.dot(*dir_from_other?))
+                                                })
+                                                .unwrap_or_default();
 
-                                            vel_delta +=
-                                                Vec3::from(diff.normalized()) * force * step_delta;
+                                            if d < inline_tweak::tweak!(-0.01) {
+                                                // temp hack to avoid refactor
+                                                let vel_other = Vel(previous_cache_other
+                                                    .velocity_dt
+                                                    / read.dt.0.max(0.001));
+                                                // Change velocity
+                                                vel.0 = collision(
+                                                    (mass, *vel),
+                                                    (mass_other, vel_other),
+                                                    CollisionKind::Inelastic,
+                                                    dir_from_other.unwrap_or_default(),
+                                                )
+                                                .0
+                                                .0;
+                                            }
+
+                                            // Pushback
+                                            if inline_tweak::tweak!(false) {
+                                                let speed: f32 = inline_tweak::tweak!(10.0);
+                                                let overlap = collision_dist - diff.magnitude();
+                                                // let a: f32 = inline_tweak::tweak!(-1.0);
+                                                if overlap.is_sign_positive() {
+                                                    vel.0 += *dir_from_other.unwrap_or_default()
+                                                        * speed
+                                                        * mass_other.0
+                                                        / (mass.0 + mass_other.0)
+                                                        * step_delta;
+                                                }
+                                            }
                                         }
 
                                         collided = true;
@@ -490,8 +566,7 @@ impl<'a> PhysicsData<'a> {
                             },
                         );
 
-                    // Change velocity
-                    vel.0 += vel_delta * read.dt.0;
+                    // vel.0 = vel_;
 
                     // Metrics
                     PhysicsMetrics {
@@ -1212,7 +1287,7 @@ impl<'a> System<'a> for Sys {
         physics_data.maintain_pushback_cache();
 
         let spatial_grid = physics_data.construct_spatial_grid();
-        physics_data.apply_pushback(job, &spatial_grid);
+        physics_data.collide_entities(job, &spatial_grid);
 
         let voxel_collider_spatial_grid = physics_data.construct_voxel_collider_spatial_grid();
         physics_data.handle_movement_and_terrain(job, &voxel_collider_spatial_grid);
