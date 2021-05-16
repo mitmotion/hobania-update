@@ -65,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Activating chat typing now ungrabs the cursor, and vice versa.
 - Admins can now grant normal players plots to place blocks within
 - Diamonds are now much more than twice as expensive as twigs.
 - Permission to build is no longer tied to being an admin
