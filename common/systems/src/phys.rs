@@ -2,9 +2,8 @@ use common::{
     comp::{
         body::ship::figuredata::{VoxelCollider, VOXEL_COLLIDER_MANIFEST},
         fluid_dynamics::{Fluid, Wings},
-        BeamSegment, Body, CharacterState, Collider, Controller, Density, InputKind, Mass,
-        Mounting, Ori, PhysicsState, Pos, PosVelDefer, PreviousPhysCache, Projectile, Scale,
-        Shockwave, Sticky, Vel,
+        BeamSegment, Body, CharacterState, Collider, Density, Mass, Mounting, Ori, PhysicsState,
+        Pos, PosVelDefer, PreviousPhysCache, Projectile, Scale, Shockwave, Sticky, Vel,
     },
     consts::{AIR_DENSITY, FRIC_GROUND, GRAVITY},
     event::{EventBus, ServerEvent},
@@ -27,24 +26,8 @@ use specs::{
 use std::ops::Range;
 use vek::*;
 
-/// The density of the fluid as a function of submersion ratio in given fluid
-/// where it is assumed that any unsubmersed part is is air.
-// TODO: Better suited partial submersion curve?
-fn fluid_density(height: f32, fluid: &Fluid) -> Density {
-    // If depth is less than our height (partial submersion), remove
-    // fluid density based on the ratio of displacement to full volume.
-    let immersion = fluid
-        .depth()
-        .map_or(1.0, |depth| (depth / height).clamp(0.0, 1.0));
 
-    Density(fluid.density().0 * immersion + AIR_DENSITY * (1.0 - immersion))
-}
-
-fn get_wings(
-    character_state: Option<&CharacterState>,
-    controller: Option<&Controller>,
-    body: &Body,
-) -> Option<Wings> {
+fn get_wings(character_state: Option<&CharacterState>) -> Option<Wings> {
     match *character_state? {
         CharacterState::Glide(states::glide::Data {
             aspect_ratio,
@@ -57,18 +40,21 @@ fn get_wings(
             ori,
         }),
 
-        _ => {
-            if body.fly_thrust().is_some() {
-                if controller?.queued_inputs.contains_key(&InputKind::Fly) {
-                    Some(Wings::Flying)
-                } else {
-                    Some(Wings::Folded)
-                }
-            } else {
-                None
-            }
-        },
+        _ => None,
     }
+}
+
+/// The density of the fluid as a function of submersion ratio in given fluid
+/// where it is assumed that any unsubmersed part is is air.
+// TODO: Better suited partial submersion curve?
+fn fluid_density(height: f32, fluid: &Fluid) -> Density {
+    // If depth is less than our height (partial submersion), remove
+    // fluid density based on the ratio of displacement to full volume.
+    let immersion = fluid
+        .depth()
+        .map_or(1.0, |depth| (depth / height).clamp(0.0, 1.0));
+
+    Density(fluid.density().0 * immersion + AIR_DENSITY * (1.0 - immersion))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -148,7 +134,6 @@ pub struct PhysicsRead<'a> {
     stickies: ReadStorage<'a, Sticky>,
     masses: ReadStorage<'a, Mass>,
     colliders: ReadStorage<'a, Collider>,
-    controllers: ReadStorage<'a, Controller>,
     mountings: ReadStorage<'a, Mounting>,
     projectiles: ReadStorage<'a, Projectile>,
     beams: ReadStorage<'a, BeamSegment>,
@@ -607,7 +592,6 @@ impl<'a> PhysicsData<'a> {
             &read.bodies,
             read.character_states.maybe(),
             &write.physics_states,
-            read.controllers.maybe(),
             &read.masses,
             &read.densities,
             !&read.mountings,
@@ -626,7 +610,6 @@ impl<'a> PhysicsData<'a> {
                     body,
                     character_state,
                     physics_state,
-                    controller,
                     mass,
                     density,
                     _,
@@ -651,7 +634,7 @@ impl<'a> PhysicsData<'a> {
                                 vel.0.z -= dt.0 * GRAVITY;
                             },
                             Some(fluid) => {
-                                let wings = get_wings(character_state, controller, body);
+                                let wings = get_wings(character_state);
                                 vel.0 = integrate_forces(
                                     &dt,
                                     *vel,
