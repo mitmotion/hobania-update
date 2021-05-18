@@ -184,8 +184,16 @@ impl Body {
             },
             Body::BipedSmall(_) => 50.0,
 
-            // Ravens are 0.69-2 kg, crows are 0.51 kg on average. Our birds are quite large
-            Body::BirdMedium(_) => 3.0,
+            // ravens are 0.69-2 kg, crows are 0.51 kg on average.
+            Body::BirdMedium(body) => match body.species {
+                bird_medium::Species::Chicken => 2.0, // ~✅ Red junglefowl are 1-1.5 kg
+                bird_medium::Species::Duck => 2.0,
+                bird_medium::Species::Eagle => 10.0, // ~✅ Steller's sea eagle are 5-9 kg
+                bird_medium::Species::Goose => 3.5,  // ~✅ Swan geese are 2.8-3.5 kg
+                bird_medium::Species::Owl => 2.0,
+                bird_medium::Species::Parrot => 2.0,
+                bird_medium::Species::Peacock => 5.0,
+            },
             Body::BirdLarge(_) => 50.0,
 
             Body::Dragon(_) => 20_000.0,

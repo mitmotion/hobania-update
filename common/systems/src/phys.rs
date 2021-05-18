@@ -26,7 +26,6 @@ use specs::{
 use std::ops::Range;
 use vek::*;
 
-
 fn get_wings(character_state: Option<&CharacterState>) -> Option<Wings> {
     match *character_state? {
         CharacterState::Glide(states::glide::Data {

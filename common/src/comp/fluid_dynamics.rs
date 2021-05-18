@@ -113,32 +113,27 @@ impl Body {
             // All the coefficients come pre-multiplied by their reference area
             0.5 * fluid_density
                 * v_sq
-                * wings
-                    .and_then(|wings| match *wings {
-                        Wings::Gliding {
-                            aspect_ratio,
-                            planform_area,
-                            ori,
-                        } => {
-                            if aspect_ratio > 25.0 {
-                                tracing::warn!(
-                                    "Calculating lift for wings with an aspect ratio of {}. The \
-                                     formulas are only valid for aspect ratios below 25.",
-                                    aspect_ratio
-                                )
-                            };
-                            Some((aspect_ratio.min(24.0), planform_area, ori))
-                        },
-                        _ => None,
-                    })
-                    .map(|(ar, area, ori)| {
+                * match wings {
+                    Some(&Wings::Gliding {
+                        aspect_ratio,
+                        planform_area,
+                        ori,
+                    }) => {
+                        if aspect_ratio > 25.0 {
+                            tracing::warn!(
+                                "Calculating lift for wings with an aspect ratio of {}. The \
+                                 formulas are only valid for aspect ratios below 25.",
+                                aspect_ratio
+                            )
+                        };
+                        let ar = aspect_ratio.min(24.0);
                         // We have an elliptical wing; proceed to calculate its lift and drag
 
                         // aoa will be positive when we're pitched up and negative otherwise
                         let aoa = angle_of_attack(&ori, &rel_flow_dir);
                         // c_l will be positive when aoa is positive (we have positive lift,
                         // producing an upward force) and negative otherwise
-                        let c_l = lift_coefficient(ar, area, aoa);
+                        let c_l = lift_coefficient(ar, planform_area, aoa);
 
                         // lift dir will be orthogonal to the local relative flow vector.
                         // Local relative flow is the resulting vector of (relative) freestream
@@ -162,22 +157,26 @@ impl Body {
                             ori.pitched_down(aoa_eff).up()
                         };
 
-                        // drag coefficient due to lift
+                        // drag coefficient
                         let c_d = {
                             // Oswald's efficiency factor (empirically derived--very magical)
                             // (this definition should not be used for aspect ratios > 25)
                             let e = 1.78 * (1.0 - 0.045 * ar.powf(0.68)) - 0.64;
+                            // induced drag coefficient (drag due to lift)
+                            let cdi = c_l.powi(2) / (PI * e * ar);
 
-                            zero_lift_drag_coefficient(area)
+                            zero_lift_drag_coefficient(planform_area)
                                 + self.parasite_drag_coefficient(wings)
-                                + c_l.powi(2) / (PI * e * ar)
+                                + cdi
                         };
                         debug_assert!(c_d.is_sign_positive());
                         debug_assert!(c_l.is_sign_positive() || aoa.is_sign_negative());
 
                         c_l * *lift_dir + c_d * *rel_flow_dir
-                    })
-                    .unwrap_or_else(|| self.parasite_drag_coefficient(wings) * *rel_flow_dir)
+                    },
+
+                    _ => self.parasite_drag_coefficient(wings) * *rel_flow_dir,
+                }
         }
     }
 
@@ -192,7 +191,8 @@ impl Body {
             // Cross-section, head/feet first
             Body::BipedLarge(_) | Body::BipedSmall(_) | Body::Golem(_) | Body::Humanoid(_) => {
                 let dim = self.dimensions().xy().map(|a| a * 0.5);
-                0.7 * PI * dim.x * dim.y
+                const CD: f32 = 0.7;
+                CD * PI * dim.x * dim.y
             },
 
             // Cross-section, nose/tail first
@@ -201,7 +201,7 @@ impl Body {
             | Body::QuadrupedSmall(_)
             | Body::QuadrupedLow(_) => {
                 let dim = self.dimensions().map(|a| a * 0.5);
-                let cd = if matches!(self, Body::QuadrupedLow(_)) {
+                let cd: f32 = if matches!(self, Body::QuadrupedLow(_)) {
                     0.7
                 } else {
                     1.0
@@ -212,7 +212,7 @@ impl Body {
             // Cross-section, zero-lift angle; exclude the wings (width * 0.2)
             Body::BirdMedium(_) | Body::BirdLarge(_) | Body::Dragon(_) => {
                 let dim = self.dimensions().map(|a| a * 0.5);
-                let cd = if matches!(wings, Some(Wings::Folded) | None) {
+                let cd: f32 = if matches!(wings, Some(Wings::Folded) | None) {
                     0.7
                 } else {
                     // "Field Estimates of Body Drag Coefficient on the Basis of Dives in Passerine
@@ -231,7 +231,8 @@ impl Body {
                 let dim = self.dimensions().map(|a| a * 0.5);
                 // "A Simple Method to Determine Drag Coefficients in Aquatic Animals",
                 // D. Bilo and W. Nachtigall, 1980
-                0.031 * PI * dim.x * 0.2 * dim.z
+                const CD: f32 = 0.031;
+                CD * PI * dim.x * 0.2 * dim.z
             },
 
             Body::Object(object) => match object {
@@ -247,7 +248,8 @@ impl Body {
                 | object::Body::FireworkYellow
                 | object::Body::MultiArrow => {
                     let dim = self.dimensions().map(|a| a * 0.5);
-                    0.02 * PI * dim.x * dim.z
+                    const CD: f32 = 0.02;
+                    CD * PI * dim.x * dim.z
                 },
 
                 // spherical-ish objects
@@ -265,12 +267,14 @@ impl Body {
                 | object::Body::Pumpkin4
                 | object::Body::Pumpkin5 => {
                     let dim = self.dimensions().map(|a| a * 0.5);
-                    0.5 * PI * dim.x * dim.z
+                    const CD: f32 = 0.5;
+                    CD * PI * dim.x * dim.z
                 },
 
                 _ => {
                     let dim = self.dimensions();
-                    2.0 * (PI / 6.0 * dim.x * dim.y * dim.z).powf(2.0 / 3.0)
+                    const CD: f32 = 2.0;
+                    CD * (PI / 6.0 * dim.x * dim.y * dim.z).powf(2.0 / 3.0)
                 },
             },
 
