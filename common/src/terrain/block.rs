@@ -93,6 +93,11 @@ impl<'a> TryFrom<&'a str> for BlockKind {
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct Block {
     kind: BlockKind,
+    /// If `kind.is_filled()` is true, attr is to be interpreted as 8 bit rgb
+    /// data. Otherwise:
+    /// - `attr[0]` contains the `SpriteKind` of the sprite in this block
+    /// - `attr[1]` contains the bit pattern `xxxxxyyy`, where x is a plant
+    ///   growth stage from 0-31, and y is an orientation from 0-7.
     attr: [u8; 3],
 }
 

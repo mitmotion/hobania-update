@@ -188,11 +188,68 @@ pub struct GrowthSpec {
 
 impl SpriteKind {
     pub fn solid_height(&self) -> Option<f32> {
-        SPRITE_BEHAVIOR_MANIFEST
-            .read()
-            .solid_height
-            .get(self)
-            .copied()
+        // Beware: the height *must* be <= `MAX_HEIGHT` or the collision system will not
+        // properly detect it!
+        Some(match self {
+            SpriteKind::Tomato => 1.65,
+            SpriteKind::LargeCactus => 2.5,
+            SpriteKind::Scarecrow => 3.0,
+            SpriteKind::Turnip => 0.36,
+            SpriteKind::Pumpkin => 0.81,
+            SpriteKind::Cabbage => 0.45,
+            SpriteKind::Chest => 1.09,
+            SpriteKind::StreetLamp => 2.65,
+            SpriteKind::Carrot => 0.18,
+            SpriteKind::Radish => 0.18,
+            SpriteKind::FireBowlGround => 0.55,
+            // TODO: Uncomment this when we have a way to open doors
+            // SpriteKind::Door => 3.0,
+            SpriteKind::Bed => 1.54,
+            SpriteKind::Bench => 0.5,
+            SpriteKind::ChairSingle => 0.5,
+            SpriteKind::ChairDouble => 0.5,
+            SpriteKind::CoatRack => 2.36,
+            SpriteKind::Crate => 0.90,
+            SpriteKind::DrawerSmall => 1.0,
+            SpriteKind::DrawerMedium => 2.0,
+            SpriteKind::DrawerLarge => 2.0,
+            SpriteKind::DungeonWallDecor => 1.0,
+            SpriteKind::Planter => 1.09,
+            SpriteKind::TableSide => 1.27,
+            SpriteKind::TableDining => 1.45,
+            SpriteKind::TableDouble => 1.45,
+            SpriteKind::WardrobeSingle => 3.0,
+            SpriteKind::WardrobeDouble => 3.0,
+            SpriteKind::Pot => 0.90,
+            SpriteKind::Mud => 0.36,
+            SpriteKind::ChestBuried => 0.91,
+            SpriteKind::StonyCoral => 1.4,
+            // TODO => Find suitable heights.
+            SpriteKind::BarrelCactus => 1.0,
+            SpriteKind::RoundCactus => 1.0,
+            SpriteKind::ShortCactus => 1.0,
+            SpriteKind::MedFlatCactus => 1.0,
+            SpriteKind::ShortFlatCactus => 1.0,
+            SpriteKind::Apple => 1.0,
+            SpriteKind::Velorite => 1.0,
+            SpriteKind::VeloriteFrag => 1.0,
+            SpriteKind::Coconut => 1.0,
+            SpriteKind::StreetLampTall => 1.0,
+            SpriteKind::Window1 => 1.0,
+            SpriteKind::Window2 => 1.0,
+            SpriteKind::Window3 => 1.0,
+            SpriteKind::Window4 => 1.0,
+            SpriteKind::DropGate => 1.0,
+            // TODO: Figure out if this should be solid or not.
+            SpriteKind::Shelf => 1.0,
+            SpriteKind::Lantern => 0.9,
+            SpriteKind::CraftingBench => 1.18,
+            SpriteKind::Forge => 2.7,
+            SpriteKind::Cauldron => 1.27,
+            SpriteKind::Anvil => 1.1,
+            SpriteKind::CookingPot => 1.36,
+            _ => return None,
+        })
     }
 
     pub fn is_collectible(&self) -> bool {
@@ -315,6 +372,8 @@ pub struct PlantGrowthData {
 struct PlantGrowthPerKind {
     // TODO: if we made use of the assumption that chunks are 32x32xk voxels, we could pack
     // positions into 10+log_2(k) bits instead of using the whole 12 bytes that a Vec3<i32> uses
+    // (don't make this optimization unless needed, and not without double-checking with zesterer
+    // about the best place to document what needs to be changed for handling larger chunk sizes).
     positions: Vec<Vec3<i32>>,
     growth_amounts: Vec<u8>,
     last_growth_tick: f32,

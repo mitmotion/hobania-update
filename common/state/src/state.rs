@@ -81,9 +81,9 @@ impl TerrainChanges {
     }
 }
 
-pub fn insert_terrain_chunk<'a>(
-    terrain_grid: &mut specs::WriteExpect<'a, TerrainGrid>,
-    terrain_changes: &mut specs::Write<'a, TerrainChanges>,
+pub fn insert_terrain_chunk(
+    terrain_grid: &mut TerrainGrid,
+    terrain_changes: &mut TerrainChanges,
     key: Vec2<i32>,
     chunk: Arc<TerrainChunk>,
     new_hook: impl FnOnce(),
@@ -407,8 +407,8 @@ impl State {
     /// Insert the provided chunk into this state's terrain.
     pub fn insert_chunk(&mut self, key: Vec2<i32>, chunk: Arc<TerrainChunk>) {
         insert_terrain_chunk(
-            &mut self.ecs.write_resource::<TerrainGrid>().into(),
-            &mut self.ecs.write_resource::<TerrainChanges>().into(),
+            &mut self.ecs.write_resource::<TerrainGrid>(),
+            &mut self.ecs.write_resource::<TerrainChanges>(),
             key,
             chunk,
             || (),
