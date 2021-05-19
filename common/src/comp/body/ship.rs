@@ -26,7 +26,7 @@ impl Body {
         }
     }
 
-    pub fn dimensions(&self) -> Vec3<f32> { Vec3::new(25.0, 50.0, 40.0) }
+    pub const fn dimensions(&self) -> Vec3<f32> { Vec3::new(25.0, 50.0, 40.0) }
 
     fn balloon_vol(&self) -> f32 {
         let spheroid_vol = |equat_d: f32, polar_d: f32| -> f32 {

@@ -293,7 +293,7 @@ impl Body {
 
     /// The width (shoulder to shoulder), length (nose to tail) and height
     /// respectively
-    pub fn dimensions(&self) -> Vec3<f32> {
+    pub const fn dimensions(&self) -> Vec3<f32> {
         match self {
             Body::BipedLarge(body) => match body.species {
                 biped_large::Species::Cyclops => Vec3::new(4.6, 3.0, 6.5),
@@ -398,7 +398,7 @@ impl Body {
         dim.x.max(dim.y) / 2.0
     }
 
-    pub fn height(&self) -> f32 { self.dimensions().z }
+    pub const fn height(&self) -> f32 { self.dimensions().z }
 
     pub fn collider_shape(&self) -> Collider {
         Collider::Box {

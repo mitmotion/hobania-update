@@ -341,7 +341,7 @@ impl Body {
         Mass(m)
     }
 
-    pub fn dimensions(&self) -> Vec3<f32> {
+    pub const fn dimensions(&self) -> Vec3<f32> {
         match self {
             Body::Arrow | Body::ArrowSnake | Body::MultiArrow | Body::ArrowTurret => {
                 Vec3::new(0.01, 0.8, 0.01)
@@ -349,7 +349,7 @@ impl Body {
             Body::BoltFire => Vec3::new(0.1, 0.1, 0.1),
             Body::Crossbow => Vec3::new(3.0, 3.0, 1.5),
             Body::HaniwaSentry => Vec3::new(0.8, 0.8, 1.4),
-            _ => Vec3::broadcast(0.5),
+            _ => Vec3::new(0.5, 0.5, 0.5),
         }
     }
 }
