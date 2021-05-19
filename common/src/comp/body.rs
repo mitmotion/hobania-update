@@ -313,21 +313,30 @@ impl Body {
             Body::FishMedium(_) => Vec3::new(0.5, 2.0, 0.8),
             Body::FishSmall(_) => Vec3::new(0.3, 1.2, 0.6),
             Body::Golem(_) => Vec3::new(5.0, 5.0, 7.5),
-            Body::Humanoid(humanoid) => match (humanoid.species, humanoid.body_type) {
-                (humanoid::Species::Orc, humanoid::BodyType::Male) => Vec3::new(1.25, 0.7, 2.0),
-                (humanoid::Species::Orc, humanoid::BodyType::Female) => Vec3::new(1.15, 0.6, 1.8),
-                (humanoid::Species::Human, humanoid::BodyType::Male) => Vec3::new(1.1, 0.55, 1.8),
-                (humanoid::Species::Human, humanoid::BodyType::Female) => Vec3::new(1.0, 0.55, 1.7),
-                (humanoid::Species::Elf, _) => Vec3::new(1.0, 0.6, 1.7),
-                (humanoid::Species::Dwarf, humanoid::BodyType::Male) => Vec3::new(0.9, 0.55, 1.5),
-                (humanoid::Species::Dwarf, humanoid::BodyType::Female) => {
-                    Vec3::new(0.85, 0.45, 1.4)
+            Body::Humanoid(humanoid) => match humanoid.species {
+                humanoid::Species::Orc => match humanoid.body_type {
+                    humanoid::BodyType::Male => Vec3::new(1.25, 0.7, 2.0),
+                    humanoid::BodyType::Female => Vec3::new(1.15, 0.6, 1.8),
                 },
-                (humanoid::Species::Undead, humanoid::BodyType::Male) => Vec3::new(1.0, 0.5, 1.7),
-                (humanoid::Species::Undead, humanoid::BodyType::Female) => {
-                    Vec3::new(0.95, 0.5, 1.65)
+
+                humanoid::Species::Human => match humanoid.body_type {
+                    humanoid::BodyType::Male => Vec3::new(1.1, 0.55, 1.8),
+                    humanoid::BodyType::Female => Vec3::new(1.0, 0.55, 1.7),
                 },
-                (humanoid::Species::Danari, _) => Vec3::new(0.75, 0.65, 1.25),
+
+                humanoid::Species::Elf => Vec3::new(1.0, 0.6, 1.7),
+
+                humanoid::Species::Dwarf => match humanoid.body_type {
+                    humanoid::BodyType::Male => Vec3::new(0.9, 0.55, 1.5),
+                    humanoid::BodyType::Female => Vec3::new(0.85, 0.45, 1.4),
+                },
+
+                humanoid::Species::Undead => match humanoid.body_type {
+                    humanoid::BodyType::Male => Vec3::new(1.0, 0.5, 1.7),
+                    humanoid::BodyType::Female => Vec3::new(0.95, 0.5, 1.65),
+                },
+
+                humanoid::Species::Danari => Vec3::new(0.75, 0.65, 1.25),
             },
             Body::Object(object) => object.dimensions(),
             Body::QuadrupedMedium(body) => match body.species {
