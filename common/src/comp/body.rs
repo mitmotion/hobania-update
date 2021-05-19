@@ -16,6 +16,7 @@ pub mod theropod;
 
 use crate::{
     assets::{self, Asset},
+    comp::Collider,
     consts::{HUMAN_DENSITY, WATER_DENSITY},
     make_case_elim,
     npc::NpcKind,
@@ -398,6 +399,14 @@ impl Body {
     }
 
     pub fn height(&self) -> f32 { self.dimensions().z }
+
+    pub fn collider_shape(&self) -> Collider {
+        Collider::Box {
+            radius: self.radius(),
+            z_min: 0.0,
+            z_max: self.height(),
+        }
+    }
 
     pub fn base_energy(&self) -> u32 {
         match self {
