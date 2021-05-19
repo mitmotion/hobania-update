@@ -292,7 +292,7 @@ impl Body {
 
     /// The width (shoulder to shoulder), length (nose to tail) and height
     /// respectively
-    pub fn dimensions(&self) -> Vec3<f32> {
+    pub const fn dimensions(&self) -> Vec3<f32> {
         match self {
             Body::BipedLarge(body) => match body.species {
                 biped_large::Species::Cyclops => Vec3::new(4.6, 3.0, 6.5),
@@ -323,22 +323,30 @@ impl Body {
             Body::FishMedium(_) => Vec3::new(0.5, 2.0, 0.8),
             Body::FishSmall(_) => Vec3::new(0.3, 1.2, 0.6),
             Body::Golem(_) => Vec3::new(5.0, 5.0, 7.5),
-            Body::Humanoid(humanoid) => {
-                let scale = match (humanoid.species, humanoid.body_type) {
-                    (humanoid::Species::Orc, humanoid::BodyType::Male) => 0.91,
-                    (humanoid::Species::Orc, humanoid::BodyType::Female) => 0.81,
-                    (humanoid::Species::Human, humanoid::BodyType::Male) => 0.81,
-                    (humanoid::Species::Human, humanoid::BodyType::Female) => 0.76,
-                    (humanoid::Species::Elf, humanoid::BodyType::Male) => 0.82,
-                    (humanoid::Species::Elf, humanoid::BodyType::Female) => 0.76,
-                    (humanoid::Species::Dwarf, humanoid::BodyType::Male) => 0.67,
-                    (humanoid::Species::Dwarf, humanoid::BodyType::Female) => 0.62,
-                    (humanoid::Species::Undead, humanoid::BodyType::Male) => 0.78,
-                    (humanoid::Species::Undead, humanoid::BodyType::Female) => 0.72,
-                    (humanoid::Species::Danari, humanoid::BodyType::Male) => 0.56,
-                    (humanoid::Species::Danari, humanoid::BodyType::Female) => 0.56,
-                };
-                Vec3::new(0.7 * scale, 0.4 * scale, 2.15 * scale)
+            Body::Humanoid(humanoid) => match humanoid.species {
+                humanoid::Species::Orc => match humanoid.body_type {
+                    humanoid::BodyType::Male => Vec3::new(1.25, 0.7, 2.0),
+                    humanoid::BodyType::Female => Vec3::new(1.15, 0.6, 1.8),
+                },
+
+                humanoid::Species::Human => match humanoid.body_type {
+                    humanoid::BodyType::Male => Vec3::new(1.1, 0.55, 1.8),
+                    humanoid::BodyType::Female => Vec3::new(1.0, 0.55, 1.7),
+                },
+
+                humanoid::Species::Elf => Vec3::new(1.0, 0.6, 1.7),
+
+                humanoid::Species::Dwarf => match humanoid.body_type {
+                    humanoid::BodyType::Male => Vec3::new(0.9, 0.55, 1.5),
+                    humanoid::BodyType::Female => Vec3::new(0.85, 0.45, 1.4),
+                },
+
+                humanoid::Species::Undead => match humanoid.body_type {
+                    humanoid::BodyType::Male => Vec3::new(1.0, 0.5, 1.7),
+                    humanoid::BodyType::Female => Vec3::new(0.95, 0.5, 1.65),
+                },
+
+                humanoid::Species::Danari => Vec3::new(0.75, 0.65, 1.25),
             },
             Body::Object(object) => object.dimensions(),
             Body::QuadrupedMedium(body) => match body.species {
@@ -400,7 +408,7 @@ impl Body {
         dim.x.max(dim.y) / 2.0
     }
 
-    pub fn height(&self) -> f32 { self.dimensions().z }
+    pub const fn height(&self) -> f32 { self.dimensions().z }
 
     pub fn base_energy(&self) -> u32 {
         match self {

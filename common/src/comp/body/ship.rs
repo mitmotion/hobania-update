@@ -38,7 +38,7 @@ impl Body {
         }
     }
 
-    pub fn dimensions(&self) -> Vec3<f32> {
+    pub const fn dimensions(&self) -> Vec3<f32> {
         match self {
             Body::DefaultAirship => Vec3::new(25.0, 50.0, 40.0),
             Body::AirBalloon => Vec3::new(25.0, 50.0, 40.0),
