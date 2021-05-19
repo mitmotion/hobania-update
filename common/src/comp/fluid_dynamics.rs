@@ -214,13 +214,15 @@ impl Body {
     /// Skin friction is the drag arising from the shear forces between a fluid
     /// and a surface, while pressure drag is due to flow separation. Both are
     /// viscous effects.
+    ///
+    /// This coefficient includes the reference area.
     fn parasite_drag_coefficient(&self) -> f32 {
         // Reference area and drag coefficient assumes best-case scenario of the
         // orientation producing least amount of drag
         match self {
             // Cross-section, head/feet first
             Body::BipedLarge(_) | Body::BipedSmall(_) | Body::Golem(_) | Body::Humanoid(_) => {
-                let dim = self.dimensions().xy().map(|a| a * 0.5);
+                let dim = self.dimensions().xy().map(|a| 0.7 * a * 0.5);
                 const CD: f32 = 0.7;
                 CD * PI * dim.x * dim.y
             },
