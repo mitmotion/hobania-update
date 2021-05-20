@@ -183,6 +183,26 @@ pub struct BodyAttributes {
     pub base_energy: Option<AllBodiesBaseEnergy>,
     pub base_health: Option<AllBodiesBaseHealth>,
     pub base_health_increase: Option<AllBodiesBaseHealthIncrease>,
+    // Things to add:
+    // dimensions of some kind
+    //   - radius
+    //   - height
+    // poise
+    // base_accel
+    // base_ori_rate
+    // swim_thrust
+    // fly_thrust
+    // jump_impulse
+    // 
+    // Maybes:
+    // can_climb
+    // flying_height
+    // eye_height
+    // default_light_offset
+    // can_strafe
+    // mounting_offset
+    // air_accel
+
 }
 
 impl assets::Compound for BodyAttributes {
