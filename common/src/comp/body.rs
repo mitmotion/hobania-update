@@ -16,7 +16,6 @@ pub mod theropod;
 
 use crate::{
     assets::{self, Asset},
-    consts::{HUMAN_DENSITY, WATER_DENSITY},
     make_case_elim,
     npc::NpcKind,
 };
@@ -146,124 +145,203 @@ impl<
     const EXTENSION: &'static str = "ron";
 }
 
+pub type BodyAggro = f32;
+pub type SpeciesAggro = Option<f32>;
+/// Type holding aggro data for bodies and species.
+pub type AllBodiesAggro = AllBodies<BodyAggro, SpeciesAggro>;
+
+pub type BodyDensity = f32;
+pub type SpeciesDensity = Option<f32>;
+/// Type holding density data for bodies and species.
+pub type AllBodiesDensity = AllBodies<BodyDensity, SpeciesDensity>;
+
+pub type BodyMass = f32;
+pub type SpeciesMass = Option<f32>;
+/// Type holding mass data for bodies and species.
+pub type AllBodiesMass = AllBodies<BodyMass, SpeciesMass>;
+
+pub type BodyBaseEnergy = u32;
+pub type SpeciesBaseEnergy = Option<u32>;
+/// Type holding mass data for bodies and species.
+pub type AllBodiesBaseEnergy = AllBodies<BodyBaseEnergy, SpeciesBaseEnergy>;
+
+pub type BodyBaseHealth = u32;
+pub type SpeciesBaseHealth = Option<u32>;
+/// Type holding mass data for bodies and species.
+pub type AllBodiesBaseHealth = AllBodies<BodyBaseHealth, SpeciesBaseHealth>;
+
+pub type BodyBaseHealthIncrease = u32;
+pub type SpeciesBaseHealthIncrease = Option<u32>;
+/// Type holding mass data for bodies and species.
+pub type AllBodiesBaseHealthIncrease = AllBodies<BodyBaseHealthIncrease, SpeciesBaseHealthIncrease>;
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct BodyAttributes {
+    pub aggro: Option<AllBodiesAggro>,
+    pub density: Option<AllBodiesDensity>,
+    pub mass: Option<AllBodiesMass>,
+    pub base_energy: Option<AllBodiesBaseEnergy>,
+    pub base_health: Option<AllBodiesBaseHealth>,
+    pub base_health_increase: Option<AllBodiesBaseHealthIncrease>,
+}
+
+impl assets::Compound for BodyAttributes {
+    fn load<S: assets::source::Source>(
+        cache: &assets::AssetCache<S>,
+        _: &str,
+    ) -> Result<Self, assets::Error> {
+        let aggro = cache.load_owned::<AllBodiesAggro>("common.body.aggro")?;
+        let density = cache.load_owned::<AllBodiesDensity>("common.body.density")?;
+        let mass = cache.load_owned::<AllBodiesMass>("common.body.mass")?;
+        let energy = cache.load_owned::<AllBodiesBaseEnergy>("common.body.base_energy")?;
+        let health = cache.load_owned::<AllBodiesBaseHealth>("common.body.base_health")?;
+        let health_increase =
+            cache.load_owned::<AllBodiesBaseHealthIncrease>("common.body.base_health_increase")?;
+
+        Ok(Self {
+            aggro: Some(aggro),
+            density: Some(density),
+            mass: Some(mass),
+            base_energy: Some(energy),
+            base_health: Some(health),
+            base_health_increase: Some(health_increase),
+        })
+    }
+}
+
+pub fn get_body_f32_attribute<
+    'a,
+    Species,
+    SpeciesData: for<'b> core::ops::Index<&'b Species, Output = Option<f32>>,
+>(
+    body_data: &'a BodyData<f32, SpeciesData>,
+    species: Species,
+) -> f32 {
+    body_data.species[&species].unwrap_or_else(|| body_data.body)
+}
+
+pub fn get_body_u32_attribute<
+    'a,
+    Species,
+    SpeciesData: for<'b> core::ops::Index<&'b Species, Output = Option<u32>>,
+>(
+    body_data: &'a BodyData<u32, SpeciesData>,
+    species: Species,
+) -> u32 {
+    body_data.species[&species].unwrap_or_else(|| body_data.body)
+}
+
 impl Body {
     pub fn is_humanoid(&self) -> bool { matches!(self, Body::Humanoid(_)) }
 
     /// Average density of the body
-    // Units are based on kg/m³
-    pub fn density(&self) -> Density {
-        let d = match self {
-            // based on a house sparrow (Passer domesticus)
-            Body::BirdMedium(_) => 700.0,
-            Body::BirdLarge(_) => 2_200.0,
-
-            // based on its mass divided by the volume of a bird scaled up to the size of the dragon
-            Body::Dragon(_) => 3_700.0,
-
-            Body::Golem(_) => WATER_DENSITY * 2.5,
-            Body::Humanoid(_) => HUMAN_DENSITY,
+    /// Units are based on kg/m³
+    pub fn density(&self, body_densities: &AllBodiesDensity) -> Density {
+        let density_value = match self {
+            Body::BipedLarge(body) => {
+                get_body_f32_attribute(&body_densities.biped_large, body.species)
+            },
+            Body::BipedSmall(body) => {
+                get_body_f32_attribute(&body_densities.biped_small, body.species)
+            },
+            Body::BirdMedium(body) => {
+                get_body_f32_attribute(&body_densities.bird_medium, body.species)
+            },
+            Body::BirdLarge(body) => {
+                get_body_f32_attribute(&body_densities.bird_large, body.species)
+            },
+            Body::Dragon(body) => get_body_f32_attribute(&body_densities.dragon, body.species),
+            Body::FishMedium(body) => {
+                get_body_f32_attribute(&body_densities.fish_medium, body.species)
+            },
+            Body::FishSmall(body) => {
+                get_body_f32_attribute(&body_densities.fish_small, body.species)
+            },
+            Body::Golem(body) => get_body_f32_attribute(&body_densities.golem, body.species),
+            Body::Humanoid(body) => get_body_f32_attribute(&body_densities.humanoid, body.species),
+            Body::QuadrupedLow(body) => {
+                get_body_f32_attribute(&body_densities.quadruped_low, body.species)
+            },
+            Body::QuadrupedMedium(body) => {
+                get_body_f32_attribute(&body_densities.quadruped_medium, body.species)
+            },
+            Body::QuadrupedSmall(body) => {
+                get_body_f32_attribute(&body_densities.quadruped_small, body.species)
+            },
+            Body::Theropod(body) => get_body_f32_attribute(&body_densities.theropod, body.species),
             Body::Ship(ship) => ship.density().0,
             Body::Object(object) => object.density().0,
-            _ => HUMAN_DENSITY,
         };
-        Density(d)
+        Density(density_value)
     }
 
-    // Values marked with ~✅ are checked based on their RL equivalent.
-    // Discrepancy in size compared to their RL equivalents has not necessarily been
-    // taken into account.
-    pub fn mass(&self) -> Mass {
+    /// Units are kg
+    pub fn mass(&self, body_masses: &AllBodiesMass) -> Mass {
         let m = match self {
-            Body::BipedLarge(body) => match body.species {
-                biped_large::Species::Slysaurok => 400.0,
-                biped_large::Species::Occultsaurok => 400.0,
-                biped_large::Species::Mightysaurok => 400.0,
-                biped_large::Species::Mindflayer => 420.0,
-                biped_large::Species::Minotaur => 500.0,
-                _ => 400.0,
+            Body::BipedLarge(body) => {
+                get_body_f32_attribute(&body_masses.biped_large, body.species)
             },
-            Body::BipedSmall(_) => 50.0,
-
-            // ravens are 0.69-2 kg, crows are 0.51 kg on average
-            Body::BirdMedium(_) => 1.0,
-            Body::BirdLarge(_) => 200.0,
-
-            Body::Dragon(_) => 20_000.0,
-            Body::FishMedium(_) => 2.5,
-            Body::FishSmall(_) => 1.0,
-            Body::Golem(_) => 10_000.0,
-            Body::Humanoid(humanoid) => {
-                // humanoids are quite a bit larger than in real life, so we multiply their mass
-                // to scale it up proportionally (remember cube law)
-                1.0 * match (humanoid.species, humanoid.body_type) {
-                    (humanoid::Species::Orc, humanoid::BodyType::Male) => 120.0,
-                    (humanoid::Species::Orc, humanoid::BodyType::Female) => 120.0,
-                    (humanoid::Species::Human, humanoid::BodyType::Male) => 77.0, // ~✅
-                    (humanoid::Species::Human, humanoid::BodyType::Female) => 59.0, // ~✅
-                    (humanoid::Species::Elf, humanoid::BodyType::Male) => 77.0,
-                    (humanoid::Species::Elf, humanoid::BodyType::Female) => 59.0,
-                    (humanoid::Species::Dwarf, humanoid::BodyType::Male) => 70.0,
-                    (humanoid::Species::Dwarf, humanoid::BodyType::Female) => 70.0,
-                    (humanoid::Species::Undead, humanoid::BodyType::Male) => 70.0,
-                    (humanoid::Species::Undead, humanoid::BodyType::Female) => 50.0,
-                    (humanoid::Species::Danari, humanoid::BodyType::Male) => 80.0,
-                    (humanoid::Species::Danari, humanoid::BodyType::Female) => 60.0,
-                }
+            Body::BipedSmall(body) => {
+                get_body_f32_attribute(&body_masses.biped_small, body.species)
             },
-            Body::Object(obj) => obj.mass().0,
-            Body::QuadrupedLow(body) => match body.species {
-                quadruped_low::Species::Alligator => 360.0, // ~✅
-                quadruped_low::Species::Asp => 300.0,
-                // saltwater crocodiles can weigh around 1 ton, but our version is the size of an
-                // alligator or smaller, so whatever
-                quadruped_low::Species::Crocodile => 360.0,
-                quadruped_low::Species::Deadwood => 400.0,
-                quadruped_low::Species::Lavadrake => 500.0,
-                quadruped_low::Species::Monitor => 100.0,
-                quadruped_low::Species::Pangolin => 100.0,
-                quadruped_low::Species::Salamander => 65.0,
-                quadruped_low::Species::Tortoise => 200.0,
-                _ => 200.0,
+            Body::BirdMedium(body) => {
+                get_body_f32_attribute(&body_masses.bird_medium, body.species)
             },
-            Body::QuadrupedMedium(body) => match body.species {
-                quadruped_medium::Species::Bear => 500.0, // ~✅ (350-700 kg)
-                quadruped_medium::Species::Cattle => 575.0, // ~✅ (500-650 kg)
-                quadruped_medium::Species::Deer => 80.0,
-                quadruped_medium::Species::Donkey => 200.0,
-                quadruped_medium::Species::Highland => 200.0,
-                quadruped_medium::Species::Horse => 500.0, // ~✅
-                quadruped_medium::Species::Kelpie => 200.0,
-                quadruped_medium::Species::Lion => 170.0, // ~✅ (110-225 kg)
-                quadruped_medium::Species::Panda => 200.0,
-                quadruped_medium::Species::Saber => 130.0,
-                quadruped_medium::Species::Yak => 200.0,
-                _ => 200.0,
+            Body::BirdLarge(body) => get_body_f32_attribute(&body_masses.bird_large, body.species),
+            Body::Dragon(body) => get_body_f32_attribute(&body_masses.dragon, body.species),
+            Body::FishMedium(body) => {
+                get_body_f32_attribute(&body_masses.fish_medium, body.species)
             },
-            Body::QuadrupedSmall(body) => match body.species {
-                quadruped_small::Species::Batfox => 50.0,
-                quadruped_small::Species::Boar => 80.0, // ~✅ (60-100 kg)
-                quadruped_small::Species::Dodarock => 150.0,
-                quadruped_small::Species::Holladon => 150.0,
-                quadruped_small::Species::Hyena => 70.0, // ~✅ (vaguely)
-                quadruped_small::Species::Truffler => 150.0,
-                _ => 80.0,
+            Body::FishSmall(body) => get_body_f32_attribute(&body_masses.fish_small, body.species),
+            Body::Golem(body) => get_body_f32_attribute(&body_masses.golem, body.species),
+            Body::Humanoid(body) => get_body_f32_attribute(&body_masses.humanoid, body.species),
+            Body::QuadrupedLow(body) => {
+                get_body_f32_attribute(&body_masses.quadruped_low, body.species)
             },
-            Body::Theropod(body) => match body.species {
-                // for reference, elephants are in the range of 2.6-6.9 tons
-                // and Tyrannosaurus rex were ~8.4-14 tons
-                theropod::Species::Archaeos => 13_000.0,
-                theropod::Species::Ntouka => 13_000.0,
-                theropod::Species::Odonto => 13_000.0,
-
-                theropod::Species::Sandraptor => 500.0,
-                theropod::Species::Snowraptor => 500.0,
-                theropod::Species::Sunlizard => 500.0,
-                theropod::Species::Woodraptor => 500.0,
-                theropod::Species::Yale => 1_000.0,
+            Body::QuadrupedMedium(body) => {
+                get_body_f32_attribute(&body_masses.quadruped_medium, body.species)
             },
-            Body::Ship(ship) => ship.mass().0,
+            Body::QuadrupedSmall(body) => {
+                get_body_f32_attribute(&body_masses.quadruped_small, body.species)
+            },
+            Body::Theropod(body) => get_body_f32_attribute(&body_masses.theropod, body.species),
+            Body::Ship(ship) => ship.density().0,
+            Body::Object(object) => object.density().0,
         };
         Mass(m)
+    }
+
+    pub fn aggro(&self, body_aggros: &AllBodiesAggro) -> f32 {
+        match self {
+            Body::BipedLarge(body) => {
+                get_body_f32_attribute(&body_aggros.biped_large, body.species)
+            },
+            Body::BipedSmall(body) => {
+                get_body_f32_attribute(&body_aggros.biped_small, body.species)
+            },
+            Body::BirdMedium(body) => {
+                get_body_f32_attribute(&body_aggros.bird_medium, body.species)
+            },
+            Body::BirdLarge(body) => get_body_f32_attribute(&body_aggros.bird_large, body.species),
+            Body::FishSmall(body) => get_body_f32_attribute(&body_aggros.fish_small, body.species),
+            Body::FishMedium(body) => {
+                get_body_f32_attribute(&body_aggros.fish_medium, body.species)
+            },
+            Body::Humanoid(body) => get_body_f32_attribute(&body_aggros.humanoid, body.species),
+            Body::QuadrupedMedium(body) => {
+                get_body_f32_attribute(&body_aggros.quadruped_medium, body.species)
+            },
+            Body::QuadrupedSmall(body) => {
+                get_body_f32_attribute(&body_aggros.quadruped_small, body.species)
+            },
+            Body::Theropod(body) => get_body_f32_attribute(&body_aggros.theropod, body.species),
+            Body::Dragon(body) => get_body_f32_attribute(&body_aggros.dragon, body.species),
+            Body::QuadrupedLow(body) => {
+                get_body_f32_attribute(&body_aggros.quadruped_low, body.species)
+            },
+            Body::Golem(body) => get_body_f32_attribute(&body_aggros.golem, body.species),
+            Body::Ship(_) | Body::Object(_) => 0.0,
+        }
     }
 
     /// The width (shoulder to shoulder), length (nose to tail) and height
@@ -367,226 +445,123 @@ impl Body {
 
     pub fn height(&self) -> f32 { self.dimensions().z }
 
-    pub fn base_energy(&self) -> u32 {
+    pub fn base_energy(&self, body_energies: &AllBodiesBaseEnergy) -> u32 {
         match self {
-            Body::BipedLarge(biped_large) => match biped_large.species {
-                biped_large::Species::Dullahan => 4000,
-                _ => 3000,
+            Body::BipedLarge(body) => {
+                get_body_u32_attribute(&body_energies.biped_large, body.species)
             },
-            Body::BirdLarge(body) => match body.species {
-                bird_large::Species::Cockatrice => 4000,
-                bird_large::Species::Phoenix => 6000,
+            Body::BipedSmall(body) => {
+                get_body_u32_attribute(&body_energies.biped_small, body.species)
             },
-            Body::Humanoid(_) => 750,
-            _ => 1000,
+            Body::BirdMedium(body) => {
+                get_body_u32_attribute(&body_energies.bird_medium, body.species)
+            },
+            Body::BirdLarge(body) => {
+                get_body_u32_attribute(&body_energies.bird_large, body.species)
+            },
+            Body::FishSmall(body) => {
+                get_body_u32_attribute(&body_energies.fish_small, body.species)
+            },
+            Body::FishMedium(body) => {
+                get_body_u32_attribute(&body_energies.fish_medium, body.species)
+            },
+            Body::Humanoid(body) => get_body_u32_attribute(&body_energies.humanoid, body.species),
+            Body::QuadrupedMedium(body) => {
+                get_body_u32_attribute(&body_energies.quadruped_medium, body.species)
+            },
+            Body::QuadrupedSmall(body) => {
+                get_body_u32_attribute(&body_energies.quadruped_small, body.species)
+            },
+            Body::Theropod(body) => get_body_u32_attribute(&body_energies.theropod, body.species),
+            Body::Dragon(body) => get_body_u32_attribute(&body_energies.dragon, body.species),
+            Body::QuadrupedLow(body) => {
+                get_body_u32_attribute(&body_energies.quadruped_low, body.species)
+            },
+            Body::Golem(body) => get_body_u32_attribute(&body_energies.golem, body.species),
+            Body::Ship(_) | Body::Object(_) => 1000,
         }
     }
 
-    #[allow(unreachable_patterns)]
-    pub fn base_health(&self) -> u32 {
+    pub fn base_health(&self, body_healths: &AllBodiesBaseHealth) -> u32 {
         match self {
-            Body::Humanoid(_) => 500,
-            Body::QuadrupedSmall(quadruped_small) => match quadruped_small.species {
-                quadruped_small::Species::Boar => 700,
-                quadruped_small::Species::Batfox => 400,
-                quadruped_small::Species::Dodarock => 1000,
-                quadruped_small::Species::Holladon => 800,
-                quadruped_small::Species::Hyena => 450,
-                quadruped_small::Species::Truffler => 450,
-                _ => 400,
+            Body::BipedLarge(body) => {
+                get_body_u32_attribute(&body_healths.biped_large, body.species)
             },
-            Body::QuadrupedMedium(quadruped_medium) => match quadruped_medium.species {
-                quadruped_medium::Species::Grolgar => 900,
-                quadruped_medium::Species::Saber => 600,
-                quadruped_medium::Species::Tiger => 700,
-                quadruped_medium::Species::Lion => 900,
-                quadruped_medium::Species::Tarasque => 1500,
-                quadruped_medium::Species::Wolf => 550,
-                quadruped_medium::Species::Frostfang => 400,
-                quadruped_medium::Species::Mouflon => 500,
-                quadruped_medium::Species::Catoblepas => 1000,
-                quadruped_medium::Species::Bonerattler => 500,
-                quadruped_medium::Species::Deer => 500,
-                quadruped_medium::Species::Hirdrasil => 700,
-                quadruped_medium::Species::Roshwalr => 800,
-                quadruped_medium::Species::Donkey => 550,
-                quadruped_medium::Species::Zebra => 550,
-                quadruped_medium::Species::Antelope => 450,
-                quadruped_medium::Species::Kelpie => 600,
-                quadruped_medium::Species::Horse => 600,
-                quadruped_medium::Species::Barghest => 1700,
-                quadruped_medium::Species::Cattle => 1000,
-                quadruped_medium::Species::Highland => 1200,
-                quadruped_medium::Species::Yak => 1100,
-                quadruped_medium::Species::Panda => 900,
-                quadruped_medium::Species::Bear => 900,
-                quadruped_medium::Species::Moose => 800,
-                quadruped_medium::Species::Dreadhorn => 1100,
-                _ => 700,
+            Body::BipedSmall(body) => {
+                get_body_u32_attribute(&body_healths.biped_small, body.species)
             },
-            Body::BirdMedium(bird_medium) => match bird_medium.species {
-                bird_medium::Species::Chicken => 300,
-                bird_medium::Species::Duck => 300,
-                bird_medium::Species::Goose => 300,
-                bird_medium::Species::Parrot => 250,
-                bird_medium::Species::Peacock => 350,
-                bird_medium::Species::Eagle => 450,
-                _ => 250,
+            Body::BirdMedium(body) => {
+                get_body_u32_attribute(&body_healths.bird_medium, body.species)
             },
-            Body::FishMedium(_) => 250,
-            Body::Dragon(_) => 5000,
-            Body::BirdLarge(_) => 3000,
-            Body::FishSmall(_) => 20,
-            Body::BipedLarge(biped_large) => match biped_large.species {
-                biped_large::Species::Ogre => 3200,
-                biped_large::Species::Cyclops => 3200,
-                biped_large::Species::Wendigo => 2800,
-                biped_large::Species::Troll => 2400,
-                biped_large::Species::Dullahan => 3000,
-                biped_large::Species::Mindflayer => 12500,
-                biped_large::Species::Tidalwarrior => 2500,
-                biped_large::Species::Yeti => 4000,
-                biped_large::Species::Minotaur => 30000,
-                biped_large::Species::Harvester => 3000,
-                biped_large::Species::Blueoni => 2400,
-                biped_large::Species::Redoni => 2400,
-                _ => 1200,
+            Body::BirdLarge(body) => get_body_u32_attribute(&body_healths.bird_large, body.species),
+            Body::FishSmall(body) => get_body_u32_attribute(&body_healths.fish_small, body.species),
+            Body::FishMedium(body) => {
+                get_body_u32_attribute(&body_healths.fish_medium, body.species)
             },
-            Body::BipedSmall(biped_small) => match biped_small.species {
-                biped_small::Species::Gnarling => 500,
-                biped_small::Species::Adlet => 600,
-                biped_small::Species::Sahagin => 800,
-                biped_small::Species::Haniwa => 900,
-                biped_small::Species::Myrmidon => 900,
-                biped_small::Species::Husk => 200,
-                _ => 600,
+            Body::Humanoid(body) => get_body_u32_attribute(&body_healths.humanoid, body.species),
+            Body::QuadrupedMedium(body) => {
+                get_body_u32_attribute(&body_healths.quadruped_medium, body.species)
             },
+            Body::QuadrupedSmall(body) => {
+                get_body_u32_attribute(&body_healths.quadruped_small, body.species)
+            },
+            Body::Theropod(body) => get_body_u32_attribute(&body_healths.theropod, body.species),
+            Body::Dragon(body) => get_body_u32_attribute(&body_healths.dragon, body.species),
+            Body::QuadrupedLow(body) => {
+                get_body_u32_attribute(&body_healths.quadruped_low, body.species)
+            },
+            Body::Golem(body) => get_body_u32_attribute(&body_healths.golem, body.species),
+            Body::Ship(_) => 10000,
             Body::Object(object) => match object {
                 object::Body::TrainingDummy => 10000,
                 object::Body::Crossbow => 800,
                 object::Body::HaniwaSentry => 600,
                 _ => 10000,
             },
-            Body::Golem(golem) => match golem.species {
-                golem::Species::ClayGolem => 7500,
-                _ => 10000,
-            },
-            Body::Theropod(theropod) => match theropod.species {
-                theropod::Species::Archaeos => 3500,
-                theropod::Species::Odonto => 3000,
-                _ => 1100,
-            },
-            Body::QuadrupedLow(quadruped_low) => match quadruped_low.species {
-                quadruped_low::Species::Crocodile => 800,
-                quadruped_low::Species::Alligator => 900,
-                quadruped_low::Species::Monitor => 600,
-                quadruped_low::Species::Asp => 750,
-                quadruped_low::Species::Tortoise => 900,
-                quadruped_low::Species::Rocksnapper => 1200,
-                quadruped_low::Species::Pangolin => 400,
-                quadruped_low::Species::Maneater => 700,
-                quadruped_low::Species::Sandshark => 900,
-                quadruped_low::Species::Hakulaq => 500,
-                quadruped_low::Species::Lavadrake => 1000,
-                quadruped_low::Species::Basilisk => 1000,
-                quadruped_low::Species::Deadwood => 700,
-                _ => 700,
-            },
-            Body::Ship(_) => 10000,
         }
     }
 
-    #[allow(unreachable_patterns)]
-    pub fn base_health_increase(&self) -> u32 {
+    pub fn base_health_increase(&self, body_health_increases: &AllBodiesBaseHealthIncrease) -> u32 {
         match self {
-            Body::Humanoid(_) => 50,
-            Body::QuadrupedSmall(quadruped_small) => match quadruped_small.species {
-                quadruped_small::Species::Boar => 20,
-                quadruped_small::Species::Batfox => 10,
-                quadruped_small::Species::Dodarock => 30,
-                quadruped_small::Species::Holladon => 30,
-                quadruped_small::Species::Hyena => 20,
-                quadruped_small::Species::Truffler => 20,
-                _ => 10,
+            Body::BipedLarge(body) => {
+                get_body_u32_attribute(&body_health_increases.biped_large, body.species)
             },
-            Body::QuadrupedMedium(quadruped_medium) => match quadruped_medium.species {
-                quadruped_medium::Species::Grolgar => 30,
-                quadruped_medium::Species::Saber => 20,
-                quadruped_medium::Species::Tiger => 20,
-                quadruped_medium::Species::Tuskram => 30,
-                quadruped_medium::Species::Lion => 40,
-                quadruped_medium::Species::Tarasque => 60,
-                quadruped_medium::Species::Wolf => 20,
-                quadruped_medium::Species::Frostfang => 40,
-                quadruped_medium::Species::Mouflon => 30,
-                quadruped_medium::Species::Catoblepas => 50,
-                quadruped_medium::Species::Bonerattler => 30,
-                quadruped_medium::Species::Deer => 20,
-                quadruped_medium::Species::Hirdrasil => 30,
-                quadruped_medium::Species::Roshwalr => 40,
-                quadruped_medium::Species::Donkey => 30,
-                quadruped_medium::Species::Camel => 30,
-                quadruped_medium::Species::Zebra => 30,
-                quadruped_medium::Species::Antelope => 20,
-                quadruped_medium::Species::Kelpie => 30,
-                quadruped_medium::Species::Horse => 30,
-                quadruped_medium::Species::Barghest => 50,
-                quadruped_medium::Species::Cattle => 30,
-                quadruped_medium::Species::Highland => 30,
-                quadruped_medium::Species::Yak => 30,
-                quadruped_medium::Species::Panda => 40,
-                quadruped_medium::Species::Bear => 40,
-                quadruped_medium::Species::Moose => 30,
-                quadruped_medium::Species::Dreadhorn => 50,
-                _ => 20,
+            Body::BipedSmall(body) => {
+                get_body_u32_attribute(&body_health_increases.biped_small, body.species)
             },
-            Body::BirdMedium(bird_medium) => match bird_medium.species {
-                bird_medium::Species::Chicken => 10,
-                bird_medium::Species::Duck => 10,
-                bird_medium::Species::Goose => 10,
-                bird_medium::Species::Parrot => 10,
-                bird_medium::Species::Peacock => 10,
-                bird_medium::Species::Eagle => 10,
-                _ => 20,
+            Body::BirdMedium(body) => {
+                get_body_u32_attribute(&body_health_increases.bird_medium, body.species)
             },
-            Body::FishMedium(_) => 10,
-            Body::Dragon(_) => 500,
-            Body::BirdLarge(_) => 120,
-            Body::FishSmall(_) => 10,
-            Body::BipedLarge(biped_large) => match biped_large.species {
-                biped_large::Species::Ogre => 70,
-                biped_large::Species::Cyclops => 80,
-                biped_large::Species::Wendigo => 80,
-                biped_large::Species::Troll => 60,
-                biped_large::Species::Dullahan => 120,
-                biped_large::Species::Tidalwarrior => 90,
-                biped_large::Species::Yeti => 80,
-                biped_large::Species::Harvester => 80,
-                // Boss enemies have their health set, not adjusted by level.
-                biped_large::Species::Mindflayer => 0,
-                biped_large::Species::Minotaur => 0,
-                _ => 100,
+            Body::BirdLarge(body) => {
+                get_body_u32_attribute(&body_health_increases.bird_large, body.species)
             },
-            Body::BipedSmall(_) => 10,
-            Body::Object(_) => 10,
-            Body::Golem(_) => 0,
-            Body::Theropod(_) => 20,
-            Body::QuadrupedLow(quadruped_low) => match quadruped_low.species {
-                quadruped_low::Species::Crocodile => 20,
-                quadruped_low::Species::Alligator => 20,
-                quadruped_low::Species::Salamander => 10,
-                quadruped_low::Species::Monitor => 10,
-                quadruped_low::Species::Asp => 10,
-                quadruped_low::Species::Tortoise => 20,
-                quadruped_low::Species::Rocksnapper => 50,
-                quadruped_low::Species::Pangolin => 10,
-                quadruped_low::Species::Maneater => 30,
-                quadruped_low::Species::Sandshark => 40,
-                quadruped_low::Species::Hakulaq => 10,
-                quadruped_low::Species::Deadwood => 30,
-                _ => 20,
+            Body::FishSmall(body) => {
+                get_body_u32_attribute(&body_health_increases.fish_small, body.species)
             },
+            Body::FishMedium(body) => {
+                get_body_u32_attribute(&body_health_increases.fish_medium, body.species)
+            },
+            Body::Humanoid(body) => {
+                get_body_u32_attribute(&body_health_increases.humanoid, body.species)
+            },
+            Body::QuadrupedMedium(body) => {
+                get_body_u32_attribute(&body_health_increases.quadruped_medium, body.species)
+            },
+            Body::QuadrupedSmall(body) => {
+                get_body_u32_attribute(&body_health_increases.quadruped_small, body.species)
+            },
+            Body::Theropod(body) => {
+                get_body_u32_attribute(&body_health_increases.theropod, body.species)
+            },
+            Body::Dragon(body) => {
+                get_body_u32_attribute(&body_health_increases.dragon, body.species)
+            },
+            Body::QuadrupedLow(body) => {
+                get_body_u32_attribute(&body_health_increases.quadruped_low, body.species)
+            },
+            Body::Golem(body) => get_body_u32_attribute(&body_health_increases.golem, body.species),
             Body::Ship(_) => 500,
+            Body::Object(_) => 10,
         }
     }
 

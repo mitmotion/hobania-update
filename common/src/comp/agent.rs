@@ -1,5 +1,4 @@
 use crate::{
-    comp::{humanoid, quadruped_low, quadruped_medium, quadruped_small, Body},
     path::Chaser,
     rtsim::RtSimController,
     trade::{PendingTrade, ReducedInventory, SiteId, SitePrices, TradeId, TradeResult},
@@ -163,80 +162,6 @@ pub struct Psyche {
     pub aggro: f32, // 0.0 = always flees, 1.0 = always attacks, 0.5 = flee at 50% health
 }
 
-impl<'a> From<&'a Body> for Psyche {
-    fn from(body: &'a Body) -> Self {
-        Self {
-            aggro: match body {
-                Body::Humanoid(humanoid) => match humanoid.species {
-                    humanoid::Species::Danari => 0.9,
-                    humanoid::Species::Dwarf => 0.8,
-                    humanoid::Species::Elf => 0.7,
-                    humanoid::Species::Human => 0.6,
-                    humanoid::Species::Orc => 0.9,
-                    humanoid::Species::Undead => 0.9,
-                },
-                Body::QuadrupedSmall(quadruped_small) => match quadruped_small.species {
-                    quadruped_small::Species::Pig => 0.5,
-                    quadruped_small::Species::Fox => 0.3,
-                    quadruped_small::Species::Sheep => 0.5,
-                    quadruped_small::Species::Boar => 0.8,
-                    quadruped_small::Species::Jackalope => 0.4,
-                    quadruped_small::Species::Skunk => 0.6,
-                    quadruped_small::Species::Cat => 0.2,
-                    quadruped_small::Species::Batfox => 0.6,
-                    quadruped_small::Species::Raccoon => 0.4,
-                    quadruped_small::Species::Quokka => 0.4,
-                    quadruped_small::Species::Dodarock => 0.9,
-                    quadruped_small::Species::Holladon => 1.0,
-                    quadruped_small::Species::Hyena => 0.4,
-                    quadruped_small::Species::Rabbit => 0.1,
-                    quadruped_small::Species::Truffler => 0.8,
-                    quadruped_small::Species::Frog => 0.4,
-                    quadruped_small::Species::Hare => 0.2,
-                    quadruped_small::Species::Goat => 0.5,
-                    _ => 0.0,
-                },
-                Body::QuadrupedMedium(quadruped_medium) => match quadruped_medium.species {
-                    quadruped_medium::Species::Tuskram => 0.7,
-                    quadruped_medium::Species::Frostfang => 0.9,
-                    quadruped_medium::Species::Mouflon => 0.7,
-                    quadruped_medium::Species::Catoblepas => 0.8,
-                    quadruped_medium::Species::Deer => 0.6,
-                    quadruped_medium::Species::Hirdrasil => 0.7,
-                    quadruped_medium::Species::Donkey => 0.7,
-                    quadruped_medium::Species::Camel => 0.7,
-                    quadruped_medium::Species::Zebra => 0.7,
-                    quadruped_medium::Species::Antelope => 0.6,
-                    quadruped_medium::Species::Horse => 0.7,
-                    quadruped_medium::Species::Cattle => 0.7,
-                    quadruped_medium::Species::Darkhound => 0.9,
-                    quadruped_medium::Species::Dreadhorn => 0.8,
-                    quadruped_medium::Species::Snowleopard => 0.7,
-                    _ => 0.5,
-                },
-                Body::QuadrupedLow(quadruped_low) => match quadruped_low.species {
-                    quadruped_low::Species::Salamander => 0.7,
-                    quadruped_low::Species::Monitor => 0.7,
-                    quadruped_low::Species::Asp => 0.9,
-                    quadruped_low::Species::Pangolin => 0.4,
-                    _ => 0.6,
-                },
-                Body::BipedSmall(_) => 0.5,
-                Body::BirdMedium(_) => 0.5,
-                Body::BirdLarge(_) => 0.9,
-                Body::FishMedium(_) => 0.15,
-                Body::FishSmall(_) => 0.0,
-                Body::BipedLarge(_) => 1.0,
-                Body::Object(_) => 1.0,
-                Body::Golem(_) => 1.0,
-                Body::Theropod(_) => 1.0,
-                Body::Dragon(_) => 1.0,
-                Body::Ship(_) => 1.0,
-            },
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
 /// Events that affect agent behavior from other entities/players/environment
 pub enum AgentEvent {
@@ -338,16 +263,16 @@ impl Agent {
 
     pub fn new(
         patrol_origin: Option<Vec3<f32>>,
-        body: &Body,
         behavior: Behavior,
         no_flee: bool,
+        aggro: f32,
     ) -> Self {
         Agent {
             patrol_origin,
             psyche: if no_flee {
                 Psyche { aggro: 1.0 }
             } else {
-                Psyche::from(body)
+                Psyche { aggro }
             },
             behavior,
             ..Default::default()

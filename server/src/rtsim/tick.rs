@@ -2,7 +2,10 @@
 
 use super::*;
 use common::{
-    comp::{self, inventory::loadout_builder::LoadoutBuilder, Behavior, BehaviorCapability},
+    comp::{
+        self, body::BodyAttributes, inventory::loadout_builder::LoadoutBuilder, Behavior,
+        BehaviorCapability,
+    },
     event::{EventBus, ServerEvent},
     resources::{DeltaTime, Time},
     terrain::TerrainGrid,
@@ -21,6 +24,7 @@ impl<'a> System<'a> for Sys {
         Read<'a, Time>,
         Read<'a, DeltaTime>,
         Read<'a, EventBus<ServerEvent>>,
+        Read<'a, BodyAttributes>,
         WriteExpect<'a, RtSim>,
         ReadExpect<'a, TerrainGrid>,
         ReadExpect<'a, Arc<world::World>>,
@@ -40,6 +44,7 @@ impl<'a> System<'a> for Sys {
             time,
             dt,
             server_event_bus,
+            body_attributes,
             mut rtsim,
             terrain,
             world,
@@ -103,16 +108,29 @@ impl<'a> System<'a> for Sys {
                 .map(|e| e as f32)
                 + Vec3::new(0.5, 0.5, body.flying_height());
             let pos = comp::Pos(spawn_pos);
+            let aggro = body_attributes
+                .aggro
+                .as_ref()
+                .map_or(0.0, |ba| body.aggro(&ba));
             let agent = Some(comp::Agent::new(
                 None,
-                &body,
                 if matches!(body, comp::Body::Humanoid(_)) {
                     Behavior::from(BehaviorCapability::SPEAK)
                 } else {
                     Behavior::default()
                 },
                 false,
+                aggro,
             ));
+
+            let base_health = body_attributes
+                .base_health
+                .as_ref()
+                .map_or(500, |bh| body.base_health(&bh));
+            let base_health_increase = body_attributes
+                .base_health_increase
+                .as_ref()
+                .map_or(30, |bhi| body.base_health_increase(&bhi));
 
             let rtsim_entity = Some(RtSimEntity(id));
             let event = match body {
@@ -127,7 +145,7 @@ impl<'a> System<'a> for Sys {
                     pos: comp::Pos(spawn_pos),
                     stats: comp::Stats::new(entity.get_name()),
                     skill_set: comp::SkillSet::default(),
-                    health: comp::Health::new(body, 10),
+                    health: comp::Health::new(base_health, base_health_increase, 10),
                     loadout: match body {
                         comp::Body::Humanoid(_) => entity.get_loadout(),
                         _ => LoadoutBuilder::new().build(),

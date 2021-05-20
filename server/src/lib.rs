@@ -232,6 +232,9 @@ impl Server {
         let msm = comp::inventory::item::MaterialStatManifest::default();
         state.ecs_mut().insert(msm);
 
+        let body_attributes = comp::body::BodyAttributes::load_expect_cloned("");
+        state.ecs_mut().insert(body_attributes);
+
         state.ecs_mut().insert(CharacterLoader::new(
             Arc::<RwLock<DatabaseSettings>>::clone(&database_settings),
         )?);

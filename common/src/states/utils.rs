@@ -160,35 +160,40 @@ impl Body {
 
     /// Returns thrust force if the body type can swim, otherwise None
     pub fn swim_thrust(&self) -> Option<f32> {
-        match self {
-            Body::Object(_) | Body::Ship(_) => None,
-            Body::BipedLarge(_) | Body::Golem(_) => Some(200.0 * self.mass().0),
-            Body::BipedSmall(_) => Some(100.0 * self.mass().0),
-            Body::BirdMedium(_) => Some(50.0 * self.mass().0),
-            Body::BirdLarge(_) => Some(50.0 * self.mass().0),
-            Body::FishMedium(_) => Some(50.0 * self.mass().0),
-            Body::FishSmall(_) => Some(50.0 * self.mass().0),
-            Body::Dragon(_) => Some(200.0 * self.mass().0),
-            Body::Humanoid(_) => Some(200.0 * self.mass().0),
-            Body::Theropod(body) => match body.species {
-                theropod::Species::Sandraptor
-                | theropod::Species::Snowraptor
-                | theropod::Species::Sunlizard
-                | theropod::Species::Woodraptor
-                | theropod::Species::Yale => Some(200.0 * self.mass().0),
-                _ => Some(100.0 * self.mass().0),
-            },
-            Body::QuadrupedLow(_) => Some(300.0 * self.mass().0),
-            Body::QuadrupedMedium(_) => Some(300.0 * self.mass().0),
-            Body::QuadrupedSmall(_) => Some(300.0 * self.mass().0),
-        }
+        Some(14000.0)
+        //match self {
+        //    Body::Object(_) | Body::Ship(_) => None,
+        //    Body::BipedLarge(_) | Body::Golem(_) => Some(200.0 *
+        // self.mass().0),    Body::BipedSmall(_) => Some(100.0 *
+        // self.mass().0),    Body::BirdMedium(_) => Some(50.0 *
+        // self.mass().0),    Body::BirdLarge(_) => Some(50.0 *
+        // self.mass().0),    Body::FishMedium(_) => Some(50.0 *
+        // self.mass().0),    Body::FishSmall(_) => Some(50.0 *
+        // self.mass().0),    Body::Dragon(_) => Some(200.0 *
+        // self.mass().0),    Body::Humanoid(_) => Some(200.0 *
+        // self.mass().0),    Body::Theropod(body) => match body.species
+        // {        theropod::Species::Sandraptor
+        //        | theropod::Species::Snowraptor
+        //        | theropod::Species::Sunlizard
+        //        | theropod::Species::Woodraptor
+        //        | theropod::Species::Yale => Some(200.0 * self.mass().0),
+        //        _ => Some(100.0 * self.mass().0),
+        //    },
+        //    Body::QuadrupedLow(_) => Some(300.0 * self.mass().0),
+        //    Body::QuadrupedMedium(_) => Some(300.0 * self.mass().0),
+        //    Body::QuadrupedSmall(_) => Some(300.0 * self.mass().0),
+        //}
     }
 
     /// Returns thrust force if the body type can fly, otherwise None
     pub fn fly_thrust(&self) -> Option<f32> {
         match self {
-            Body::BirdMedium(_) => Some(GRAVITY * self.mass().0 * 2.0),
-            Body::BirdLarge(_) => Some(GRAVITY * self.mass().0 * 0.5),
+            //Body::BirdMedium(_) => Some(GRAVITY * self.mass().0 * 2.0),
+            //Body::BirdLarge(_) => Some(GRAVITY * self.mass().0 * 0.5),
+            //Body::Dragon(_) => Some(200_000.0),
+            //Body::Ship(ship::Body::DefaultAirship) => Some(300_000.0),
+            Body::BirdMedium(_) => Some(GRAVITY * 0.5),
+            Body::BirdLarge(_) => Some(GRAVITY * 2.0),
             Body::Dragon(_) => Some(200_000.0),
             Body::Ship(ship::Body::DefaultAirship) => Some(300_000.0),
             _ => None,
@@ -197,20 +202,21 @@ impl Body {
 
     /// Returns jump impulse if the body type can jump, otherwise None
     pub fn jump_impulse(&self) -> Option<f32> {
-        match self {
-            Body::Object(_) | Body::Ship(_) => None,
-            Body::BipedLarge(_) | Body::Dragon(_) | Body::Golem(_) | Body::QuadrupedLow(_) => {
-                Some(0.1 * self.mass().0)
-            },
-            Body::QuadrupedMedium(_) => Some(0.4 * self.mass().0),
-            Body::Theropod(body) => match body.species {
-                theropod::Species::Snowraptor
-                | theropod::Species::Sandraptor
-                | theropod::Species::Woodraptor => Some(0.4 * self.mass().0),
-                _ => None,
-            },
-            _ => Some(0.4 * self.mass().0),
-        }
+        Some(30.0)
+        //match self {
+        //    Body::Object(_) | Body::Ship(_) => None,
+        //    Body::BipedLarge(_) | Body::Dragon(_) | Body::Golem(_) | Body::QuadrupedLow(_) => {
+        //        Some(0.1 * self.mass().0)
+        //    },
+        //    Body::QuadrupedMedium(_) => Some(0.4 * self.mass().0),
+        //    Body::Theropod(body) => match body.species {
+        //        theropod::Species::Snowraptor
+        //        | theropod::Species::Sandraptor
+        //        | theropod::Species::Woodraptor => Some(0.4 * self.mass().0),
+        //        _ => None,
+        //    },
+        //    _ => Some(0.4 * self.mass().0),
+        //}
         .map(|f| f * GRAVITY)
     }
 

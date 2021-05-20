@@ -98,8 +98,10 @@ impl CharacterBehavior for Data {
                             pos: *data.pos,
                             stats,
                             skill_set,
+                            // FIXME somehow get husk health in here
                             health: comp::Health::new(
-                                body,
+                                200,
+                                10,
                                 self.static_data.summon_info.health_scaling,
                             ),
                             poise: comp::Poise::new(body),
@@ -107,9 +109,9 @@ impl CharacterBehavior for Data {
                             body,
                             agent: Some(comp::Agent::new(
                                 None,
-                                &body,
                                 Behavior::from(BehaviorCapability::SPEAK),
                                 true,
+                                0.0,
                             )),
                             alignment: comp::Alignment::Owned(*data.uid),
                             scale: self

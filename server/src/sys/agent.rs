@@ -590,6 +590,8 @@ impl<'a> AgentData<'a> {
     ) {
         decrement_awareness(agent);
         forget_old_sounds(agent, read_data);
+        let msg = format!("aggro: {}", agent.psyche.aggro);
+        event_emitter.emit(ServerEvent::Chat(UnresolvedChatMsg::npc(*self.uid, msg)));
 
         // Set owner if no target
         if agent.target.is_none() && thread_rng().gen_bool(0.1) {

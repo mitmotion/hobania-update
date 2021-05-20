@@ -1,0 +1,204 @@
+(
+    humanoid: (
+        body: 0.8,
+        species: (
+            danari: Some(0.9),
+            dwarf: Some(0.8),
+            elf: Some(0.7),
+            human: Some(0.6),
+            orc: Some(0.9),
+            undead: Some(0.9),
+        )
+    ),
+    quadruped_medium: (
+        body: 0.6,
+        species: (
+            grolgar: Some(0.8),
+            saber: Some(0.8),
+            tuskram: Some(0.7),
+            lion: Some(0.8),
+            tarasque: Some(0.8),
+            tiger: Some(0.8),
+            wolf: Some(0.8),
+            frostfang: Some(0.9),
+            mouflon: Some(0.7),
+            catoblepas: Some(0.8),
+            bonerattler: Some(0.8),
+            deer: Some(0.6),
+            hirdrasil: Some(0.7),
+            roshwalr: Some(0.8),
+            donkey: Some(0.7),
+            camel: Some(0.7),
+            zebra: Some(0.7),
+            antelope: Some(0.6),
+            kelpie: Some(0.7),
+            horse: Some(0.7),
+            barghest: Some(0.5),
+            cattle: Some(0.7),
+            darkhound: Some(0.9),
+            highland: Some(0.7),
+            yak: Some(0.7),
+            panda: Some(0.7),
+            bear: Some(0.9),
+            dreadhorn: Some(0.8),
+            moose: Some(0.8),
+            snowleopard: Some(0.9),
+        )
+    ),
+    quadruped_small: (
+        body: 0.0,
+        species: (
+            pig: Some(0.5),
+            fox: Some(0.3),
+            sheep: Some(0.5),
+            boar: Some(0.8),
+            jackalope: Some(0.4),
+            skunk: Some(0.6),
+            cat: Some(0.2),
+            batfox: Some(0.6),
+            raccoon: Some(0.4),
+            quokka: Some(0.4),
+            dodarock: Some(0.9),
+            holladon: Some(1.0),
+            hyena: Some(0.4),
+            rabbit: Some(0.1),
+            truffler: Some(0.8),
+            frog: Some(0.4),
+            rat: Some(0.0),
+            axolotl: Some(0.0),
+            gecko: Some(0.0),
+            turtle: Some(0.8),
+            squirrel: Some(0.1),
+            fungome: Some(0.0),
+            porcupine: Some(0.4),
+            beaver: Some(0.5),
+            hare: Some(0.3),
+            dog: Some(0.5),
+            goat: Some(0.5),
+        )
+    ),
+    bird_medium: (
+        body: 0.8,
+        species: (
+            duck: Some(0.8),
+            chicken: Some(0.8),
+            goose: Some(0.8),
+            peacock: Some(0.8),
+            eagle: Some(0.8),
+            owl: Some(0.8),
+            parrot: Some(0.8),
+        )
+    ),
+    biped_large: (
+        body: 1.0,
+        species: (
+            ogre: Some(1.0),
+            cyclops: Some(1.0),
+            wendigo: Some(1.0),
+            troll: Some(1.0),
+            dullahan: Some(1.0),
+            werewolf: Some(1.0),
+            saurok_occult: Some(1.0),
+            saurok_mighty: Some(1.0),
+            saurok_sly: Some(1.0),
+            mindflayer: Some(1.0),
+            minotaur: Some(1.0),
+            tidalwarrior: Some(1.0),
+            yeti: Some(1.0),
+            harvester: Some(1.0),
+            oni_blue: Some(1.0),
+            oni_red: Some(1.0),
+        )
+    ),
+    golem: (
+        body: 1.0,
+        species: (
+            stonegolem: Some(1.0),
+            treant: Some(1.0),
+            claygolem: Some(1.0),
+        )
+    ),
+    theropod: (
+        body: 1.0,
+        species: (
+            archaeos: Some(1.0),
+            odonto: Some(1.0),
+            raptor_sand: Some(1.0),
+            raptor_snow: Some(1.0),
+            raptor_wood: Some(1.0),
+            sunlizard: Some(1.0),
+            yale: Some(1.0),
+            ntouka: Some(1.0),
+        )
+    ),
+    dragon: (
+        body: 1.0,
+        species: (
+            reddragon: Some(1.0),
+        )
+    ),
+    object: (
+        body: 1.0,
+        species: ()
+    ),
+    ship: (
+        body: 1.0,
+        species: (),
+    ),
+    biped_small: (
+        body: 0.5,
+        species: (
+            gnome: Some(0.5),
+            sahagin: Some(0.5),
+            adlet: Some(0.5),
+            gnarling: Some(0.5),
+            mandragora: Some(0.5),
+            kappa: Some(0.5),
+            cactid: Some(0.5),
+            gnoll: Some(0.5),
+            haniwa: Some(0.5),
+            myrmidon: Some(0.5),
+            husk: Some(0.5),
+        )
+    ),
+    fish_small: (
+        body: 0.0,
+        species: (
+            clownfish: Some(0.0),
+            piranha: Some(0.0),
+        )
+    ),
+    fish_medium: (
+        body: 0.15,
+        species: (
+            marlin: Some(0.15),
+            icepike: Some(0.15),
+        )
+    ),
+    bird_large: (
+        body: 0.9,
+        species: (
+            phoenix: Some(0.9),
+            cockatrice: Some(0.9),
+        )
+    ),
+    quadruped_low: (
+        body: 0.6,
+        species: (
+            crocodile: Some(0.8),
+            alligator: Some(0.8),
+            salamander: Some(0.7),
+            monitor: Some(0.7),
+            asp: Some(0.9),
+            tortoise: Some(0.6),
+            rocksnapper: Some(0.8),
+            pangolin: Some(0.4),
+            maneater: Some(0.8),
+            sandshark: Some(0.9),
+            hakulaq: Some(0.9),
+            lavadrake: Some(0.9),
+            basilisk: Some(0.8),
+            deadwood: Some(0.6),
+        )
+    )
+)

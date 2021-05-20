@@ -1,4 +1,3 @@
-use crate::comp::Body;
 use serde::{Deserialize, Serialize};
 use specs::{Component, DerefFlaggedStorage};
 use specs_idvs::IdvStorage;
@@ -31,10 +30,10 @@ pub enum StatChangeError {
 }
 
 impl Energy {
-    pub fn new(body: Body, level: u16) -> Energy {
+    pub fn new(base_energy: u32, level: u16) -> Energy {
         let mut energy = Energy::empty();
 
-        energy.update_max_energy(Some(body), level);
+        energy.update_max_energy(base_energy, level);
         energy.set_to(energy.maximum(), EnergySource::Revive);
 
         energy
@@ -96,15 +95,13 @@ impl Energy {
     // it'll set it to base max
     pub fn last_set(&mut self) { self.last_max = self.maximum }
 
-    pub fn update_max_energy(&mut self, body: Option<Body>, level: u16) {
-        if let Some(body) = body {
-            self.set_base_max(body.base_energy() + 50 * level as u32);
-            self.set_maximum(body.base_energy() + 50 * level as u32);
-            self.change_by(EnergyChange {
-                amount: 50,
-                source: EnergySource::LevelUp,
-            });
-        }
+    pub fn update_max_energy(&mut self, base_energy: u32, level: u16) {
+        self.set_base_max(base_energy + 50 * level as u32);
+        self.set_maximum(base_energy + 50 * level as u32);
+        self.change_by(EnergyChange {
+            amount: 50,
+            source: EnergySource::LevelUp,
+        });
     }
 
     pub fn reset_max(&mut self) {

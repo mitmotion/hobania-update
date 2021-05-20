@@ -1,0 +1,109 @@
+(
+    humanoid: (
+        body: 77.0,
+        species: (
+            danari: Some(60.0),
+            dwarf: Some(80.0),
+            elf: Some(77.0),
+            human: Some(77.0),
+            orc: Some(95.0),
+            undead: Some(65.0),
+        )
+    ),
+    quadruped_medium: (
+        body: 200.0,
+        species: (
+            saber: Some(130.0),
+            lion: Some(170.0),
+            deer: Some(80.0),
+            antelope: Some(120.0),
+            kelpie: Some(300.0),
+            horse: Some(300.0),
+            cattle: Some(575.0),
+            highland: Some(600.0),
+            yak: Some(600.0),
+            bear: Some(500.0),
+            moose: Some(500.0),
+        )
+    ),
+    quadruped_small: (
+        body: 80.0,
+        species: (
+            boar: Some(80.0),
+            batfox: Some(50.0),
+            dodarock: Some(150.0),
+            holladon: Some(100.0),
+            hyena: Some(70.0),
+            truffler: Some(150.0),
+        )
+    ),
+    biped_large: (
+        body: 400.0,
+        species: (
+            mindflayer: Some(420.0),
+            minotaur: Some(500.0),
+        )
+    ),
+    golem: (
+        body: 1000.0,
+        species: (),
+    ),
+    theropod: (
+        body: 1000.0,
+        species: (
+            archaeos: Some(10000.0),
+            ntouka: Some(5000.0),
+            odonto: Some(10000.0),
+            raptor_sand: Some(500.0),
+            raptor_snow: Some(500.0),
+            raptor_wood: Some(500.0),
+            sunlizard: Some(500.0),
+        )
+    ),
+    dragon: (
+        body: 2000.0,
+        species: (),
+    ),
+    object: (
+        body: 1.0,
+        species: ()
+    ),
+    ship: (
+        body: 1.0,
+        species: (),
+    ),
+    biped_small: (
+        body: 50.0,
+        species: (),
+    ),
+    fish_small: (
+        body: 1.0,
+        species: (),
+    ),
+    fish_medium: (
+        body: 2.5,
+        species: (),
+    ),
+    bird_medium: (
+        body: 2.0,
+        species: (),
+    ),
+    bird_large: (
+        body: 200.0,
+        species: (),
+    ),
+    quadruped_low: (
+        body: 200.0,
+        species: (
+            crocodile: Some(360.0),
+            alligator: Some(360.0),
+            monitor: Some(100.0),
+            asp: Some(300.0),
+            tortoise: Some(200.0),
+            rocksnapper: Some(300.0),
+            pangolin: Some(60.0),
+            lavadrake: Some(500.0),
+            deadwood: Some(50.0),
+        )
+    )
+)

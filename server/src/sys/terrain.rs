@@ -4,8 +4,8 @@ use crate::{
 };
 use common::{
     comp::{
-        self, bird_medium, inventory::loadout_builder::LoadoutConfig, Alignment,
-        BehaviorCapability, Pos,
+        self, bird_medium, body::BodyAttributes, inventory::loadout_builder::LoadoutConfig,
+        Alignment, BehaviorCapability, Pos,
     },
     event::{EventBus, ServerEvent},
     generation::get_npc_name,
@@ -91,6 +91,7 @@ impl<'a> System<'a> for Sys {
         Read<'a, Tick>,
         Read<'a, SpawnPoint>,
         Read<'a, Settings>,
+        Read<'a, BodyAttributes>,
         ReadExpect<'a, NetworkRequestMetrics>,
         WriteExpect<'a, ChunkGenerator>,
         WriteExpect<'a, TerrainGrid>,
@@ -112,6 +113,7 @@ impl<'a> System<'a> for Sys {
             tick,
             spawn_point,
             server_settings,
+            body_attributes,
             network_metrics,
             mut chunk_generator,
             mut terrain,
@@ -207,7 +209,16 @@ impl<'a> System<'a> for Sys {
                 let loadout =
                     LoadoutBuilder::build_loadout(body, main_tool, loadout_config, economy).build();
 
-                let health = comp::Health::new(body, entity.level.unwrap_or(0));
+                let base_health = body_attributes
+                    .base_health
+                    .as_ref()
+                    .map_or(500, |bh| body.base_health(&bh));
+                let base_health_increase = body_attributes
+                    .base_health_increase
+                    .as_ref()
+                    .map_or(30, |bhi| body.base_health_increase(&bhi));
+                let health =
+                    comp::Health::new(base_health, base_health_increase, entity.level.unwrap_or(0));
                 let poise = comp::Poise::new(body);
 
                 let can_speak = match body {
@@ -224,6 +235,11 @@ impl<'a> System<'a> for Sys {
                 } else {
                     None
                 };
+
+                let aggro = body_attributes
+                    .aggro
+                    .as_ref()
+                    .map_or(0.0, |ba| body.aggro(&ba));
 
                 // TODO: This code sets an appropriate base_damage for the enemy. This doesn't
                 // work because the damage is now saved in an ability
@@ -244,7 +260,6 @@ impl<'a> System<'a> for Sys {
                     agent: if entity.has_agency {
                         Some(comp::Agent::new(
                             Some(entity.pos),
-                            &body,
                             Behavior::default()
                                 .maybe_with_capabilities(
                                     can_speak.then(|| BehaviorCapability::SPEAK),
@@ -254,6 +269,7 @@ impl<'a> System<'a> for Sys {
                                 loadout_config,
                                 Some(comp::inventory::loadout_builder::LoadoutConfig::Guard)
                             ),
+                            aggro,
                         ))
                     } else {
                         None

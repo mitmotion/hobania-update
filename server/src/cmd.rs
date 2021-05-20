@@ -1007,6 +1007,23 @@ fn handle_spawn(
                 let body = body();
                 let loadout = LoadoutBuilder::build_loadout(body, None, None, None).build();
                 let inventory = Inventory::new_with_loadout(loadout);
+                let (base_health, base_health_increase) = {
+                    let body_attributes = server
+                        .state
+                        .ecs()
+                        .read_resource::<comp::body::BodyAttributes>();
+                    (
+                        body_attributes
+                            .base_health
+                            .as_ref()
+                            .map_or(500, |bh| body.base_health(&bh)),
+                        body_attributes
+                            .base_health_increase
+                            .as_ref()
+                            .map_or(30, |bhi| body.base_health_increase(&bhi)),
+                    )
+                    //(500, 30)
+                };
 
                 let mut entity_base = server
                     .state
@@ -1014,7 +1031,7 @@ fn handle_spawn(
                         pos,
                         comp::Stats::new(get_npc_name(id, npc::BodyType::from_body(body))),
                         comp::SkillSet::default(),
-                        comp::Health::new(body, 1),
+                        comp::Health::new(base_health, base_health_increase, 1),
                         comp::Poise::new(body),
                         inventory,
                         body,
@@ -1107,7 +1124,24 @@ fn handle_spawn_training_dummy(
 
     let stats = comp::Stats::new("Training Dummy".to_string());
     let skill_set = comp::SkillSet::default();
-    let health = comp::Health::new(body, 0);
+    let (base_health, base_health_increase) = {
+        let body_attributes = server
+            .state
+            .ecs()
+            .read_resource::<comp::body::BodyAttributes>();
+        (
+            body_attributes
+                .base_health
+                .as_ref()
+                .map_or(500, |bh| body.base_health(&bh)),
+            body_attributes
+                .base_health_increase
+                .as_ref()
+                .map_or(30, |bhi| body.base_health_increase(&bhi)),
+        )
+        //(500, 30)
+    };
+    let health = comp::Health::new(base_health, base_health_increase, 0);
     let poise = comp::Poise::new(body);
 
     server

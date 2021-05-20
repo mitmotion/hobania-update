@@ -8,7 +8,7 @@ use entity_creation::{
 use entity_manipulation::{
     handle_aura, handle_buff, handle_combo_change, handle_damage, handle_delete, handle_destroy,
     handle_energy_change, handle_explosion, handle_knockback, handle_land_on_ground, handle_poise,
-    handle_respawn, handle_teleport_to,
+    handle_respawn, handle_teleport_to, handle_update_energy_level, handle_update_health_level,
 };
 use group_manip::handle_group;
 use information::handle_site_info;
@@ -90,6 +90,12 @@ impl Server {
                     handle_knockback(&self, entity, impulse)
                 },
                 ServerEvent::Damage { entity, change } => handle_damage(&self, entity, change),
+                ServerEvent::ModifyHealthLevel { entity, level } => {
+                    handle_update_health_level(&self, entity, level)
+                },
+                ServerEvent::ModifyEnergyLevel { entity, level } => {
+                    handle_update_energy_level(&self, entity, level)
+                },
                 ServerEvent::PoiseChange {
                     entity,
                     change,

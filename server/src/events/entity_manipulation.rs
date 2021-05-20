@@ -62,6 +62,40 @@ pub fn handle_damage(server: &Server, entity: EcsEntity, change: HealthChange) {
     }
 }
 
+pub fn handle_update_health_level(server: &Server, entity: EcsEntity, level: u16) {
+    let ecs = &server.state.ecs();
+    if let Some(body) = ecs.read_storage::<Body>().get(entity) {
+        let body_attributes = ecs.read_resource::<comp::body::BodyAttributes>();
+        let base_health = body_attributes
+            .base_health
+            .as_ref()
+            .map_or(500, |bh| body.base_health(&bh));
+        let base_health_increase = body_attributes
+            .base_health_increase
+            .as_ref()
+            .map_or(500, |bhi| body.base_health_increase(&bhi));
+
+        if let Some(mut health) = ecs.write_storage::<Health>().get_mut(entity) {
+            health.update_max_health(base_health, base_health_increase, level);
+        }
+    }
+}
+
+pub fn handle_update_energy_level(server: &Server, entity: EcsEntity, level: u16) {
+    let ecs = &server.state.ecs();
+    if let Some(body) = ecs.read_storage::<Body>().get(entity) {
+        let body_attributes = ecs.read_resource::<comp::body::BodyAttributes>();
+        let base_energy = body_attributes
+            .base_energy
+            .as_ref()
+            .map_or(1000, |bh| body.base_energy(&bh));
+
+        if let Some(mut energy) = ecs.write_storage::<Energy>().get_mut(entity) {
+            energy.update_max_energy(base_energy, level);
+        }
+    }
+}
+
 pub fn handle_knockback(server: &Server, entity: EcsEntity, impulse: Vec3<f32>) {
     let ecs = &server.state.ecs();
     let clients = ecs.read_storage::<Client>();

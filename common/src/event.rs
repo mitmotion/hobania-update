@@ -41,6 +41,14 @@ pub enum ServerEvent {
         explosion: Explosion,
         owner: Option<Uid>,
     },
+    ModifyHealthLevel {
+        entity: EcsEntity,
+        level: u16,
+    },
+    ModifyEnergyLevel {
+        entity: EcsEntity,
+        level: u16,
+    },
     Damage {
         entity: EcsEntity,
         change: comp::HealthChange,

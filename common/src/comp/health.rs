@@ -1,5 +1,4 @@
 #[cfg(not(target_arch = "wasm32"))]
-use crate::comp::Body;
 use crate::{uid::Uid, DamageSource};
 use serde::{Deserialize, Serialize};
 
@@ -45,10 +44,10 @@ pub struct Health {
 
 impl Health {
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn new(body: Body, level: u16) -> Self {
+    pub fn new(base_health: u32, base_health_increase: u32, level: u16) -> Self {
         let mut health = Health::empty();
 
-        health.update_max_hp(Some(body), level);
+        health.update_max_health(base_health, base_health_increase, level);
         health.set_to(health.maximum(), HealthSource::Revive);
 
         health
@@ -120,15 +119,13 @@ impl Health {
 
     // TODO: Delete this once stat points will be a thing
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn update_max_hp(&mut self, body: Option<Body>, level: u16) {
-        if let Some(body) = body {
-            self.set_base_max(body.base_health() + body.base_health_increase() * level as u32);
-            self.set_maximum(body.base_health() + body.base_health_increase() * level as u32);
-            self.change_by(HealthChange {
-                amount: body.base_health_increase() as i32,
-                cause: HealthSource::LevelUp,
-            });
-        }
+    pub fn update_max_health(&mut self, base_health: u32, base_health_increase: u32, level: u16) {
+        self.set_base_max(base_health + base_health_increase * level as u32);
+        self.set_maximum(base_health + base_health_increase * level as u32);
+        self.change_by(HealthChange {
+            amount: base_health_increase as i32,
+            cause: HealthSource::LevelUp,
+        });
     }
 
     /// Returns the fraction of health an entity has remaining

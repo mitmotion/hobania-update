@@ -1,0 +1,142 @@
+(
+    humanoid: (
+        body: 500,
+        species: (),
+    ),
+    quadruped_medium: (
+        body: 700,
+        species: (
+            grolgar: Some(900),
+            saber: Some(600),
+            tuskram: Some(900),
+            lion: Some(900),
+            tarasque: Some(1500),
+            tiger: Some(700),
+            wolf: Some(550),
+            frostfang: Some(400),
+            mouflon: Some(500),
+            catoblepas: Some(1000),
+            bonerattler: Some(500),
+            deer: Some(500),
+            roshwalr: Some(800),
+            donkey: Some(550),
+            zebra: Some(550),
+            antelope: Some(450),
+            kelpie: Some(600),
+            horse: Some(600),
+            barghest: Some(1700),
+            cattle: Some(1000),
+            highland: Some(1200),
+            yak: Some(1100),
+            panda: Some(900),
+            bear: Some(900),
+            moose: Some(800),
+            dreadhorn: Some(1100),
+            snowleopard: Some(900),
+        )
+    ),
+    quadruped_small: (
+        body: 400,
+        species: (
+            boar: Some(700),
+            batfox: Some(400),
+            dodarock: Some(1000),
+            holladon: Some(800),
+            hyena: Some(450),
+	    truffler: Some(450),
+        )
+    ),
+    bird_medium: (
+        body: 250,
+        species: (
+            chicken: Some(300),
+            duck: Some(300),
+            goose: Some(300),
+            peacock: Some(350),
+            eagle: Some(450),
+        )
+    ),
+    biped_large: (
+        body: 1200,
+        species: (
+            ogre: Some(3200),
+            cyclops: Some(3200),
+            wendigo: Some(2800),
+            troll: Some(2400),
+            dullahan: Some(3000),
+            mindflayer: Some(12500),
+            minotaur: Some(30000),
+            tidalwarrior: Some(2500),
+            yeti: Some(4000),
+            harvester: Some(3000),
+            oni_blue: Some(2400),
+            oni_red: Some(2400),
+        )
+    ),
+    golem: (
+        body: 10000,
+        species: (
+            claygolem: Some(7500),
+        )
+    ),
+    theropod: (
+        body: 1100,
+        species: (
+            archaeos: Some(3500),
+            odonto: Some(3000),
+        )
+    ),
+    dragon: (
+        body: 5000,
+        species: (),
+    ),
+    object: (
+        body: 10000,
+        species: (),
+    ),
+    ship: (
+        body: 10000,
+        species: (),
+    ),
+    biped_small: (
+        body: 600,
+        species: (
+            gnarling: Some(500),
+            adlet: Some(600),
+            sahagin: Some(800),
+            haniwa: Some(900),
+            myrmidon: Some(900),
+            husk: Some(200),
+        )
+    ),
+    fish_small: (
+        body: 20,
+        species: (),
+    ),
+    fish_medium: (
+        body: 250,
+        species: (),
+    ),
+    bird_large: (
+        body: 3000,
+        species: (),
+    ),
+    quadruped_low: (
+        body: 700,
+        species: (
+            crocodile: Some(900),
+            alligator: Some(800),
+            monitor: Some(600),
+            asp: Some(750),
+            tortoise: Some(900),
+            rocksnapper: Some(1200),
+            pangolin: Some(400),
+            maneater: Some(700),
+            sandshark: Some(900),
+            hakulaq: Some(500),
+            lavadrake: Some(1000),
+            basilisk: Some(1000),
+            deadwood: Some(700),
+        )
+    )
+)

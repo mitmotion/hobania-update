@@ -1,0 +1,492 @@
+(
+    humanoid: (
+        body: (
+            aggro: 0.8,
+        ),
+        species: (
+            danari: (
+            	aggro: 0.9,
+            ),
+            dwarf: (
+            	aggro: 0.8,
+            ),
+            elf: (
+            	aggro: 0.7,
+            ),
+            human: (
+            	aggro: 0.6,
+            ),
+            orc: (
+            	aggro: 0.9,
+            ),
+            undead: (
+            	aggro: 0.9,
+            )
+        )
+    ),
+    quadruped_medium: (
+        body: (
+            aggro: 0.8,
+        ),
+        species: (
+            grolgar: (
+            	aggro: 0.8,
+            ),
+            saber: (
+            	aggro: 0.8,
+            ),
+            tuskram: (
+            	aggro: 0.7,
+            ),
+            lion: (
+            	aggro: 0.8,
+            ),
+            tarasque: (
+            	aggro: 0.8,
+            ),
+            tiger: (
+            	aggro: 0.8,
+            ),
+            wolf: (
+            	aggro: 0.8,
+            ),
+            frostfang: (
+            	aggro: 0.9,
+            ),
+            mouflon: (
+            	aggro: 0.7,
+            ),
+            catoblepas: (
+            	aggro: 0.8,
+            ),
+            bonerattler: (
+            	aggro: 0.8,
+            ),
+            deer: (
+            	aggro: 0.6,
+            ),
+            hirdrasil: (
+            	aggro: 0.7,
+            ),
+            roshwalr: (
+            	aggro: 0.8,
+            ),
+            donkey: (
+            	aggro: 0.7,
+            ),
+            camel: (
+            	aggro: 0.7,
+            ),
+            zebra: (
+            	aggro: 0.7,
+            ),
+            antelope: (
+            	aggro: 0.6,
+            ),
+            kelpie: (
+            	aggro: 0.7,
+            ),
+            horse: (
+            	aggro: 0.7,
+            ),
+            barghest: (
+            	aggro: 0.5,
+            ),
+            cattle: (
+            	aggro: 0.7,
+            ),
+            darkhound: (
+            	aggro: 0.9,
+            ),
+            highland: (
+            	aggro: 0.7,
+            ),
+            yak: (
+            	aggro: 0.7,
+            ),
+            panda: (
+            	aggro: 0.7,
+            ),
+            bear: (
+            	aggro: 0.9,
+            ),
+            dreadhorn: (
+            	aggro: 0.8,
+            ),
+            moose: (
+            	aggro: 0.8,
+            ),
+            snowleopard: (
+            	aggro: 0.9,
+            )
+        )
+    ),
+    quadruped_small: (
+        body: (
+            aggro: 0.8,
+        ),
+        species: (
+            pig: (
+            	aggro: 0.5,
+            ),
+            fox: (
+                aggro: 0.3,
+            ),
+            sheep: (
+                aggro: 0.5,
+            ),
+            boar: (
+                aggro: 0.8,
+            ),
+            jackalope: (
+                aggro: 0.4,
+            ),
+            skunk: (
+                aggro: 0.6,
+            ),
+            cat: (
+                aggro: 0.2,
+            ),
+            batfox: (
+                aggro: 0.6,
+            ),
+            raccoon: (
+                aggro: 0.4,
+            ),
+            quokka: (
+                aggro: 0.4,
+            ),
+            dodarock: (
+                aggro: 0.9,
+            ),
+            holladon: (
+                aggro: 1.0,
+            ),
+            hyena: (
+                aggro: 0.4,
+            ),
+            rabbit: (
+                aggro: 0.1,
+            ),
+            truffler: (
+                aggro: 0.8,
+            ),
+            frog: (
+                aggro: 0.4,
+            ),
+            rat: (
+                aggro: 0.0,
+            ),
+            axolotl: (
+                aggro: 0.0,
+            ),
+            gecko: (
+                aggro: 0.0,
+            ),
+            turtle: (
+                aggro: 0.8,
+            ),
+            squirrel: (
+                aggro: 0.1,
+            ),
+            fungome: (
+                aggro: 0.0,
+            ),
+            porcupine: (
+                aggro: 0.4,
+            ),
+            beaver: (
+                aggro: 0.5,
+            ),
+            hare: (
+                aggro: 0.3,
+            ),
+            dog: (
+                aggro: 0.5,
+            ),
+            goat: (
+                aggro: 0.5,
+            )
+        )
+    ),
+    bird_medium: (
+        body: (
+            aggro: 0.8,
+        ),
+        species: (
+            duck: (
+                aggro: 0.8,
+            ),
+            chicken: (
+                aggro: 0.8,
+            ),
+            goose: (
+                aggro: 0.8,
+            ),
+            peacock: (
+                aggro: 0.8,
+            ),
+            eagle: (
+                aggro: 0.8,
+            ),
+            owl: (
+                aggro: 0.8,
+            ),
+            parrot: (
+                aggro: 0.8,
+            ),
+        )
+    ),
+    biped_large: (
+        body: (
+            aggro: 1.0,
+        ),
+        species: (
+            ogre: (
+                aggro: 1.0,
+            ),
+            cyclops: (
+                aggro: 1.0,
+            ),
+            wendigo: (
+                aggro: 1.0,
+            ),
+            troll: (
+                aggro: 1.0,
+            ),
+            dullahan: (
+                aggro: 1.0,
+            ),
+            werewolf: (
+                aggro: 1.0,
+            ),
+            saurok_occult: (
+                aggro: 1.0,
+            ),
+            saurok_mighty: (
+                aggro: 1.0,
+            ),
+            saurok_sly: (
+                aggro: 1.0,
+            ),
+            mindflayer: (
+                aggro: 1.0,
+            ),
+            minotaur: (
+                aggro: 1.0,
+            ),
+            tidalwarrior: (
+                aggro: 1.0,
+            ),
+            yeti: (
+                aggro: 1.0,
+            ),
+            harvester: (
+                aggro: 1.0,
+            ),
+            oni_blue: (
+                aggro: 1.0,
+            ),
+            oni_red: (
+                aggro: 1.0,
+            ),
+        )
+    ),
+    golem: (
+        body: (
+            aggro: 1.0,
+        ),
+        species: (
+            stonegolem: (
+                aggro: 1.0,
+            ),
+            treant: (
+                aggro: 1.0,
+            ),
+            claygolem: (
+                aggro: 1.0,
+            )
+        )
+    ),
+    theropod: (
+        body: (
+            aggro: 1.0,
+        ),
+        species: (
+            archaeos: (
+                aggro: 1.0,
+            ),
+            odonto: (
+                aggro: 1.0,
+            ),
+            raptor_sand: (
+                aggro: 1.0,
+            ),
+            raptor_snow: (
+                aggro: 1.0,
+            ),
+            raptor_wood: (
+                aggro: 1.0,
+            ),
+            sunlizard: (
+                aggro: 1.0,
+            ),
+            yale: (
+                aggro: 1.0,
+            ),
+            ntouka: (
+                aggro: 1.0,
+            )
+        )
+    ),
+    dragon: (
+        body: (
+            aggro: 1.0,
+        ),
+        species: (
+            reddragon: (
+                aggro: 1.0,
+            )
+        )
+    ),
+    object: (
+        body: (
+            aggro: 1.0,
+        ),
+        species: ()
+    ),
+    ship: (
+        body: (
+            aggro: 1.0,
+        ),
+        species: (),
+    ),
+    biped_small: (
+        body: (
+            aggro: 0.5,
+        ),
+        species: (
+            gnome: (
+                aggro: 0.5,
+            ),
+            sahagin: (
+                aggro: 0.5,
+            ),
+            adlet: (
+                aggro: 0.5,
+            ),
+            gnarling: (
+                aggro: 0.5,
+            ),
+            mandragora: (
+                aggro: 0.5,
+            ),
+            kappa: (
+                aggro: 0.5,
+            ),
+            cactid: (
+                aggro: 0.5,
+            ),
+            gnoll: (
+                aggro: 0.5,
+            ),
+            haniwa: (
+                aggro: 0.5,
+            ),
+            myrmidon: (
+                aggro: 0.5,
+            ),
+            husk: (
+                aggro: 0.5,
+            )
+        )
+    ),
+    fish_small: (
+        body: (
+            aggro: 0.0,
+        ),
+        species: (
+            clownfish: (
+                aggro: 0.0,
+            ),
+            piranha: (
+                aggro: 0.0,
+            )
+        )
+    ),
+    fish_medium: (
+        body: (
+            aggro: 0.15,
+        ),
+        species: (
+            marlin: (
+                aggro: 0.15,
+            ),
+            icepike: (
+                aggro: 0.15,
+            )
+        )
+    ),
+    bird_large: (
+        body: (
+            aggro: 0.9,
+        ),
+        species: (
+            phoenix: (
+                aggro: 0.9,
+            ),
+            cockatrice: (
+                aggro: 0.9,
+            ),
+        )
+    ),
+    quadruped_low: (
+        body: (
+            aggro: 0.8,
+        ),
+        species: (
+            crocodile: (
+                aggro: 0.8,
+            ),
+            alligator: (
+                aggro: 0.8,
+            ),
+            salamander: (
+                aggro: 0.7,
+            ),
+            monitor: (
+                aggro: 0.7,
+            ),
+            asp: (
+                aggro: 0.9,
+            ),
+            tortoise: (
+                aggro: 0.6,
+            ),
+            rocksnapper: (
+                aggro: 0.8,
+            ),
+            pangolin: (
+                aggro: 0.4,
+            ),
+            maneater: (
+                aggro: 0.8,
+            ),
+            sandshark: (
+                aggro: 0.9,
+            ),
+            hakulaq: (
+                aggro: 0.9,
+            ),
+            lavadrake: (
+                aggro: 0.9,
+            ),
+            basilisk: (
+                aggro: 0.8,
+            ),
+            deadwood: (
+                aggro: 0.6,
+            ),
+        )
+    )
+)

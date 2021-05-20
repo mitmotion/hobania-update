@@ -1,0 +1,114 @@
+(
+    humanoid: (
+        body: 50,
+        species: (),
+    ),
+    quadruped_medium: (
+        body: 20,
+        species: (
+            grolgar: Some(30),
+            tuskram: Some(30),
+            lion: Some(40),
+            tarasque: Some(60),
+            wolf: Some(20),
+            frostfang: Some(40),
+            mouflon: Some(30),
+            catoblepas: Some(50),
+            bonerattler: Some(30),
+            hirdrasil: Some(30),
+            roshwalr: Some(40),
+            donkey: Some(30),
+            camel: Some(30),
+            zebra: Some(30),
+            kelpie: Some(30),
+            horse: Some(30),
+            barghest: Some(50),
+            cattle: Some(30),
+            highland: Some(30),
+            yak: Some(30),
+            panda: Some(40),
+            bear: Some(40),
+            moose: Some(30),
+            dreadhorn: Some(50),
+        )
+    ),
+    quadruped_small: (
+        body: 10,
+        species: (
+            boar: Some(20),
+            dodarock: Some(30),
+            holladon: Some(30),
+            hyena: Some(20),
+            truffler: Some(20),
+        )
+    ),
+    bird_medium: (
+        body: 10,
+        species: (),
+    ),
+    biped_large: (
+        body: 100,
+        species: (
+            ogre: Some(70),
+            cyclops: Some(80),
+            wendigo: Some(80),
+            troll: Some(60),
+            dullahan: Some(120),
+            tidalwarrior: Some(90),
+            yeti: Some(80),
+            harvester: Some(80),
+            // Boss enemies have their health set,
+	    // not adjusted by level.
+        )
+    ),
+    golem: (
+        body: 0,
+        species: (),
+    ),
+    theropod: (
+        body: 20,
+        species: (),
+    ),
+    dragon: (
+        body: 500,
+        species: (),
+    ),
+    object: (
+        body: 10,
+        species: (),
+    ),
+    ship: (
+        body: 10,
+        species: (),
+    ),
+    biped_small: (
+        body: 10,
+        species: (),
+    ),
+    fish_small: (
+        body: 10,
+        species: (),
+    ),
+    fish_medium: (
+        body: 10,
+        species: (),
+    ),
+    bird_large: (
+        body: 120,
+        species: (),
+    ),
+    quadruped_low: (
+        body: 20,
+        species: (
+            salamander: Some(10),
+            monitor: Some(10),
+            asp: Some(10),
+            rocksnapper: Some(50),
+            pangolin: Some(10),
+            maneater: Some(30),
+            sandshark: Some(40),
+            hakulaq: Some(10),
+            deadwood: Some(30),
+        )
+    )
+)

@@ -1,0 +1,62 @@
+(
+    humanoid: (
+        body: 990.0,
+        species: (),
+    ),
+    quadruped_medium: (
+        body: 990.0,
+        species: (),
+    ),
+    quadruped_small: (
+        body: 990.0,
+        species: (),
+    ),
+    biped_large: (
+        body: 990.0,
+        species: (),
+    ),
+    golem: (
+        body: 2500.0,
+        species: (),
+    ),
+    theropod: (
+        body: 990.0,
+        species: (),
+    ),
+    dragon: (
+        body: 3700.0,
+        species: (),
+    ),
+    object: (
+        body: 990.0,
+        species: ()
+    ),
+    ship: (
+        body: 990.0,
+        species: (),
+    ),
+    biped_small: (
+        body: 990.0,
+        species: (),
+    ),
+    fish_small: (
+        body: 999.1,
+        species: (),
+    ),
+    fish_medium: (
+        body: 999.1,
+        species: (),
+    ),
+    bird_medium: (
+        body: 700.0,
+        species: (),
+    ),
+    bird_large: (
+        body: 990.0,
+        species: (),
+    ),
+    quadruped_low: (
+        body: 990.0,
+        species: (),
+    )
+)

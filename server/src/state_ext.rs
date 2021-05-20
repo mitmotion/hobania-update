@@ -8,7 +8,7 @@ use common::{
     comp::{
         self,
         skills::{GeneralSkill, Skill},
-        Group, Inventory,
+        Density, Group, Inventory, Mass,
     },
     effect::Effect,
     resources::TimeOfDay,
@@ -180,6 +180,24 @@ impl StateExt for State {
         inventory: comp::Inventory,
         body: comp::Body,
     ) -> EcsEntityBuilder {
+        let (mass, density, base_energy) = {
+            let body_attributes = &self.ecs().read_resource::<comp::body::BodyAttributes>();
+            (
+                body_attributes
+                    .mass
+                    .as_ref()
+                    .map_or(Mass::default(), |bm| body.mass(&bm)),
+                body_attributes
+                    .density
+                    .as_ref()
+                    .map_or(Density::default(), |bd| body.density(&bd)),
+                body_attributes
+                    .base_energy
+                    .as_ref()
+                    .map_or(0, |be| body.base_energy(&be)),
+            )
+            //(Mass::default(), Density::default(), 100)
+        };
         self.ecs_mut()
             .create_entity_synced()
             .with(pos)
@@ -192,8 +210,8 @@ impl StateExt for State {
                 ))
                 .unwrap_or_default(),
             )
-            .with(body.mass())
-            .with(body.density())
+            .with(mass)
+            .with(density)
             .with(match body {
                 comp::Body::Ship(ship) => comp::Collider::Voxel {
                     id: ship.manifest_entry().to_string(),
@@ -207,7 +225,7 @@ impl StateExt for State {
             .with(comp::Controller::default())
             .with(body)
             .with(comp::Energy::new(
-                body,
+                base_energy,
                 skill_set
                     .skill_level(Skill::General(GeneralSkill::EnergyIncrease))
                     .unwrap_or(None)
@@ -227,13 +245,27 @@ impl StateExt for State {
 
     fn create_object(&mut self, pos: comp::Pos, object: comp::object::Body) -> EcsEntityBuilder {
         let body = comp::Body::Object(object);
+        let (mass, density) = {
+            let body_attributes = &self.ecs().read_resource::<comp::body::BodyAttributes>();
+            (
+                body_attributes
+                    .mass
+                    .as_ref()
+                    .map_or(Mass::default(), |bm| body.mass(&bm)),
+                body_attributes
+                    .density
+                    .as_ref()
+                    .map_or(Density::default(), |bd| body.density(&bd)),
+            )
+            //(Mass::default(), Density::default())
+        };
         self.ecs_mut()
             .create_entity_synced()
             .with(pos)
             .with(comp::Vel(Vec3::zero()))
             .with(comp::Ori::default())
-            .with(body.mass())
-            .with(body.density())
+            .with(mass)
+            .with(density)
             .with(comp::Collider::Box {
                 radius: body.radius(),
                 z_min: 0.0,
@@ -249,14 +281,32 @@ impl StateExt for State {
         mountable: bool,
     ) -> EcsEntityBuilder {
         let body = comp::Body::Ship(ship);
+        let (mass, density, base_energy) = {
+            let body_attributes = &self.ecs().read_resource::<comp::body::BodyAttributes>();
+            (
+                body_attributes
+                    .mass
+                    .as_ref()
+                    .map_or(Mass::default(), |bm| body.mass(&bm)),
+                body_attributes
+                    .density
+                    .as_ref()
+                    .map_or(Density::default(), |bd| body.density(&bd)),
+                body_attributes
+                    .base_energy
+                    .as_ref()
+                    .map_or(0, |be| body.base_energy(&be)),
+            )
+            //(Mass::default(), Density::default(), 100)
+        };
         let mut builder = self
             .ecs_mut()
             .create_entity_synced()
             .with(pos)
             .with(comp::Vel(Vec3::zero()))
             .with(comp::Ori::default())
-            .with(body.mass())
-            .with(body.density())
+            .with(mass)
+            .with(density)
             .with(comp::Collider::Voxel {
                 id: ship.manifest_entry().to_string(),
             })
@@ -267,7 +317,7 @@ impl StateExt for State {
             .with(comp::CharacterState::default())
             // TODO: some of these are required in order for the character_behavior system to
             // recognize a possesed airship; that system should be refactored to use `.maybe()`
-            .with(comp::Energy::new(ship.into(), 0))
+            .with(comp::Energy::new(base_energy, 0))
             .with(comp::Stats::new("Airship".to_string()))
             .with(comp::SkillSet::default())
             .with(comp::Combo::default());
@@ -285,13 +335,27 @@ impl StateExt for State {
         body: comp::Body,
         projectile: comp::Projectile,
     ) -> EcsEntityBuilder {
+        let (mass, density) = {
+            let body_attributes = &self.ecs().read_resource::<comp::body::BodyAttributes>();
+            (
+                body_attributes
+                    .mass
+                    .as_ref()
+                    .map_or(Mass::default(), |bm| body.mass(&bm)),
+                body_attributes
+                    .density
+                    .as_ref()
+                    .map_or(Density::default(), |bd| body.density(&bd)),
+            )
+            //(Mass::default(), Density::default())
+        };
         self.ecs_mut()
             .create_entity_synced()
             .with(pos)
             .with(vel)
             .with(comp::Ori::from_unnormalized_vec(vel.0).unwrap_or_default())
-            .with(body.mass())
-            .with(body.density())
+            .with(mass)
+            .with(density)
             .with(comp::Collider::Point)
             .with(body)
             .with(projectile)
@@ -470,6 +534,34 @@ impl StateExt for State {
 
     fn update_character_data(&mut self, entity: EcsEntity, components: PersistedComponents) {
         let (body, stats, skill_set, inventory, waypoint) = components;
+        let (mass, density, base_energy, base_health, base_health_increase) = {
+            let body_attributes = &self.ecs().read_resource::<comp::body::BodyAttributes>();
+            (
+                body_attributes
+                    .mass
+                    .as_ref()
+                    .map_or(Mass::default(), |bm| body.mass(&bm)),
+                body_attributes
+                    .density
+                    .as_ref()
+                    .map_or(Density::default(), |bd| body.density(&bd)),
+                // FIXME what should the default value be here?
+                body_attributes
+                    .base_energy
+                    .as_ref()
+                    .map_or(0, |be| body.base_energy(&be)),
+                // FIXME what should the default value be here?
+                body_attributes
+                    .base_health
+                    .as_ref()
+                    .map_or(500, |bh| body.base_health(&bh)),
+                body_attributes
+                    .base_health_increase
+                    .as_ref()
+                    .map_or(30, |bhi| body.base_health_increase(&bhi)),
+            )
+            //(Mass::default(), Density::default(), 100, 500, 30)
+        };
 
         if let Some(player_uid) = self.read_component_copied::<Uid>(entity) {
             // Notify clients of a player list update
@@ -489,8 +581,8 @@ impl StateExt for State {
                 z_max: body.height(),
             });
             self.write_component_ignore_entity_dead(entity, body);
-            self.write_component_ignore_entity_dead(entity, body.mass());
-            self.write_component_ignore_entity_dead(entity, body.density());
+            self.write_component_ignore_entity_dead(entity, mass);
+            self.write_component_ignore_entity_dead(entity, density);
             let (health_level, energy_level) = (
                 skill_set
                     .skill_level(Skill::General(GeneralSkill::HealthIncrease))
@@ -501,8 +593,14 @@ impl StateExt for State {
                     .unwrap_or(None)
                     .unwrap_or(0),
             );
-            self.write_component_ignore_entity_dead(entity, comp::Health::new(body, health_level));
-            self.write_component_ignore_entity_dead(entity, comp::Energy::new(body, energy_level));
+            self.write_component_ignore_entity_dead(
+                entity,
+                comp::Health::new(base_health, base_health_increase, health_level),
+            );
+            self.write_component_ignore_entity_dead(
+                entity,
+                comp::Energy::new(base_energy, energy_level),
+            );
             self.write_component_ignore_entity_dead(entity, comp::Poise::new(body));
             self.write_component_ignore_entity_dead(entity, stats);
             self.write_component_ignore_entity_dead(entity, skill_set);

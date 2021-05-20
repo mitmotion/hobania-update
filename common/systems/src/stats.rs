@@ -2,8 +2,8 @@ use common::{
     comp::{
         self,
         skills::{GeneralSkill, Skill},
-        Body, CharacterState, Combo, Energy, EnergyChange, EnergySource, Health, Poise,
-        PoiseChange, PoiseSource, Pos, SkillSet, Stats,
+        CharacterState, Combo, Energy, EnergyChange, EnergySource, Health, Poise, PoiseChange,
+        PoiseSource, Pos, SkillSet, Stats,
     },
     event::{EventBus, ServerEvent},
     outcome::Outcome,
@@ -28,7 +28,6 @@ pub struct ReadData<'a> {
     server_bus: Read<'a, EventBus<ServerEvent>>,
     positions: ReadStorage<'a, Pos>,
     uids: ReadStorage<'a, Uid>,
-    bodies: ReadStorage<'a, Body>,
     char_states: ReadStorage<'a, CharacterState>,
 }
 
@@ -112,13 +111,13 @@ impl<'a> System<'a> for Sys {
             }
             let stat = stats;
 
-            let update_max_hp = {
+            let update_max_health = {
                 let health = health.get_unchecked();
                 (stat.max_health_modifier - 1.0).abs() > f32::EPSILON
                     || health.base_max() != health.maximum()
             };
 
-            if update_max_hp {
+            if update_max_health {
                 let mut health = health.get_mut_unchecked();
                 health.scale_maximum(stat.max_health_modifier);
             }
@@ -148,33 +147,32 @@ impl<'a> System<'a> for Sys {
         }
 
         // Apply effects from leveling skills
-        for (mut skill_set, mut health, mut energy, body) in (
-            &mut skill_sets.restrict_mut(),
-            &mut healths.restrict_mut(),
-            &mut energies.restrict_mut(),
-            &read_data.bodies,
-        )
-            .join()
+        for (entity, mut skill_set) in (&read_data.entities, &mut skill_sets.restrict_mut()).join()
         {
             let skillset = skill_set.get_unchecked();
             if skillset.modify_health {
-                let mut health = health.get_mut_unchecked();
+                //let mut health = health.get_mut_unchecked();
                 let health_level = skillset
                     .skill_level(Skill::General(GeneralSkill::HealthIncrease))
                     .unwrap_or(None)
                     .unwrap_or(0);
-                health.update_max_hp(Some(*body), health_level);
+                server_event_emitter.emit(ServerEvent::ModifyHealthLevel {
+                    entity,
+                    level: health_level,
+                });
                 let mut skillset = skill_set.get_mut_unchecked();
                 skillset.modify_health = false;
             }
             let skillset = skill_set.get_unchecked();
             if skillset.modify_energy {
-                let mut energy = energy.get_mut_unchecked();
                 let energy_level = skillset
                     .skill_level(Skill::General(GeneralSkill::EnergyIncrease))
                     .unwrap_or(None)
                     .unwrap_or(0);
-                energy.update_max_energy(Some(*body), energy_level);
+                server_event_emitter.emit(ServerEvent::ModifyEnergyLevel {
+                    entity,
+                    level: energy_level,
+                });
                 let mut skill_set = skill_set.get_mut_unchecked();
                 skill_set.modify_energy = false;
             }
