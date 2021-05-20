@@ -84,7 +84,7 @@ impl<'a> System<'a> for Sys {
                         pos.0,
                         2.0,
                         read_data.time.0,
-                        Some(entity),
+                        projectile_owner,
                     ),
                 });
             }
