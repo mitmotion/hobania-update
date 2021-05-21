@@ -45,7 +45,7 @@ pub trait StateExt {
         body: comp::Body,
     ) -> EcsEntityBuilder;
     /// Build a static object entity
-    fn create_object(&mut self, pos: comp::Pos, object: comp::object::Body) -> EcsEntityBuilder;
+    fn create_object(&mut self, pos: comp::Pos, species: comp::object::Species) -> EcsEntityBuilder;
     fn create_ship(
         &mut self,
         pos: comp::Pos,
@@ -79,7 +79,7 @@ pub trait StateExt {
     fn create_wiring(
         &mut self,
         pos: comp::Pos,
-        object: comp::object::Body,
+        species: comp::object::Species,
         wiring_element: wiring::WiringElement,
     ) -> EcsEntityBuilder;
     // NOTE: currently only used for testing
@@ -243,8 +243,8 @@ impl StateExt for State {
             .with(comp::Auras::default())
     }
 
-    fn create_object(&mut self, pos: comp::Pos, object: comp::object::Body) -> EcsEntityBuilder {
-        let body = comp::Body::Object(object);
+    fn create_object(&mut self, pos: comp::Pos, species: comp::object::Species) -> EcsEntityBuilder {
+        let body = comp::Body::Object(comp::object::Body { species });
         let (mass, density) = {
             let body_attributes = &self.ecs().read_resource::<comp::body::BodyAttributes>();
             (
@@ -257,7 +257,6 @@ impl StateExt for State {
                     .as_ref()
                     .map_or(Density::default(), |bd| body.density(&bd)),
             )
-            //(Mass::default(), Density::default())
         };
         self.ecs_mut()
             .create_entity_synced()
@@ -271,7 +270,7 @@ impl StateExt for State {
                 z_min: 0.0,
                 z_max: body.height(),
             })
-            .with(body)
+            .with(comp::Body::Object(comp::object::Body { species }))
     }
 
     fn create_ship(
@@ -424,7 +423,7 @@ impl StateExt for State {
     fn create_wiring(
         &mut self,
         pos: comp::Pos,
-        object: comp::object::Body,
+        species: comp::object::Species,
         wiring_element: wiring::WiringElement,
     ) -> EcsEntityBuilder {
         self.ecs_mut()
@@ -433,11 +432,11 @@ impl StateExt for State {
             .with(comp::Vel(Vec3::zero()))
             .with(comp::Ori::default())
             .with(comp::Collider::Box {
-                radius: comp::Body::Object(object).radius(),
+                radius: comp::Body::Object(comp::body::object::Body { species }).radius(),
                 z_min: 0.0,
-                z_max: comp::Body::Object(object).height()
+                z_max: comp::Body::Object(comp::body::object::Body { species }).height(),
             })
-            .with(comp::Body::Object(object))
+            .with(comp::Body::Object(comp::body::object::Body { species }))
             .with(comp::Mass(10.0))
             // .with(comp::Sticky)
             .with(wiring_element)

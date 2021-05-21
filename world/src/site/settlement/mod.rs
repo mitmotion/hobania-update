@@ -899,7 +899,7 @@ impl Settlement {
                         .with_body(match dynamic_rng.gen_range(0..5) {
                             _ if is_dummy => {
                                 is_human = false;
-                                object::Body::TrainingDummy.into()
+                                comp::Body::Object(object::Body { species: object::Species::TrainingDummy })
                             },
                             0 => {
                                 let species = match dynamic_rng.gen_range(0..5) {

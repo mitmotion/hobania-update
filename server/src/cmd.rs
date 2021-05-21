@@ -420,7 +420,7 @@ fn handle_drop_all(
 
         server
             .state
-            .create_object(Default::default(), comp::object::Body::Pouch)
+            .create_object(Default::default(), comp::object::Species::Pouch)
             .with(comp::Pos(Vec3::new(
                 pos.0.x + rng.gen_range(5.0..10.0),
                 pos.0.y + rng.gen_range(5.0..10.0),
@@ -1120,7 +1120,7 @@ fn handle_spawn_training_dummy(
         10.0,
     );
 
-    let body = comp::Body::Object(comp::object::Body::TrainingDummy);
+    let body = comp::Body::Object(comp::object::Body { species: comp::object::Species::TrainingDummy });
 
     let stats = comp::Stats::new("Training Dummy".to_string());
     let skill_set = comp::SkillSet::default();
@@ -1217,7 +1217,7 @@ fn handle_spawn_campfire(
     let pos = position(server, target, "target")?;
     server
         .state
-        .create_object(pos, comp::object::Body::CampfireLit)
+        .create_object(pos, comp::object::Species::CampfireLit)
         .with(LightEmitter {
             col: Rgb::new(1.0, 0.65, 0.2),
             strength: 2.0,
@@ -1675,7 +1675,7 @@ fn handle_object(
     .create_object(pos, ori, obj_type)
     .with(ori);*/
     let obj_str_res = obj_type.as_ref().map(String::as_str);
-    if let Some(obj_type) = comp::object::ALL_OBJECTS
+    if let Some(obj_type) = comp::object::ALL_SPECIES
         .iter()
         .find(|o| Ok(o.to_string()) == obj_str_res)
     {
@@ -1944,7 +1944,7 @@ fn handle_spawn_wiring(
 
     let builder1 = server
         .state
-        .create_wiring(pos, comp::object::Body::Coins, WiringElement {
+        .create_wiring(pos, comp::object::Species::Coins, WiringElement {
             actions: vec![WiringAction {
                 formula: wiring::OutputFormula::Constant { value: 1.0 },
                 threshold: 1.0,
@@ -1969,7 +1969,7 @@ fn handle_spawn_wiring(
     pos.0.x += 3.0;
     let builder2 = server
         .state
-        .create_wiring(pos, comp::object::Body::Coins, WiringElement {
+        .create_wiring(pos, comp::object::Species::Coins, WiringElement {
             actions: vec![
                 WiringAction {
                     formula: wiring::OutputFormula::Input {
@@ -2008,7 +2008,7 @@ fn handle_spawn_wiring(
     pos.0.x += 3.0;
     let builder3 = server
         .state
-        .create_wiring(pos, comp::object::Body::TrainingDummy, WiringElement {
+        .create_wiring(pos, comp::object::Species::TrainingDummy, WiringElement {
             actions: vec![],
             inputs: HashMap::new(),
             outputs: HashMap::new(),

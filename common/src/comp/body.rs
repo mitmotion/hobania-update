@@ -92,11 +92,11 @@ pub struct AllBodies<BodyMeta, SpeciesMeta> {
     pub fish_small: BodyData<BodyMeta, fish_small::AllSpecies<SpeciesMeta>>,
     pub biped_large: BodyData<BodyMeta, biped_large::AllSpecies<SpeciesMeta>>,
     pub biped_small: BodyData<BodyMeta, biped_small::AllSpecies<SpeciesMeta>>,
-    pub object: BodyData<BodyMeta, ()>,
+    pub object: BodyData<BodyMeta, object::AllSpecies<SpeciesMeta>>,
     pub golem: BodyData<BodyMeta, golem::AllSpecies<SpeciesMeta>>,
     pub theropod: BodyData<BodyMeta, theropod::AllSpecies<SpeciesMeta>>,
     pub quadruped_low: BodyData<BodyMeta, quadruped_low::AllSpecies<SpeciesMeta>>,
-    pub ship: BodyData<BodyMeta, ()>,
+    pub ship: BodyData<BodyMeta, ship::AllSpecies<SpeciesMeta>>,
 }
 
 /// Can only retrieve body metadata by direct index.
@@ -313,9 +313,8 @@ impl Body {
                 get_body_attribute(&body_attribute.quadruped_small, body.species)
             },
             Body::Theropod(body) => get_body_attribute(&body_attribute.theropod, body.species),
-            // TODO fix this for ships and objects to read from the ron files
-            Body::Ship(ship) => T::default(),
-            Body::Object(object) => T::default(),
+            Body::Ship(body) => get_body_attribute(&body_attribute.ship, body.species),
+            Body::Object(body) => get_body_attribute(&body_attribute.object, body.species),
         }
     }
 
@@ -397,36 +396,37 @@ impl Body {
     }
 
     pub fn aggro(&self, body_aggros: &AllBodiesAggro) -> f32 {
-        match self {
-            Body::BipedLarge(body) => {
-                get_body_f32_attribute(&body_aggros.biped_large, body.species)
-            },
-            Body::BipedSmall(body) => {
-                get_body_f32_attribute(&body_aggros.biped_small, body.species)
-            },
-            Body::BirdMedium(body) => {
-                get_body_f32_attribute(&body_aggros.bird_medium, body.species)
-            },
-            Body::BirdLarge(body) => get_body_f32_attribute(&body_aggros.bird_large, body.species),
-            Body::FishSmall(body) => get_body_f32_attribute(&body_aggros.fish_small, body.species),
-            Body::FishMedium(body) => {
-                get_body_f32_attribute(&body_aggros.fish_medium, body.species)
-            },
-            Body::Humanoid(body) => get_body_f32_attribute(&body_aggros.humanoid, body.species),
-            Body::QuadrupedMedium(body) => {
-                get_body_f32_attribute(&body_aggros.quadruped_medium, body.species)
-            },
-            Body::QuadrupedSmall(body) => {
-                get_body_f32_attribute(&body_aggros.quadruped_small, body.species)
-            },
-            Body::Theropod(body) => get_body_f32_attribute(&body_aggros.theropod, body.species),
-            Body::Dragon(body) => get_body_f32_attribute(&body_aggros.dragon, body.species),
-            Body::QuadrupedLow(body) => {
-                get_body_f32_attribute(&body_aggros.quadruped_low, body.species)
-            },
-            Body::Golem(body) => get_body_f32_attribute(&body_aggros.golem, body.species),
-            Body::Ship(_) | Body::Object(_) => 0.0,
-        }
+        0.0 //match self {
+        //    Body::BipedLarge(body) => {
+        //        get_body_f32_attribute(&body_aggros.biped_large, body.species)
+        //    },
+        //    Body::BipedSmall(body) => {
+        //        get_body_f32_attribute(&body_aggros.biped_small, body.species)
+        //    },
+        //    Body::BirdMedium(body) => {
+        //        get_body_f32_attribute(&body_aggros.bird_medium, body.species)
+        //    },
+        //    Body::BirdLarge(body) => get_body_f32_attribute(&body_aggros.bird_large, body.species),
+        //    Body::FishSmall(body) => get_body_f32_attribute(&body_aggros.fish_small, body.species),
+        //    Body::FishMedium(body) => {
+        //        get_body_f32_attribute(&body_aggros.fish_medium, body.species)
+        //    },
+        //    Body::Humanoid(body) => get_body_f32_attribute(&body_aggros.humanoid, body.species),
+        //    Body::QuadrupedMedium(body) => {
+        //        get_body_f32_attribute(&body_aggros.quadruped_medium, body.species)
+        //    },
+        //    Body::QuadrupedSmall(body) => {
+        //        get_body_f32_attribute(&body_aggros.quadruped_small, body.species)
+        //    },
+        //    Body::Theropod(body) => get_body_f32_attribute(&body_aggros.theropod, body.species),
+        //    Body::Dragon(body) => get_body_f32_attribute(&body_aggros.dragon, body.species),
+        //    Body::QuadrupedLow(body) => {
+        //        get_body_f32_attribute(&body_aggros.quadruped_low, body.species)
+        //    },
+        //    Body::Golem(body) => get_body_f32_attribute(&body_aggros.golem, body.species),
+        //    Body::Ship(body) => get_body_f32_attribute(&body_aggros.ship, body.species),
+        //    Body::Object(body) => get_body_f32_attribute(&body_aggros.object, body.species),
+        //}
     }
 
     /// The width (shoulder to shoulder), length (nose to tail) and height
@@ -469,7 +469,7 @@ impl Body {
                 };
                 Vec3::new(1.5, 0.5, height)
             },
-            Body::Object(object) => object.dimensions(),
+            Body::Object(object) => Vec3::new(1.0, 1.0, 1.0), //object.dimensions(),
             Body::QuadrupedMedium(body) => match body.species {
                 quadruped_medium::Species::Barghest => Vec3::new(2.0, 3.6, 2.5),
                 quadruped_medium::Species::Bear => Vec3::new(2.0, 3.6, 2.0),
@@ -531,79 +531,82 @@ impl Body {
     pub fn height(&self) -> f32 { self.dimensions().z }
 
     pub fn base_energy(&self, body_energies: &AllBodiesBaseEnergy) -> u32 {
-        match self {
-            Body::BipedLarge(body) => {
-                get_body_u32_attribute(&body_energies.biped_large, body.species)
-            },
-            Body::BipedSmall(body) => {
-                get_body_u32_attribute(&body_energies.biped_small, body.species)
-            },
-            Body::BirdMedium(body) => {
-                get_body_u32_attribute(&body_energies.bird_medium, body.species)
-            },
-            Body::BirdLarge(body) => {
-                get_body_u32_attribute(&body_energies.bird_large, body.species)
-            },
-            Body::FishSmall(body) => {
-                get_body_u32_attribute(&body_energies.fish_small, body.species)
-            },
-            Body::FishMedium(body) => {
-                get_body_u32_attribute(&body_energies.fish_medium, body.species)
-            },
-            Body::Humanoid(body) => get_body_u32_attribute(&body_energies.humanoid, body.species),
-            Body::QuadrupedMedium(body) => {
-                get_body_u32_attribute(&body_energies.quadruped_medium, body.species)
-            },
-            Body::QuadrupedSmall(body) => {
-                get_body_u32_attribute(&body_energies.quadruped_small, body.species)
-            },
-            Body::Theropod(body) => get_body_u32_attribute(&body_energies.theropod, body.species),
-            Body::Dragon(body) => get_body_u32_attribute(&body_energies.dragon, body.species),
-            Body::QuadrupedLow(body) => {
-                get_body_u32_attribute(&body_energies.quadruped_low, body.species)
-            },
-            Body::Golem(body) => get_body_u32_attribute(&body_energies.golem, body.species),
-            Body::Ship(_) | Body::Object(_) => 1000,
-        }
+        1000
+        //match self {
+        //    Body::BipedLarge(body) => {
+        //        get_body_u32_attribute(&body_energies.biped_large, body.species)
+        //    },
+        //    Body::BipedSmall(body) => {
+        //        get_body_u32_attribute(&body_energies.biped_small, body.species)
+        //    },
+        //    Body::BirdMedium(body) => {
+        //        get_body_u32_attribute(&body_energies.bird_medium, body.species)
+        //    },
+        //    Body::BirdLarge(body) => {
+        //        get_body_u32_attribute(&body_energies.bird_large, body.species)
+        //    },
+        //    Body::FishSmall(body) => {
+        //        get_body_u32_attribute(&body_energies.fish_small, body.species)
+        //    },
+        //    Body::FishMedium(body) => {
+        //        get_body_u32_attribute(&body_energies.fish_medium, body.species)
+        //    },
+        //    Body::Humanoid(body) => get_body_u32_attribute(&body_energies.humanoid, body.species),
+        //    Body::QuadrupedMedium(body) => {
+        //        get_body_u32_attribute(&body_energies.quadruped_medium, body.species)
+        //    },
+        //    Body::QuadrupedSmall(body) => {
+        //        get_body_u32_attribute(&body_energies.quadruped_small, body.species)
+        //    },
+        //    Body::Theropod(body) => get_body_u32_attribute(&body_energies.theropod, body.species),
+        //    Body::Dragon(body) => get_body_u32_attribute(&body_energies.dragon, body.species),
+        //    Body::QuadrupedLow(body) => {
+        //        get_body_u32_attribute(&body_energies.quadruped_low, body.species)
+        //    },
+        //    Body::Golem(body) => get_body_u32_attribute(&body_energies.golem, body.species),
+        //    Body::Ship(body) => get_body_u32_attribute(&body_energies.ship, body.species),
+        //    Body::Object(body) => get_body_u32_attribute(&body_energies.object, body.species),
+        //}
     }
 
     pub fn base_health(&self, body_healths: &AllBodiesBaseHealth) -> u32 {
-        match self {
-            Body::BipedLarge(body) => {
-                get_body_u32_attribute(&body_healths.biped_large, body.species)
-            },
-            Body::BipedSmall(body) => {
-                get_body_u32_attribute(&body_healths.biped_small, body.species)
-            },
-            Body::BirdMedium(body) => {
-                get_body_u32_attribute(&body_healths.bird_medium, body.species)
-            },
-            Body::BirdLarge(body) => get_body_u32_attribute(&body_healths.bird_large, body.species),
-            Body::FishSmall(body) => get_body_u32_attribute(&body_healths.fish_small, body.species),
-            Body::FishMedium(body) => {
-                get_body_u32_attribute(&body_healths.fish_medium, body.species)
-            },
-            Body::Humanoid(body) => get_body_u32_attribute(&body_healths.humanoid, body.species),
-            Body::QuadrupedMedium(body) => {
-                get_body_u32_attribute(&body_healths.quadruped_medium, body.species)
-            },
-            Body::QuadrupedSmall(body) => {
-                get_body_u32_attribute(&body_healths.quadruped_small, body.species)
-            },
-            Body::Theropod(body) => get_body_u32_attribute(&body_healths.theropod, body.species),
-            Body::Dragon(body) => get_body_u32_attribute(&body_healths.dragon, body.species),
-            Body::QuadrupedLow(body) => {
-                get_body_u32_attribute(&body_healths.quadruped_low, body.species)
-            },
-            Body::Golem(body) => get_body_u32_attribute(&body_healths.golem, body.species),
-            Body::Ship(_) => 10000,
-            Body::Object(object) => match object {
-                object::Body::TrainingDummy => 10000,
-                object::Body::Crossbow => 800,
-                object::Body::HaniwaSentry => 600,
-                _ => 10000,
-            },
-        }
+        1000
+        //match self {
+        //    Body::BipedLarge(body) => {
+        //        get_body_u32_attribute(&body_healths.biped_large, body.species)
+        //    },
+        //    Body::BipedSmall(body) => {
+        //        get_body_u32_attribute(&body_healths.biped_small, body.species)
+        //    },
+        //    Body::BirdMedium(body) => {
+        //        get_body_u32_attribute(&body_healths.bird_medium, body.species)
+        //    },
+        //    Body::BirdLarge(body) => get_body_u32_attribute(&body_healths.bird_large, body.species),
+        //    Body::FishSmall(body) => get_body_u32_attribute(&body_healths.fish_small, body.species),
+        //    Body::FishMedium(body) => {
+        //        get_body_u32_attribute(&body_healths.fish_medium, body.species)
+        //    },
+        //    Body::Humanoid(body) => get_body_u32_attribute(&body_healths.humanoid, body.species),
+        //    Body::QuadrupedMedium(body) => {
+        //        get_body_u32_attribute(&body_healths.quadruped_medium, body.species)
+        //    },
+        //    Body::QuadrupedSmall(body) => {
+        //        get_body_u32_attribute(&body_healths.quadruped_small, body.species)
+        //    },
+        //    Body::Theropod(body) => get_body_u32_attribute(&body_healths.theropod, body.species),
+        //    Body::Dragon(body) => get_body_u32_attribute(&body_healths.dragon, body.species),
+        //    Body::QuadrupedLow(body) => {
+        //        get_body_u32_attribute(&body_healths.quadruped_low, body.species)
+        //    },
+        //    Body::Golem(body) => get_body_u32_attribute(&body_healths.golem, body.species),
+        //    Body::Ship(body) => get_body_u32_attribute(&body_healths.ship, body.species), //10000,
+        //    Body::Object(body) => get_body_u32_attribute(&body_healths.object, body.species), //match object {
+        //    //    object::Body::TrainingDummy => 10000,
+        //    //    object::Body::Crossbow => 800,
+        //    //    object::Body::HaniwaSentry => 600,
+        //    //    _ => 10000,
+        //    //},
+        //}
     }
 
     pub fn base_health_increase(&self, body_health_increases: &AllBodiesBaseHealthIncrease) -> u32 {
@@ -645,8 +648,8 @@ impl Body {
                 get_body_u32_attribute(&body_health_increases.quadruped_low, body.species)
             },
             Body::Golem(body) => get_body_u32_attribute(&body_health_increases.golem, body.species),
-            Body::Ship(_) => 500,
-            Body::Object(_) => 10,
+            Body::Ship(body) => get_body_u32_attribute(&body_health_increases.ship, body.species), //500,
+            Body::Object(body) => get_body_u32_attribute(&body_health_increases.object, body.species), //10,
         }
     }
 
@@ -667,7 +670,7 @@ impl Body {
             BuffKind::Burning => match self {
                 Body::Golem(g) => matches!(g.species, golem::Species::ClayGolem),
                 Body::BipedSmall(b) => matches!(b.species, biped_small::Species::Haniwa),
-                Body::Object(object::Body::HaniwaSentry) => true,
+                Body::Object(b) => matches!(b.species, object::Species::HaniwaSentry),
                 _ => false,
             },
             _ => false,

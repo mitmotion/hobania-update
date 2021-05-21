@@ -67,14 +67,14 @@ impl Default for SkeletonAttr {
 
 impl<'a> From<&'a Body> for SkeletonAttr {
     fn from(body: &'a Body) -> Self {
-        use comp::object::Body::*;
+        use comp::object::Species::*;
         Self {
-            bone0: match body {
+            bone0: match body.species {
                 Crossbow => (0.0, 0.0, 11.0),
                 HaniwaSentry => (0.0, 0.0, 10.5),
                 _ => (0.0, 0.0, 0.0),
             },
-            bone1: match body {
+            bone1: match body.species {
                 Crossbow => (0.0, 0.0, 8.0),
                 HaniwaSentry => (0.0, 0.0, 3.0),
                 _ => (0.0, 0.0, 0.0),

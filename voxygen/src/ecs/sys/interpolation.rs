@@ -90,8 +90,8 @@ impl<'a> System<'a> for Sys {
 #[allow(clippy::collapsible_match)]
 fn base_ori_interp(body: &Body) -> f32 {
     match body {
-        Body::Object(object) => match object {
-            object::Body::Crossbow | object::Body::HaniwaSentry => 100.0,
+        Body::Object(object) => match object.species {
+            object::Species::Crossbow | object::Species::HaniwaSentry => 100.0,
             _ => 10.0,
         },
         _ => 10.0,

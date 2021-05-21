@@ -1,7 +1,6 @@
 use crate::{
     comp::{Density, Mass},
     consts::AIR_DENSITY,
-    make_case_elim,
     make_proj_elim,
 };
 use serde::{Deserialize, Serialize};

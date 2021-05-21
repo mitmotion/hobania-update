@@ -332,20 +332,16 @@ impl SfxMgr {
             },
             Outcome::ProjectileShot { pos, body, .. } => {
                 match body {
-                    Body::Object(
-                        object::Body::Arrow
-                        | object::Body::MultiArrow
-                        | object::Body::ArrowSnake
-                        | object::Body::ArrowTurret,
-                    ) => {
+                    Body::Object(object::Body { species: object::Species::Arrow })
+                    | Body::Object(object::Body { species: object::Species::MultiArrow })
+                    | Body::Object(object::Body { species: object::Species::ArrowSnake })
+                    | Body::Object(object::Body { species: object::Species::ArrowTurret }) => {
                         let sfx_trigger_item = triggers.get_key_value(&SfxEvent::ArrowShot);
                         audio.emit_sfx(sfx_trigger_item, *pos, None, false);
                     },
-                    Body::Object(
-                        object::Body::BoltFire
-                        | object::Body::BoltFireBig
-                        | object::Body::BoltNature,
-                    ) => {
+                    Body::Object(object::Body { species: object::Species::BoltFire })
+                    | Body::Object(object::Body { species: object::Species::BoltFireBig })
+                    | Body::Object(object::Body { species: object::Species::BoltNature }) => {
                         let sfx_trigger_item = triggers.get_key_value(&SfxEvent::FireShot);
                         audio.emit_sfx(sfx_trigger_item, *pos, None, false);
                     },
@@ -361,12 +357,10 @@ impl SfxMgr {
                 target,
                 ..
             } => match body {
-                Body::Object(
-                    object::Body::Arrow
-                    | object::Body::MultiArrow
-                    | object::Body::ArrowSnake
-                    | object::Body::ArrowTurret,
-                ) => {
+                Body::Object(object::Body { species: object::Species::Arrow })
+                | Body::Object(object::Body { species: object::Species::MultiArrow })
+                | Body::Object(object::Body { species: object::Species::ArrowSnake })
+                | Body::Object(object::Body { species: object::Species::ArrowTurret }) => {
                     if target.is_none() {
                         let sfx_trigger_item = triggers.get_key_value(&SfxEvent::ArrowMiss);
                         audio.emit_sfx(sfx_trigger_item, *pos, Some(2.0), false);

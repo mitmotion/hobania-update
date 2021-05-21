@@ -668,8 +668,8 @@ pub fn handle_inventory(server: &mut Server, entity: EcsEntity, manip: comp::Inv
     {
         // hack: special case coins for now
         let body = match item.item_definition_id() {
-            "common.items.utility.coins" => comp::object::Body::Coins,
-            _ => comp::object::Body::Pouch,
+            "common.items.utility.coins" => comp::object::Species::Coins,
+            _ => comp::object::Species::Pouch,
         };
 
         // If item is a container check inside of it for Debug items and remove them
@@ -711,9 +711,9 @@ pub fn handle_inventory(server: &mut Server, entity: EcsEntity, manip: comp::Inv
 
         let mut new_entity = state
             .create_object(Default::default(), match kind {
-                item::Throwable::Bomb => comp::object::Body::Bomb,
-                item::Throwable::Firework(reagent) => comp::object::Body::for_firework(reagent),
-                item::Throwable::TrainingDummy => comp::object::Body::TrainingDummy,
+                item::Throwable::Bomb => comp::object::Species::Bomb,
+                item::Throwable::Firework(reagent) => comp::object::Species::for_firework(reagent),
+                item::Throwable::TrainingDummy => comp::object::Species::TrainingDummy,
             })
             .with(comp::Pos(pos.0 + Vec3::unit_z() * 0.25))
             .with(comp::Vel(vel));

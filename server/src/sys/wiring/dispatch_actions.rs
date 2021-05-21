@@ -109,7 +109,7 @@ fn dispatch_action_spawn_projectile(
     server_emitter.emit(ServerEvent::Shoot {
         entity,
         dir: Dir::forward(),
-        body: Body::Object(object::Body::Arrow),
+        body: Body::Object(object::Body{ species: object::Species::Arrow }),
         projectile: constr.create_projectile(None, 1.0, 1.0),
         light: None,
         speed: 5.0,

@@ -289,7 +289,7 @@ pub fn handle_mine_block(server: &mut Server, pos: Vec3<i32>, tool: Option<ToolK
             // Drop item if one is recoverable from the block
             if let Some(item) = comp::Item::try_reclaim_from_block(block) {
                 state
-                    .create_object(Default::default(), comp::object::Body::Pouch)
+                    .create_object(Default::default(), comp::object::Species::Pouch)
                     .with(comp::Pos(pos.map(|e| e as f32) + Vec3::new(0.5, 0.5, 0.0)))
                     .with(item)
                     .build();

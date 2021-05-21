@@ -59,7 +59,7 @@ impl EventMapper for CampfireEventMapper {
             .join()
             .filter(|(_, _, e_pos)| (e_pos.0.distance_squared(cam_pos)) < SFX_DIST_LIMIT_SQR)
         {
-            if let Body::Object(object::Body::CampfireLit) = body {
+            if let Body::Object(object::Body { species: object::Species::CampfireLit }) = body {
                 let internal_state = self.event_history.entry(entity).or_default();
 
                 let mapped_event = SfxEvent::Campfire;

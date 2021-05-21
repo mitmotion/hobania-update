@@ -219,36 +219,36 @@ impl Body {
                 0.031 * PI * dim.x * 0.2 * dim.z
             },
 
-            Body::Object(object) => match object {
+            Body::Object(body) => match body.species {
                 // very streamlined objects
-                object::Body::Arrow
-                | object::Body::ArrowSnake
-                | object::Body::ArrowTurret
-                | object::Body::FireworkBlue
-                | object::Body::FireworkGreen
-                | object::Body::FireworkPurple
-                | object::Body::FireworkRed
-                | object::Body::FireworkWhite
-                | object::Body::FireworkYellow
-                | object::Body::MultiArrow => {
+                object::Species::Arrow
+                | object::Species::ArrowSnake
+                | object::Species::ArrowTurret
+                | object::Species::FireworkBlue
+                | object::Species::FireworkGreen
+                | object::Species::FireworkPurple
+                | object::Species::FireworkRed
+                | object::Species::FireworkWhite
+                | object::Species::FireworkYellow
+                | object::Species::MultiArrow => {
                     let dim = self.dimensions().map(|a| a * 0.5);
                     0.02 * PI * dim.x * dim.z
                 },
 
                 // spherical-ish objects
-                object::Body::BoltFire
-                | object::Body::BoltFireBig
-                | object::Body::BoltNature
-                | object::Body::Bomb
-                | object::Body::PotionBlue
-                | object::Body::PotionGreen
-                | object::Body::PotionRed
-                | object::Body::Pouch
-                | object::Body::Pumpkin
-                | object::Body::Pumpkin2
-                | object::Body::Pumpkin3
-                | object::Body::Pumpkin4
-                | object::Body::Pumpkin5 => {
+                object::Species::BoltFire
+                | object::Species::BoltFireBig
+                | object::Species::BoltNature
+                | object::Species::Bomb
+                | object::Species::PotionBlue
+                | object::Species::PotionGreen
+                | object::Species::PotionRed
+                | object::Species::Pouch
+                | object::Species::Pumpkin
+                | object::Species::Pumpkin2
+                | object::Species::Pumpkin3
+                | object::Species::Pumpkin4
+                | object::Species::Pumpkin5 => {
                     let dim = self.dimensions().map(|a| a * 0.5);
                     0.5 * PI * dim.x * dim.z
                 },

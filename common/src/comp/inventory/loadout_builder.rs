@@ -310,13 +310,13 @@ impl LoadoutBuilder {
                         ));
                     },
                 },
-                Body::Object(body) => match body {
-                    object::Body::Crossbow => {
+                Body::Object(body) => match body.species {
+                    object::Species::Crossbow => {
                         main_tool = Some(Item::new_from_asset_expect(
                             "common.items.npc_weapons.unique.turret",
                         ));
                     },
-                    object::Body::HaniwaSentry => {
+                    object::Species::HaniwaSentry => {
                         main_tool = Some(Item::new_from_asset_expect(
                             "common.items.npc_weapons.unique.haniwa_sentry",
                         ));

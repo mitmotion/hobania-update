@@ -302,33 +302,32 @@ impl ParticleMgr {
             .join()
         {
             match body {
-                Body::Object(object::Body::CampfireLit) => {
-                    self.maintain_campfirelit_particles(scene_data, pos, vel)
-                },
-                Body::Object(
-                    object::Body::Arrow
-                    | object::Body::MultiArrow
-                    | object::Body::ArrowSnake
-                    | object::Body::ArrowTurret,
-                ) => self.maintain_arrow_particles(scene_data, pos, vel),
-                Body::Object(object::Body::BoltFire) => {
-                    self.maintain_boltfire_particles(scene_data, pos, vel)
-                },
-                Body::Object(object::Body::BoltFireBig) => {
-                    self.maintain_boltfirebig_particles(scene_data, pos, vel)
-                },
-                Body::Object(object::Body::BoltNature) => {
-                    self.maintain_boltnature_particles(scene_data, pos, vel)
-                },
-                Body::Object(
-                    object::Body::Bomb
-                    | object::Body::FireworkBlue
-                    | object::Body::FireworkGreen
-                    | object::Body::FireworkPurple
-                    | object::Body::FireworkRed
-                    | object::Body::FireworkWhite
-                    | object::Body::FireworkYellow,
-                ) => self.maintain_bomb_particles(scene_data, pos, vel),
+                Body::Object(body) => match body.species {
+                    object::Species::CampfireLit => {
+                        self.maintain_campfirelit_particles(scene_data, pos, vel)
+                    },
+                    object::Species::Arrow
+                    | object::Species::MultiArrow
+                    | object::Species::ArrowSnake
+                    | object::Species::ArrowTurret => self.maintain_arrow_particles(scene_data, pos, vel),
+                    object::Species::BoltFire => {
+                        self.maintain_boltfire_particles(scene_data, pos, vel)
+                    },
+                    object::Species::BoltFireBig => {
+                        self.maintain_boltfirebig_particles(scene_data, pos, vel)
+                    },
+                    object::Species::BoltNature => {
+                        self.maintain_boltnature_particles(scene_data, pos, vel)
+                    },
+                    object::Species::Bomb
+                        | object::Species::FireworkBlue
+                        | object::Species::FireworkGreen
+                        | object::Species::FireworkPurple
+                        | object::Species::FireworkRed
+                        | object::Species::FireworkWhite
+                        | object::Species::FireworkYellow => self.maintain_bomb_particles(scene_data, pos, vel),
+                    _ => {},
+                }
                 _ => {},
             }
         }

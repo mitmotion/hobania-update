@@ -244,7 +244,7 @@ lazy_static! {
 
         souls
     };
-    static ref OBJECTS: Vec<String> = comp::object::ALL_OBJECTS
+    static ref OBJECTS: Vec<String> = comp::object::ALL_SPECIES
         .iter()
         .map(|o| o.to_string().to_string())
         .collect();

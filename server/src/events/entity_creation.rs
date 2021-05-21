@@ -233,7 +233,7 @@ pub fn handle_beam(server: &mut Server, properties: beam::Properties, pos: Pos, 
 pub fn handle_create_waypoint(server: &mut Server, pos: Vec3<f32>) {
     server
         .state
-        .create_object(Pos(pos), comp::object::Body::CampfireLit)
+        .create_object(Pos(pos), comp::object::Species::CampfireLit)
         .with(LightEmitter {
             col: Rgb::new(1.0, 0.3, 0.1),
             strength: 5.0,

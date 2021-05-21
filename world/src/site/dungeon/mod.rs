@@ -673,7 +673,7 @@ impl Floor {
                                 )),
                             3 => match dynamic_rng.gen_range(0..4) {
                                 0 => entity
-                                    .with_body(comp::Body::Object(comp::object::Body::HaniwaSentry))
+                                    .with_body(comp::Body::Object(comp::object::Body { species: comp::object::Species::HaniwaSentry }))
                                     .with_name("Haniwa Sentry".to_string())
                                     .with_loot_drop(comp::Item::new_from_asset_expect(
                                         "common.items.crafting_ing.stones",
@@ -750,7 +750,7 @@ impl Floor {
                                         "common.items.weapons.staff.cultist_staff",
                                     )),
                                 1 => entity
-                                    .with_body(comp::Body::Object(comp::object::Body::Crossbow))
+                                    .with_body(comp::Body::Object(comp::object::Body { species: comp::object::Species::Crossbow }))
                                     .with_name("Possessed Turret".to_string())
                                     .with_loot_drop(comp::Item::new_from_asset_expect(
                                         "common.items.crafting_ing.twigs",
