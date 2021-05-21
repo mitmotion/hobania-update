@@ -1,6 +1,13 @@
-use crate::{make_case_elim, make_proj_elim};
+use crate::{
+    comp::{
+        fluid_dynamics::{Drag, WingShape, WingState, Glide},
+        Ori,
+    },
+    make_case_elim, make_proj_elim,
+};
 use rand::{seq::SliceRandom, thread_rng};
 use serde::{Deserialize, Serialize};
+use vek::*;
 
 make_proj_elim!(
     body,
@@ -22,6 +29,18 @@ impl Body {
     pub fn random_with(rng: &mut impl rand::Rng, &species: &Species) -> Self {
         let body_type = *(&ALL_BODY_TYPES).choose(rng).unwrap();
         Self { species, body_type }
+    }
+
+    /// Dimensions of the body (wings folded)
+    pub const fn dimensions(&self) -> Vec3<f32> { Vec3::new(0.5, 1.0, 1.1) }
+
+    /// Distance from wing tip to wing tip and leading edge to trailing edge
+    /// respectively
+    // TODO: Check
+    pub const fn wing_dimensions(&self) -> Vec2<f32> { Vec2::new(2.0, 0.4) }
+
+    pub fn flying<'a>(&'a self, ori: &'a Ori) -> FlyingBirdMedium<'a> {
+        FlyingBirdMedium::from((self, ori))
     }
 }
 
@@ -102,3 +121,55 @@ make_case_elim!(
     }
 );
 pub const ALL_BODY_TYPES: [BodyType; 2] = [BodyType::Female, BodyType::Male];
+
+#[derive(Copy, Clone)]
+pub struct FlyingBirdMedium<'a> {
+    wing_shape: WingShape,
+    wing_state: WingState,
+    planform_area: f32,
+    body: &'a Body,
+    ori: &'a Ori,
+}
+
+impl<'a> From<(&'a Body, &'a Ori)> for FlyingBirdMedium<'a> {
+    fn from((body, ori): (&'a Body, &'a Ori)) -> Self {
+        let Vec2 {
+            x: span_length,
+            y: chord_length,
+        } = body.wing_dimensions();
+        let planform_area = WingShape::elliptical_planform_area(span_length, chord_length);
+        FlyingBirdMedium {
+            wing_shape: WingShape::elliptical(span_length, chord_length),
+            wing_state: WingState::Flapping,
+            planform_area,
+            body,
+            ori,
+        }
+    }
+}
+
+impl Drag for Body {
+    fn parasite_drag_coefficient(&self) -> f32 {
+        let radius = self.dimensions().map(|a| a * 0.5);
+        // "Field Estimates of body::Body Drag Coefficient on the Basis of
+        // Dives in Passerine Birds", Anders Hedenström and Felix Liechti, 2001
+        const CD: f32 = 0.2;
+        CD * std::f32::consts::PI * radius.x * radius.z
+    }
+}
+
+impl Drag for FlyingBirdMedium<'_> {
+    fn parasite_drag_coefficient(&self) -> f32 {
+        self.body.parasite_drag_coefficient() + self.planform_area * 0.004
+    }
+}
+
+impl Glide for FlyingBirdMedium<'_> {
+    fn wing_shape(&self) -> &WingShape { &self.wing_shape }
+
+    fn is_gliding(&self) -> bool { matches!(self.wing_state, WingState::Fixed) }
+
+    fn planform_area(&self) -> f32 { self.planform_area }
+
+    fn ori(&self) -> &Ori { self.ori }
+}

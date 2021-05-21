@@ -1,7 +1,7 @@
 use common::{
     comp::{
         body::ship::figuredata::{VoxelCollider, VOXEL_COLLIDER_MANIFEST},
-        fluid_dynamics::{Fluid, LiquidKind, Wings},
+        fluid_dynamics::{Fluid, LiquidKind, Glide},
         BeamSegment, Body, CharacterState, Collider, Density, Mass, Mounting, Ori, PhysicsState,
         Pos, PosVelDefer, PreviousPhysCache, Projectile, Scale, Shockwave, Stats, Sticky, Vel,
     },
@@ -9,7 +9,6 @@ use common::{
     event::{EventBus, ServerEvent},
     outcome::Outcome,
     resources::DeltaTime,
-    states,
     terrain::{Block, TerrainGrid},
     uid::Uid,
     util::{Projection, SpatialGrid},
@@ -43,7 +42,9 @@ fn fluid_density(height: f32, fluid: &Fluid) -> Density {
 fn integrate_forces(
     dt: &DeltaTime,
     mut vel: Vel,
-    (body, wings): (&Body, Option<&Wings>),
+    ori: Option<&Ori>,
+    body: &Body,
+    character_state: Option<&CharacterState>,
     density: &Density,
     mass: &Mass,
     fluid: &Fluid,
@@ -59,10 +60,18 @@ fn integrate_forces(
     // Aerodynamic/hydrodynamic forces
     if !rel_flow.0.is_approx_zero() {
         debug_assert!(!rel_flow.0.map(|a| a.is_nan()).reduce_or());
-        let impulse = dt.0 * body.aerodynamic_forces(&rel_flow, fluid_density.0, wings);
-        debug_assert!(!impulse.map(|a| a.is_nan()).reduce_or());
-        if !impulse.is_approx_zero() {
-            let new_v = vel.0 + impulse / mass.0;
+        let aerodynamic_forces = body.aerodynamic_forces(ori, &rel_flow, fluid_density.0)
+            + match character_state {
+                Some(CharacterState::Glide(glider)) => {
+                    glider.aerodynamic_forces(&rel_flow, fluid_density.0)
+                },
+                _ => Vec3::zero(),
+            };
+        // let impulse = dt.0 * body.aerodynamic_forces(ori, &rel_flow,
+        // fluid_density.0);
+        debug_assert!(!aerodynamic_forces.map(|a| a.is_nan()).reduce_or());
+        if !aerodynamic_forces.is_approx_zero() {
+            let new_v = vel.0 + dt.0 * aerodynamic_forces / mass.0;
             // If the new velocity is in the opposite direction, it's because the forces
             // involved are too high for the current tick to handle. We deal with this by
             // removing the component of our velocity vector along the direction of force.
@@ -71,7 +80,7 @@ fn integrate_forces(
             if new_v.dot(vel.0) < 0.0 {
                 // Multiply by a factor to prevent full stop, as this can cause things to get
                 // stuck in high-density medium
-                vel.0 -= vel.0.projected(&impulse) * 0.9;
+                vel.0 -= vel.0.projected(&aerodynamic_forces) * 0.9;
             } else {
                 vel.0 = new_v;
             }
@@ -81,8 +90,7 @@ fn integrate_forces(
 
     // Hydrostatic/aerostatic forces
     // modify gravity to account for the effective density as a result of buoyancy
-    let down_force = dt.0 * gravity * (density.0 - fluid_density.0) / density.0;
-    vel.0.z -= down_force;
+    vel.0.z -= dt.0 * gravity * (density.0 - fluid_density.0) / density.0;
 
     vel
 }
@@ -576,6 +584,7 @@ impl<'a> PhysicsData<'a> {
             read.character_states.maybe(),
             &write.physics_states,
             &read.masses,
+            write.orientations.maybe(),
             &read.densities,
             !&read.mountings,
         )
@@ -594,6 +603,7 @@ impl<'a> PhysicsData<'a> {
                     character_state,
                     physics_state,
                     mass,
+                    ori,
                     density,
                     _,
                 )| {
@@ -617,24 +627,12 @@ impl<'a> PhysicsData<'a> {
                                 vel.0.z -= dt.0 * GRAVITY;
                             },
                             Some(fluid) => {
-                                let wings = match character_state {
-                                    Some(&CharacterState::Glide(states::glide::Data {
-                                        aspect_ratio,
-                                        planform_area,
-                                        ori,
-                                        ..
-                                    })) => Some(Wings {
-                                        aspect_ratio,
-                                        planform_area,
-                                        ori,
-                                    }),
-
-                                    _ => None,
-                                };
                                 vel.0 = integrate_forces(
                                     &dt,
                                     *vel,
-                                    (body, wings.as_ref()),
+                                    ori,
+                                    body,
+                                    character_state,
                                     density,
                                     mass,
                                     &fluid,
