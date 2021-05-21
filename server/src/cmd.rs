@@ -1188,7 +1188,7 @@ fn handle_spawn_airship(
     });
     let mut builder = server
         .state
-        .create_ship(pos, comp::ship::Body::DefaultAirship, true)
+        .create_ship(pos, comp::ship::Body { species: comp::ship::Species::DefaultAirship }, true)
         .with(LightEmitter {
             col: Rgb::new(1.0, 0.65, 0.2),
             strength: 2.0,

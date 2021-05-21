@@ -5,7 +5,7 @@ use super::{
 use crate::sync;
 use common::{
     character::{self, CharacterItem},
-    comp::{self, invite::InviteKind, item::MaterialStatManifest},
+    comp::{self, body::BodyAttributes, invite::InviteKind, item::MaterialStatManifest},
     outcome::Outcome,
     recipe::RecipeBook,
     resources::TimeOfDay,
@@ -60,6 +60,7 @@ pub enum ServerInit {
         world_map: crate::msg::world_msg::WorldMapMsg,
         recipe_book: RecipeBook,
         material_stats: MaterialStatManifest,
+        body_attributes: BodyAttributes,
         ability_map: comp::item::tool::AbilityMap,
     },
 }

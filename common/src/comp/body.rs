@@ -31,20 +31,20 @@ make_case_elim!(
     #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
     #[repr(u32)]
     pub enum Body {
-        Humanoid(body: humanoid::Body) = 0,
-        QuadrupedSmall(body: quadruped_small::Body) = 1,
-        QuadrupedMedium(body: quadruped_medium::Body) = 2,
-        BirdMedium(body: bird_medium::Body) = 3,
-        FishMedium(body: fish_medium::Body) = 4,
-        Dragon(body: dragon::Body) = 5,
-        BirdLarge(body: bird_large::Body) = 6,
-        FishSmall(body: fish_small::Body) = 7,
         BipedLarge(body: biped_large::Body)= 8,
         BipedSmall(body: biped_small::Body)= 9,
-        Object(body: object::Body) = 10,
+        BirdLarge(body: bird_large::Body) = 6,
+        BirdMedium(body: bird_medium::Body) = 3,
+        Dragon(body: dragon::Body) = 5,
+        FishMedium(body: fish_medium::Body) = 4,
+        FishSmall(body: fish_small::Body) = 7,
         Golem(body: golem::Body) = 11,
-        Theropod(body: theropod::Body) = 12,
+        Humanoid(body: humanoid::Body) = 0,
         QuadrupedLow(body: quadruped_low::Body) = 13,
+        QuadrupedMedium(body: quadruped_medium::Body) = 2,
+        QuadrupedSmall(body: quadruped_small::Body) = 1,
+        Theropod(body: theropod::Body) = 12,
+        Object(body: object::Body) = 10,
         Ship(body: ship::Body) = 14,
     }
 );
@@ -52,7 +52,7 @@ make_case_elim!(
 /// Data representing data generic to the body together with per-species data.
 ///
 /// NOTE: Deliberately don't (yet?) implement serialize.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BodyData<BodyMeta, SpeciesData> {
     /// Shared metadata for this whole body type.
     pub body: BodyMeta,
@@ -64,9 +64,23 @@ pub struct BodyData<BodyMeta, SpeciesData> {
 /// stored for each species for each body.
 ///
 /// NOTE: Deliberately don't (yet?) implement serialize.
+///
+///
+/// ##############################################################################################
+/// ##############################################################################################
+///
+/// ##############################################################################################
+/// ##############################################################################################
+/// TALK TO SHARP ABOUT IMPLEMENTING SERIALIZE!!!!!!
+/// ##############################################################################################
+/// ##############################################################################################
+///
+/// ##############################################################################################
+/// ##############################################################################################
+///
 /// NOTE: If you are adding new body kind and it should be spawned via /spawn
 /// please add it to `[ENTITIES](crate::cmd::ENTITIES)`
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AllBodies<BodyMeta, SpeciesMeta> {
     pub humanoid: BodyData<BodyMeta, humanoid::AllSpecies<SpeciesMeta>>,
     pub quadruped_small: BodyData<BodyMeta, quadruped_small::AllSpecies<SpeciesMeta>>,
@@ -175,7 +189,7 @@ pub type SpeciesBaseHealthIncrease = Option<u32>;
 /// Type holding mass data for bodies and species.
 pub type AllBodiesBaseHealthIncrease = AllBodies<BodyBaseHealthIncrease, SpeciesBaseHealthIncrease>;
 
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct BodyAttributes {
     pub aggro: Option<AllBodiesAggro>,
     pub density: Option<AllBodiesDensity>,
@@ -251,83 +265,134 @@ pub fn get_body_u32_attribute<
     body_data.species[&species].unwrap_or_else(|| body_data.body)
 }
 
+pub fn get_body_attribute<
+    'a,
+    T: Copy,
+    Species,
+    SpeciesData: for<'b> core::ops::Index<&'b Species, Output = Option<T>>,
+>(
+    body_data: &'a BodyData<T, SpeciesData>,
+    species: Species,
+) -> T {
+    body_data.species[&species].unwrap_or_else(|| body_data.body)
+}
+
 impl Body {
     pub fn is_humanoid(&self) -> bool { matches!(self, Body::Humanoid(_)) }
+
+    pub fn get_attribute_value<T: Default + Copy>(&self, body_attribute: &AllBodies<T, Option<T>>) -> T {
+        match self {
+            Body::BipedLarge(body) => {
+                get_body_attribute(&body_attribute.biped_large, body.species)
+            },
+            Body::BipedSmall(body) => {
+                get_body_attribute(&body_attribute.biped_small, body.species)
+            },
+            Body::BirdMedium(body) => {
+                get_body_attribute(&body_attribute.bird_medium, body.species)
+            },
+            Body::BirdLarge(body) => {
+                get_body_attribute(&body_attribute.bird_large, body.species)
+            },
+            Body::Dragon(body) => get_body_attribute(&body_attribute.dragon, body.species),
+            Body::FishMedium(body) => {
+                get_body_attribute(&body_attribute.fish_medium, body.species)
+            },
+            Body::FishSmall(body) => {
+                get_body_attribute(&body_attribute.fish_small, body.species)
+            },
+            Body::Golem(body) => get_body_attribute(&body_attribute.golem, body.species),
+            Body::Humanoid(body) => get_body_attribute(&body_attribute.humanoid, body.species),
+            Body::QuadrupedLow(body) => {
+                get_body_attribute(&body_attribute.quadruped_low, body.species)
+            },
+            Body::QuadrupedMedium(body) => {
+                get_body_attribute(&body_attribute.quadruped_medium, body.species)
+            },
+            Body::QuadrupedSmall(body) => {
+                get_body_attribute(&body_attribute.quadruped_small, body.species)
+            },
+            Body::Theropod(body) => get_body_attribute(&body_attribute.theropod, body.species),
+            // TODO fix this for ships and objects to read from the ron files
+            Body::Ship(ship) => T::default(),
+            Body::Object(object) => T::default(),
+        }
+    }
 
     /// Average density of the body
     /// Units are based on kg/m³
     pub fn density(&self, body_densities: &AllBodiesDensity) -> Density {
-        let density_value = match self {
-            Body::BipedLarge(body) => {
-                get_body_f32_attribute(&body_densities.biped_large, body.species)
-            },
-            Body::BipedSmall(body) => {
-                get_body_f32_attribute(&body_densities.biped_small, body.species)
-            },
-            Body::BirdMedium(body) => {
-                get_body_f32_attribute(&body_densities.bird_medium, body.species)
-            },
-            Body::BirdLarge(body) => {
-                get_body_f32_attribute(&body_densities.bird_large, body.species)
-            },
-            Body::Dragon(body) => get_body_f32_attribute(&body_densities.dragon, body.species),
-            Body::FishMedium(body) => {
-                get_body_f32_attribute(&body_densities.fish_medium, body.species)
-            },
-            Body::FishSmall(body) => {
-                get_body_f32_attribute(&body_densities.fish_small, body.species)
-            },
-            Body::Golem(body) => get_body_f32_attribute(&body_densities.golem, body.species),
-            Body::Humanoid(body) => get_body_f32_attribute(&body_densities.humanoid, body.species),
-            Body::QuadrupedLow(body) => {
-                get_body_f32_attribute(&body_densities.quadruped_low, body.species)
-            },
-            Body::QuadrupedMedium(body) => {
-                get_body_f32_attribute(&body_densities.quadruped_medium, body.species)
-            },
-            Body::QuadrupedSmall(body) => {
-                get_body_f32_attribute(&body_densities.quadruped_small, body.species)
-            },
-            Body::Theropod(body) => get_body_f32_attribute(&body_densities.theropod, body.species),
-            Body::Ship(ship) => ship.density().0,
-            Body::Object(object) => object.density().0,
-        };
+        let density_value = 1000.0;//match self {
+        //    Body::BipedLarge(body) => {
+        //        get_body_f32_attribute(&body_densities.biped_large, body.species)
+        //    },
+        //    Body::BipedSmall(body) => {
+        //        get_body_f32_attribute(&body_densities.biped_small, body.species)
+        //    },
+        //    Body::BirdMedium(body) => {
+        //        get_body_f32_attribute(&body_densities.bird_medium, body.species)
+        //    },
+        //    Body::BirdLarge(body) => {
+        //        get_body_f32_attribute(&body_densities.bird_large, body.species)
+        //    },
+        //    Body::Dragon(body) => get_body_f32_attribute(&body_densities.dragon, body.species),
+        //    Body::FishMedium(body) => {
+        //        get_body_f32_attribute(&body_densities.fish_medium, body.species)
+        //    },
+        //    Body::FishSmall(body) => {
+        //        get_body_f32_attribute(&body_densities.fish_small, body.species)
+        //    },
+        //    Body::Golem(body) => get_body_f32_attribute(&body_densities.golem, body.species),
+        //    Body::Humanoid(body) => get_body_f32_attribute(&body_densities.humanoid, body.species),
+        //    Body::QuadrupedLow(body) => {
+        //        get_body_f32_attribute(&body_densities.quadruped_low, body.species)
+        //    },
+        //    Body::QuadrupedMedium(body) => {
+        //        get_body_f32_attribute(&body_densities.quadruped_medium, body.species)
+        //    },
+        //    Body::QuadrupedSmall(body) => {
+        //        get_body_f32_attribute(&body_densities.quadruped_small, body.species)
+        //    },
+        //    Body::Theropod(body) => get_body_f32_attribute(&body_densities.theropod, body.species),
+        //    Body::Ship(body) => get_body_f32_attribute(&body_densities.ship, body.species),
+        //    Body::Object(object) => object.density().0,
+        //};
         Density(density_value)
     }
 
     /// Units are kg
     pub fn mass(&self, body_masses: &AllBodiesMass) -> Mass {
-        let m = match self {
-            Body::BipedLarge(body) => {
-                get_body_f32_attribute(&body_masses.biped_large, body.species)
-            },
-            Body::BipedSmall(body) => {
-                get_body_f32_attribute(&body_masses.biped_small, body.species)
-            },
-            Body::BirdMedium(body) => {
-                get_body_f32_attribute(&body_masses.bird_medium, body.species)
-            },
-            Body::BirdLarge(body) => get_body_f32_attribute(&body_masses.bird_large, body.species),
-            Body::Dragon(body) => get_body_f32_attribute(&body_masses.dragon, body.species),
-            Body::FishMedium(body) => {
-                get_body_f32_attribute(&body_masses.fish_medium, body.species)
-            },
-            Body::FishSmall(body) => get_body_f32_attribute(&body_masses.fish_small, body.species),
-            Body::Golem(body) => get_body_f32_attribute(&body_masses.golem, body.species),
-            Body::Humanoid(body) => get_body_f32_attribute(&body_masses.humanoid, body.species),
-            Body::QuadrupedLow(body) => {
-                get_body_f32_attribute(&body_masses.quadruped_low, body.species)
-            },
-            Body::QuadrupedMedium(body) => {
-                get_body_f32_attribute(&body_masses.quadruped_medium, body.species)
-            },
-            Body::QuadrupedSmall(body) => {
-                get_body_f32_attribute(&body_masses.quadruped_small, body.species)
-            },
-            Body::Theropod(body) => get_body_f32_attribute(&body_masses.theropod, body.species),
-            Body::Ship(ship) => ship.density().0,
-            Body::Object(object) => object.density().0,
-        };
+        let m = 100.0;//match self {
+        //    Body::BipedLarge(body) => {
+        //        get_body_f32_attribute(&body_masses.biped_large, body.species)
+        //    },
+        //    Body::BipedSmall(body) => {
+        //        get_body_f32_attribute(&body_masses.biped_small, body.species)
+        //    },
+        //    Body::BirdMedium(body) => {
+        //        get_body_f32_attribute(&body_masses.bird_medium, body.species)
+        //    },
+        //    Body::BirdLarge(body) => get_body_f32_attribute(&body_masses.bird_large, body.species),
+        //    Body::Dragon(body) => get_body_f32_attribute(&body_masses.dragon, body.species),
+        //    Body::FishMedium(body) => {
+        //        get_body_f32_attribute(&body_masses.fish_medium, body.species)
+        //    },
+        //    Body::FishSmall(body) => get_body_f32_attribute(&body_masses.fish_small, body.species),
+        //    Body::Golem(body) => get_body_f32_attribute(&body_masses.golem, body.species),
+        //    Body::Humanoid(body) => get_body_f32_attribute(&body_masses.humanoid, body.species),
+        //    Body::QuadrupedLow(body) => {
+        //        get_body_f32_attribute(&body_masses.quadruped_low, body.species)
+        //    },
+        //    Body::QuadrupedMedium(body) => {
+        //        get_body_f32_attribute(&body_masses.quadruped_medium, body.species)
+        //    },
+        //    Body::QuadrupedSmall(body) => {
+        //        get_body_f32_attribute(&body_masses.quadruped_small, body.species)
+        //    },
+        //    Body::Theropod(body) => get_body_f32_attribute(&body_masses.theropod, body.species),
+        //    Body::Ship(body) => get_body_f32_attribute(&body_masses.ship, body.species),
+        //    Body::Object(object) => object.density().0,
+        //};
         Mass(m)
     }
 
@@ -441,7 +506,7 @@ impl Body {
                 quadruped_low::Species::Tortoise => Vec3::new(1.0, 1.6, 2.0),
                 _ => Vec3::new(1.0, 1.6, 1.3),
             },
-            Body::Ship(ship) => ship.dimensions(),
+            Body::Ship(ship) => Vec3::new(1.0, 1.0, 1.0),//ship.dimensions(),
             Body::Theropod(body) => match body.species {
                 theropod::Species::Archaeos => Vec3::new(4.0, 7.0, 8.0),
                 theropod::Species::Ntouka => Vec3::new(4.0, 6.0, 8.0),
@@ -590,7 +655,8 @@ impl Body {
             Body::BirdLarge(_) => 50.0,
             Body::BirdMedium(_) => 40.0,
             Body::Dragon(_) => 60.0,
-            Body::Ship(ship::Body::DefaultAirship) => 60.0,
+            //Body::Ship(ship::Body::DefaultAirship) => 60.0,
+            Body::Ship(_) => 60.0,
             _ => 0.0,
         }
     }
@@ -656,7 +722,8 @@ impl Body {
 
     pub fn mounting_offset(&self) -> Vec3<f32> {
         match self {
-            Body::Ship(ship::Body::DefaultAirship) => Vec3::from([0.0, 0.0, 10.0]),
+            //Body::Ship(ship::Body::DefaultAirship) => Vec3::from([0.0, 0.0, 10.0]),
+            Body::Ship(_) => Vec3::from([0.0, 0.0, 10.0]),
             _ => Vec3::unit_z(),
         }
     }

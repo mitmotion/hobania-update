@@ -2,16 +2,16 @@ use crate::{
     comp::{Density, Mass},
     consts::AIR_DENSITY,
     make_case_elim,
+    make_proj_elim,
 };
 use serde::{Deserialize, Serialize};
 use vek::Vec3;
 
-make_case_elim!(
+make_proj_elim!(
     body,
     #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-    #[repr(u32)]
-    pub enum Body {
-        DefaultAirship = 0,
+    pub struct Body {
+        pub species: Species,
     }
 );
 
@@ -19,10 +19,52 @@ impl From<Body> for super::Body {
     fn from(body: Body) -> Self { super::Body::Ship(body) }
 }
 
-impl Body {
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[repr(u32)]
+pub enum Species {
+    DefaultAirship = 0,
+    NonDefaultAirship = 1,
+}
+
+/// Data representing per-species generic data.
+///
+/// NOTE: Deliberately don't (yet?) implement serialize.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AllSpecies<SpeciesMeta> {
+    pub default_airship: SpeciesMeta,
+    // TODO remove this
+    pub non_default_airship: SpeciesMeta,
+}
+
+impl<'a, SpeciesMeta> core::ops::Index<&'a Species> for AllSpecies<SpeciesMeta> {
+    type Output = SpeciesMeta;
+
+    #[inline]
+    fn index(&self, &index: &'a Species) -> &Self::Output {
+        match index {
+            Species::DefaultAirship => &self.default_airship,
+            Species::NonDefaultAirship => &self.non_default_airship,
+        }
+    }
+}
+
+pub const ALL_SPECIES: [Species; 2] = [
+    Species::DefaultAirship,
+    Species::NonDefaultAirship,
+];
+
+impl<'a, SpeciesMeta: 'a> IntoIterator for &'a AllSpecies<SpeciesMeta> {
+    type IntoIter = std::iter::Copied<std::slice::Iter<'static, Self::Item>>;
+    type Item = Species;
+
+    fn into_iter(self) -> Self::IntoIter { ALL_SPECIES.iter().copied() }
+}
+
+impl Species {
     pub fn manifest_entry(&self) -> &'static str {
         match self {
-            Body::DefaultAirship => "Human_Airship",
+            Species::DefaultAirship => "Human_Airship",
+            Species::NonDefaultAirship => "Nonexistent_Airship",
         }
     }
 

@@ -51,7 +51,7 @@ make_case_elim!(
 /// Data representing per-species generic data.
 ///
 /// NOTE: Deliberately don't (yet?) implement serialize.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AllSpecies<SpeciesMeta> {
     pub gnome: SpeciesMeta,
     pub sahagin: SpeciesMeta,

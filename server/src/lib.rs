@@ -837,6 +837,7 @@ impl Server {
                 client_timeout: self.settings().client_timeout,
                 world_map: self.map.clone(),
                 recipe_book: default_recipe_book().cloned(),
+                body_attributes: (&*self.state.ecs().read_resource::<comp::body::BodyAttributes>()).clone(),
                 material_stats: MaterialStatManifest::default(),
                 ability_map: (&*self
                     .state

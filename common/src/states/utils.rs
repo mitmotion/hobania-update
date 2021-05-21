@@ -195,7 +195,7 @@ impl Body {
             Body::BirdMedium(_) => Some(GRAVITY * 0.5),
             Body::BirdLarge(_) => Some(GRAVITY * 2.0),
             Body::Dragon(_) => Some(200_000.0),
-            Body::Ship(ship::Body::DefaultAirship) => Some(300_000.0),
+            Body::Ship(_) => Some(300_000.0),
             _ => None,
         }
     }
@@ -395,28 +395,27 @@ pub fn fly_move(data: &JoinData, update: &mut StateUpdate, efficiency: f32) -> b
                 let anti_grav = GRAVITY * (1.0 + data.inputs.move_z.min(0.0));
                 update.vel.0.z += data.dt.0 * (anti_grav + accel * data.inputs.move_z.max(0.0));
             },
-            // floaty floaty
-            Body::Ship(ship @ ship::Body::DefaultAirship) => {
-                let regulate_density = |min: f32, max: f32, def: f32, rate: f32| -> Density {
-                    // Reset to default on no input
-                    let change = if data.inputs.move_z.abs() > std::f32::EPSILON {
-                        -data.inputs.move_z
-                    } else {
-                        (def - data.density.0).max(-1.0).min(1.0)
-                    };
-                    Density((update.density.0 + data.dt.0 * rate * change).clamp(min, max))
-                };
-                let def_density = ship.density().0;
-                if data.physics.in_liquid().is_some() {
-                    let hull_density = ship.hull_density().0;
-                    update.density.0 =
-                        regulate_density(def_density * 0.6, hull_density, hull_density, 25.0).0;
-                } else {
-                    update.density.0 =
-                        regulate_density(def_density * 0.5, def_density * 1.5, def_density, 0.5).0;
-                };
-            },
-            // oopsie woopsie
+            // TODO fix this
+            //Body::Ship(ship @ ship::Body::DefaultAirship) => {
+            //    let regulate_density = |min: f32, max: f32, def: f32, rate: f32| -> Density {
+            //        // Reset to default on no input
+            //        let change = if data.inputs.move_z.abs() > std::f32::EPSILON {
+            //            -data.inputs.move_z
+            //        } else {
+            //            (def - data.density.0).max(-1.0).min(1.0)
+            //        };
+            //        Density((update.density.0 + data.dt.0 * rate * change).clamp(min, max))
+            //    };
+            //    let def_density = 1000.0;//ship.density().0;
+            //    if data.physics.in_liquid().is_some() {
+            //        let hull_density = 1000.0;//ship.hull_density().0;
+            //        update.density.0 =
+            //            regulate_density(def_density * 0.6, hull_density, hull_density, 25.0).0;
+            //    } else {
+            //        update.density.0 =
+            //            regulate_density(def_density * 0.5, def_density * 1.5, def_density, 0.5).0;
+            //    };
+            //},
             // TODO: refactor to make this state impossible
             _ => {},
         };

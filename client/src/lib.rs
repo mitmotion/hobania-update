@@ -284,6 +284,7 @@ impl Client {
                 client_timeout,
                 world_map,
                 recipe_book,
+                body_attributes,
                 material_stats,
                 ability_map,
             } => {
@@ -297,6 +298,7 @@ impl Client {
                 let entity = state.ecs_mut().apply_entity_package(entity_package);
                 *state.ecs_mut().write_resource() = time_of_day;
                 *state.ecs_mut().write_resource() = PlayerEntity(Some(entity));
+                state.ecs_mut().insert(body_attributes);
                 state.ecs_mut().insert(material_stats);
                 state.ecs_mut().insert(ability_map);
 

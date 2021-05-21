@@ -213,8 +213,8 @@ impl StateExt for State {
             .with(mass)
             .with(density)
             .with(match body {
-                comp::Body::Ship(ship) => comp::Collider::Voxel {
-                    id: ship.manifest_entry().to_string(),
+                comp::Body::Ship(comp::ship::Body { species }) => comp::Collider::Voxel {
+                    id: species.manifest_entry().to_string(),
                 },
                 _ => comp::Collider::Box {
                     radius: body.radius(),
@@ -307,8 +307,11 @@ impl StateExt for State {
             .with(comp::Ori::default())
             .with(mass)
             .with(density)
+            //.with(comp::Collider::Voxel {
+            //    id: ship.manifest_entry().to_string(),
+            //})
             .with(comp::Collider::Voxel {
-                id: ship.manifest_entry().to_string(),
+                id: ship.species.manifest_entry().to_string(),
             })
             .with(body)
             .with(comp::Scale(comp::ship::AIRSHIP_SCALE))
