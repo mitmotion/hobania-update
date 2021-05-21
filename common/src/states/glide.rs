@@ -1,8 +1,9 @@
 use super::utils::handle_climb;
 use crate::{
     comp::{
-        fluid_dynamics::angle_of_attack, inventory::slot::EquipSlot, CharacterState, Ori,
-        StateUpdate, Vel,
+        fluid_dynamics::{angle_of_attack, Drag, Glide, WingShape},
+        inventory::slot::EquipSlot,
+        CharacterState, Ori, StateUpdate, Vel,
     },
     states::behavior::{CharacterBehavior, JoinData},
     util::{Dir, Plane, Projection},
@@ -17,7 +18,7 @@ const PITCH_SLOW_TIME: f32 = 0.5;
 pub struct Data {
     /// The aspect ratio is the ratio of the span squared to actual planform
     /// area
-    pub aspect_ratio: f32,
+    pub wing_shape: WingShape,
     pub planform_area: f32,
     pub ori: Ori,
     last_vel: Vel,
@@ -36,7 +37,7 @@ impl Data {
         let planform_area = PI * chord_length * span_length * 0.25;
         let aspect_ratio = span_length.powi(2) / planform_area;
         Self {
-            aspect_ratio,
+            wing_shape: WingShape::Elliptical { aspect_ratio },
             planform_area,
             ori,
             last_vel: Vel::zero(),
@@ -67,6 +68,20 @@ impl Data {
             )
             .look_dir()
     }
+}
+
+impl Drag for Data {
+    fn parasite_drag_coefficient(&self) -> f32 { self.planform_area * 0.004 }
+}
+
+impl Glide for Data {
+    fn wing_shape(&self) -> &WingShape { &self.wing_shape }
+
+    fn is_gliding(&self) -> bool { true }
+
+    fn planform_area(&self) -> f32 { self.planform_area }
+
+    fn ori(&self) -> &Ori { &self.ori }
 }
 
 impl CharacterBehavior for Data {

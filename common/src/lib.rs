@@ -6,6 +6,7 @@
 #![feature(
     arbitrary_enum_discriminant,
     associated_type_defaults,
+    bindings_after_at,
     bool_to_option,
     const_generics,
     fundamental,

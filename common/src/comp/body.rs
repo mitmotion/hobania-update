@@ -16,6 +16,7 @@ pub mod theropod;
 
 use crate::{
     assets::{self, Asset},
+    comp::{fluid_dynamics::*, Ori, Vel},
     consts::{HUMAN_DENSITY, WATER_DENSITY},
     make_case_elim,
     npc::NpcKind,
@@ -23,6 +24,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use specs::{Component, DerefFlaggedStorage};
 use specs_idvs::IdvStorage;
+use std::f32::consts::PI;
 use vek::*;
 
 use super::{BuffKind, Density, Mass};
@@ -317,9 +319,9 @@ impl Body {
 
                 _ => Vec3::new(1.0, 0.75, 1.4),
             },
-            Body::BirdMedium(_) => Vec3::new(2.0, 1.0, 1.5),
-            Body::BirdLarge(_) => Vec3::new(2.0, 6.0, 3.5),
-            Body::Dragon(_) => Vec3::new(16.0, 10.0, 16.0),
+            Body::BirdMedium(body) => body.dimensions(),
+            Body::BirdLarge(body) => body.dimensions(),
+            Body::Dragon(body) => body.dimensions(),
             Body::FishMedium(_) => Vec3::new(0.5, 2.0, 0.8),
             Body::FishSmall(_) => Vec3::new(0.3, 1.2, 0.6),
             Body::Golem(_) => Vec3::new(5.0, 5.0, 7.5),
@@ -736,4 +738,122 @@ impl Body {
 
 impl Component for Body {
     type Storage = DerefFlaggedStorage<Self, IdvStorage<Self>>;
+}
+
+impl Body {
+    pub fn aerodynamic_forces(
+        &self,
+        ori: Option<&Ori>,
+        rel_flow: &Vel,
+        fluid_density: f32,
+    ) -> Vec3<f32> {
+        match (self, ori) {
+            (Body::BirdMedium(bird), Some(ori)) => bird_medium::FlyingBirdMedium::from((bird, ori))
+                .aerodynamic_forces(rel_flow, fluid_density),
+            (Body::BirdLarge(bird), Some(ori)) => bird_large::FlyingBirdLarge::from((bird, ori))
+                .aerodynamic_forces(rel_flow, fluid_density),
+            (Body::Dragon(not_bird), Some(ori)) => dragon::FlyingDragon::from((not_bird, ori))
+                .aerodynamic_forces(rel_flow, fluid_density),
+            _ => self.drag(rel_flow, fluid_density),
+        }
+    }
+}
+
+impl Drag for Body {
+    /// Parasite drag is the sum of pressure drag and skin friction.
+    /// Skin friction is the drag arising from the shear forces between a fluid
+    /// and a surface, while pressure drag is due to flow separation. Both are
+    /// viscous effects.
+    ///
+    /// This coefficient includes the reference area.
+    fn parasite_drag_coefficient(&self) -> f32 {
+        // Reference area and drag coefficient assumes best-case scenario of the
+        // orientation producing least amount of drag
+        match self {
+            // Cross-section, head/feet first
+            Body::BipedLarge(_) | Body::BipedSmall(_) | Body::Golem(_) | Body::Humanoid(_) => {
+                const SCALE: f32 = 0.7;
+                let radius = self.dimensions().xy().map(|a| SCALE * a * 0.5);
+                const CD: f32 = 0.7;
+                CD * PI * radius.x * radius.y
+            },
+
+            // Cross-section, nose/tail first
+            Body::Theropod(_)
+            | Body::QuadrupedMedium(_)
+            | Body::QuadrupedSmall(_)
+            | Body::QuadrupedLow(_) => {
+                let radius = self.dimensions().map(|a| a * 0.5);
+                let cd: f32 = if matches!(self, Body::QuadrupedLow(_)) {
+                    0.7
+                } else {
+                    1.0
+                };
+                cd * PI * radius.x * radius.z
+            },
+
+            Body::BirdMedium(bird) => bird.parasite_drag_coefficient(),
+            Body::BirdLarge(bird) => bird.parasite_drag_coefficient(),
+            Body::Dragon(not_bird) => not_bird.parasite_drag_coefficient(),
+
+            // Cross-section, zero-lift angle; exclude the fins
+            Body::FishMedium(_) | Body::FishSmall(_) => {
+                let radius = self.dimensions().map(|a| a * 0.5);
+                // "A Simple Method to Determine Drag Coefficients in Aquatic Animals",
+                // D. Bilo and W. Nachtigall, 1980
+                const CD: f32 = 0.031;
+                CD * PI * radius.x * radius.z
+            },
+
+            Body::Object(object) => match object {
+                // very streamlined objects
+                object::Body::Arrow
+                | object::Body::ArrowSnake
+                | object::Body::ArrowTurret
+                | object::Body::FireworkBlue
+                | object::Body::FireworkGreen
+                | object::Body::FireworkPurple
+                | object::Body::FireworkRed
+                | object::Body::FireworkWhite
+                | object::Body::FireworkYellow
+                | object::Body::MultiArrow => {
+                    let radius = self.dimensions().map(|a| a * 0.5);
+                    const CD: f32 = 0.02;
+                    CD * PI * radius.x * radius.z
+                },
+
+                // spherical-ish objects
+                object::Body::BoltFire
+                | object::Body::BoltFireBig
+                | object::Body::BoltNature
+                | object::Body::Bomb
+                | object::Body::PotionBlue
+                | object::Body::PotionGreen
+                | object::Body::PotionRed
+                | object::Body::Pouch
+                | object::Body::Pumpkin
+                | object::Body::Pumpkin2
+                | object::Body::Pumpkin3
+                | object::Body::Pumpkin4
+                | object::Body::Pumpkin5 => {
+                    let radius = self.dimensions().xy().map(|a| a * 0.5);
+                    const CD: f32 = 0.5;
+                    CD * PI * radius.product()
+                },
+
+                _ => {
+                    let dim = self.dimensions();
+                    const CD: f32 = 2.0;
+                    CD * (PI / 6.0 * dim.x * dim.y * dim.z).powf(2.0 / 3.0)
+                },
+            },
+
+            Body::Ship(_) => {
+                // Airships tend to use the square of the cube root of its volume for
+                // reference area
+                let dim = self.dimensions();
+                (PI / 6.0 * dim.x * dim.y * dim.z).powf(2.0 / 3.0)
+            },
+        }
+    }
 }
