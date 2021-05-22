@@ -18,11 +18,13 @@ pub const GRID_SIZE: Vec3<usize> = Vec3 {
     y: Y_SIZE,
     z: Z_SIZE,
 };
+pub const MS_BETWEEN_TICKS: u32 = 1000;
 
 #[derive(Default)]
 pub struct WindSim {
     grid: WindGrid,
     blocks_per_cell: Vec3<u32>,
+    pub ms_since_update: u32,
 }
 
 impl WindSim {
@@ -30,6 +32,7 @@ impl WindSim {
         Self {
             grid: WindGrid::default(),
             blocks_per_cell: cell_size_in_blocks(world_size),
+            ms_since_update: MS_BETWEEN_TICKS,
         }
     }
 
@@ -75,6 +78,7 @@ impl WindSim {
             0.1,
             true,
         );
+        self.ms_since_update = 0;
     }
 }
 
