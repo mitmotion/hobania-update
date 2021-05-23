@@ -400,8 +400,8 @@ impl<'a> System<'a> for Sys {
                                                 &read_data.terrain,
                                                 tgt_pos,
                                             );
-                                        } else if target_was_attacked(target, &read_data) {
-                                            data.attack_targets_attacker(
+                                        } else if entity_was_attacked(target, &read_data) {
+                                            data.attack_agents_attacker(
                                                 agent, &read_data, controller,
                                             );
                                         // Follow owner if too far away and not
@@ -445,15 +445,13 @@ impl<'a> System<'a> for Sys {
                         // have a health component
                         match health {
                             Some(health) if health.last_change.0 < DAMAGE_MEMORY_DURATION => {
+                                // TODO: Can most of this match be replaced by the function
+                                // `attack_agents_attacker`?
                                 if let comp::HealthSource::Damage { by: Some(by), .. } =
                                     health.last_change.1.cause
                                 {
-                                    if let Some(attacker) =
-                                        read_data.uid_allocator.retrieve_entity_internal(by.id())
-                                    {
+                                    if let Some(attacker) = get_entity_by_id(by.id(), &read_data) {
                                         if let Some(tgt_pos) = read_data.positions.get(attacker) {
-                                            // If the target is dead or in a safezone, remove the
-                                            // target and idle.
                                             if should_stop_attacking(attacker, &read_data) {
                                                 agent.target = None;
                                                 data.idle_tree(
@@ -485,15 +483,13 @@ impl<'a> System<'a> for Sys {
                                                     .rtsim_entity
                                                     .and_then(|_| read_data.stats.get(attacker))
                                                 {
-                                                    agent.rtsim_controller.events.push(
-                                                        RtSimEvent::AddMemory(Memory {
-                                                            item: MemoryItem::CharacterFight {
-                                                                name: tgt_stats.name.clone(),
-                                                            },
-                                                            time_to_forget: read_data.time.0
-                                                                + 300.0,
-                                                        }),
-                                                    );
+                                                    if data.rtsim_entity.is_some() {
+                                                        remember_fight(
+                                                            agent,
+                                                            tgt_stats.name.clone(),
+                                                            read_data.time.0,
+                                                        );
+                                                    }
                                                 }
                                             }
                                         } else {
@@ -561,7 +557,7 @@ impl<'a> AgentData<'a> {
         // Set owner if no target
         if agent.target.is_none() && thread_rng().gen_bool(0.1) {
             if let Some(Alignment::Owned(owner)) = self.alignment {
-                if let Some(owner) = read_data.uid_allocator.retrieve_entity_internal(owner.id()) {
+                if let Some(owner) = get_entity_by_id(owner.id(), read_data) {
                     agent.target = build_target(owner, false, read_data.time.0);
                 }
             }
@@ -947,8 +943,7 @@ impl<'a> AgentData<'a> {
         match msg {
             Some(AgentEvent::Talk(by, subject)) => {
                 if can_speak(agent) {
-                    if let Some(target) = read_data.uid_allocator.retrieve_entity_internal(by.id())
-                    {
+                    if let Some(target) = get_entity_by_id(by.id(), read_data) {
                         agent.target = build_target(target, false, read_data.time.0);
 
                         if self.look_toward(controller, read_data, &target) {
@@ -1135,9 +1130,7 @@ impl<'a> AgentData<'a> {
                         // stand still and looking towards the trading player
                         controller.actions.push(ControlAction::Stand);
                         controller.actions.push(ControlAction::Talk);
-                        if let Some(target) =
-                            read_data.uid_allocator.retrieve_entity_internal(with.id())
-                        {
+                        if let Some(target) = get_entity_by_id(with.id(), read_data) {
                             agent.target = build_target(target, false, read_data.time.0);
                         }
                         controller
@@ -1163,9 +1156,7 @@ impl<'a> AgentData<'a> {
             },
             Some(AgentEvent::TradeAccepted(with)) => {
                 if !agent.behavior.is(BehaviorState::TRADING) {
-                    if let Some(target) =
-                        read_data.uid_allocator.retrieve_entity_internal(with.id())
-                    {
+                    if let Some(target) = get_entity_by_id(with.id(), read_data) {
                         agent.target = build_target(target, false, read_data.time.0);
                     }
                     agent.behavior.set(BehaviorState::TRADING);
@@ -1384,6 +1375,17 @@ impl<'a> AgentData<'a> {
         agent.action_state.timer = 0.0;
 
         // Search area
+        // TODO: REMOVE THIS BEFORE MERGE
+        if let Some(agent_stats) = read_data.stats.get(*self.entity) {
+            let is_village_guard = agent_stats.name == *"Guard".to_string();
+            if is_village_guard {
+                self.chat_general(
+                    "I am a guard, searching for target".to_string(),
+                    event_emitter,
+                );
+            }
+        }
+
         let target = self.cached_spatial_grid.0
             .in_circle_aabr(self.pos.0.xy(), SEARCH_DIST)
             .filter_map(|entity| {
@@ -1396,7 +1398,7 @@ impl<'a> AgentData<'a> {
                         (entity, pos, health, stats, inventory, read_data.alignments.get(entity), read_data.char_states.get(entity))
                     })
             })
-            .filter(|(e, e_pos, e_health, e_stats, e_inventory, e_alignment, char_state)| {
+        .filter(|(e, e_pos, e_health, e_stats, e_inventory, e_alignment, char_state)| {
                 let mut search_dist = SEARCH_DIST;
                 let mut listen_dist = MAX_LISTEN_DIST;
                 if char_state.map_or(false, |c_s| c_s.is_stealthy()) {
@@ -1404,11 +1406,7 @@ impl<'a> AgentData<'a> {
                     search_dist *= SNEAK_COEFFICIENT;
                     listen_dist *= SNEAK_COEFFICIENT;
                 }
-                ((e_pos.0.distance_squared(self.pos.0) < search_dist.powi(2) &&
-                    // Within our view
-                    (e_pos.0 - self.pos.0).try_normalized().map(|v| v.dot(*controller.inputs.look_dir) > 0.15).unwrap_or(true))
-                        // Within listen distance
-                        || e_pos.0.distance_squared(self.pos.0) < listen_dist.powi(2)) // TODO implement proper sound system for agents
+                ((self.within_range_of(search_dist, e_pos.0) && self.within_view_angle(e_pos.0, controller)) || self.within_range_of(listen_dist, e_pos.0)) // TODO implement proper sound system for agents
                     && e != self.entity
                     && !e_health.is_dead
                     && !invulnerability_is_in_buffs(read_data.buffs.get(*e))
@@ -1416,12 +1414,7 @@ impl<'a> AgentData<'a> {
                             if let Some(rtsim_entity) = &self.rtsim_entity {
                                 if can_speak(agent) {
                                     if rtsim_entity.brain.remembers_fight_with_character(&e_stats.name) {
-                                        agent.rtsim_controller.events.push(
-                                            RtSimEvent::AddMemory(Memory {
-                                                item: MemoryItem::CharacterFight { name: e_stats.name.clone() },
-                                                time_to_forget: read_data.time.0 + 300.0,
-                                            })
-                                        );
+                                        remember_fight(agent, e_stats.name.clone(), read_data.time.0);
                                         let msg = format!("{}! How dare you cross me again!", e_stats.name.clone());
                                         self.chat_general(msg, event_emitter);
                                         true
@@ -1440,12 +1433,7 @@ impl<'a> AgentData<'a> {
                                 if matches!(alignment, Alignment::Npc) && e_inventory.equipped_items().filter(|item| item.tags().contains(&ItemTag::Cultist)).count() > 2 {
                                     if can_speak(agent) {
                                         if self.rtsim_entity.is_some() {
-                                            agent.rtsim_controller.events.push(
-                                                RtSimEvent::AddMemory(Memory {
-                                                    item: MemoryItem::CharacterFight { name: e_stats.name.clone() },
-                                                    time_to_forget: read_data.time.0 + 300.0,
-                                                })
-                                            );
+                                            remember_fight(agent, e_stats.name.clone(), read_data.time.0);
                                         }
                                         let msg = "npc.speech.villager_cultist_alarm".to_string();
                                         self.chat_general(msg, event_emitter);
@@ -1459,14 +1447,57 @@ impl<'a> AgentData<'a> {
                         ))
 
             })
+            .filter_map(|(e, e_pos, e_health, _e_stats, _e_inventory, e_alignment, _char_state)| {
+                // TODO: REMOVE THIS BEFORE MERGE
+                if let Some(agent_stats) = read_data.stats.get(*self.entity) {
+                    let is_village_guard = agent_stats.name == *"Guard".to_string();
+                    if is_village_guard {
+                        println!("{}", "I am a guard, made it to the filter_map".to_string());
+                    }
+                }
+                if entity_was_attacked(e, &read_data) {
+                    if let Some(alignment) = e_alignment {
+                        let is_npc = matches!(alignment, Alignment::Npc);
+
+                        if is_npc {
+                            if let comp::HealthSource::Damage { by: Some(by), .. } = e_health.last_change.1.cause {
+                                get_entity_by_id(by.id(), read_data)
+                                    .and_then(|attacker| {
+                                        println!("attacker data: {:?}", Some(attacker).zip(read_data.positions.get(attacker)));
+                                        Some(attacker).zip(read_data.positions.get(attacker))
+                                    })
+                            } else {
+                                Some(e).zip(Some(e_pos))
+                            }
+                        } else {
+                            Some(e).zip(Some(e_pos))
+                        }
+                    } else {
+                        Some(e).zip(Some(e_pos))
+                    }
+                } else {
+                    Some(e).zip(Some(e_pos))
+                }
+            })
             // Can we even see them?
-            .filter(|(_, e_pos, _, _, _, _, _)| read_data.terrain
+            .filter(|(_e, e_pos)| {
+                // TODO: REMOVE THIS BEFORE MERGE
+                if let Some(agent_stats) = read_data.stats.get(*self.entity) {
+                    let is_village_guard = agent_stats.name == *"Guard".to_string();
+                    if is_village_guard {
+                        println!("looking at: {:?} at {:?}", _e, e_pos);
+                        println!("can we see them: {:?}", read_data.terrain.ray(self.pos.0 + Vec3::unit_z(), e_pos.0 + Vec3::unit_z()).until(Block::is_opaque).cast().0 >= e_pos.0.distance(self.pos.0));
+                    }
+                }
+
+                read_data.terrain
                 .ray(self.pos.0 + Vec3::unit_z(), e_pos.0 + Vec3::unit_z())
                 .until(Block::is_opaque)
                 .cast()
-                .0 >= e_pos.0.distance(self.pos.0))
-            .min_by_key(|(_, e_pos, _, _, _, _, _)| (e_pos.0.distance_squared(self.pos.0) * 100.0) as i32) // TODO choose target by more than just distance
-            .map(|(e, _, _, _, _, _, _)| e);
+                .0 >= e_pos.0.distance(self.pos.0)
+            })
+            .min_by_key(|(_e, e_pos)| (e_pos.0.distance_squared(self.pos.0) * 100.0) as i32) // TODO choose target by more than just distance
+            .map(|(e, _e_pos)| e);
 
         if agent.target.is_none() && target.is_some() {
             controller.push_event(ControlEvent::Utterance(UtteranceKind::Angry));
@@ -1477,6 +1508,14 @@ impl<'a> AgentData<'a> {
             hostile: true,
             selected_at: read_data.time.0,
         });
+
+        // TODO: REMOVE THIS BEFORE MERGE
+        if let Some(agent_stats) = read_data.stats.get(*self.entity) {
+            let is_village_guard = agent_stats.name == *"Guard".to_string();
+            if is_village_guard {
+                println!("guard's target is: {:?}", agent.target);
+            }
+        }
     }
 
     fn attack(
@@ -3845,12 +3884,7 @@ impl<'a> AgentData<'a> {
                     let sound_is_villager_alarm = matches!(sound.kind, SoundKind::VillagerAlarm);
 
                     if sound_is_villager_alarm {
-                        if let Some(alarmist) = sound.owner {
-                            agent.target = build_target(alarmist, true, read_data.time.0);
-                            self.attack_targets_attacker(agent, &read_data, controller);
-                        } else {
-                            self.follow(agent, controller, &read_data.terrain, &sound_pos);
-                        }
+                        self.follow(agent, controller, &read_data.terrain, &sound_pos);
                     } else {
                         self.idle(agent, controller, &read_data);
                     }
@@ -3862,7 +3896,7 @@ impl<'a> AgentData<'a> {
         }
     }
 
-    fn attack_targets_attacker(
+    fn attack_agents_attacker(
         &self,
         agent: &mut Agent,
         read_data: &ReadData,
@@ -3873,9 +3907,7 @@ impl<'a> AgentData<'a> {
                 if let comp::HealthSource::Damage { by: Some(by), .. } =
                     tgt_health.last_change.1.cause
                 {
-                    if let Some(attacker) =
-                        read_data.uid_allocator.retrieve_entity_internal(by.id())
-                    {
+                    if let Some(attacker) = get_entity_by_id(by.id(), read_data) {
                         if agent.target.is_none() {
                             controller.push_event(ControlEvent::Utterance(UtteranceKind::Angry));
                         }
@@ -3976,14 +4008,19 @@ impl<'a> AgentData<'a> {
 
     fn emit_villager_alarm(&self, time: f64, event_emitter: &mut Emitter<'_, ServerEvent>) {
         event_emitter.emit(ServerEvent::Sound {
-            sound: Sound::new(
-                SoundKind::VillagerAlarm,
-                self.pos.0,
-                100.0,
-                time,
-                Some(*self.entity),
-            ),
+            sound: Sound::new(SoundKind::VillagerAlarm, self.pos.0, 100.0, time),
         });
+    }
+
+    fn within_view_angle(&self, tgt_pos: Vec3<f32>, controller: &Controller) -> bool {
+        (tgt_pos - self.pos.0)
+            .try_normalized()
+            .map(|v| v.dot(*controller.inputs.look_dir) > 0.15)
+            .unwrap_or(true)
+    }
+
+    fn within_range_of(&self, range: f32, their_pos: Vec3<f32>) -> bool {
+        their_pos.distance_squared(self.pos.0) < range.powi(2)
     }
 }
 
@@ -4017,10 +4054,7 @@ fn try_owner_alignment<'a>(
     read_data: &'a ReadData,
 ) -> Option<&'a Alignment> {
     if let Some(Alignment::Owned(owner_uid)) = alignment {
-        if let Some(owner) = read_data
-            .uid_allocator
-            .retrieve_entity_internal(owner_uid.id())
-        {
+        if let Some(owner) = get_entity_by_id(owner_uid.id(), read_data) {
             return read_data.alignments.get(owner);
         }
     }
@@ -4079,9 +4113,9 @@ fn decrement_awareness(agent: &mut Agent) {
     agent.awareness -= decrement;
 }
 
-fn target_was_attacked(target: EcsEntity, read_data: &ReadData) -> bool {
-    if let Some(tgt_health) = read_data.healths.get(target) {
-        tgt_health.last_change.0 < 5.0 && tgt_health.last_change.1.amount < 0
+fn entity_was_attacked(entity: EcsEntity, read_data: &ReadData) -> bool {
+    if let Some(entity_health) = read_data.healths.get(entity) {
+        entity_health.last_change.0 < 5.0 && entity_health.last_change.1.amount < 0
     } else {
         false
     }
@@ -4108,3 +4142,17 @@ fn build_target_data<'a>(
 }
 
 fn can_speak(agent: &Agent) -> bool { agent.behavior.can(BehaviorCapability::SPEAK) }
+
+fn remember_fight(agent: &mut Agent, name: String, time: f64) {
+    agent
+        .rtsim_controller
+        .events
+        .push(RtSimEvent::AddMemory(Memory {
+            item: MemoryItem::CharacterFight { name },
+            time_to_forget: time + 300.0,
+        }));
+}
+
+fn get_entity_by_id(id: u64, read_data: &ReadData) -> Option<EcsEntity> {
+    read_data.uid_allocator.retrieve_entity_internal(id)
+}

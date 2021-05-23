@@ -699,13 +699,7 @@ pub fn handle_explosion(server: &Server, pos: Vec3<f32>, explosion: Explosion, o
 
     let explosion_volume = 2.5 * explosion.radius;
     server_eventbus.emit_now(ServerEvent::Sound {
-        sound: Sound::new(
-            SoundKind::Explosion,
-            pos,
-            explosion_volume,
-            time.0,
-            owner_entity,
-        ),
+        sound: Sound::new(SoundKind::Explosion, pos, explosion_volume, time.0),
     });
 
     // Add an outcome

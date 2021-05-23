@@ -99,7 +99,6 @@ impl<'a> System<'a> for Sys {
                                 pos.0 + Vec3::unit_z() * body.eye_height(),
                                 8.0, // TODO: Come up with a better way of determining this
                                 1.0,
-                                Some(entity),
                             );
                             server_emitter.emit(ServerEvent::Sound { sound });
                         }
