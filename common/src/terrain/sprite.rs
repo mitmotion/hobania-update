@@ -148,6 +148,9 @@ make_case_elim!(
         Cauldron = 0x79,
         Anvil = 0x7A,
         CookingPot = 0x7B,
+        IronBar = 0x7C,
+        IronBarCross = 0x7D,
+        Tombstones = 0x7E,
     }
 );
 
@@ -209,7 +212,10 @@ impl SpriteKind {
             | SpriteKind::Window2
             | SpriteKind::Window3
             | SpriteKind::Window4
-            | SpriteKind::DropGate => 1.0,
+            | SpriteKind::DropGate
+            | SpriteKind::IronBar
+            | SpriteKind::IronBarCross
+            | SpriteKind::Tombstones => 1.0,
             // TODO: Figure out if this should be solid or not.
             SpriteKind::Shelf => 1.0,
             SpriteKind::Lantern => 0.9,
@@ -324,6 +330,8 @@ impl SpriteKind {
                 | SpriteKind::Cauldron
                 | SpriteKind::Anvil
                 | SpriteKind::CookingPot
+                | SpriteKind::IronBarCross
+                | SpriteKind::Tombstones
         )
     }
 }

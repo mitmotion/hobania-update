@@ -2,7 +2,7 @@ mod castle;
 mod house;
 
 pub use self::{castle::Castle, house::House};
-pub use super::structure::Hut;
+pub use super::structure::{Cemetary, Hut};
 
 use super::*;
 use crate::util::DHashSet;
@@ -32,4 +32,5 @@ pub enum PlotKind {
     Plaza,
     Castle(Castle),
     Road(Path<Vec2<i32>>),
+    Cemetary(Cemetary),
 }

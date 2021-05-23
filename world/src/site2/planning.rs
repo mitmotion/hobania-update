@@ -1,8 +1,8 @@
-use common::lottery::Lottery;
 use super::{
+    structure::{Cemetary, Hut, Structure},
     *,
-    structure::{Structure, Hut},
 };
+use common::lottery::Lottery;
 
 // All are weights, must be positive, 1.0 is default.
 pub struct Values {
@@ -23,11 +23,14 @@ impl Site {
         match *Lottery::from_slice(&mut [
             (10.0, 0), // Huts
         ])
-            .choose_seeded(rng.gen())
+        .choose_seeded(rng.gen())
         {
             0 => {
-                Hut::choose_location((), land, self, rng)
-                    .map(|hut| hut.generate(land, self, rng));
+                Cemetary::choose_location((), land, self, rng)
+                    .map(|cemetary| cemetary.generate(land, self, rng));
+            },
+            1 => {
+                Hut::choose_location((), land, self, rng).map(|hut| hut.generate(land, self, rng));
             },
             _ => unreachable!(),
         }

@@ -2907,4 +2907,52 @@ CookingPot: Some((
     ],
     wind_sway: 0.0,
 )),
+// Iron Bar
+IronBar: Some((
+    variations: [
+        (
+            model: "voxygen.voxel.sprite.iron_bar.iron_bar-0",
+            offset: (-1.5, -1.5, 0.0),
+            lod_axes: (0.0, 0.0, 0.0),
+        ),
+    ],
+    wind_sway: 0.0,
+)),
+// Iron Bar Cross
+IronBarCross: Some((
+    variations: [
+        (
+            model: "voxygen.voxel.sprite.iron_bar.iron_bar-1",
+            offset: (-5.5, -1.5, -5.5),
+            lod_axes: (0.0, 0.0, 0.0),
+        ),
+    ],
+    wind_sway: 0.0,
+)),
+// Tombstones
+Tombstones: Some((
+    variations: [
+        (
+            model: "voxygen.voxel.sprite.tombstones.tombstone-0",
+            offset: (-5.5, -2.0, 0.0),
+            lod_axes: (0.0, 0.0, 0.0),
+        ),
+        (
+            model: "voxygen.voxel.sprite.tombstones.tombstone-1",
+            offset: (-4.5, -1.0, 0.0),
+            lod_axes: (0.0, 0.0, 0.0),
+        ),
+        (
+            model: "voxygen.voxel.sprite.tombstones.tombstone-2",
+            offset: (-4.5, -1.0, 0.0),
+            lod_axes: (0.0, 0.0, 0.0),
+        ),
+        (
+            model: "voxygen.voxel.sprite.tombstones.tombstone-3",
+            offset: (-7.5, -3.0, 0.0),
+            lod_axes: (0.0, 0.0, 0.0),
+        ),
+    ],
+    wind_sway: 0.0,
+)),
 )

@@ -722,6 +722,7 @@ impl Site {
         for plot in plots_to_render {
             let (prim_tree, fills) = match &self.plots[plot].kind {
                 PlotKind::Hut(hut) => hut.render_collect(self),
+                PlotKind::Cemetary(cemetary) => cemetary.render_collect(self),
                 PlotKind::House(house) => house.render_collect(self),
                 PlotKind::Castle(castle) => castle.render_collect(self),
                 _ => continue,
