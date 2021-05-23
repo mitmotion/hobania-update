@@ -3870,6 +3870,14 @@ impl<'a> AgentData<'a> {
                         // TODO: Change this to a search action instead of idle
                         self.idle(agent, controller, &read_data);
                     }
+                } else if is_village_guard {
+                    let sound_is_villager_alarm = matches!(sound.kind, SoundKind::VillagerAlarm);
+
+                    if sound_is_villager_alarm {
+                        self.follow(agent, controller, &read_data.terrain, &sound_pos);
+                    } else {
+                        self.idle(agent, controller, &read_data);
+                    }
                 } else if is_neutral {
                     let aggro = agent.psyche.aggro;
                     let close_enough = dist_sqrd < 35.0_f32.powi(2);
@@ -3879,14 +3887,6 @@ impl<'a> AgentData<'a> {
                         self.flee(agent, controller, &read_data.terrain, &sound_pos);
                     } else {
                         self.idle(agent, controller, read_data);
-                    }
-                } else if is_village_guard {
-                    let sound_is_villager_alarm = matches!(sound.kind, SoundKind::VillagerAlarm);
-
-                    if sound_is_villager_alarm {
-                        self.follow(agent, controller, &read_data.terrain, &sound_pos);
-                    } else {
-                        self.idle(agent, controller, &read_data);
                     }
                 } else {
                     // TODO: Change this to a search action instead of idle
