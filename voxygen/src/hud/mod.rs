@@ -63,8 +63,8 @@ use crate::{
     },
     settings::chat::ChatFilter,
     ui::{
-        self, fonts::Fonts, img_ids::Rotations, slot, slot::SlotKey, Graphic, Ingameable,
-        ScaleMode, Ui,
+        self, fonts::Fonts, img_ids::Rotations, slot, slot::SlotKey, Event as UiEvent, Graphic,
+        Ingameable, ScaleMode, Ui,
     },
     window::{Event as WinEvent, GameInput},
     GlobalState,
@@ -93,6 +93,8 @@ use common_net::{
     sync::WorldSyncExt,
 };
 use conrod_core::{
+    event::Input as ConrodInput,
+    input::{Button as ConrodInputButton, MouseButton as ConrodInputMouseButton},
     text::cursor::Index,
     widget::{self, Button, Image, Text},
     widget_ids, Color, Colorable, Labelable, Positionable, Sizeable, Widget,
@@ -3355,6 +3357,11 @@ impl Hud {
 
         let cursor_grabbed = global_state.window.is_cursor_grabbed();
         let handled = match event {
+            // Do not unfocus widgets that the user is typing into when Left-Clicking the window
+            WinEvent::Ui(UiEvent(ConrodInput::Press(ConrodInputButton::Mouse(
+                ConrodInputMouseButton::Left,
+            )))) if self.typing() => true,
+
             WinEvent::Ui(event) => {
                 if (self.typing() && event.is_keyboard() && self.show.ui)
                     || !(cursor_grabbed && event.is_keyboard_or_mouse())
@@ -3412,21 +3419,30 @@ impl Hud {
             WinEvent::Zoom(_) => !cursor_grabbed && !self.ui.no_widget_capturing_mouse(),
 
             WinEvent::InputUpdate(GameInput::Chat, true) => {
-                self.ui.focus_widget(if self.typing() {
-                    // regrab cursor when done typing
-                    self.force_ungrab = false;
-                    None
+                if self.typing() {
+                    if !self.show.bag
+                        && !self.show.trade
+                        && !self.show.esc_menu
+                        && !self.show.map
+                        && !self.show.social
+                        && !self.show.crafting
+                        && !self.show.diary
+                        && !self.show.help
+                        && !self.show.intro
+                    {
+                        self.show.want_grab = true;
+                    }
+                    self.ui.focus_widget(None);
                 } else {
-                    // ungrab cursor when activating typing
-                    self.force_ungrab = true;
-                    Some(self.ids.chat)
-                });
+                    self.show.want_grab = false;
+                    self.ui.focus_widget(Some(self.ids.chat));
+                }
+
                 true
             },
             WinEvent::InputUpdate(GameInput::Escape, true) => {
                 if self.typing() {
-                    // If we were typing, the cursor was ungrabbed, so regrab it.
-                    self.force_ungrab = false;
+                    self.show.want_grab = true;
                     self.ui.focus_widget(None);
                 } else if self.show.trade {
                     self.events.push(Event::TradeAction(TradeAction::Decline));
