@@ -1376,15 +1376,15 @@ impl<'a> AgentData<'a> {
 
         // Search area
         // TODO: REMOVE THIS BEFORE MERGE
-        if let Some(agent_stats) = read_data.stats.get(*self.entity) {
-            let is_village_guard = agent_stats.name == *"Guard".to_string();
-            if is_village_guard {
-                self.chat_general(
-                    "I am a guard, searching for target".to_string(),
-                    event_emitter,
-                );
-            }
-        }
+        //if let Some(agent_stats) = read_data.stats.get(*self.entity) {
+        //    let is_village_guard = agent_stats.name == *"Guard".to_string();
+        //    if is_village_guard {
+        //        self.chat_general(
+        //            "I am a guard, searching for target".to_string(),
+        //            event_emitter,
+        //        );
+        //    }
+        //}
 
         let target = self.cached_spatial_grid.0
             .in_circle_aabr(self.pos.0.xy(), SEARCH_DIST)
@@ -1398,97 +1398,80 @@ impl<'a> AgentData<'a> {
                         (entity, pos, health, stats, inventory, read_data.alignments.get(entity), read_data.char_states.get(entity))
                     })
             })
-        .filter(|(e, e_pos, e_health, e_stats, e_inventory, e_alignment, char_state)| {
-                let mut search_dist = SEARCH_DIST;
-                let mut listen_dist = MAX_LISTEN_DIST;
-                if char_state.map_or(false, |c_s| c_s.is_stealthy()) {
-                    // TODO: make sneak more effective based on a stat like e_stats.fitness
-                    search_dist *= SNEAK_COEFFICIENT;
-                    listen_dist *= SNEAK_COEFFICIENT;
-                }
-                ((self.within_range_of(search_dist, e_pos.0) && self.within_view_angle(e_pos.0, controller)) || self.within_range_of(listen_dist, e_pos.0)) // TODO implement proper sound system for agents
-                    && e != self.entity
-                    && !e_health.is_dead
-                    && !invulnerability_is_in_buffs(read_data.buffs.get(*e))
-                    && (try_owner_alignment(self.alignment, read_data).and_then(|a| try_owner_alignment(*e_alignment, read_data).map(|b| a.hostile_towards(*b))).unwrap_or(false) || (
-                            if let Some(rtsim_entity) = &self.rtsim_entity {
-                                if can_speak(agent) {
-                                    if rtsim_entity.brain.remembers_fight_with_character(&e_stats.name) {
-                                        remember_fight(agent, e_stats.name.clone(), read_data.time.0);
-                                        let msg = format!("{}! How dare you cross me again!", e_stats.name.clone());
-                                        self.chat_general(msg, event_emitter);
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                } else {
-                                    false
-                                }
-                            } else {
-                                false
+        .filter(|(e, e_pos, e_health, _e_stats, _e_inventory, _e_alignment, char_state)| {
+            // Filter based on sight and hearing
+            let mut search_dist = SEARCH_DIST;
+            let mut listen_dist = MAX_LISTEN_DIST;
+            if char_state.map_or(false, |c_s| c_s.is_stealthy()) {
+                // TODO: make sneak more effective based on a stat like e_stats.fitness
+                search_dist *= SNEAK_COEFFICIENT;
+                listen_dist *= SNEAK_COEFFICIENT;
+            }
+            ((self.within_range_of(search_dist, e_pos.0) && self.within_view_angle(e_pos.0, controller)) || self.within_range_of(listen_dist, e_pos.0)) // TODO implement proper sound system for agents
+                && e != self.entity
+                && !e_health.is_dead
+                && !invulnerability_is_in_buffs(read_data.buffs.get(*e))
+        })
+        .filter_map(|(e, e_pos, e_health, e_stats, e_inventory, e_alignment, _char_state)| {
+                if try_owner_alignment(self.alignment, &read_data).and_then(|a| try_owner_alignment(e_alignment, &read_data).map(|b| a.hostile_towards(*b))).unwrap_or(false) {
+                    Some((e, e_pos))
+                } else if let Some(rtsim_entity) = &self.rtsim_entity {
+                    if can_speak(agent) && rtsim_entity.brain.remembers_fight_with_character(&e_stats.name) {
+                        remember_fight(agent, e_stats.name.clone(), read_data.time.0);
+                        let msg = format!("{}! How dare you cross me again!", e_stats.name.clone());
+                        self.chat_general(msg, event_emitter);
+                        Some((e, e_pos))
+                    } else {
+                        None
+                    }
+                } else if let Some(alignment) = self.alignment {
+                    if matches!(alignment, Alignment::Npc) && e_inventory.equipped_items().filter(|item| item.tags().contains(&ItemTag::Cultist)).count() > 2 {
+                        if can_speak(agent) {
+                            if self.rtsim_entity.is_some() {
+                                remember_fight(agent, e_stats.name.clone(), read_data.time.0);
                             }
-                        ) ||
-                        (
-                            self.alignment.map_or(false, |alignment| {
-                                if matches!(alignment, Alignment::Npc) && e_inventory.equipped_items().filter(|item| item.tags().contains(&ItemTag::Cultist)).count() > 2 {
-                                    if can_speak(agent) {
-                                        if self.rtsim_entity.is_some() {
-                                            remember_fight(agent, e_stats.name.clone(), read_data.time.0);
-                                        }
-                                        let msg = "npc.speech.villager_cultist_alarm".to_string();
-                                        self.chat_general(msg, event_emitter);
-                                        self.emit_villager_alarm(read_data.time.0, event_emitter);
-                                    }
-                                    true
-                                } else {
-                                    false
-                                }
-                            })
-                        ))
-
-            })
-            .filter_map(|(e, e_pos, e_health, _e_stats, _e_inventory, e_alignment, _char_state)| {
-                // TODO: REMOVE THIS BEFORE MERGE
-                if let Some(agent_stats) = read_data.stats.get(*self.entity) {
+                            let msg = "npc.speech.villager_cultist_alarm".to_string();
+                            self.chat_general(msg, event_emitter);
+                            self.emit_villager_alarm(read_data.time.0, event_emitter);
+                        }
+                        Some((e, e_pos))
+                    } else {
+                        None
+                    }
+                } else if let Some(agent_stats) = read_data.stats.get(*self.entity) {
                     let is_village_guard = agent_stats.name == *"Guard".to_string();
                     if is_village_guard {
-                        println!("{}", "I am a guard, made it to the filter_map".to_string());
-                    }
-                }
-                if entity_was_attacked(e, &read_data) {
-                    if let Some(alignment) = e_alignment {
-                        let is_npc = matches!(alignment, Alignment::Npc);
-
-                        if is_npc {
-                            if let comp::HealthSource::Damage { by: Some(by), .. } = e_health.last_change.1.cause {
-                                get_entity_by_id(by.id(), read_data)
-                                    .and_then(|attacker| {
-                                        println!("attacker data: {:?}", Some(attacker).zip(read_data.positions.get(attacker)));
-                                        Some(attacker).zip(read_data.positions.get(attacker))
-                                    })
+                        e_alignment.map(|alignment| {
+                            let is_npc = matches!(alignment, Alignment::Npc);
+                            if is_npc && e_health.last_change.0 < DAMAGE_MEMORY_DURATION {
+                                if let comp::HealthSource::Damage { by: Some(by), .. } = e_health.last_change.1.cause {
+                                    get_entity_by_id(by.id(), read_data).map(|attacker| {
+                                        read_data.positions.get(attacker).map(|a_pos| (attacker, a_pos))
+                                    }).flatten()
+                                } else {
+                                    None
+                                }
                             } else {
-                                Some(e).zip(Some(e_pos))
+                                None
                             }
-                        } else {
-                            Some(e).zip(Some(e_pos))
-                        }
+                        }).flatten()
                     } else {
-                        Some(e).zip(Some(e_pos))
+                        None
                     }
                 } else {
-                    Some(e).zip(Some(e_pos))
+                    None
                 }
             })
             // Can we even see them?
             .filter(|(_e, e_pos)| {
                 // TODO: REMOVE THIS BEFORE MERGE
-                if let Some(agent_stats) = read_data.stats.get(*self.entity) {
-                    let is_village_guard = agent_stats.name == *"Guard".to_string();
-                    if is_village_guard {
-                        println!("looking at: {:?} at {:?}", _e, e_pos);
-                        println!("can we see them: {:?}", read_data.terrain.ray(self.pos.0 + Vec3::unit_z(), e_pos.0 + Vec3::unit_z()).until(Block::is_opaque).cast().0 >= e_pos.0.distance(self.pos.0));
-                    }
-                }
+                //if let Some(agent_stats) = read_data.stats.get(*self.entity) {
+                //    let is_village_guard = agent_stats.name == *"Guard".to_string();
+                //    if is_village_guard {
+                //        println!("looking at: {:?} at {:?}", _e, e_pos);
+                //        println!("can we see them: {:?}", read_data.terrain.ray(self.pos.0 + Vec3::unit_z(), e_pos.0 + Vec3::unit_z()).until(Block::is_opaque).cast().0 >= e_pos.0.distance(self.pos.0));
+                //    }
+                //}
 
                 read_data.terrain
                 .ray(self.pos.0 + Vec3::unit_z(), e_pos.0 + Vec3::unit_z())
@@ -1509,13 +1492,13 @@ impl<'a> AgentData<'a> {
             selected_at: read_data.time.0,
         });
 
-        // TODO: REMOVE THIS BEFORE MERGE
-        if let Some(agent_stats) = read_data.stats.get(*self.entity) {
-            let is_village_guard = agent_stats.name == *"Guard".to_string();
-            if is_village_guard {
-                println!("guard's target is: {:?}", agent.target);
-            }
-        }
+        //// TODO: REMOVE THIS BEFORE MERGE
+        //if let Some(agent_stats) = read_data.stats.get(*self.entity) {
+        //    let is_village_guard = agent_stats.name == *"Guard".to_string();
+        //    if is_village_guard {
+        //        println!("guard's target is: {:?}", agent.target);
+        //    }
+        //}
     }
 
     fn attack(
