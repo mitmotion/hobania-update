@@ -669,7 +669,8 @@ impl Show {
     // TODO: Add self updating key-bindings element
     //fn toggle_help(&mut self) { self.help = !self.help }
 
-    fn toggle_windows(&mut self, global_state: &mut GlobalState) {
+    /// Returns `true` if there is some ui window open
+    fn some_window_open(&self) -> bool {
         if self.bag
             || self.trade
             || self.esc_menu
@@ -679,8 +680,15 @@ impl Show {
             || self.diary
             || self.help
             || self.intro
-            || !matches!(self.open_windows, Windows::None)
         {
+            true
+        } else {
+            false
+        }
+    }
+
+    fn toggle_windows(&mut self, global_state: &mut GlobalState) {
+        if self.some_window_open() || !matches!(self.open_windows, Windows::None) {
             self.bag = false;
             self.trade = false;
             self.esc_menu = false;
@@ -734,17 +742,7 @@ impl Show {
     /// If all of the menus are closed, adjusts coordinates of cursor to center
     /// of screen
     fn toggle_cursor_on_menu_close(&self, global_state: &mut GlobalState, ui: &mut Ui) {
-        if !self.bag
-            && !self.trade
-            && !self.esc_menu
-            && !self.map
-            && !self.social
-            && !self.crafting
-            && !self.diary
-            && !self.help
-            && !self.intro
-            && global_state.window.is_cursor_grabbed()
-        {
+        if !self.some_window_open() && global_state.window.is_cursor_grabbed() {
             ui.handle_event(ui::Event(
                 conrod_core::input::Motion::MouseCursor { x: 0.0, y: 0.0 }.into(),
             ));
@@ -3420,16 +3418,7 @@ impl Hud {
 
             WinEvent::InputUpdate(GameInput::Chat, true) => {
                 if self.typing() {
-                    if !self.show.bag
-                        && !self.show.trade
-                        && !self.show.esc_menu
-                        && !self.show.map
-                        && !self.show.social
-                        && !self.show.crafting
-                        && !self.show.diary
-                        && !self.show.help
-                        && !self.show.intro
-                    {
+                    if !self.show.some_window_open() {
                         self.show.want_grab = true;
                     }
                     self.ui.focus_widget(None);
