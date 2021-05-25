@@ -1413,54 +1413,71 @@ impl<'a> AgentData<'a> {
                 && !invulnerability_is_in_buffs(read_data.buffs.get(*e))
         })
         .filter_map(|(e, e_pos, e_health, e_stats, e_inventory, e_alignment, _char_state)| {
-                if try_owner_alignment(self.alignment, &read_data).and_then(|a| try_owner_alignment(e_alignment, &read_data).map(|b| a.hostile_towards(*b))).unwrap_or(false) {
-                    Some((e, e_pos))
-                } else if let Some(rtsim_entity) = &self.rtsim_entity {
-                    if can_speak(agent) && rtsim_entity.brain.remembers_fight_with_character(&e_stats.name) {
-                        remember_fight(agent, e_stats.name.clone(), read_data.time.0);
-                        let msg = format!("{}! How dare you cross me again!", e_stats.name.clone());
-                        self.chat_general(msg, event_emitter);
-                        Some((e, e_pos))
-                    } else {
-                        None
-                    }
-                } else if let Some(alignment) = self.alignment {
-                    if matches!(alignment, Alignment::Npc) && e_inventory.equipped_items().filter(|item| item.tags().contains(&ItemTag::Cultist)).count() > 2 {
-                        if can_speak(agent) {
-                            if self.rtsim_entity.is_some() {
+            // Hostile entities
+                try_owner_alignment(self.alignment, &read_data).and_then(|a| try_owner_alignment(e_alignment, &read_data).map(|b| a.hostile_towards(*b))).unwrap_or(false).then(|| Some((e, e_pos))).flatten()
+                .or({
+                    // I remember fighting this entity
+                    self.rtsim_entity.and_then(|rtsim_entity| {
+                        if rtsim_entity.brain.remembers_fight_with_character(&e_stats.name) {
+                            if can_speak(agent) {
                                 remember_fight(agent, e_stats.name.clone(), read_data.time.0);
+                                let msg = format!("{}! How dare you cross me again!", e_stats.name.clone());
+                                self.chat_general(msg, event_emitter);
                             }
-                            let msg = "npc.speech.villager_cultist_alarm".to_string();
-                            self.chat_general(msg, event_emitter);
-                            self.emit_villager_alarm(read_data.time.0, event_emitter);
+                            Some((e, e_pos))
+                        } else {
+                            None
                         }
-                        Some((e, e_pos))
-                    } else {
-                        None
-                    }
-                } else if let Some(agent_stats) = read_data.stats.get(*self.entity) {
-                    let is_village_guard = agent_stats.name == *"Guard".to_string();
-                    if is_village_guard {
-                        e_alignment.map(|alignment| {
-                            let is_npc = matches!(alignment, Alignment::Npc);
-                            if is_npc && e_health.last_change.0 < DAMAGE_MEMORY_DURATION {
-                                if let comp::HealthSource::Damage { by: Some(by), .. } = e_health.last_change.1.cause {
-                                    get_entity_by_id(by.id(), read_data).map(|attacker| {
-                                        read_data.positions.get(attacker).map(|a_pos| (attacker, a_pos))
-                                    }).flatten()
-                                } else {
-                                    None
+                    })
+                }).or({
+                    // Cultists!
+                    self.alignment.and_then(|alignment| {
+                        (matches!(alignment, Alignment::Npc) && e_inventory.equipped_items().filter(|item| item.tags().contains(&ItemTag::Cultist)).count() > 2).then(|| {
+                            if can_speak(agent) {
+                                if self.rtsim_entity.is_some() {
+                                    remember_fight(agent, e_stats.name.clone(), read_data.time.0);
                                 }
+                                let msg = "npc.speech.villager_cultist_alarm".to_string();
+                                self.chat_general(msg, event_emitter);
+                                self.emit_villager_alarm(read_data.time.0, event_emitter);
+                            }
+                            Some((e, e_pos))
+                        })
+                    }).flatten()
+                }).or({
+                    // I'm a guard and a villager is in distress
+                    read_data.stats.get(*self.entity).map_or(false, |stats| stats.name == "Guard")
+                        .then(|| {
+                            let other_is_npc = matches!(e_alignment, Some(Alignment::Npc));
+                            if other_is_npc {
+                                let remembers_damage = e_health.last_change.0 < DAMAGE_MEMORY_DURATION;
+
+                                remembers_damage
+                                    // TODO: add `.by()` helper method to HealthSource?
+                                    .then(|| {
+                                        println!("remembers damage");
+                                        match e_health.last_change.1.cause {
+                                            comp::HealthSource::Damage { by, .. } => by,
+                                            _ => None,
+                                        }
+                                    })
+                                    .flatten()
+                                    .and_then(|attacker_uid| {
+                                        println!("attacker has a uid");
+                                        get_entity_by_id(attacker_uid.id(), read_data)
+                                    })
+                                    .and_then(|attacker| {
+                                        println!("attacker has pos");
+                                        read_data
+                                            .positions
+                                            .get(attacker)
+                                            .map(|a_pos| (attacker, a_pos))
+                                    })
                             } else {
                                 None
                             }
                         }).flatten()
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
+                })
             })
             // Can we even see them?
             .filter(|(_e, e_pos)| {
@@ -1492,13 +1509,14 @@ impl<'a> AgentData<'a> {
             selected_at: read_data.time.0,
         });
 
-        //// TODO: REMOVE THIS BEFORE MERGE
-        //if let Some(agent_stats) = read_data.stats.get(*self.entity) {
-        //    let is_village_guard = agent_stats.name == *"Guard".to_string();
-        //    if is_village_guard {
-        //        println!("guard's target is: {:?}", agent.target);
-        //    }
-        //}
+        // TODO: REMOVE THIS BEFORE MERGE
+        if let Some(agent_stats) = read_data.stats.get(*self.entity) {
+            let is_village_guard = agent_stats.name == *"Guard".to_string();
+            if is_village_guard {
+                let msg = "I'm a guard".to_string();
+                self.chat_general(msg, event_emitter);
+            }
+        }
     }
 
     fn attack(
