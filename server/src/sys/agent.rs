@@ -3872,13 +3872,7 @@ impl<'a> AgentData<'a> {
                         self.idle(agent, controller, &read_data);
                     }
                 } else if is_village_guard {
-                    let sound_is_villager_alarm = matches!(sound.kind, SoundKind::VillagerAlarm);
-
-                    if sound_is_villager_alarm {
-                        self.follow(agent, controller, &read_data.terrain, &sound_pos);
-                    } else {
-                        self.idle(agent, controller, &read_data);
-                    }
+                    self.follow(agent, controller, &read_data.terrain, &sound_pos);
                 } else if is_neutral {
                     let aggro = agent.psyche.aggro;
                     let close_enough = dist_sqrd < 35.0_f32.powi(2);
