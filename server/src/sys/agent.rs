@@ -447,9 +447,7 @@ impl<'a> System<'a> for Sys {
                             Some(health) if health.last_change.0 < DAMAGE_MEMORY_DURATION => {
                                 // TODO: Can most of this match be replaced by the function
                                 // `attack_agents_attacker`?
-                                if let comp::HealthSource::Damage { by: Some(by), .. } =
-                                    health.last_change.1.cause
-                                {
+                                if let Some(by) = health.last_change.1.cause.damage_by() {
                                     if let Some(attacker) = get_entity_by_id(by.id(), &read_data) {
                                         if let Some(tgt_pos) = read_data.positions.get(attacker) {
                                             if should_stop_attacking(attacker, &read_data) {
@@ -1413,21 +1411,37 @@ impl<'a> AgentData<'a> {
                 && !invulnerability_is_in_buffs(read_data.buffs.get(*e))
         })
         .filter_map(|(e, e_pos, e_health, e_stats, e_inventory, e_alignment, _char_state)| {
-            // Hostile entities
-                try_owner_alignment(self.alignment, &read_data).and_then(|a| try_owner_alignment(e_alignment, &read_data).map(|b| a.hostile_towards(*b))).unwrap_or(false).then(|| Some((e, e_pos))).flatten()
+                // Hostile entities
+                try_owner_alignment(self.alignment, &read_data).and_then(|a| try_owner_alignment(e_alignment, &read_data).map(|b| a.hostile_towards(*b))).unwrap_or(false).then(|| (e, e_pos))
                 .or({
+                    // I'm a guard and a villager is in distress
+                    let other_is_npc = matches!(e_alignment, Some(Alignment::Npc));
+                    let remembers_damage = e_health.last_change.0 < 5.0;//DAMAGE_MEMORY_DURATION;
+                    read_data.stats.get(*self.entity).map_or(false, |stats| stats.name == "Guard" && other_is_npc && remembers_damage)
+                        .then(|| {
+                                e_health.last_change.1.cause.damage_by()
+                            })
+                            .flatten()
+                            .and_then(|attacker_uid| {
+                                get_entity_by_id(attacker_uid.id(), read_data)
+                            })
+                            .and_then(|attacker| {
+                                read_data
+                                    .positions
+                                    .get(attacker)
+                                    .map(|a_pos| (attacker, a_pos))
+                            })
+                }).or({
                     // I remember fighting this entity
                     self.rtsim_entity.and_then(|rtsim_entity| {
-                        if rtsim_entity.brain.remembers_fight_with_character(&e_stats.name) {
+                        rtsim_entity.brain.remembers_fight_with_character(&e_stats.name).then(|| {
                             if can_speak(agent) {
                                 remember_fight(agent, e_stats.name.clone(), read_data.time.0);
                                 let msg = format!("{}! How dare you cross me again!", e_stats.name.clone());
                                 self.chat_general(msg, event_emitter);
                             }
-                            Some((e, e_pos))
-                        } else {
-                            None
-                        }
+                            (e, e_pos)
+                        })
                     })
                 }).or({
                     // Cultists!
@@ -1441,42 +1455,9 @@ impl<'a> AgentData<'a> {
                                 self.chat_general(msg, event_emitter);
                                 self.emit_villager_alarm(read_data.time.0, event_emitter);
                             }
-                            Some((e, e_pos))
+                            (e, e_pos)
                         })
-                    }).flatten()
-                }).or({
-                    // I'm a guard and a villager is in distress
-                    read_data.stats.get(*self.entity).map_or(false, |stats| stats.name == "Guard")
-                        .then(|| {
-                            let other_is_npc = matches!(e_alignment, Some(Alignment::Npc));
-                            if other_is_npc {
-                                let remembers_damage = e_health.last_change.0 < DAMAGE_MEMORY_DURATION;
-
-                                remembers_damage
-                                    // TODO: add `.by()` helper method to HealthSource?
-                                    .then(|| {
-                                        println!("remembers damage");
-                                        match e_health.last_change.1.cause {
-                                            comp::HealthSource::Damage { by, .. } => by,
-                                            _ => None,
-                                        }
-                                    })
-                                    .flatten()
-                                    .and_then(|attacker_uid| {
-                                        println!("attacker has a uid");
-                                        get_entity_by_id(attacker_uid.id(), read_data)
-                                    })
-                                    .and_then(|attacker| {
-                                        println!("attacker has pos");
-                                        read_data
-                                            .positions
-                                            .get(attacker)
-                                            .map(|a_pos| (attacker, a_pos))
-                                    })
-                            } else {
-                                None
-                            }
-                        }).flatten()
+                    })
                 })
             })
             // Can we even see them?
@@ -3899,9 +3880,7 @@ impl<'a> AgentData<'a> {
     ) {
         if let Some(Target { target, .. }) = agent.target {
             if let Some(tgt_health) = read_data.healths.get(target) {
-                if let comp::HealthSource::Damage { by: Some(by), .. } =
-                    tgt_health.last_change.1.cause
-                {
+                if let Some(by) = tgt_health.last_change.1.cause.damage_by() {
                     if let Some(attacker) = get_entity_by_id(by.id(), read_data) {
                         if agent.target.is_none() {
                             controller.push_event(ControlEvent::Utterance(UtteranceKind::Angry));
