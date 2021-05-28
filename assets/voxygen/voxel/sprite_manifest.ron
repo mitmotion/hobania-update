@@ -9,6 +9,7 @@ Window1: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 Window2: Some((
@@ -19,6 +20,7 @@ Window2: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 Window3: Some((
@@ -29,6 +31,7 @@ Window3: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 Window4: Some((
@@ -39,6 +42,7 @@ Window4: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -56,6 +60,7 @@ LargeCactus: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 BarrelCactus: Some((
@@ -66,6 +71,7 @@ BarrelCactus: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 RoundCactus: Some((
@@ -76,6 +82,7 @@ RoundCactus: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 ShortCactus: Some((
@@ -86,6 +93,7 @@ ShortCactus: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 MedFlatCactus: Some((
@@ -96,6 +104,7 @@ MedFlatCactus: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 ShortFlatCactus: Some((
@@ -106,6 +115,7 @@ ShortFlatCactus: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -163,6 +173,7 @@ BlueFlower: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.1,
 )),
 PinkFlower: Some((
@@ -188,6 +199,7 @@ PinkFlower: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.1,
 )),
 PurpleFlower: Some((
@@ -233,6 +245,7 @@ PurpleFlower: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.1,
 )),
 RedFlower: Some((
@@ -263,6 +276,7 @@ RedFlower: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.1,
 )),
 WhiteFlower: Some((
@@ -293,6 +307,7 @@ WhiteFlower: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.1,
 )),
 YellowFlower: Some((
@@ -308,6 +323,7 @@ YellowFlower: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.1,
 )),
 Sunflower: Some((
@@ -323,6 +339,7 @@ Sunflower: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.1,
 )),
 
@@ -366,6 +383,7 @@ LongGrass: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.8,
 )),
 MediumGrass: Some((
@@ -396,6 +414,7 @@ MediumGrass: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.5,
 )),
 ShortGrass: Some((
@@ -426,6 +445,7 @@ ShortGrass: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.1,
 )),
 LargeGrass: Some((
@@ -446,6 +466,7 @@ LargeGrass: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.5,
 )),
 
@@ -458,6 +479,7 @@ Apple: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -520,6 +542,7 @@ Mushroom: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.1,
 )),
 
@@ -557,6 +580,7 @@ CaveMushroom: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -574,6 +598,7 @@ Liana: Some((
             lod_axes: (0.0, 0.0, 0.5),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.05,
 )),
 
@@ -586,6 +611,7 @@ Velorite: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 VeloriteFrag: Some((
@@ -641,6 +667,7 @@ VeloriteFrag: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -668,6 +695,7 @@ Chest: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -680,6 +708,7 @@ DungeonChest0: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 DungeonChest1: Some((
@@ -690,6 +719,7 @@ DungeonChest1: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 DungeonChest2: Some((
@@ -700,6 +730,7 @@ DungeonChest2: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 DungeonChest3: Some((
@@ -710,6 +741,7 @@ DungeonChest3: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 DungeonChest4: Some((
@@ -720,6 +752,7 @@ DungeonChest4: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 DungeonChest5: Some((
@@ -730,6 +763,7 @@ DungeonChest5: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -742,6 +776,7 @@ Welwitch: Some((
             lod_axes: (0.0, 0.0, 0.7),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.1,
 )),
 
@@ -784,6 +819,7 @@ Pumpkin: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -806,6 +842,7 @@ LingonBerry: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -863,6 +900,7 @@ LeafyPlant: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.4,
 )),
 
@@ -935,6 +973,7 @@ Fern: Some((
             lod_axes: (0.0, 0.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.4,
 )),
 
@@ -977,6 +1016,7 @@ SavannaGrass: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
 	wind_sway: 0.5,
 )),
 TallSavannaGrass: Some((
@@ -1017,6 +1057,7 @@ TallSavannaGrass: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
 	wind_sway: 0.8,
 )),
 RedSavannaGrass: Some((
@@ -1042,6 +1083,7 @@ RedSavannaGrass: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
 	wind_sway: 0.8,
 )),
 SavannaBush: Some((
@@ -1077,6 +1119,7 @@ SavannaBush: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.1,
 )),
 
@@ -1104,6 +1147,7 @@ DeadBush: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.1,
 )),
 
@@ -1157,6 +1201,7 @@ Blueberry: None/* (
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )*/,
 
@@ -1169,6 +1214,7 @@ Ember: Some((
             lod_axes: (1.0, 1.0, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.8,
 )),
 
@@ -1206,6 +1252,7 @@ Corn: Some((
             lod_axes: (0.0, 0.0, 0.7),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.4,
 )),
 
@@ -1263,6 +1310,7 @@ WheatYellow: Some((
             lod_axes: (0.0, 0.0, 0.7),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.4,
 )),
 
@@ -1320,6 +1368,7 @@ WheatGreen: Some((
             lod_axes: (0.0, 0.0, 0.7),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.4,
 )),
 
@@ -1342,6 +1391,7 @@ Cabbage: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1379,6 +1429,7 @@ Flax: Some((
             lod_axes: (0.0, 0.0, 0.7),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.4,
 )),
 
@@ -1416,6 +1467,7 @@ Carrot: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.1,
 )),
 
@@ -1448,6 +1500,7 @@ Tomato: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1480,6 +1533,7 @@ Radish: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.1,
 )),
 
@@ -1517,6 +1571,7 @@ Turnip: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.1,
 )),
 
@@ -1529,6 +1584,7 @@ Coconut: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1541,6 +1597,7 @@ Scarecrow: Some((
         lod_axes: (0.0, 0.0, 1.0),
     ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1553,6 +1610,7 @@ StreetLamp: Some((
             lod_axes: (0.0, 0.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 StreetLampTall: Some((
@@ -1564,6 +1622,7 @@ StreetLampTall: Some((
         ),
 
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1576,6 +1635,7 @@ Door: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1588,6 +1648,7 @@ Bed: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1600,6 +1661,7 @@ Bench: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1617,6 +1679,7 @@ ChairSingle: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 ChairDouble: Some((
@@ -1632,6 +1695,7 @@ ChairDouble: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1649,6 +1713,7 @@ CoatRack: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1691,6 +1756,7 @@ Crate: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1708,6 +1774,7 @@ DrawerLarge: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1725,6 +1792,7 @@ DrawerMedium: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1742,6 +1810,7 @@ DrawerSmall: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1799,6 +1868,7 @@ DungeonWallDecor: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1816,6 +1886,7 @@ HangingBasket: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1828,6 +1899,7 @@ HangingSign: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1840,6 +1912,7 @@ WallLamp: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1852,6 +1925,7 @@ WallLampSmall: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1864,6 +1938,7 @@ WallSconce: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1906,6 +1981,7 @@ Planter: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1923,6 +1999,7 @@ Shelf: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1940,6 +2017,7 @@ TableSide: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1957,6 +2035,7 @@ TableDining: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1970,6 +2049,7 @@ TableDouble: Some((
         ),
 
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -1987,6 +2067,7 @@ WardrobeDouble: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -2004,6 +2085,7 @@ WardrobeSingle: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -2022,6 +2104,7 @@ Pot: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -2044,6 +2127,7 @@ Stones: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -2066,6 +2150,7 @@ Twigs: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -2078,6 +2163,7 @@ DropGate: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 DropGateBottom: Some((
@@ -2088,6 +2174,7 @@ DropGateBottom: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -2145,6 +2232,7 @@ GrassSnow: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.2,
 )),
 
@@ -2177,6 +2265,7 @@ Reed: Some((
             lod_axes: (0.0, 0.0, 0.5),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.3,
 )),
 
@@ -2189,6 +2278,7 @@ Beehive: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.1,
 )),
 // Empty Flask
@@ -2200,6 +2290,7 @@ VialEmpty: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Bowls
@@ -2211,6 +2302,7 @@ Bowl: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Minor Potion
@@ -2222,6 +2314,7 @@ PotionMinor: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
 ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Ground Fire Bowls
@@ -2233,6 +2326,7 @@ FireBowlGround: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
 ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Underwater Grass
@@ -2249,6 +2343,7 @@ GrassBlue: Some((
             lod_axes: (0.0, 0.0, 0.5),
         ),
     ],
+    scale: 1.0,
     wind_sway: 1.0,
 )),
 // Underwater Chests
@@ -2265,6 +2360,7 @@ ChestBuried: Some((
             lod_axes: (0.0, 0.0, 0.5),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Stony Coral
@@ -2376,6 +2472,7 @@ StonyCoral: Some((
             lod_axes: (0.5, 0.5, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Soft Coral
@@ -2472,6 +2569,7 @@ SoftCoral: Some((
             lod_axes: (0.0, 0.0, 0.5),
         ),
     ],
+    scale: 1.0,
     wind_sway: 1.0,
 )),
 // Sea Anemones
@@ -2483,6 +2581,7 @@ SeaAnemone: Some((
             lod_axes: (0.0, 0.0, 0.5),
         ),
     ],
+    scale: 1.0,
     wind_sway: 1.0,
 )),
 //Bull kelp
@@ -2534,6 +2633,7 @@ BullKelp: Some((
             lod_axes: (0.0, 0.0, 0.5),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.5,
 )),
 //scattered temperate type Seaweed
@@ -2560,6 +2660,7 @@ SeaweedTemperate: Some((
             lod_axes: (0.0, 0.0, 0.5),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.5,
 )),
 //scattered tropical type seaweed
@@ -2606,6 +2707,7 @@ SeaweedTropical: Some((
             lod_axes: (0.0, 0.0, 0.5),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.7,
 )),
 //Mermaids fan algae patch
@@ -2627,6 +2729,7 @@ MermaidsFan: Some((
             lod_axes: (0.0, 0.0, 0.5),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.7,
 )),
 //Caulerpa prolifera patch
@@ -2653,6 +2756,7 @@ WavyAlgae: Some((
             lod_axes: (0.0, 0.0, 0.5),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.7,
 )),
 //Caulerpa lentillifera patch
@@ -2679,6 +2783,7 @@ SeaGrapes: Some((
             lod_axes: (0.0, 0.0, 0.5),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.7,
 )),
 //Giant Kelp
@@ -2705,6 +2810,7 @@ GiantKelp: Some((
             lod_axes: (0.5, 0.5, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.2,
 )),
 //Seagrass
@@ -2734,9 +2840,10 @@ Seagrass: Some((
             model: "voxygen.voxel.sprite.grass.seagrass-4",
             offset: (-6.0, -6.0, -0.0),
             lod_axes: (1.0, 1.0, 1.0),
-    )
-],
-wind_sway: 0.7,
+        )
+    ],
+    scale: 1.0,
+    wind_sway: 0.7,
 )),
 // Seashells
 Seashells: Some((
@@ -2752,6 +2859,7 @@ Seashells: Some((
             lod_axes: (1.0, 1.0, 1.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Underwater Mud Piles
@@ -2768,6 +2876,7 @@ Mud: Some((
             lod_axes: (0.0, 0.0, 0.5),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Amethyst Ore
@@ -2779,6 +2888,7 @@ Amethyst: Some((
             lod_axes: (0.0, 0.0, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Ruby Ore
@@ -2790,6 +2900,7 @@ Ruby: Some((
             lod_axes: (0.0, 0.0, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Diamond Ore
@@ -2801,6 +2912,7 @@ Diamond: Some((
             lod_axes: (0.0, 0.0, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Sapphire Ore
@@ -2812,6 +2924,7 @@ Sapphire: Some((
             lod_axes: (0.0, 0.0, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Emerald Ore
@@ -2823,6 +2936,7 @@ Emerald: Some((
             lod_axes: (0.0, 0.0, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Topaz Ore
@@ -2834,6 +2948,7 @@ Topaz: Some((
             lod_axes: (0.0, 0.0, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Small Amethyst Ore
@@ -2845,6 +2960,7 @@ AmethystSmall: Some((
             lod_axes: (0.0, 0.0, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Small Topaz Ore
@@ -2856,6 +2972,7 @@ TopazSmall: Some((
             lod_axes: (0.0, 0.0, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Small Ruby Ore
@@ -2867,6 +2984,7 @@ RubySmall: Some((
             lod_axes: (0.0, 0.0, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Small Emerald Ore
@@ -2878,6 +2996,7 @@ EmeraldSmall: Some((
             lod_axes: (0.0, 0.0, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Small Diamond Ore
@@ -2889,6 +3008,7 @@ DiamondSmall: Some((
             lod_axes: (0.0, 0.0, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Small Sapphire Ore
@@ -2900,6 +3020,7 @@ SapphireSmall: Some((
             lod_axes: (0.0, 0.0, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 
@@ -2912,6 +3033,7 @@ Lantern: Some((
             lod_axes: (0.0, 0.0, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Anvil
@@ -2923,6 +3045,7 @@ Anvil: Some((
             lod_axes: (0.0, 0.0, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Cauldron
@@ -2934,6 +3057,7 @@ Cauldron: Some((
             lod_axes: (0.0, 0.0, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Forge
@@ -2945,6 +3069,7 @@ Forge: Some((
             lod_axes: (0.0, 0.0, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Crafting Bench
@@ -2956,6 +3081,7 @@ CraftingBench: Some((
             lod_axes: (0.0, 0.0, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 // Cooking Pot
@@ -2967,6 +3093,7 @@ CookingPot: Some((
             lod_axes: (0.0, 0.0, 0.0),
         ),
     ],
+    scale: 1.0,
     wind_sway: 0.0,
 )),
 )

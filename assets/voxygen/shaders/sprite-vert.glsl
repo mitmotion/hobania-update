@@ -39,6 +39,7 @@ uniform u_locals {
     mat4 mat;
     vec4 wind_sway;
     vec4 offs;
+    float scale;
     // SpriteLocals sprites[8];
 };
 
@@ -141,7 +142,7 @@ void main() {
     // vec3 v_pos = (inst_mat * vec4(v_pos, 1)).xyz;
     // f_pos = v_pos + (model_offs - focus_off.xyz);
 
-    f_pos = (inst_mat * vec4(v_pos_, 1.0)).xyz * SCALE + inst_offs;
+    f_pos = (inst_mat * vec4(v_pos_, 1.0)).xyz * scale / 11.0 + inst_offs;
 
     // Terrain 'pop-in' effect
     f_pos.z -= 250.0 * (1.0 - min(1.0001 - 0.02 / pow(tick.x - load_time, 10.0), 1.0));
@@ -185,7 +186,7 @@ void main() {
             sin(tick.x * 1.5 + f_pos.y * 0.1) * sin(tick.x * 0.35),
             sin(tick.x * 1.5 + f_pos.x * 0.1) * sin(tick.x * 0.25),
             0.0
-            ) * 4 * v_pos_.z * /*0.2;*/SCALE_FACTOR;
+            ) * 4 * v_pos_.z * /*0.2;*/pow(1.0 / 11.0, 1.3) * 0.2;
     }
 
     // First 3 normals are negative, next 3 are positive
@@ -227,7 +228,7 @@ void main() {
     // }
     // f_light = 1.0;
     // if (select_pos.w > 0) */{
-        vec3 sprite_pos = /*round*/floor(((inst_mat * vec4(-offs.xyz, 1)).xyz) * SCALE/* - vec3(0.5, 0.5, 0.0)*/) + inst_offs;
+        vec3 sprite_pos = /*round*/floor(((inst_mat * vec4(-offs.xyz, 1)).xyz) * scale / 11.0/* - vec3(0.5, 0.5, 0.0)*/) + inst_offs;
         f_select = (select_pos.w > 0 && select_pos.xyz == sprite_pos/* - vec3(0.5, 0.5, 0.0) * SCALE*/) ? 1.0 : 0.0;
     // }
 

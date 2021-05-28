@@ -30,6 +30,7 @@ gfx_defines! {
         mat: [[f32; 4]; 4]  = "mat",
         wind_sway: [f32; 4] = "wind_sway",
         offs: [f32; 4] = "offs",
+        scale: f32 = "scale",
     }
 
     vertex/*constant*/ Instance {
@@ -41,6 +42,7 @@ gfx_defines! {
         inst_mat3: [f32; 4] = "inst_mat3",
         inst_light: [f32; 4] = "inst_light",
         inst_wind_sway: f32 = "inst_wind_sway",
+        scale: f32 = "inst_scale",
     }
 
     pipeline pipe {
@@ -122,6 +124,7 @@ impl Instance {
         ori_bits: u8,
         light: f32,
         glow: f32,
+        scale: f32,
     ) -> Self {
         const EXTRA_NEG_Z: i32 = 32768;
 
@@ -137,24 +140,32 @@ impl Instance {
             inst_mat3: mat_arr[3],
             inst_light: [light, glow, 1.0, 1.0],
             inst_wind_sway: wind_sway,
+            scale,
         }
     }
 }
 
 impl Default for Instance {
-    fn default() -> Self { Self::new(Mat4::identity(), 0.0, Vec3::zero(), 0, 1.0, 0.0) }
+    fn default() -> Self { Self::new(Mat4::identity(), 0.0, Vec3::zero(), 0, 1.0, 0.0, 0.0) }
 }
 
 impl Default for Locals {
-    fn default() -> Self { Self::new(Mat4::identity(), Vec3::one(), Vec3::zero(), 0.0) }
+    fn default() -> Self { Self::new(Mat4::identity(), Vec3::one(), Vec3::zero(), 0.0, 1.0) }
 }
 
 impl Locals {
-    pub fn new(mat: Mat4<f32>, scale: Vec3<f32>, offs: Vec3<f32>, wind_sway: f32) -> Self {
+    pub fn new(
+        mat: Mat4<f32>,
+        scale: Vec3<f32>,
+        offs: Vec3<f32>,
+        wind_sway: f32,
+        integer_scale: f32,
+    ) -> Self {
         Self {
             mat: mat.into_col_arrays(),
             wind_sway: [scale.x, scale.y, scale.z, wind_sway],
             offs: [offs.x, offs.y, offs.z, 0.0],
+            scale: integer_scale,
         }
     }
 }

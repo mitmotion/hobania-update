@@ -34,8 +34,6 @@ use tracing::warn;
 use treeculler::{BVol, Frustum, AABB};
 use vek::*;
 
-const SPRITE_SCALE: Vec3<f32> = Vec3::new(1.0 / 11.0, 1.0 / 11.0, 1.0 / 11.0);
-
 #[derive(Clone, Copy, Debug)]
 struct Visibility {
     in_range: bool,
@@ -136,6 +134,7 @@ struct SpriteConfig<Model> {
     // NOTE: Could make constant per sprite type, but eliminating this indirection and
     // allocation is probably not that important considering how sprites are used.
     variations: Vec<SpriteModelConfig<Model>>,
+    scale: f32,
     /// The extent to which the sprite sways in the window.
     ///
     /// 0.0 is normal.
@@ -238,13 +237,14 @@ fn mesh_worker<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + '
                                     .rotated_z(f32::consts::PI * 0.25 * ori as f32)
                                     .translated_3d(
                                         (rel_pos.map(|e| e as f32) + Vec3::new(0.5, 0.5, 0.0))
-                                            / SPRITE_SCALE,
+                                            / Vec3::broadcast(cfg.scale / 11.0),
                                     ),
                                 cfg.wind_sway,
                                 rel_pos,
                                 ori,
                                 light_map(wpos),
                                 glow_map(wpos),
+                                cfg.scale,
                             );
 
                             instances.entry(key).or_insert(Vec::new()).push(instance);
@@ -410,7 +410,7 @@ impl SpriteRenderContext {
                                 }
                             });
                             let sprite_mat: Mat4<f32> =
-                                Mat4::translation_3d(offset).scaled_3d(SPRITE_SCALE);
+                                Mat4::translation_3d(offset).scaled_3d(Vec3::broadcast(sprite_config.scale / 11.0));
                             move |greedy: &mut GreedyMesh| {
                                 (
                                     (kind, variation),
@@ -434,9 +434,9 @@ impl SpriteRenderContext {
                                                 (greedy, &mut opaque_mesh, false),
                                             );
 
-                                            let sprite_scale = Vec3::one() / lod_scale;
+                                            let sprite_scale = Vec3::broadcast(sprite_config.scale) / lod_scale;
                                             let sprite_mat: Mat4<f32> =
-                                                sprite_mat * Mat4::scaling_3d(sprite_scale);
+                                                sprite_mat * Mat4::scaling_3d(Vec3::broadcast(sprite_config.scale / 11.0));
                                             locals_buffer.iter_mut().enumerate().for_each(
                                                 |(ori, locals)| {
                                                     let sprite_mat = sprite_mat
@@ -446,6 +446,7 @@ impl SpriteRenderContext {
                                                         sprite_scale,
                                                         offset,
                                                         wind_sway,
+                                                        sprite_config.scale,
                                                     );
                                                 },
                                             );
