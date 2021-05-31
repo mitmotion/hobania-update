@@ -118,7 +118,7 @@ pub fn init(
     package_source_dir: &'static str,
 ) {
     let mut lock = lib_storage.lock().unwrap();
-    *lock = Some(LoadedLib::compile_load(package));
+    *lock = Some(LoadedLib::compile_load(dyn_package));
 
     // TODO: use crossbeam
     let (reload_send, reload_recv) = mpsc::channel();
@@ -201,7 +201,7 @@ fn event_fn(res: notify::Result<notify::Event>, sender: &mpsc::Sender<String>) {
                     .for_each(|p| { let _ = sender.send(p); });
             }
         },
-        Err(e) => error!(?e, "egui hotreload watcher error."),
+        Err(e) => error!(?e, "hotreload watcher error."),
     }
 }
 
@@ -222,11 +222,11 @@ fn hotreload(dyn_package: &str, loaded_lib: Arc<Mutex<Option<LoadedLib>>>) {
         // Open new lib.
         *lock = Some(LoadedLib::load(dyn_package));
 
-        info!("Updated egui.");
+        info!("Updated {}.", dyn_package);
     }
 }
 
-/// Recompile the anim package
+/// Recompile the dyn package
 ///
 /// Returns `false` if the compile failed.
 fn compile(dyn_package: &str) -> bool {
@@ -234,8 +234,6 @@ fn compile(dyn_package: &str) -> bool {
         .stderr(Stdio::inherit())
         .stdout(Stdio::inherit())
         .arg("build")
-        .arg("-v")
-        .arg("-v")
         .arg("--package")
         .arg(dyn_package)
         .arg("--features")

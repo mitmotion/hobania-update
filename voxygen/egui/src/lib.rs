@@ -1,6 +1,8 @@
+#![feature(stmt_expr_attributes)]
+mod character_states;
 #[cfg(all(feature = "be-dyn-lib", feature = "use-dyn-lib"))]
 compile_error!("Can't use both \"be-dyn-lib\" and \"use-dyn-lib\" features at once");
-use client::{Client, Join, WorldExt};
+use client::{Client, Join, World, WorldExt};
 use common::{
     comp,
     comp::{Poise, PoiseState},
@@ -10,8 +12,17 @@ use core::mem;
 use egui::{
     plot::{Plot, Value},
     widgets::plot::Curve,
-    Color32, Grid, ScrollArea, Slider, Ui,
+    CollapsingHeader, Color32, Grid, Label, ScrollArea, Slider, Ui, Window,
 };
+
+fn two_col_row(ui: &mut Ui, label: impl Into<Label>, content: impl Into<Label>) {
+    ui.label(label);
+    ui.label(content);
+    ui.end_row();
+}
+
+use crate::character_states::draw_char_state_group;
+use common::comp::{aura::AuraKind::Buff, Body, Fluid};
 use egui_winit_platform::Platform;
 #[cfg(feature = "use-dyn-lib")]
 use lazy_static::lazy_static;
@@ -88,6 +99,7 @@ pub fn maintain(
 pub struct SelectedEntityInfo {
     entity_id: u32,
     debug_shape_id: Option<u64>,
+    character_state_history: Vec<String>,
 }
 
 impl SelectedEntityInfo {
@@ -95,6 +107,7 @@ impl SelectedEntityInfo {
         Self {
             entity_id,
             debug_shape_id: None,
+            character_state_history: Vec::new(),
         }
     }
 }
@@ -105,6 +118,9 @@ pub struct EguiInnerState {
     max_entity_distance: f32,
     selected_entity_cylinder_height: f32,
     frame_times: Vec<f32>,
+    show_inspection_ui: bool,
+    show_settings_ui: bool,
+    show_memory_ui: bool,
 }
 
 impl Default for EguiInnerState {
@@ -115,6 +131,9 @@ impl Default for EguiInnerState {
             max_entity_distance: 100000.0,
             selected_entity_cylinder_height: 10.0,
             frame_times: Vec::new(),
+            show_inspection_ui: false,
+            show_settings_ui: false,
+            show_memory_ui: false,
         }
     }
 }
@@ -146,6 +165,8 @@ pub fn maintain_egui_inner(
     added_cylinder_shape_id: Option<u64>,
 ) -> EguiActions {
     platform.begin_frame();
+    let ctx = &platform.context();
+
     let mut egui_actions = EguiActions::default();
     let mut previous_selected_entity: Option<SelectedEntityInfo> = None;
     let mut max_entity_distance = egui_state.max_entity_distance;
@@ -168,6 +189,66 @@ pub fn maintain_egui_inner(
         }
     };
 
+    egui::Window::new("Test Window")
+        .default_width(200.0)
+        .default_height(200.0)
+        .show(&platform.context(), |ui| {
+            ui.heading("Debug UI");
+            ui.horizontal(|ui| {
+                ui.label(format!(
+                    "Ping: {:.1}ms",
+                    debug_info.as_ref().map_or(0.0, |x| x.ping_ms)
+                ));
+            });
+            if ui.button("Enable ECS reading").clicked() {
+                egui_state.read_ecs = true;
+            }
+            ui.group(|ui| {
+                ui.vertical(|ui| {
+                    ui.label("Show EGUI Windows");
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut egui_state.show_inspection_ui, "🔍 Inspection");
+                        ui.checkbox(&mut egui_state.show_settings_ui, "🔍 Settings");
+                        ui.checkbox(&mut egui_state.show_memory_ui, "📝 Memory");
+                    })
+                })
+            });
+        });
+
+    Window::new("🔧 Settings")
+        .open(&mut egui_state.show_settings_ui)
+        .scroll(true)
+        .show(ctx, |ui| {
+            ctx.settings_ui(ui);
+        });
+    Window::new("🔍 Inspection")
+        .open(&mut egui_state.show_inspection_ui)
+        .scroll(true)
+        .show(ctx, |ui| {
+            ctx.inspection_ui(ui);
+        });
+
+    Window::new("📝 Memory")
+        .open(&mut egui_state.show_memory_ui)
+        .resizable(false)
+        .show(ctx, |ui| {
+            ctx.memory_ui(ui);
+        });
+
+    Window::new("Frame Time")
+        .default_width(200.0)
+        .default_height(200.0)
+        .show(ctx, |ui| {
+            let plot = Plot::default().curve(Curve::from_values_iter(
+                egui_state
+                    .frame_times
+                    .iter()
+                    .enumerate()
+                    .map(|(i, x)| Value::new(i as f64, *x)),
+            ));
+            ui.add(plot);
+        });
+
     if egui_state.read_ecs {
         let ecs = client.state().ecs();
 
@@ -177,7 +258,7 @@ pub fn maintain_egui_inner(
         egui::Window::new("ECS Entities")
             .default_width(500.0)
             .default_height(500.0)
-            .show(&platform.context(), |ui| {
+            .show(ctx, |ui| {
                 ui.label(format!("Entity count: {}", &ecs.entities().join().count()));
                 ui.add(
                     Slider::new(&mut max_entity_distance, 1.0..=100000.0)
@@ -207,10 +288,12 @@ pub fn maintain_egui_inner(
                             ui.label("ID");
                             ui.label("Pos");
                             ui.label("Vel");
+                            ui.label("Name");
                             ui.label("Body");
                             ui.label("Poise");
+                            ui.label("Character State");
                             ui.end_row();
-                            for (entity, _body, stats, pos, _ori, vel, poise) in (
+                            for (entity, body, stats, pos, _ori, vel, poise, character_state) in (
                                 &ecs.entities(),
                                 ecs.read_storage::<comp::Body>().maybe(),
                                 ecs.read_storage::<comp::Stats>().maybe(),
@@ -218,9 +301,10 @@ pub fn maintain_egui_inner(
                                 ecs.read_storage::<comp::Ori>().maybe(),
                                 ecs.read_storage::<comp::Vel>().maybe(),
                                 ecs.read_storage::<comp::Poise>().maybe(),
+                                ecs.read_storage::<comp::CharacterState>().maybe(),
                             )
                                 .join()
-                                .filter(|(_, _, _, pos, _, _, _)| {
+                                .filter(|(_, _, _, pos, _, _, _, _)| {
                                     client_pos.map_or(true, |client_pos| {
                                         pos.map_or(0.0, |pos| pos.0.distance_squared(client_pos.0))
                                             < max_entity_distance
@@ -258,10 +342,7 @@ pub fn maintain_egui_inner(
                                 }
 
                                 if let Some(vel) = vel {
-                                    ui.label(format!(
-                                        "{:.1},{:.1},{:.1}",
-                                        vel.0.x, vel.0.y, vel.0.z
-                                    ));
+                                    ui.label(format!("{:.1}u/s", vel.0.magnitude()));
                                 } else {
                                     ui.label("-");
                                 }
@@ -270,9 +351,20 @@ pub fn maintain_egui_inner(
                                 } else {
                                     ui.label("-");
                                 }
+                                if let Some(body) = body {
+                                    ui.label(body_species(&body));
+                                } else {
+                                    ui.label("-");
+                                }
 
                                 if let Some(poise) = poise {
                                     poise_state_label(ui, poise);
+                                } else {
+                                    ui.label("-");
+                                }
+
+                                if let Some(character_state) = character_state {
+                                    ui.label(character_state.to_string());
                                 } else {
                                     ui.label("-");
                                 }
@@ -291,148 +383,14 @@ pub fn maintain_egui_inner(
             });
         if let Some(selected_entity_info) = &mut egui_state.selected_entity_info {
             let selected_entity = ecs.entities().entity(selected_entity_info.entity_id);
+            //let selected_entity_id = selected_entity_info.entity_id;
             if !selected_entity.gen().is_alive() {
                 previous_selected_entity = mem::take(&mut egui_state.selected_entity_info);
             } else {
-                for (_entity, _body, stats, pos, _ori, _vel, poise, buffs) in (
-                    &ecs.entities(),
-                    ecs.read_storage::<comp::Body>().maybe(),
-                    ecs.read_storage::<comp::Stats>().maybe(),
-                    ecs.read_storage::<comp::Pos>().maybe(),
-                    ecs.read_storage::<comp::Ori>().maybe(),
-                    ecs.read_storage::<comp::Vel>().maybe(),
-                    ecs.read_storage::<comp::Poise>().maybe(),
-                    ecs.read_storage::<comp::Buffs>().maybe(),
-                )
-                    .join()
-                    .filter(|(e, _, _, _, _, _, _, _)| e.id() == selected_entity_info.entity_id)
-                {
-                    egui::Window::new(format!(
-                        "Selected Entity - {}",
-                        stats.as_ref().map_or("<No Name>", |x| &x.name)
-                    ))
-                    .default_width(300.0)
-                    .default_height(200.0)
-                    .show(&platform.context(), |ui| {
-                        ui.horizontal_wrapped(|ui| {
-                            if let Some(pos) = pos {
-                                if let Some(shape_id) = selected_entity_info.debug_shape_id {
-                                    egui_actions.actions.push(DebugShapeAction::SetPosAndColor {
-                                        id: shape_id,
-                                        color: [1.0, 1.0, 0.0, 0.5],
-                                        pos: [pos.0.x, pos.0.y, pos.0.z + 2.0, 0.0],
-                                    });
-                                }
-                                ui.group(|ui| {
-                                    ui.vertical(|ui| {
-                                        ui.label("Pos");
-                                        Grid::new("selected_entity_pos_grid")
-                                            .spacing([40.0, 4.0])
-                                            .max_col_width(100.0)
-                                            .striped(true)
-                                            .show(ui, |ui| {
-                                                ui.label("x");
-                                                ui.label(format!("{}", pos.0.x));
-                                                ui.end_row();
-                                                ui.label("y");
-                                                ui.label(format!("{}", pos.0.y));
-                                                ui.end_row();
-                                                ui.label("z");
-                                                ui.label(format!("{}", pos.0.z));
-                                                ui.end_row();
-                                            });
-                                    });
-                                });
-                            }
-                            if let Some(poise) = poise {
-                                ui.group(|ui| {
-                                    ui.vertical(|ui| {
-                                        ui.label("Poise");
-                                        Grid::new("selected_entity_poise_grid")
-                                            .spacing([40.0, 4.0])
-                                            .max_col_width(100.0)
-                                            .striped(true)
-                                            .show(ui, |ui| {
-                                                ui.label("State");
-                                                poise_state_label(ui, poise);
-                                                ui.end_row();
-                                                ui.label("Current");
-                                                ui.label(format!("{}", poise.current()));
-                                                ui.end_row();
-                                                ui.label("Maximum");
-                                                ui.label(format!("{}", poise.maximum()));
-                                                ui.end_row();
-                                                ui.label("Base Max");
-                                                ui.label(format!("{}", poise.base_max()));
-                                                ui.end_row();
-                                            });
-                                    });
-                                });
-                            }
-
-                            if let Some(buffs) = buffs {
-                                ui.group(|ui| {
-                                    ui.vertical(|ui| {
-                                        ui.label("Buffs");
-                                        Grid::new("selected_entity_buffs_grid")
-                                            .spacing([40.0, 4.0])
-                                            .max_col_width(100.0)
-                                            .striped(true)
-                                            .show(ui, |ui| {
-                                                ui.label("Kind");
-                                                ui.label("Time");
-                                                ui.label("Source");
-                                                ui.end_row();
-                                                buffs.buffs.iter().for_each(|(_, v)| {
-                                                    ui.label(format!("{:?}", v.kind));
-                                                    ui.label(
-                                                        v.time.map_or("-".to_string(), |time| {
-                                                            format!("{:?}", time)
-                                                        }),
-                                                    );
-                                                    ui.label(format!("{:?}", v.source));
-                                                    ui.end_row();
-                                                });
-                                            });
-                                    });
-                                });
-                            }
-                        });
-                    });
-                }
+                selected_entity_window(platform, ecs, selected_entity_info, &mut egui_actions);
             }
         }
     }
-
-    egui::Window::new("Test Window")
-        .default_width(200.0)
-        .default_height(200.0)
-        .show(&platform.context(), |ui| {
-            ui.heading("Debug UI");
-            ui.horizontal(|ui| {
-                ui.label(format!(
-                    "Ping: {:.1}ms",
-                    debug_info.as_ref().map_or(0.0, |x| x.ping_ms)
-                ));
-            });
-            if ui.button("Enable ECS reading").clicked() {
-                egui_state.read_ecs = true;
-            }
-        });
-
-    egui::Window::new("Frame Time")
-        .default_width(200.0)
-        .default_height(200.0)
-        .show(&platform.context(), |ui| {
-            let plot = Plot::default().curve(Curve::from_values_iter(
-                egui_state
-                    .frame_times
-                    .iter()
-                    .enumerate()
-                    .map(|(i, x)| Value::new(i as f64, *x)),
-            ));
-            ui.add(plot);
-        });
 
     if let Some(previous) = previous_selected_entity {
         if let Some(debug_shape_id) = previous.debug_shape_id {
@@ -461,6 +419,266 @@ pub fn maintain_egui_inner(
     egui_state.max_entity_distance = max_entity_distance;
     egui_state.selected_entity_cylinder_height = selected_entity_cylinder_height;
     egui_actions
+}
+
+fn selected_entity_window(
+    platform: &mut Platform,
+    ecs: &World,
+    selected_entity_info: &mut SelectedEntityInfo,
+    egui_actions: &mut EguiActions,
+) {
+    let entity_id = selected_entity_info.entity_id;
+    for (
+        _entity,
+        body,
+        stats,
+        pos,
+        _ori,
+        vel,
+        poise,
+        buffs,
+        auras,
+        character_state,
+        physics_state,
+        alignment,
+        scale,
+        mass,
+        (density, health, energy),
+    ) in (
+        &ecs.entities(),
+        ecs.read_storage::<comp::Body>().maybe(),
+        ecs.read_storage::<comp::Stats>().maybe(),
+        ecs.read_storage::<comp::Pos>().maybe(),
+        ecs.read_storage::<comp::Ori>().maybe(),
+        ecs.read_storage::<comp::Vel>().maybe(),
+        ecs.read_storage::<comp::Poise>().maybe(),
+        ecs.read_storage::<comp::Buffs>().maybe(),
+        ecs.read_storage::<comp::Auras>().maybe(),
+        ecs.read_storage::<comp::CharacterState>().maybe(),
+        ecs.read_storage::<comp::PhysicsState>().maybe(),
+        ecs.read_storage::<comp::Alignment>().maybe(),
+        ecs.read_storage::<comp::Scale>().maybe(),
+        ecs.read_storage::<comp::Mass>().maybe(),
+        (
+            ecs.read_storage::<comp::Density>().maybe(),
+            ecs.read_storage::<comp::Health>().maybe(),
+            ecs.read_storage::<comp::Energy>().maybe(),
+        ),
+    )
+        .join()
+        .filter(|(e, _, _, _, _, _, _, _, _, _, _, _, _, _, (_, _, _))| e.id() == entity_id)
+    {
+        if let Some(pos) = pos {
+            if let Some(shape_id) = selected_entity_info.debug_shape_id {
+                egui_actions.actions.push(DebugShapeAction::SetPosAndColor {
+                    id: shape_id,
+                    color: [1.0, 1.0, 0.0, 0.5],
+                    pos: [pos.0.x, pos.0.y, pos.0.z + 2.0, 0.0],
+                });
+            }
+        };
+
+        egui::Window::new("Selected Entity")
+            .default_width(300.0)
+            .default_height(200.0)
+            .show(&platform.context(), |ui| {
+                ui.vertical(|ui| {
+
+                    // let n = 128;
+                    // let curve = egui::plot::Curve::from_values_iter((0..=n).map(|i| {
+                    //     use std::f64::consts::TAU;
+                    //     let x = egui::remap(i as f64, 0.0..=(n as f64), -TAU..=TAU);
+                    //     egui::plot::Value::new(x, x.sin())
+                    // }));
+                    // egui::plot::Plot::default()
+                    //     .curve(curve)
+                    //     .height(32.0)
+                    //     .data_aspect(1.0);
+
+                    CollapsingHeader::new("General").default_open(true).show(ui, |ui| {
+                        Grid::new("selected_entity_general_grid")
+                            .spacing([40.0, 4.0])
+                            .striped(true)
+                            .show(ui, |ui| {
+                                two_col_row(ui, "Health", health.map_or("-".to_owned(), |x| format!("{:.1}/{:.1}", x.current(), x.maximum())));
+                                two_col_row(ui, "Energy", energy.map_or("-".to_owned(), |x| format!("{:.1}/{:.1}", x.current(), x.maximum())));
+                                two_col_row(ui, "Position", pos.map_or("-".to_owned(), |x| format!("({:.1},{:.1},{:.1})", x.0.x, x.0.y, x.0.z)));
+                                two_col_row(ui, "Velocity", vel.map_or("-".to_owned(), |x| format!("({:.1},{:.1},{:.1}) ({:.1} u/s)", x.0.x, x.0.y, x.0.z, x.0.magnitude())));
+                                two_col_row(ui, "Alignment", alignment.map_or("-".to_owned(), |x| format!("{:?}", x)));
+                                two_col_row(ui, "Scale", scale.map_or("-".to_owned(), |x| format!("{:?}", x)));
+                                two_col_row(ui, "Mass", mass.map_or("-".to_owned(), |x| format!("{:.1}", x.0)));
+                                two_col_row(ui, "Density", density.map_or("-".to_owned(), |x| format!("{:.1}", x.0)));
+
+                            });
+
+                    });
+                if let Some(stats) = stats {
+                    CollapsingHeader::new("Stats").default_open(true).show(ui, |ui| {
+                        Grid::new("selected_entity_stats_grid")
+                            .spacing([40.0, 4.0])
+                            .striped(true)
+                            .show(ui, |ui| {
+                                two_col_row(ui, "Name", format!("{}", stats.name));
+                                two_col_row(ui, "Damage Reduction", format!("{:.1}", stats.damage_reduction));
+                                two_col_row(ui, "Max Health Modifier", format!("{:.1}", stats.max_health_modifier));
+                                two_col_row(ui, "Move Speed Modifier", format!("{:.1}", stats.move_speed_modifier));
+                            });
+
+                    });
+                }
+                if let Some(body) = body {
+                    CollapsingHeader::new("Body").default_open(false).show(ui, |ui| {
+                        Grid::new("selected_entity_body_grid")
+                            .spacing([40.0, 4.0])
+                            .striped(true)
+                            .show(ui, |ui| {
+                                two_col_row(ui, "Type", format!("{}", body.to_string()));
+                                two_col_row(ui, "Species", format!("{}", body_species(body)));
+                            });
+
+                    });
+                }
+                if let Some(pos) = pos {
+                    CollapsingHeader::new("Pos").default_open(false).show(ui, |ui| {
+                            Grid::new("selected_entity_pos_grid")
+                                .spacing([40.0, 4.0])
+                                .max_col_width(100.0)
+                                .striped(true)
+                                .show(ui, |ui| {
+                                    two_col_row(ui, "x", format!("{:.1}", pos.0.x));
+                                    two_col_row(ui, "y", format!("{:.1}", pos.0.y));
+                                    two_col_row(ui, "z", format!("{:.1}", pos.0.z));
+                                });
+
+                    });
+                }
+                if let Some(poise) = poise {
+                    CollapsingHeader::new("Poise").default_open(false).show(ui, |ui| {
+                            Grid::new("selected_entity_poise_grid")
+                                .spacing([40.0, 4.0])
+                                .max_col_width(100.0)
+                                .striped(true)
+                                .show(ui, |ui| #[rustfmt::skip] {
+                                    ui.label("State");
+                                    poise_state_label(ui, poise);
+                                    ui.end_row();
+                                    two_col_row(ui, "Current", format!("{}/{}", poise.current(), poise.maximum()));
+                                    two_col_row(ui, "Base Max", format!("{}", poise.base_max()));
+                                });
+                        });
+                }
+
+                if let Some(buffs) = buffs {
+                    CollapsingHeader::new("Buffs").default_open(false).show(ui, |ui| {
+                        Grid::new("selected_entity_buffs_grid")
+                            .spacing([40.0, 4.0])
+                            .max_col_width(100.0)
+                            .striped(true)
+                            .show(ui, |ui| {
+                                ui.label("Kind");
+                                ui.label("Time");
+                                ui.label("Source");
+                                ui.end_row();
+                                buffs.buffs.iter().for_each(|(_, v)| {
+                                    ui.label(format!("{:?}", v.kind));
+                                    ui.label(
+                                        v.time.map_or("-".to_string(), |time| {
+                                            format!("{:?}", time)
+                                        }),
+                                    );
+                                    ui.label(format!("{:?}", v.source));
+                                    ui.end_row();
+                                });
+                            });
+                    });
+                }
+
+                if let Some(auras) = auras {
+                    CollapsingHeader::new("Auras").default_open(false).show(ui, |ui| {
+                        Grid::new("selected_entity_auras_grid")
+                            .spacing([40.0, 4.0])
+                            .striped(true)
+                            .show(ui, |ui| {
+                                ui.label("Kind");
+                                ui.label("Radius");
+                                ui.label("Duration");
+                                ui.label("Target");
+                                ui.end_row();
+                                auras.auras.iter().for_each(|(_, v)| {
+                                    ui.label(match v.aura_kind {
+                                        Buff { kind, .. } =>  format!("Buff - {:?}", kind)
+                                    });
+                                    ui.label(format!("{:1}", v.radius));
+                                    ui.label(v.duration.map_or("-".to_owned(), |x| format!("{:1}s", x.as_secs())));
+                                    ui.label(format!("{:?}", v.target));
+                                    ui.end_row();
+                                });
+                            });
+                    });
+                }
+
+                if let Some(character_state) = character_state {
+                    if selected_entity_info
+                        .character_state_history
+                        .first()
+                        .unwrap_or(&"-".to_owned())
+                        != &character_state.to_string()
+                    {
+                        selected_entity_info
+                            .character_state_history
+                            .insert(0, character_state.to_string());
+                        if selected_entity_info.character_state_history.len() > 50 {
+                            selected_entity_info.character_state_history.pop();
+                        }
+                    }
+
+                    CollapsingHeader::new("Character State").default_open(false).show(ui, |ui| {
+                        draw_char_state_group(ui, selected_entity_info, character_state);
+                    });
+                }
+
+                if let Some(physics_state) = physics_state {
+                    CollapsingHeader::new("Physics State").default_open(false).show(ui, |ui| {
+                        Grid::new("selected_entity_physics_state_grid")
+                            .spacing([40.0, 4.0])
+                            .striped(true)
+                            .show(ui, |ui| {
+                                two_col_row(ui, "On Ground", format!("{}", if physics_state.on_ground { "True" } else { "False " }));
+                                two_col_row(ui, "On Ceiling", format!("{}", if physics_state.on_ceiling { "True" } else { "False " }));
+                                two_col_row(ui, "On Wall", physics_state.on_wall.map_or("-".to_owned(), |x| format!("{:.1},{:.1},{:.1}", x.x, x.y, x.z )));
+                                two_col_row(ui, "Touching Entities", format!("{}", physics_state.touch_entities.len()));
+                                two_col_row(ui, "In Fluid", match physics_state.in_fluid {
+
+                                    Some(Fluid::Air { elevation, .. }) => format!("Air (Elevation: {:.1})", elevation),
+                                    Some(Fluid::Water { depth, .. }) => format!("Water (Depth: {:.1})", depth),
+                                    _ => "None".to_owned() });
+                                });
+                            });
+
+                }
+            });
+        });
+    }
+}
+
+fn body_species(body: &Body) -> String {
+    match body {
+        Body::Humanoid(body) => format!("{:?}", body.species),
+        Body::QuadrupedSmall(body) => format!("{:?}", body.species),
+        Body::QuadrupedMedium(body) => format!("{:?}", body.species),
+        Body::BirdMedium(body) => format!("{:?}", body.species),
+        Body::FishMedium(body) => format!("{:?}", body.species),
+        Body::Dragon(body) => format!("{:?}", body.species),
+        Body::BirdLarge(body) => format!("{:?}", body.species),
+        Body::FishSmall(body) => format!("{:?}", body.species),
+        Body::BipedLarge(body) => format!("{:?}", body.species),
+        Body::BipedSmall(body) => format!("{:?}", body.species),
+        Body::Object(body) => format!("{:?}", body),
+        Body::Golem(body) => format!("{:?}", body.species),
+        Body::Theropod(body) => format!("{:?}", body.species),
+        Body::QuadrupedLow(body) => format!("{:?}", body.species),
+        Body::Ship(body) => format!("{:?}", body),
+    }
 }
 
 fn poise_state_label(ui: &mut Ui, poise: &Poise) {

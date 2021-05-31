@@ -554,6 +554,7 @@ impl Item {
             ability_map,
             msm,
         );
+
         new_item.set_amount(self.amount()).expect(
             "`new_item` has the same `item_def` and as an invariant, \
              self.set_amount(self.amount()) should always succeed.",

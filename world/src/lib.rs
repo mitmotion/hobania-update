@@ -11,7 +11,6 @@
     arbitrary_enum_discriminant,
     bool_to_option,
     const_generics,
-    or_patterns,
     const_panic,
     label_break_value,
     array_map
