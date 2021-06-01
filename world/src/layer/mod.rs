@@ -35,7 +35,6 @@ pub struct Colors {
 const EMPTY_AIR: Block = Block::air(SpriteKind::Empty);
 
 pub fn apply_paths_to(canvas: &mut Canvas) {
-    let info = canvas.info();
     canvas.foreach_col(|canvas, wpos2d, col| {
 
         if let Some((path_dist, path_nearest, path, _)) =
@@ -43,6 +42,7 @@ pub fn apply_paths_to(canvas: &mut Canvas) {
         {
             let inset = 0;
 
+            let info = canvas.info();
             let (riverless_alt, alt, water_dist) = new_method(info, col, path_nearest);
             let (bridge_offset, depth) = new_method1(riverless_alt, alt, water_dist);
             let surface_z = (riverless_alt + bridge_offset).floor() as i32;
