@@ -45,28 +45,16 @@ pub fn apply_paths_to(canvas: &mut Canvas) {
             let (bridge_offset, depth) = new_method1(riverless_alt, alt, water_dist);
             let surface_z = (riverless_alt + bridge_offset).floor() as i32;
 
-            let noisy_color = |color: Rgb<u8>, factor: u32| {
-                let surface_z = col.riverless_alt.floor() as i32;
-                let nz = RandomField::new(0).get(Vec3::new(wpos2d.x, wpos2d.y, surface_z));
-                color.map(|e| {
-                    (e as u32 + nz % (factor * 2))
-                        .saturating_sub(factor)
-                        .min(255) as u8
-                })
-            };
-
             for z in -depth.abs()..0 {
                 let _ = canvas.set(
                     Vec3::new(wpos2d.x, wpos2d.y, surface_z + z),
                     if bridge_offset >= 2.0 && path_dist >= 3.0 || z < -1 {
-                        Block::new(
-                            BlockKind::Rock,
-                            noisy_color(info.index().colors.layer.bridge.into(), 8),
-                        )
+                        new_method2(BlockKind::Rock, info.index().colors.layer.bridge.into())
                     } else {
-                        let path_color =
-                            path.surface_color(col.sub_surface_color.map(|e| (e * 255.0) as u8));
-                        Block::new(BlockKind::Earth, noisy_color(path_color, 8))
+                        new_method2(
+                            BlockKind::Earth,
+                            path.surface_color(col.sub_surface_color.map(|e| (e * 255.0) as u8)),
+                        )
                     },
                 );
             }
@@ -114,6 +102,21 @@ fn new_method1(riverless_alt: f32, alt: f32, water_dist: f32) -> (f32, i32) {
             * 1.75
             + 3.0) as i32,
     )
+}
+
+//TODO: Rename
+fn new_method2(block_kind: BlockKind, color: Rgb<u8>) -> Block {
+    let noisy_color = |color: Rgb<u8>, factor: u32| {
+        let surface_z = col.riverless_alt.floor() as i32;
+        let nz = RandomField::new(0).get(Vec3::new(wpos2d.x, wpos2d.y, surface_z));
+        color.map(|e| {
+            (e as u32 + nz % (factor * 2))
+                .saturating_sub(factor)
+                .min(255) as u8
+        })
+    };
+
+    Block::new(block_kind, noisy_color(color, 8))
 }
 
 pub fn apply_caves_to(canvas: &mut Canvas, rng: &mut impl Rng) {
