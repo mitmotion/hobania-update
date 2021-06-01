@@ -6,6 +6,7 @@ pub use self::{scatter::apply_scatter_to, tree::apply_trees_to};
 
 use crate::{
     column::ColumnSample,
+    sim::Path,
     util::{FastNoise, RandomField, Sampler},
     Canvas, CanvasInfo, IndexRef,
 };
@@ -58,13 +59,7 @@ pub fn apply_paths_to(canvas: &mut Canvas) {
                     },
                 );
             }
-            let head_space = path.head_space(path_dist);
-            for z in 0..head_space {
-                let pos = Vec3::new(wpos2d.x, wpos2d.y, surface_z + z);
-                if canvas.get(pos).kind() != BlockKind::Water {
-                    let _ = canvas.set(pos, EMPTY_AIR);
-                }
-            }
+            new_method3(canvas, wpos2d, path_dist, path, surface_z)
         }
     });
 }
@@ -117,6 +112,17 @@ fn new_method2(block_kind: BlockKind, color: Rgb<u8>) -> Block {
     };
 
     Block::new(block_kind, noisy_color(color, 8))
+}
+
+//TODO: Rename
+fn new_method3(canvas: &mut Canvas, wpos2d: Vec2<i32>, path_dist: f32, path: Path, surface_z: i32) {
+    let head_space = path.head_space(path_dist);
+    for z in 0..head_space {
+        let pos = Vec3::new(wpos2d.x, wpos2d.y, surface_z + z);
+        if canvas.get(pos).kind() != BlockKind::Water {
+            let _ = canvas.set(pos, EMPTY_AIR);
+        }
+    }
 }
 
 pub fn apply_caves_to(canvas: &mut Canvas, rng: &mut impl Rng) {
