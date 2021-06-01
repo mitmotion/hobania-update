@@ -37,9 +37,9 @@ const EMPTY_AIR: Block = Block::air(SpriteKind::Empty);
 pub fn apply_paths_to(canvas: &mut Canvas) {
     let info = canvas.info();
     canvas.foreach_col(|canvas, wpos2d, col| {
-        let surface_z = col.riverless_alt.floor() as i32;
 
         let noisy_color = |color: Rgb<u8>, factor: u32| {
+            let surface_z = col.riverless_alt.floor() as i32;
             let nz = RandomField::new(0).get(Vec3::new(wpos2d.x, wpos2d.y, surface_z));
             color.map(|e| {
                 (e as u32 + nz % (factor * 2))
