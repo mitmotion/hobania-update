@@ -40,8 +40,6 @@ pub fn apply_paths_to(canvas: &mut Canvas) {
         if let Some((path_dist, path_nearest, path, _)) =
             col.path.filter(|(dist, _, path, _)| *dist < path.width)
         {
-            let inset = 0;
-
             let info = canvas.info();
             let (riverless_alt, alt, water_dist) = new_method(info, col, path_nearest);
             let (bridge_offset, depth) = new_method1(riverless_alt, alt, water_dist);
@@ -57,10 +55,10 @@ pub fn apply_paths_to(canvas: &mut Canvas) {
                 })
             };
 
-            for z in inset - depth..inset {
+            for z in -depth.abs()..0 {
                 let _ = canvas.set(
                     Vec3::new(wpos2d.x, wpos2d.y, surface_z + z),
-                    if bridge_offset >= 2.0 && path_dist >= 3.0 || z < inset - 1 {
+                    if bridge_offset >= 2.0 && path_dist >= 3.0 || z < -1 {
                         Block::new(
                             BlockKind::Rock,
                             noisy_color(info.index().colors.layer.bridge.into(), 8),
@@ -73,7 +71,7 @@ pub fn apply_paths_to(canvas: &mut Canvas) {
                 );
             }
             let head_space = path.head_space(path_dist);
-            for z in inset..inset + head_space {
+            for z in 0..head_space {
                 let pos = Vec3::new(wpos2d.x, wpos2d.y, surface_z + z);
                 if canvas.get(pos).kind() != BlockKind::Water {
                     let _ = canvas.set(pos, EMPTY_AIR);
