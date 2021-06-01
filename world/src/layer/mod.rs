@@ -38,16 +38,6 @@ pub fn apply_paths_to(canvas: &mut Canvas) {
     let info = canvas.info();
     canvas.foreach_col(|canvas, wpos2d, col| {
 
-        let noisy_color = |color: Rgb<u8>, factor: u32| {
-            let surface_z = col.riverless_alt.floor() as i32;
-            let nz = RandomField::new(0).get(Vec3::new(wpos2d.x, wpos2d.y, surface_z));
-            color.map(|e| {
-                (e as u32 + nz % (factor * 2))
-                    .saturating_sub(factor)
-                    .min(255) as u8
-            })
-        };
-
         if let Some((path_dist, path_nearest, path, _)) =
             col.path.filter(|(dist, _, path, _)| *dist < path.width)
         {
@@ -56,6 +46,16 @@ pub fn apply_paths_to(canvas: &mut Canvas) {
             let (riverless_alt, alt, water_dist) = new_method(info, col, path_nearest);
             let (bridge_offset, depth) = new_method1(riverless_alt, alt, water_dist);
             let surface_z = (riverless_alt + bridge_offset).floor() as i32;
+
+            let noisy_color = |color: Rgb<u8>, factor: u32| {
+                let surface_z = col.riverless_alt.floor() as i32;
+                let nz = RandomField::new(0).get(Vec3::new(wpos2d.x, wpos2d.y, surface_z));
+                color.map(|e| {
+                    (e as u32 + nz % (factor * 2))
+                        .saturating_sub(factor)
+                        .min(255) as u8
+                })
+            };
 
             for z in inset - depth..inset {
                 let _ = canvas.set(
