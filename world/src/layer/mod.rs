@@ -54,13 +54,7 @@ pub fn apply_paths_to(canvas: &mut Canvas) {
             let inset = 0;
 
             let (riverless_alt, alt, water_dist) = new_method(info, col, path_nearest);
-            let (bridge_offset, depth) = (
-                ((water_dist.max(0.0) * 0.2).min(f32::consts::PI).cos() + 1.0) * 5.0,
-                ((1.0 - ((water_dist + 2.0) * 0.3).min(0.0).cos().abs())
-                    * (riverless_alt + 5.0 - alt).max(0.0)
-                    * 1.75
-                    + 3.0) as i32,
-            );
+            let (bridge_offset, depth) = new_method1(riverless_alt, alt, water_dist);
             let surface_z = (riverless_alt + bridge_offset).floor() as i32;
 
             for z in inset - depth..inset {
@@ -111,6 +105,17 @@ fn new_method(info: CanvasInfo, col: &ColumnSample, path_nearest: Vec2<f32>) -> 
     }
     .into_array();
     (riverless_alt, alt, water_dist)
+}
+
+//TODO: Rename
+fn new_method1(riverless_alt: f32, alt: f32, water_dist: f32) -> (f32, i32) {
+    (
+        ((water_dist.max(0.0) * 0.2).min(f32::consts::PI).cos() + 1.0) * 5.0,
+        ((1.0 - ((water_dist + 2.0) * 0.3).min(0.0).cos().abs())
+            * (riverless_alt + 5.0 - alt).max(0.0)
+            * 1.75
+            + 3.0) as i32,
+    )
 }
 
 pub fn apply_caves_to(canvas: &mut Canvas, rng: &mut impl Rng) {
