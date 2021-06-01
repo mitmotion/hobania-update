@@ -37,19 +37,23 @@ const EMPTY_AIR: Block = Block::air(SpriteKind::Empty);
 
 pub fn apply_paths_to(canvas: &mut Canvas) {
     canvas.foreach_col(|canvas, wpos2d, col| {
-
-        if let Some((path_dist, path_nearest, path, _)) =
-            col.path.filter(|(dist, _, path, _)| *dist < path.width)
-        {
-            let info = canvas.info();
-            let (riverless_alt, alt, water_dist) = new_method(info, col, path_nearest);
-            let (bridge_offset, depth) = new_method1(riverless_alt, alt, water_dist);
-            let surface_z = (riverless_alt + bridge_offset).floor() as i32;
-
-            new_method4(canvas, wpos2d, col, path_dist, path, info, bridge_offset, depth, surface_z);
-            new_method3(canvas, wpos2d, path_dist, path, surface_z)
-        }
+        new_method5(canvas, wpos2d, col)
     });
+}
+
+//TODO: Rename
+fn new_method5(canvas: &mut Canvas, wpos2d: Vec2<i32>, col: &ColumnSample) {
+    if let Some((path_dist, path_nearest, path, _)) =
+    col.path.filter(|(dist, _, path, _)| *dist < path.width)
+    {
+        let info = canvas.info();
+        let (riverless_alt, alt, water_dist) = new_method(info, col, path_nearest);
+        let (bridge_offset, depth) = new_method1(riverless_alt, alt, water_dist);
+        let surface_z = (riverless_alt + bridge_offset).floor() as i32;
+
+        new_method4(canvas, wpos2d, col, path_dist, path, info, bridge_offset, depth, surface_z);
+        new_method3(canvas, wpos2d, path_dist, path, surface_z)
+    }
 }
 
 //TODO: Rename
