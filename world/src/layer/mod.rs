@@ -36,22 +36,30 @@ pub struct Colors {
 const EMPTY_AIR: Block = Block::air(SpriteKind::Empty);
 
 pub fn apply_paths_to(canvas: &mut Canvas) {
-    canvas.foreach_col(|canvas, wpos2d, col| {
-        new_method5(canvas, wpos2d, col)
-    });
+    canvas.foreach_col(|canvas, wpos2d, col| new_method5(canvas, wpos2d, col));
 }
 
 //TODO: Rename
 fn new_method5(canvas: &mut Canvas, wpos2d: Vec2<i32>, col: &ColumnSample) {
     if let Some((path_dist, path_nearest, path, _)) =
-    col.path.filter(|(dist, _, path, _)| *dist < path.width)
+        col.path.filter(|(dist, _, path, _)| *dist < path.width)
     {
         let info = canvas.info();
         let (riverless_alt, alt, water_dist) = new_method(info, col, path_nearest);
         let (bridge_offset, depth) = new_method1(riverless_alt, alt, water_dist);
         let surface_z = (riverless_alt + bridge_offset).floor() as i32;
 
-        new_method4(canvas, wpos2d, col, path_dist, path, info, bridge_offset, depth, surface_z);
+        new_method4(
+            canvas,
+            wpos2d,
+            col,
+            path_dist,
+            path,
+            info,
+            bridge_offset,
+            depth,
+            surface_z,
+        );
         new_method3(canvas, wpos2d, path_dist, path, surface_z)
     }
 }
@@ -92,7 +100,12 @@ fn new_method1(riverless_alt: f32, alt: f32, water_dist: f32) -> (f32, i32) {
 }
 
 //TODO: Rename
-fn new_method2(col: &ColumnSample, wpos2d: Vec2<i32>, block_kind: BlockKind, color: Rgb<u8>) -> Block {
+fn new_method2(
+    col: &ColumnSample,
+    wpos2d: Vec2<i32>,
+    block_kind: BlockKind,
+    color: Rgb<u8>,
+) -> Block {
     let noisy_color = |color: Rgb<u8>, factor: u32| {
         let surface_z = col.riverless_alt.floor() as i32;
         let nz = RandomField::new(0).get(Vec3::new(wpos2d.x, wpos2d.y, surface_z));
@@ -107,16 +120,32 @@ fn new_method2(col: &ColumnSample, wpos2d: Vec2<i32>, block_kind: BlockKind, col
 }
 
 //TODO: Rename
-fn new_method4(canvas: &mut Canvas, wpos2d: Vec2<i32>, col: &ColumnSample, path_dist: f32,
-               path: Path, info: CanvasInfo, bridge_offset: f32, depth: i32, surface_z: i32) {
+fn new_method4(
+    canvas: &mut Canvas,
+    wpos2d: Vec2<i32>,
+    col: &ColumnSample,
+    path_dist: f32,
+    path: Path,
+    info: CanvasInfo,
+    bridge_offset: f32,
+    depth: i32,
+    surface_z: i32,
+) {
     for z in -depth.abs()..0 {
         let _ = canvas.set(
             Vec3::new(wpos2d.x, wpos2d.y, surface_z + z),
             if bridge_offset >= 2.0 && path_dist >= 3.0 || z < -1 {
-                new_method2(col, wpos2d, BlockKind::Rock, info.index().colors.layer.bridge.into())
+                new_method2(
+                    col,
+                    wpos2d,
+                    BlockKind::Rock,
+                    info.index().colors.layer.bridge.into(),
+                )
             } else {
                 new_method2(
-                    col, wpos2d, BlockKind::Earth,
+                    col,
+                    wpos2d,
+                    BlockKind::Earth,
                     path.surface_color(col.sub_surface_color.map(|e| (e * 255.0) as u8)),
                 )
             },
