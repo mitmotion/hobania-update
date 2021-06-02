@@ -92,7 +92,7 @@ fn new_method1(riverless_alt: f32, alt: f32, water_dist: f32) -> (f32, i32) {
 }
 
 //TODO: Rename
-fn new_method2(block_kind: BlockKind, color: Rgb<u8>) -> Block {
+fn new_method2(col: &ColumnSample, wpos2d: Vec2<i32>, block_kind: BlockKind, color: Rgb<u8>) -> Block {
     let noisy_color = |color: Rgb<u8>, factor: u32| {
         let surface_z = col.riverless_alt.floor() as i32;
         let nz = RandomField::new(0).get(Vec3::new(wpos2d.x, wpos2d.y, surface_z));
@@ -113,10 +113,10 @@ fn new_method4(canvas: &mut Canvas, wpos2d: Vec2<i32>, col: &ColumnSample, path_
         let _ = canvas.set(
             Vec3::new(wpos2d.x, wpos2d.y, surface_z + z),
             if bridge_offset >= 2.0 && path_dist >= 3.0 || z < -1 {
-                new_method2(BlockKind::Rock, info.index().colors.layer.bridge.into())
+                new_method2(col, wpos2d, BlockKind::Rock, info.index().colors.layer.bridge.into())
             } else {
                 new_method2(
-                    BlockKind::Earth,
+                    col, wpos2d, BlockKind::Earth,
                     path.surface_color(col.sub_surface_color.map(|e| (e * 255.0) as u8)),
                 )
             },
