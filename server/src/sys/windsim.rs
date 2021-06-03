@@ -40,11 +40,11 @@ impl<'a> System<'a> for Sys {
                     Pos(Vec3 {
                         x: inline_tweak::tweak!(1000.0),
                         y: vertical_chunk as f32 * 32.0,
-                        z: inline_tweak::tweak!(200.0),
+                        z: inline_tweak::tweak!(1000.0),
                     }),
                     Vel(Vec3 {
-                        x: inline_tweak::tweak!(60.0) * r.sin(),
-                        y: inline_tweak::tweak!(60.0) * r.cos(),
+                        x: inline_tweak::tweak!(30.0) * r.sin(),
+                        y: inline_tweak::tweak!(0.0) * r.cos(),
                         z: inline_tweak::tweak!(0.0) * rng.gen_range(-0.25..0.25),
                     }),
                 )
