@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::windsim::{WindSim, MS_BETWEEN_TICKS};
+use crate::windsim::WindSim;
 use common::{
     comp::{Fluid, PhysicsState, Pos, Vel},
     resources::DeltaTime,
@@ -43,19 +43,14 @@ impl<'a> System<'a> for Sys {
                         z: inline_tweak::tweak!(200.0),
                     }),
                     Vel(Vec3 {
-                        x: inline_tweak::tweak!(300.0) * r.sin(),
-                        y: inline_tweak::tweak!(300.0) * r.cos(),
-                        z: inline_tweak::tweak!(10.0) * rng.gen_range(-0.25..0.25),
+                        x: inline_tweak::tweak!(60.0) * r.sin(),
+                        y: inline_tweak::tweak!(60.0) * r.cos(),
+                        z: inline_tweak::tweak!(0.0) * rng.gen_range(-0.25..0.25),
                     }),
                 )
             })
             .collect::<Vec<_>>();
-        // If MS_BETWEEN_TICKS is 1000 it runs the sim once per second
-        if windsim.ms_since_update >= MS_BETWEEN_TICKS {
-            windsim.tick(wind_sources, &DeltaTime((MS_BETWEEN_TICKS / 1000) as f32));
-        } else {
-            windsim.ms_since_update += (dt.0 * 1000.0) as u32;
-        }
+        windsim.tick(wind_sources, &dt);
 
         for (pos, physics_state) in (&positions, &mut physics_states).join() {
             physics_state.in_fluid = physics_state

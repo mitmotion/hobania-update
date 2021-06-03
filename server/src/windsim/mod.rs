@@ -18,13 +18,13 @@ pub const GRID_SIZE: Vec3<usize> = Vec3 {
     y: Y_SIZE,
     z: Z_SIZE,
 };
-pub const MS_BETWEEN_TICKS: u32 = 1000;
+const TPS: u32 = 5;
 
 #[derive(Default)]
 pub struct WindSim {
     grid: WindGrid,
     blocks_per_cell: Vec3<u32>,
-    pub ms_since_update: u32,
+    timer: f32,
 }
 
 impl WindSim {
@@ -32,7 +32,7 @@ impl WindSim {
         Self {
             grid: WindGrid::default(),
             blocks_per_cell: cell_size_in_blocks(world_size),
-            ms_since_update: MS_BETWEEN_TICKS,
+            timer: std::f32::INFINITY,
         }
     }
 
@@ -66,19 +66,27 @@ impl WindSim {
 
     // Abstraction for running the simulation
     pub fn tick(&mut self, sources: Vec<(Pos, Vel)>, dt: &DeltaTime) {
-        for (pos, vel) in sources {
-            self.add_velocity_source(pos, vel);
+        self.timer += dt.0;
+        let step = 1.0 / TPS as f32;
+        if self.timer >= step {
+            for (pos, vel) in sources {
+                self.add_velocity_source(pos, vel);
+            }
+            step_fluid(
+                &mut self.grid.density,
+                &mut self.grid.x_vel,
+                &mut self.grid.y_vel,
+                &mut self.grid.z_vel,
+                step,
+                0.1,
+                true,
+            );
+            if self.timer.is_infinite() {
+                self.timer = 0.0;
+            } else {
+                self.timer -= step;
+            }
         }
-        step_fluid(
-            &mut self.grid.density,
-            &mut self.grid.x_vel,
-            &mut self.grid.y_vel,
-            &mut self.grid.z_vel,
-            dt.0,
-            0.1,
-            true,
-        );
-        self.ms_since_update = 0;
     }
 }
 
