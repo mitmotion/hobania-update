@@ -1984,21 +1984,26 @@ impl Client {
                     rich.economy = Some(economy);
                 }
             },
-            ServerGeneral::WindUpdate(vel) => {
-                println!("Windupdate {}", vel);
+            ServerGeneral::WindUpdate(v) => {
+                println!("Windupdate {}", v);
                 let player_entity = self.entity();
                 self.state
                     .ecs_mut()
                     .write_storage::<PhysicsState>()
                     .get_mut(player_entity)
                     .map(|physics_state| {
-                        physics_state.in_fluid = physics_state
-                            .in_fluid
-                            .filter(|fluid| matches!(fluid, Fluid::Water { .. }))
-                            .or(Some(Fluid::Air {
-                                elevation: 0.0,
-                                vel: Vel(vel),
-                            }));
+                        if let Fluid::Air { vel, elevation } =
+                            physics_state.in_fluid.unwrap_or_default()
+                        {
+                            physics_state.in_fluid = Some(Fluid::Air {
+                                vel: Vel(Lerp::lerp(
+                                    vel.0,
+                                    v,
+                                    0.2,
+                                )),
+                                elevation,
+                            });
+                        }
                     });
             },
             _ => unreachable!("Not a in_game message"),
