@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::windsim::WindSim;
+use crate::windsim::{WindSim, TPS};
 use common::{
     comp::{Fluid, PhysicsState, Pos, Vel},
     resources::DeltaTime,
@@ -53,15 +53,16 @@ impl<'a> System<'a> for Sys {
         windsim.tick(wind_sources, &dt);
 
         for (pos, physics_state) in (&positions, &mut physics_states).join() {
-            physics_state.in_fluid = physics_state
-                .in_fluid
-                .filter(|fluid| !matches!(fluid, Fluid::Air { .. }))
-                .or_else(|| {
-                    Some(Fluid::Air {
-                        elevation: pos.0.z,
-                        vel: Vel(windsim.get_velocity(*pos)),
-                    })
+            if let Fluid::Air { vel, elevation } = physics_state.in_fluid.unwrap_or_default() {
+                physics_state.in_fluid = Some(Fluid::Air {
+                    vel: Vel(Lerp::lerp(
+                        vel.0,
+                        windsim.get_velocity(*pos),
+                        inline_tweak::tweak!(0.5) / TPS as f32,
+                    )),
+                    elevation,
                 });
+            }
         }
     }
 }

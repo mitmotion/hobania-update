@@ -10,7 +10,6 @@ use common::{
     comp::{Pos, Vel},
     resources::DeltaTime,
 };
-//use common_state::State;
 
 pub const DEFAULT_POS: Vec3<usize> = Vec3 { x: 0, y: 0, z: 0 };
 pub const GRID_SIZE: Vec3<usize> = Vec3 {
@@ -18,7 +17,7 @@ pub const GRID_SIZE: Vec3<usize> = Vec3 {
     y: Y_SIZE,
     z: Z_SIZE,
 };
-const TPS: u32 = 5;
+pub const TPS: u32 = 5;
 
 #[derive(Default)]
 pub struct WindSim {
