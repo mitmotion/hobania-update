@@ -1,4 +1,4 @@
-use super::utils::handle_climb;
+use super::{glide_wield, utils::handle_climb};
 use crate::{
     comp::{inventory::slot::EquipSlot, CharacterState, ControllerInputs, Ori, StateUpdate, Vel},
     glider::Glider,
@@ -108,7 +108,7 @@ impl CharacterBehavior for Data {
         if data.physics.on_ground
             && (data.vel.0 - data.physics.ground_vel).magnitude_squared() < 2_f32.powi(2)
         {
-            update.character = CharacterState::GlideWield;
+            update.character = CharacterState::GlideWield(glide_wield::Data(self.glider));
             update.ori = update.ori.to_horizontal();
         } else if data.physics.in_liquid().is_some()
             || data.inventory.equipped(EquipSlot::Glider).is_none()
@@ -149,9 +149,6 @@ impl CharacterBehavior for Data {
             {
                 let glider_up = glider.ori.up();
                 let d = glider_up.dot(*char_up);
-                let cap = |max_ang: f32| -> Option<f32> {
-                    (d - max_ang.cos()).is_sign_positive().then_some(max_ang)
-                };
 
                 if let Some(roll_input) = self.roll_input(data.inputs) {
                     if (d - max_roll.cos()).is_sign_positive()

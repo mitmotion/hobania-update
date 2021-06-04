@@ -297,8 +297,8 @@ impl<'a> System<'a> for Sys {
                     CharacterState::Talk => states::talk::Data.handle_event(&j, action),
                     CharacterState::Climb(data) => data.handle_event(&j, action),
                     CharacterState::Glide(data) => data.handle_event(&j, action),
-                    CharacterState::GlideWield => {
-                        states::glide_wield::Data.handle_event(&j, action)
+                    CharacterState::GlideWield(data) => {
+                        data.handle_event(&j, action)
                     },
                     CharacterState::Stunned(data) => data.handle_event(&j, action),
                     CharacterState::Sit => {
@@ -360,7 +360,7 @@ impl<'a> System<'a> for Sys {
                 CharacterState::Talk => states::talk::Data.behavior(&j),
                 CharacterState::Climb(data) => data.behavior(&j),
                 CharacterState::Glide(data) => data.behavior(&j),
-                CharacterState::GlideWield => states::glide_wield::Data.behavior(&j),
+                CharacterState::GlideWield(data) => data.behavior(&j),
                 CharacterState::Stunned(data) => data.behavior(&j),
                 CharacterState::Sit => states::sit::Data::behavior(&states::sit::Data, &j),
                 CharacterState::Dance => states::dance::Data::behavior(&states::dance::Data, &j),

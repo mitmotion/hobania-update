@@ -570,7 +570,7 @@ pub fn attempt_glide_wield(data: &JoinData, update: &mut StateUpdate) {
             .unwrap_or(false)
         && data.body.is_humanoid()
     {
-        update.character = CharacterState::GlideWield;
+        update.character = CharacterState::GlideWield(glide_wield::Data::new(data.body, data.ori));
     }
 }
 

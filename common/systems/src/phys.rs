@@ -49,7 +49,8 @@ fn integrate_glider_forces(
     rel_wind: &Vel,
 ) -> Option<()> {
     let glider = match character_state {
-        CharacterState::Glide(glider) => Some(glider.glider),
+        CharacterState::Glide(data) => Some(data.glider),
+        CharacterState::GlideWield(data) => Some(data.0),
         _ => None,
     }?;
 
