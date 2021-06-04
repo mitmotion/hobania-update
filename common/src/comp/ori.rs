@@ -194,6 +194,24 @@ impl Ori {
         self.rotated(Quaternion::rotation_y(angle_radians))
     }
 
+    pub fn rolled_towards(self, dir: Dir) -> Self {
+        dir.projected(&Plane::from(self.look_dir()))
+            .map_or(self, |dir| self.prerotated(self.up().rotation_between(dir)))
+    }
+
+    pub fn pitched_towards(self, dir: Dir) -> Self {
+        dir.projected(&Plane::from(self.right()))
+            .map_or(self, |dir_| {
+                self.prerotated(self.look_dir().rotation_between(dir_))
+            })
+    }
+
+    pub fn yawed_towards(self, dir: Dir) -> Self {
+        dir.projected(&Plane::from(self.up())).map_or(self, |dir_| {
+            self.prerotated(self.look_dir().rotation_between(dir_))
+        })
+    }
+
     /// Returns a version without sideways tilt (roll)
     ///
     /// ```
