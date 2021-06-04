@@ -53,7 +53,7 @@ pub enum CharacterState {
     Talk,
     Sneak,
     Glide(glide::Data),
-    GlideWield,
+    GlideWield(glide_wield::Data),
     /// A stunned state
     Stunned(stunned::Data),
     /// A basic blocking state
@@ -188,7 +188,7 @@ impl CharacterState {
                 | CharacterState::Equipping(_)
                 | CharacterState::Dance
                 | CharacterState::Glide(_)
-                | CharacterState::GlideWield
+                | CharacterState::GlideWield(_)
                 | CharacterState::Talk
                 | CharacterState::Roll(_),
         )

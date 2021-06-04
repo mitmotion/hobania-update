@@ -1,14 +1,26 @@
 use super::utils::*;
 use crate::{
-    comp::{slot::EquipSlot, CharacterState, InventoryAction, StateUpdate},
+    comp::{slot::EquipSlot, Body, CharacterState, InventoryAction, Ori, StateUpdate},
     glider::Glider,
     states::{
         behavior::{CharacterBehavior, JoinData},
         glide,
     },
 };
+use serde::{Deserialize, Serialize};
 
-pub struct Data;
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Data(pub Glider);
+
+impl Data {
+    pub fn new(body: &Body, ori: &Ori) -> Self {
+        Self(Glider::new(
+            body.dimensions().z * 3.0,
+            body.dimensions().z / 3.0,
+            *ori,
+        ))
+    }
+}
 
 impl CharacterBehavior for Data {
     fn behavior(&self, data: &JoinData) -> StateUpdate {
@@ -20,25 +32,26 @@ impl CharacterBehavior for Data {
         handle_dodge_input(data, &mut update);
         handle_wield(data, &mut update);
 
+        let mut glider = self.0;
+        glider.ori = glider.ori.slerped_towards(
+            Ori::from(data.inputs.look_dir).pitched_up(inline_tweak::tweak!(0.35)),
+            inline_tweak::tweak!(10.0) * data.dt.0,
+        );
+
         // If not on the ground while wielding glider enter gliding state
-        if data.physics.on_ground.is_none() {
-            let glider = Glider::new(
-                data.body.dimensions().z * 3.0,
-                data.body.dimensions().z / 3.0,
-                *data.ori,
-            );
-            update.character = CharacterState::Glide(glide::Data::new(glider, data.ori));
-        }
-        if data
+        update.character = if data.physics.on_ground.is_none() {
+            CharacterState::Glide(glide::Data::new(glider, data.ori))
+        } else if data
             .physics
             .in_liquid()
             .map(|depth| depth > 0.5)
             .unwrap_or(false)
         {
-            update.character = CharacterState::Idle;
-        }
-        if data.inventory.equipped(EquipSlot::Glider).is_none() {
-            update.character = CharacterState::Idle
+            CharacterState::Idle
+        } else if data.inventory.equipped(EquipSlot::Glider).is_none() {
+            CharacterState::Idle
+        } else {
+            CharacterState::GlideWield(Self(glider))
         };
 
         update
