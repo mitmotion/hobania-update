@@ -16,15 +16,13 @@ const MAX_LIFT_DRAG_RATIO_AOA: f32 = PI * 0.04;
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Data {
     pub glider: Glider,
-    last_ori: Ori,
     timer: f32,
     inputs_disabled: bool,
 }
 
 impl Data {
-    pub fn new(glider: Glider, ori: &Ori) -> Self {
+    pub fn new(glider: Glider) -> Self {
         Self {
-            last_ori: *ori,
             timer: 0.0,
             inputs_disabled: true,
             glider,
@@ -109,21 +107,18 @@ impl CharacterBehavior for Data {
             && (data.vel.0 - data.physics.ground_vel).magnitude_squared() < 2_f32.powi(2)
         {
             update.character = CharacterState::GlideWield(glide_wield::Data(self.glider));
-            update.ori = update.ori.to_horizontal();
         } else if data.physics.in_liquid().is_some()
             || data.inventory.equipped(EquipSlot::Glider).is_none()
         {
             update.character = CharacterState::Idle;
-            update.ori = update.ori.to_horizontal();
         } else if !handle_climb(&data, &mut update) {
             // Tweaks
-            let def_pitch = MAX_LIFT_DRAG_RATIO_AOA * tweak!(2.0);
-            let max_pitch = tweak!(0.2) * PI;
-            let max_roll = tweak!(0.30) * PI;
-            let inputs_rate = tweak!(4.0);
+            let def_pitch = MAX_LIFT_DRAG_RATIO_AOA * tweak!(1.0);
+            let max_pitch = tweak!(0.3) * PI;
+            let max_roll = tweak!(0.2) * PI;
+            let inputs_rate = tweak!(5.0);
             let look_pitch_rate = tweak!(5.0);
             let autoroll_rate = tweak!(5.0);
-            let rot_with_char = tweak!(false);
             let yaw_correction_rate = tweak!(1.0);
             let char_yaw_follow_rate = tweak!(2.0);
             // ----
@@ -138,21 +133,16 @@ impl CharacterBehavior for Data {
 
             let char_up = data.ori.up();
 
+            let ori = self.glider.ori;
             let mut glider = self.glider;
 
-            if rot_with_char {
-                glider.ori = glider
-                    .ori
-                    .prerotated(self.last_ori.up().rotation_between(char_up));
-            }
-
             {
-                let glider_up = glider.ori.up();
-                let d = glider_up.dot(*char_up);
+                let glider_up = ori.up();
+                let up_dot = glider_up.dot(*char_up);
 
                 if let Some(roll_input) = self.roll_input(data.inputs) {
-                    if (d - max_roll.cos()).is_sign_positive()
-                        || (glider.ori.right().dot(*char_up).is_sign_positive()
+                    if (up_dot - max_roll.cos()).is_sign_positive()
+                        || (ori.right().dot(*char_up).is_sign_positive()
                             == roll_input.is_sign_positive())
                     {
                         glider.roll(data.dt.0 * inputs_rate * roll_input * max_roll);
@@ -165,8 +155,8 @@ impl CharacterBehavior for Data {
                 }
 
                 if let Some(pitch_input) = self.pitch_input(data.inputs) {
-                    if (d - max_pitch.cos()).is_sign_positive()
-                        || (glider.ori.look_dir().dot(*char_up).is_sign_negative()
+                    if (up_dot - max_pitch.cos()).is_sign_positive()
+                        || (ori.look_dir().dot(*char_up).is_sign_negative()
                             == pitch_input.is_sign_positive())
                     {
                         glider.pitch(data.dt.0 * inputs_rate * pitch_input * max_pitch);
@@ -182,13 +172,10 @@ impl CharacterBehavior for Data {
             );
 
             update.character = CharacterState::Glide(Self {
-                last_ori: update.ori,
                 timer: self.timer + data.dt.0,
                 inputs_disabled: self.inputs_disabled && !data.inputs.move_dir.is_approx_zero(),
                 glider,
             });
-        } else {
-            update.ori = update.ori.to_horizontal();
         }
 
         update
@@ -197,7 +184,6 @@ impl CharacterBehavior for Data {
     fn unwield(&self, data: &JoinData) -> StateUpdate {
         let mut update = StateUpdate::from(data);
         update.character = CharacterState::Idle;
-        update.ori = update.ori.to_horizontal();
         update
     }
 }
