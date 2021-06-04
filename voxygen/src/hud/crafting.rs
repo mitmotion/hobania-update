@@ -7,8 +7,8 @@ use super::{
 use crate::{
     i18n::Localization,
     ui::{
-        fonts::Fonts, ImageFrame, ItemTooltip, ItemTooltipManager, ItemTooltipable, OutlinedText,
-        Tooltip, TooltipManager, Tooltipable,
+        fonts::Fonts, ImageFrame, ItemTooltip, ItemTooltipManager, ItemTooltipable, Tooltip,
+        TooltipManager, Tooltipable,
     },
 };
 use client::{self, Client};
@@ -44,6 +44,9 @@ widget_ids! {
         title_main,
         title_rec,
         align_rec,
+        align_rec_craftable,
+        align_rec_partial,
+        align_rec_uncraftable,
         scrollbar_rec,
         btn_open_search,
         btn_close_search,
@@ -55,8 +58,9 @@ widget_ids! {
         align_ing,
         scrollbar_ing,
         btn_craft,
-        recipe_name_btns[],
-        recipe_name_texts[],
+        recipe_names_craftable[],
+        recipe_names_partial[],
+        recipe_names_uncraftable[],
         recipe_img_frame[],
         recipe_img[],
         ingredients[],
@@ -203,13 +207,6 @@ impl CraftingTab {
         }
     }
 }
-// First available recipes, then unavailable ones, each alphabetically
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum RecipeIngredientQuantity {
-    All,
-    Some,
-    None,
-}
 
 pub struct State {
     ids: Ids,
@@ -287,16 +284,6 @@ impl<'a> Widget for Crafting<'a> {
             .color(Some(UI_MAIN))
             .w_h(422.0, 460.0)
             .set(state.ids.window, ui);
-        // Search Background
-        // I couldn't find a way to manually set they layer of a widget
-        // If it is possible, please move this code (for rectangle) down to the code for
-        // search input
-        if self.show.crafting_search_key.is_some() {
-            Rectangle::fill([114.0, 20.0])
-                .top_left_with_margins_on(state.ids.window, 52.0, 26.0)
-                .hsla(0.0, 0.0, 0.0, 0.7)
-                .set(state.ids.input_bg_search, ui);
-        }
         // Window
         Image::new(self.imgs.crafting_frame)
             .middle_of(state.ids.window)
@@ -416,7 +403,16 @@ impl<'a> Widget for Crafting<'a> {
                 .set(state.ids.category_imgs[i], ui);
         }
 
-        let mut ordered_recipes: Vec<_> = self
+        // First available recipes, then unavailable ones, then by quality, then
+        // alphabetically In the pairs, "name" is the recipe book key, and
+        // "recipe.output.0.name()" is the display name (as stored in the item
+        // descriptors)
+
+        let mut craftable_recipes = Vec::new();
+        let mut partial_recipes = Vec::new();
+        let mut uncraftable_recipes = Vec::new();
+
+        for (name, recipe) in self
             .client
             .recipe_book()
             .iter()
@@ -431,120 +427,199 @@ impl<'a> Widget for Crafting<'a> {
                     true
                 }
             })
-            .map(|(name, recipe)| {
-                let at_least_some_ingredients = recipe.inputs.iter().any(|(input, amount)| {
-                    *amount > 0
-                        && self.inventory.slots().any(|slot| {
-                            slot.as_ref()
-                                .map(|item| item.matches_recipe_input(input))
-                                .unwrap_or(false)
+            .filter(|(_, recipe)| self.show.crafting_tab.satisfies(recipe.output.0.as_ref()))
+        {
+            let at_least_some_ingredients = recipe.inputs.iter().any(|(input, amount)| {
+                *amount > 0
+                    && self.inventory.slots().any(|slot| {
+                        slot.as_ref()
+                            .map(|item| item.matches_recipe_input(input))
+                            .unwrap_or(false)
+                    })
+            });
+            let show_craft_sprite =
+                self.client
+                    .available_recipes()
+                    .get(name.as_str())
+                    .map_or(false, |cs| {
+                        cs.map_or(true, |cs| {
+                            Some(cs) == self.show.craft_sprite.map(|(_, s)| s)
                         })
-                });
-                let show_craft_sprite =
-                    self.client
-                        .available_recipes()
-                        .get(name.as_str())
-                        .map_or(false, |cs| {
-                            cs.map_or(true, |cs| {
-                                Some(cs) == self.show.craft_sprite.map(|(_, s)| s)
-                            })
-                        });
-                let state = if show_craft_sprite {
-                    RecipeIngredientQuantity::All
-                } else if at_least_some_ingredients {
-                    RecipeIngredientQuantity::Some
-                } else {
-                    RecipeIngredientQuantity::None
-                };
-                // (name, recipe, state)
-                (name, recipe, match tweak!(1) {
-                    0 => RecipeIngredientQuantity::All,
-                    1 => RecipeIngredientQuantity::Some,
-                    _ => RecipeIngredientQuantity::None,
-                })
-            })
-            .collect();
-        ordered_recipes.sort_by_key(|(_, recipe, state)| {
-            (*state, recipe.output.0.quality, recipe.output.0.name())
-        });
+                    });
+
+            if show_craft_sprite {
+                craftable_recipes.push((name, recipe));
+            } else if at_least_some_ingredients {
+                partial_recipes.push((name, recipe));
+            } else {
+                uncraftable_recipes.push((name, recipe));
+            }
+        }
+
+        craftable_recipes
+            .sort_by_key(|(_, recipe)| (recipe.output.0.quality, recipe.output.0.name()));
+        partial_recipes
+            .sort_by_key(|(_, recipe)| (recipe.output.0.quality, recipe.output.0.name()));
+        uncraftable_recipes
+            .sort_by_key(|(_, recipe)| (recipe.output.0.quality, recipe.output.0.name()));
+
+        // let n_craftable_recipies = ordered_recipes.into_iter(||)
+        // let (craftable_recipes, _uncraftable_recipes) =
+        // ordered_recipes.into_iter().partition(     |(_, _, quantity)|
+        // quantity == &RecipeIngredientQuantity::All );
+        // let (partial_recipes, uncraftable_recipes) = _uncraftable_recipes.partition(
+        //     |(_, _, quantity)| quantity == &RecipeIngredientQuantity::Some
+        // );
+
+        // let craftable_recipes: Vec<_> = craftable_recipes.collect();
+        // let partial_recipes: Vec<_> = partial_recipes.collect();
+        // let uncraftable_recipes: Vec<_> = uncraftable_recipes.collect();
+        // let partial_recipes: Vec<_> =
+        // ordered_recipes.into_iter().filter(|(_, _, quantity)| quantity ==
+        // &RecipeIngredientQuantity::Some).collect(); let uncraftable_recipes:
+        // Vec<_> = ordered_recipes.into_iter().filter(|(_, _, quantity)|
+        // quantity == &RecipeIngredientQuantity::None).collect();
 
         // Recipe list
-        if state.ids.recipe_name_btns.len() < self.client.recipe_book().iter().len() {
+        if state.ids.recipe_names_craftable.len() < craftable_recipes.len() {
             state.update(|state| {
-                state.ids.recipe_name_btns.resize(
-                    self.client.recipe_book().iter().len(),
-                    &mut ui.widget_id_generator(),
-                )
+                state
+                    .ids
+                    .recipe_names_craftable
+                    .resize(craftable_recipes.len(), &mut ui.widget_id_generator())
             });
         }
-        if state.ids.recipe_name_texts.len() < self.client.recipe_book().iter().len() {
+        if state.ids.recipe_names_partial.len() < partial_recipes.len() {
             state.update(|state| {
-                state.ids.recipe_name_texts.resize(
-                    self.client.recipe_book().iter().len(),
-                    &mut ui.widget_id_generator(),
-                )
+                state
+                    .ids
+                    .recipe_names_partial
+                    .resize(partial_recipes.len(), &mut ui.widget_id_generator())
             });
         }
-        for (i, (name, recipe, quantity)) in ordered_recipes
-            .into_iter()
-            .filter(|(_, recipe, _)| self.show.crafting_tab.satisfies(recipe.output.0.as_ref()))
-            .enumerate()
-        {
-            let button = Button::image(
-                if state
-                    .selected_recipe
-                    .as_ref()
-                    .map(|s| s != name)
-                    .unwrap_or(false)
-                {
-                    self.imgs.nothing
-                } else {
-                    match state.selected_recipe {
-                        None => self.imgs.nothing,
-                        Some(_) => self.imgs.selection,
-                    }
-                },
-            );
-            // Recipe Button
-            let button = if i == 0 {
-                button.mid_top_with_margin_on(state.ids.align_rec, 2.0)
+        if state.ids.recipe_names_uncraftable.len() < uncraftable_recipes.len() {
+            state.update(|state| {
+                state
+                    .ids
+                    .recipe_names_uncraftable
+                    .resize(uncraftable_recipes.len(), &mut ui.widget_id_generator())
+            });
+        }
+
+        //create alignments
+        Rectangle::fill_with(
+            [130.0, 25.0 * craftable_recipes.len() as f64],
+            color::hsla(0.0, 0.0, 0.0, 0.0),
+        )
+        .mid_top_with_margin_on(state.ids.align_rec, 0.0)
+        .set(state.ids.align_rec_craftable, ui);
+        Rectangle::fill_with(
+            [130.0, 25.0 * partial_recipes.len() as f64],
+            TEXT_GRAY_COLOR.alpha(tweak!(0.1)),
+        )
+        .down_from(state.ids.align_rec_craftable, 0.0)
+        .set(state.ids.align_rec_partial, ui);
+        Rectangle::fill_with(
+            [130.0, 25.0 * uncraftable_recipes.len() as f64],
+            TEXT_DULL_RED_COLOR.alpha(tweak!(0.1)),
+        )
+        .down_from(state.ids.align_rec_partial, 0.0)
+        .set(state.ids.align_rec_uncraftable, ui);
+
+        for (i, (name, recipe)) in craftable_recipes.into_iter().enumerate() {
+            let button = Button::image(if state.selected_recipe.as_ref() == Some(name) {
+                self.imgs.selection
             } else {
-                button.mid_bottom_with_margin_on(state.ids.recipe_name_btns[i - 1], -25.0)
-            };
-            let text_color = get_quality_col(&*recipe.output.0);
-            let outline_color = match quantity {
-                RecipeIngredientQuantity::All => TEXT_COLOR,
-                RecipeIngredientQuantity::Some => TEXT_GRAY_COLOR,
-                RecipeIngredientQuantity::None => TEXT_DULL_RED_COLOR,
-            };
-            if button
-                .w_h(130.0, 20.0)
-                .hover_image(self.imgs.selection_hover)
-                .press_image(self.imgs.selection_press)
-                .set(state.ids.recipe_name_btns[i], ui)
-                .was_clicked()
-            {
-                if state
-                    .selected_recipe
-                    .as_ref()
-                    .map(|s| s == name)
-                    .unwrap_or(false)
-                {
+                self.imgs.nothing
+            })
+            .and(|button| {
+                if i == 0 {
+                    button.mid_top_with_margin_on(state.ids.align_rec_craftable, 2.0)
+                } else {
+                    button.down_from(state.ids.recipe_names_craftable[i - 1], 5.0)
+                }
+            })
+            .label(recipe.output.0.name())
+            .w_h(130.0, 20.0)
+            .hover_image(self.imgs.selection_hover)
+            .press_image(self.imgs.selection_press)
+            .label_color(get_quality_col(recipe.output.0.as_ref()))
+            .label_font_size(self.fonts.cyri.scale(12))
+            .label_font_id(self.fonts.cyri.conrod_id)
+            .label_y(conrod_core::position::Relative::Scalar(2.0))
+            .set(state.ids.recipe_names_craftable[i], ui);
+
+            if button.was_clicked() {
+                if state.selected_recipe.as_ref() == Some(name) {
                     state.update(|s| s.selected_recipe = None);
                 } else {
                     state.update(|s| s.selected_recipe = Some(name.clone()));
                 }
             }
-            OutlinedText::new(recipe.output.0.name())
-                .font_id(self.fonts.cyri.conrod_id)
-                .font_size(self.fonts.cyri.scale(12))
-                .color(text_color)
-                .outline_width(tweak!(0.5))
-                .outline_color(outline_color)
-                .w_h(tweak!(100.0), tweak!(20.0))
-                .mid_top_with_margin_on(state.ids.recipe_name_btns[i], tweak!(1.0))
-                .graphics_for(state.ids.recipe_name_btns[i])
-                .set(state.ids.recipe_name_texts[i], ui);
+        }
+        for (i, (name, recipe)) in partial_recipes.into_iter().enumerate() {
+            let button = Button::image(if state.selected_recipe.as_ref() == Some(name) {
+                self.imgs.selection
+            } else {
+                self.imgs.nothing
+            })
+            .and(|button| {
+                if i == 0 {
+                    button.mid_top_with_margin_on(state.ids.align_rec_partial, 2.0)
+                } else {
+                    button.down_from(state.ids.recipe_names_partial[i - 1], 5.0)
+                }
+            })
+            // .image_color(TEXT_GRAY_COLOR)
+            .label(recipe.output.0.name())
+            .w_h(130.0, 20.0)
+            .hover_image(self.imgs.selection_hover)
+            .press_image(self.imgs.selection_press)
+            .label_color(get_quality_col(recipe.output.0.as_ref()))
+            .label_font_size(self.fonts.cyri.scale(12))
+            .label_font_id(self.fonts.cyri.conrod_id)
+            .label_y(conrod_core::position::Relative::Scalar(2.0))
+            .set(state.ids.recipe_names_partial[i], ui);
+
+            if button.was_clicked() {
+                if state.selected_recipe.as_ref() == Some(name) {
+                    state.update(|s| s.selected_recipe = None);
+                } else {
+                    state.update(|s| s.selected_recipe = Some(name.clone()));
+                }
+            }
+        }
+        for (i, (name, recipe)) in uncraftable_recipes.into_iter().enumerate() {
+            let button = Button::image(if state.selected_recipe.as_ref() == Some(name) {
+                self.imgs.selection
+            } else {
+                self.imgs.nothing
+            })
+            .and(|button| {
+                if i == 0 {
+                    button.mid_top_with_margin_on(state.ids.align_rec_uncraftable, 2.0)
+                } else {
+                    button.down_from(state.ids.recipe_names_uncraftable[i - 1], 5.0)
+                }
+            })
+            // .image_color(TEXT_DULL_RED_COLOR)
+            .label(recipe.output.0.name())
+            .w_h(130.0, 20.0)
+            .hover_image(self.imgs.selection_hover)
+            .press_image(self.imgs.selection_press)
+            .label_color(get_quality_col(recipe.output.0.as_ref()))
+            .label_font_size(self.fonts.cyri.scale(12))
+            .label_font_id(self.fonts.cyri.conrod_id)
+            .label_y(conrod_core::position::Relative::Scalar(2.0))
+            .set(state.ids.recipe_names_uncraftable[i], ui);
+
+            if button.was_clicked() {
+                if state.selected_recipe.as_ref() == Some(name) {
+                    state.update(|s| s.selected_recipe = None);
+                } else {
+                    state.update(|s| s.selected_recipe = Some(name.clone()));
+                }
+            }
         }
 
         // Selected Recipe
@@ -910,6 +985,12 @@ impl<'a> Widget for Crafting<'a> {
             {
                 events.push(Event::SearchRecipe(None));
             }
+            Rectangle::fill([114.0, 20.0])
+                .top_left_with_margins_on(state.ids.btn_close_search, -2.0, 16.0)
+                .hsla(0.0, 0.0, 0.0, 0.7)
+                .depth(1.0)
+                .parent(state.ids.window)
+                .set(state.ids.input_bg_search, ui);
             if let Some(string) = TextEdit::new(key.as_str())
                 .top_left_with_margins_on(state.ids.btn_close_search, -2.0, 18.0)
                 .w_h(90.0, 20.0)
@@ -958,45 +1039,4 @@ impl<'a> Widget for Crafting<'a> {
 
         events
     }
-}
-
-fn tint_color_with_quantity(color: Color, quantity: RecipeIngredientQuantity) -> Color {
-    // let color::Hsla(h, s, l, a) = color.to_hsl();
-    // match quantity{
-    //     RecipeIngredientQuantity::All => color,
-    //     RecipeIngredientQuantity::Some =>
-    //     Color::Hsla(h * tweak!(1.0) + tweak!(0.0), s * tweak!(0.05) +
-    // tweak!(0.05), l * tweak!(0.2) + tweak!(0.3), a),
-    //     RecipeIngredientQuantity::None =>
-    //     Color::Hsla(h * tweak!(0.0) + tweak!(0.0), s * tweak!(0.05) +
-    // tweak!(0.2), l * tweak!(0.2) + tweak!(0.3), a), }
-    // new_color = (color - mean_color) * potency + base_color
-    let mean_color = Color::Rgba(tweak!(0.5), tweak!(0.5), tweak!(0.5), tweak!(1.0));
-    let (potency, base_color) = match quantity {
-        RecipeIngredientQuantity::All => (
-            tweak!(0.3),
-            Color::Rgba(tweak!(0.8), tweak!(0.8), tweak!(0.8), tweak!(0.8)),
-        ), //preserve color
-        RecipeIngredientQuantity::Some => (tweak!(0.15), TEXT_GRAY_COLOR),
-        RecipeIngredientQuantity::None => (tweak!(0.1), TEXT_DULL_RED_COLOR),
-    };
-
-    let color::Rgba(r, g, b, a) = color.to_rgb();
-    let color::Rgba(r1, g1, b1, a1) = mean_color.to_rgb();
-    let color::Rgba(r2, g2, b2, a2) = base_color.to_rgb();
-    Color::Rgba(
-        (r - r1) * potency + r2,
-        (g - g1) * potency + g2,
-        (b - b1) * potency + b2,
-        // (a - a1) * potency + a2,
-        1.0,
-    )
-    // match quantity{
-    //     RecipeIngredientQuantity::All => color,
-    //     RecipeIngredientQuantity::Some =>
-    //     Color::Rgba(r * tweak!(0.15) + tweak!(0.45), g * tweak!(0.15) +
-    // tweak!(0.45), b * tweak!(0.15) + tweak!(0.45), a),
-    //     RecipeIngredientQuantity::None =>
-    //     Color::Rgba(r * tweak!(0.1) + tweak!(0.46), g * tweak!(0.1) +
-    // tweak!(0.1), b * tweak!(0.1) + tweak!(0.1), a), }
 }
