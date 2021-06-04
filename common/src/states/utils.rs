@@ -327,6 +327,11 @@ pub fn handle_orientation(data: &JoinData, update: &mut StateUpdate, efficiency:
     if let Some(dir) = (is_strafing(data, update) || update.character.is_attack())
         .then(|| data.inputs.look_dir.to_horizontal().unwrap_or_default())
         .or_else(|| Dir::from_unnormalized(data.inputs.move_dir.into()))
+        .or_else(|| {
+            data.physics
+                .on_ground
+                .then_some(data.ori.look_dir().to_horizontal().unwrap_or_default())
+        })
     {
         let rate = {
             let angle = update.ori.look_dir().angle_between(*dir);
@@ -335,7 +340,7 @@ pub fn handle_orientation(data: &JoinData, update: &mut StateUpdate, efficiency:
         update.ori = update
             .ori
             .slerped_towards(dir.into(), (data.dt.0 * rate).min(1.0));
-    };
+    }
 }
 
 /// Updates components to move player as if theyre swimming
