@@ -62,7 +62,7 @@ fn integrate_glider_forces(
 
     {
         let glider_dir = ori.up();
-        let glider_dist = tweak!(2.5);
+        let glider_dist = tweak!(1.0);
         let glider_pos = *glider_dir * glider_dist;
         if let Some(rot) = Dir::from_unnormalized(glider_pos + dv_)
             .map(|u| {
