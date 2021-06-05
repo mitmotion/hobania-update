@@ -6,11 +6,9 @@ use super::char_selection::CharSelectionState;
 #[cfg(feature = "singleplayer")]
 use crate::singleplayer::Singleplayer;
 use crate::{
-    i18n::LocalizationHandle, render::Renderer, settings::Settings, window::Event, Direction,
-    GlobalState, PlayState, PlayStateResult,
+    i18n::LocalizationHandle, window::Event, Direction, GlobalState, PlayState, PlayStateResult,
 };
 #[cfg(feature = "singleplayer")]
-use client::addr::ConnectionArgs;
 use client::{
     addr::ConnectionArgs,
     error::{InitProtocolError, NetworkConnectError, NetworkError},

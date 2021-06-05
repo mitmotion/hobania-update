@@ -176,6 +176,7 @@ fn handle_main_events_cleared(
     if !exit {
         // Wait for the next tick.
         span!(guard, "Main thread sleep");
+
         global_state.clock.set_target_dt(Duration::from_secs_f64(
             1.0 / get_fps(global_state.settings.graphics.max_fps) as f64,
         ));

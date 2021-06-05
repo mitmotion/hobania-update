@@ -113,27 +113,30 @@ impl SelectedEntityInfo {
 }
 
 pub struct EguiInnerState {
-    read_ecs: bool,
     selected_entity_info: Option<SelectedEntityInfo>,
     max_entity_distance: f32,
     selected_entity_cylinder_height: f32,
     frame_times: Vec<f32>,
-    show_inspection_ui: bool,
-    show_settings_ui: bool,
-    show_memory_ui: bool,
+    windows: EguiWindows,
+}
+
+#[derive(Default)]
+struct EguiWindows {
+    egui_inspection: bool,
+    egui_settings: bool,
+    egui_memory: bool,
+    frame_time: bool,
+    ecs_entities: bool,
 }
 
 impl Default for EguiInnerState {
     fn default() -> Self {
         Self {
-            read_ecs: false,
             selected_entity_info: None,
             max_entity_distance: 100000.0,
             selected_entity_cylinder_height: 10.0,
             frame_times: Vec::new(),
-            show_inspection_ui: false,
-            show_settings_ui: false,
-            show_memory_ui: false,
+            windows: Default::default(),
         }
     }
 }
@@ -189,67 +192,72 @@ pub fn maintain_egui_inner(
         }
     };
 
-    egui::Window::new("Test Window")
+    egui::Window::new("Debug Control")
         .default_width(200.0)
         .default_height(200.0)
         .show(&platform.context(), |ui| {
-            ui.heading("Debug UI");
             ui.horizontal(|ui| {
                 ui.label(format!(
                     "Ping: {:.1}ms",
                     debug_info.as_ref().map_or(0.0, |x| x.ping_ms)
                 ));
             });
-            if ui.button("Enable ECS reading").clicked() {
-                egui_state.read_ecs = true;
-            }
+            ui.group(|ui| {
+                ui.vertical(|ui| {
+                    ui.checkbox(&mut egui_state.windows.ecs_entities, "ECS Entities");
+                    ui.checkbox(&mut egui_state.windows.frame_time, "Frame Time");
+                });
+            });
+
             ui.group(|ui| {
                 ui.vertical(|ui| {
                     ui.label("Show EGUI Windows");
                     ui.horizontal(|ui| {
-                        ui.checkbox(&mut egui_state.show_inspection_ui, "🔍 Inspection");
-                        ui.checkbox(&mut egui_state.show_settings_ui, "🔍 Settings");
-                        ui.checkbox(&mut egui_state.show_memory_ui, "📝 Memory");
+                        ui.checkbox(&mut egui_state.windows.egui_inspection, "🔍 Inspection");
+                        ui.checkbox(&mut egui_state.windows.egui_settings, "🔍 Settings");
+                        ui.checkbox(&mut egui_state.windows.egui_memory, "📝 Memory");
                     })
                 })
             });
         });
 
     Window::new("🔧 Settings")
-        .open(&mut egui_state.show_settings_ui)
+        .open(&mut egui_state.windows.egui_settings)
         .scroll(true)
         .show(ctx, |ui| {
             ctx.settings_ui(ui);
         });
     Window::new("🔍 Inspection")
-        .open(&mut egui_state.show_inspection_ui)
+        .open(&mut egui_state.windows.egui_inspection)
         .scroll(true)
         .show(ctx, |ui| {
             ctx.inspection_ui(ui);
         });
 
     Window::new("📝 Memory")
-        .open(&mut egui_state.show_memory_ui)
+        .open(&mut egui_state.windows.egui_memory)
         .resizable(false)
         .show(ctx, |ui| {
             ctx.memory_ui(ui);
         });
 
-    Window::new("Frame Time")
-        .default_width(200.0)
-        .default_height(200.0)
-        .show(ctx, |ui| {
-            let plot = Plot::default().curve(Curve::from_values_iter(
-                egui_state
-                    .frame_times
-                    .iter()
-                    .enumerate()
-                    .map(|(i, x)| Value::new(i as f64, *x)),
-            ));
-            ui.add(plot);
-        });
+    if egui_state.windows.frame_time {
+        Window::new("Frame Time")
+            .default_width(200.0)
+            .default_height(200.0)
+            .show(ctx, |ui| {
+                let plot = Plot::default().curve(Curve::from_values_iter(
+                    egui_state
+                        .frame_times
+                        .iter()
+                        .enumerate()
+                        .map(|(i, x)| Value::new(i as f64, *x)),
+                ));
+                ui.add(plot);
+            });
+    }
 
-    if egui_state.read_ecs {
+    if egui_state.windows.ecs_entities {
         let ecs = client.state().ecs();
 
         let positions = client.state().ecs().read_storage::<comp::Pos>();
@@ -276,9 +284,6 @@ pub fn maintain_egui_inner(
 
                 let scroll_area = ScrollArea::from_max_height(800.0);
                 let (_current_scroll, _max_scroll) = scroll_area.show(ui, |ui| {
-                    // if scroll_top {
-                    //     ui.scroll_to_cursor(Align::TOP);
-                    // }
                     Grid::new("entities_grid")
                         .spacing([40.0, 4.0])
                         .max_col_width(300.0)
@@ -310,11 +315,6 @@ pub fn maintain_egui_inner(
                                             < max_entity_distance
                                     })
                                 })
-                            // .sorted_by(|(_, _, pos, _, _, _)| {
-                            //     client_pos.map_or(Ordering::Less, |client_pos| {
-                            //         pos.map_or(|| 0.0, |x| x.distance_squared(client_pos.0))
-                            //     })
-                            // })
                             {
                                 if ui.button("View").clicked() {
                                     previous_selected_entity =
@@ -483,18 +483,6 @@ fn selected_entity_window(
             .default_height(200.0)
             .show(&platform.context(), |ui| {
                 ui.vertical(|ui| {
-
-                    // let n = 128;
-                    // let curve = egui::plot::Curve::from_values_iter((0..=n).map(|i| {
-                    //     use std::f64::consts::TAU;
-                    //     let x = egui::remap(i as f64, 0.0..=(n as f64), -TAU..=TAU);
-                    //     egui::plot::Value::new(x, x.sin())
-                    // }));
-                    // egui::plot::Plot::default()
-                    //     .curve(curve)
-                    //     .height(32.0)
-                    //     .data_aspect(1.0);
-
                     CollapsingHeader::new("General").default_open(true).show(ui, |ui| {
                         Grid::new("selected_entity_general_grid")
                             .spacing([40.0, 4.0])
@@ -508,7 +496,6 @@ fn selected_entity_window(
                                 two_col_row(ui, "Scale", scale.map_or("-".to_owned(), |x| format!("{:?}", x)));
                                 two_col_row(ui, "Mass", mass.map_or("-".to_owned(), |x| format!("{:.1}", x.0)));
                                 two_col_row(ui, "Density", density.map_or("-".to_owned(), |x| format!("{:.1}", x.0)));
-
                             });
 
                     });
@@ -654,7 +641,6 @@ fn selected_entity_window(
                                     _ => "None".to_owned() });
                                 });
                             });
-
                 }
             });
         });

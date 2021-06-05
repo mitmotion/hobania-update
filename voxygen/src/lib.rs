@@ -47,9 +47,7 @@ use crate::{
 };
 use common::clock::Clock;
 use common_base::span;
-use egui_winit_platform::Platform;
 use i18n::LocalizationHandle;
-use std::sync::Arc;
 
 /// A type used to store state that is shared between all play states.
 pub struct GlobalState {
