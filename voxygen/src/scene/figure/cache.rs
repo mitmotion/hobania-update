@@ -1,7 +1,9 @@
 use super::{load::BodySpec, FigureModelEntry};
 use crate::{
-    mesh::{greedy::GreedyMesh, segment::generate_mesh_base_vol_terrain},
-    render::{BoneMeshes, ColLightInfo, FigureModel, Mesh, Renderer, TerrainVertex},
+    mesh::{greedy::GreedyMesh, Meshable},
+    render::{
+        BoneMeshes, ColLightInfo, FigureModel, FigurePipeline, Mesh, Renderer, TerrainPipeline,
+    },
     scene::camera::CameraMode,
 };
 use anim::Skeleton;
@@ -32,7 +34,7 @@ use vek::*;
 /// needed to mesh figures.
 struct MeshWorkerResponse<const N: usize> {
     col_light: ColLightInfo,
-    opaque: Mesh<TerrainVertex>,
+    opaque: Mesh<TerrainPipeline>,
     bounds: anim::vek::Aabb<f32>,
     vertex_range: [Range<u32>; N],
 }
@@ -370,12 +372,16 @@ where
                                 vertex_range,
                             }) = Arc::get_mut(recv).take().and_then(|cell| cell.take())
                             {
-                                let model_entry = col_lights.create_figure(
-                                    renderer,
-                                    col_light,
-                                    (opaque, bounds),
-                                    vertex_range,
-                                );
+                                // FIXME: We really need to stop hard failing on failure to upload
+                                // to the GPU.
+                                let model_entry = col_lights
+                                    .create_figure(
+                                        renderer,
+                                        col_light,
+                                        (opaque, bounds),
+                                        vertex_range,
+                                    )
+                                    .expect("Failed to upload figure data to the GPU!");
                                 *model = FigureModelEntryFuture::Done(model_entry);
                                 // NOTE: Borrow checker isn't smart enough to figure this out.
                                 if let FigureModelEntryFuture::Done(model) = model {
@@ -405,7 +411,7 @@ where
 
                     // Then, set up meshing context.
                     let mut greedy = FigureModel::make_greedy();
-                    let mut opaque = Mesh::<TerrainVertex>::new();
+                    let mut opaque = Mesh::<TerrainPipeline>::new();
                     // Choose the most conservative bounds for any LOD model.
                     let mut figure_bounds = anim::vek::Aabb {
                         min: anim::vek::Vec3::zero(),
@@ -467,57 +473,60 @@ where
 
                     fn generate_mesh<'a>(
                         greedy: &mut GreedyMesh<'a>,
-                        opaque_mesh: &mut Mesh<TerrainVertex>,
+                        opaque_mesh: &mut Mesh<TerrainPipeline>,
                         segment: &'a Segment,
                         offset: Vec3<f32>,
                         bone_idx: u8,
                     ) -> BoneMeshes {
-                        let (opaque, _, _, bounds) = generate_mesh_base_vol_terrain(
-                            segment,
-                            (greedy, opaque_mesh, offset, Vec3::one(), bone_idx),
-                        );
+                        let (opaque, _, _, bounds) =
+                            Meshable::<FigurePipeline, &mut GreedyMesh>::generate_mesh(
+                                segment,
+                                (greedy, opaque_mesh, offset, Vec3::one(), bone_idx),
+                            );
                         (opaque, bounds)
                     }
 
                     fn generate_mesh_lod_mid<'a>(
                         greedy: &mut GreedyMesh<'a>,
-                        opaque_mesh: &mut Mesh<TerrainVertex>,
+                        opaque_mesh: &mut Mesh<TerrainPipeline>,
                         segment: &'a Segment,
                         offset: Vec3<f32>,
                         bone_idx: u8,
                     ) -> BoneMeshes {
                         let lod_scale = 0.6;
-                        let (opaque, _, _, bounds) = generate_mesh_base_vol_terrain(
-                            segment.scaled_by(Vec3::broadcast(lod_scale)),
-                            (
-                                greedy,
-                                opaque_mesh,
-                                offset * lod_scale,
-                                Vec3::one() / lod_scale,
-                                bone_idx,
-                            ),
-                        );
+                        let (opaque, _, _, bounds) =
+                            Meshable::<FigurePipeline, &mut GreedyMesh>::generate_mesh(
+                                segment.scaled_by(Vec3::broadcast(lod_scale)),
+                                (
+                                    greedy,
+                                    opaque_mesh,
+                                    offset * lod_scale,
+                                    Vec3::one() / lod_scale,
+                                    bone_idx,
+                                ),
+                            );
                         (opaque, bounds)
                     }
 
                     fn generate_mesh_lod_low<'a>(
                         greedy: &mut GreedyMesh<'a>,
-                        opaque_mesh: &mut Mesh<TerrainVertex>,
+                        opaque_mesh: &mut Mesh<TerrainPipeline>,
                         segment: &'a Segment,
                         offset: Vec3<f32>,
                         bone_idx: u8,
                     ) -> BoneMeshes {
                         let lod_scale = 0.3;
-                        let (opaque, _, _, bounds) = generate_mesh_base_vol_terrain(
-                            segment.scaled_by(Vec3::broadcast(lod_scale)),
-                            (
-                                greedy,
-                                opaque_mesh,
-                                offset * lod_scale,
-                                Vec3::one() / lod_scale,
-                                bone_idx,
-                            ),
-                        );
+                        let (opaque, _, _, bounds) =
+                            Meshable::<FigurePipeline, &mut GreedyMesh>::generate_mesh(
+                                segment.scaled_by(Vec3::broadcast(lod_scale)),
+                                (
+                                    greedy,
+                                    opaque_mesh,
+                                    offset * lod_scale,
+                                    Vec3::one() / lod_scale,
+                                    bone_idx,
+                                ),
+                            );
                         (opaque, bounds)
                     }
 

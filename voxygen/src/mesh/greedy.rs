@@ -1,6 +1,8 @@
-use crate::render::{mesh::Quad, ColLightInfo, TerrainVertex, Vertex};
+use crate::render::{self, mesh::Quad, ColLightFmt, ColLightInfo, TerrainPipeline};
 use common_base::span;
 use vek::*;
+
+type TerrainVertex = <TerrainPipeline as render::Pipeline>::Vertex;
 
 type TodoRect = (
     Vec3<i32>,
@@ -121,7 +123,7 @@ impl<'a> GreedyMesh<'a> {
                 small_size_threshold,
                 large_size_threshold,
             });
-        let col_lights_size = Vec2::new(1, 1);
+        let col_lights_size = Vec2::new(1u16, 1u16);
         Self {
             atlas,
             col_lights_size,
@@ -150,7 +152,7 @@ impl<'a> GreedyMesh<'a> {
         FO: for<'r> FnMut(&'r mut D, Vec3<i32>) -> bool + 'a,
         FS: for<'r> FnMut(&'r mut D, Vec3<i32>, Vec3<i32>, Vec2<Vec3<i32>>) -> Option<(bool, M)>,
         FP: FnMut(Vec2<u16>, Vec2<Vec2<u16>>, Vec3<f32>, Vec2<Vec3<f32>>, Vec3<f32>, &M),
-        FT: for<'r> FnMut(&'r mut D, Vec3<i32>, u8, u8) -> [u8; 4] + 'a,
+        FT: for<'r> FnMut(&'r mut D, Vec3<i32>, u8, u8) -> <<ColLightFmt as gfx::format::Formatted>::Surface as gfx::format::SurfaceTyped>::DataType + 'a,
     {
         span!(_guard, "push", "GreedyMesh::push");
         let cont = greedy_mesh(
@@ -176,7 +178,7 @@ impl<'a> GreedyMesh<'a> {
         let cur_size = self.col_lights_size;
         let col_lights = vec![
             TerrainVertex::make_col_light(254, 0, Rgb::broadcast(254));
-            cur_size.x as usize * cur_size.y as usize
+            usize::from(cur_size.x) * usize::from(cur_size.y)
         ];
         let mut col_lights_info = (col_lights, cur_size);
         self.suspended.into_iter().for_each(|cont| {
@@ -211,7 +213,7 @@ where
     FO: for<'r> FnMut(&'r mut D, Vec3<i32>) -> bool + 'a,
     FS: for<'r> FnMut(&'r mut D, Vec3<i32>, Vec3<i32>, Vec2<Vec3<i32>>) -> Option<(bool, M)>,
     FP: FnMut(Vec2<u16>, Vec2<Vec2<u16>>, Vec3<f32>, Vec2<Vec3<f32>>, Vec3<f32>, &M),
-    FT: for<'r> FnMut(&'r mut D, Vec3<i32>, u8, u8) -> [u8; 4] + 'a,
+    FT: for<'r> FnMut(&'r mut D, Vec3<i32>, u8, u8) -> <<ColLightFmt as gfx::format::Formatted>::Surface as gfx::format::SurfaceTyped>::DataType + 'a,
 {
     span!(_guard, "greedy_mesh");
     // TODO: Collect information to see if we can choose a good value here.
@@ -505,7 +507,7 @@ fn draw_col_lights<D>(
     mut get_light: impl FnMut(&mut D, Vec3<i32>) -> f32,
     mut get_glow: impl FnMut(&mut D, Vec3<i32>) -> f32,
     mut get_opacity: impl FnMut(&mut D, Vec3<i32>) -> bool,
-    mut make_face_texel: impl FnMut(&mut D, Vec3<i32>, u8, u8) -> [u8; 4],
+    mut make_face_texel: impl FnMut(&mut D, Vec3<i32>, u8, u8) -> <<ColLightFmt as gfx::format::Formatted>::Surface as gfx::format::SurfaceTyped>::DataType,
 ) {
     todo_rects.into_iter().for_each(|(pos, uv, rect, delta)| {
         // NOTE: Conversions are safe because width, height, and offset must be
@@ -518,7 +520,7 @@ fn draw_col_lights<D>(
         let uv = uv.map(|e| e.map(i32::from));
         let pos = pos + draw_delta;
         (0..height).for_each(|v| {
-            let start = cur_size.x as usize * usize::from(top + v) + usize::from(left);
+            let start = usize::from(cur_size.x) * usize::from(top + v) + usize::from(left);
             (0..width)
                 .zip(&mut col_lights[start..start + usize::from(width)])
                 .for_each(|(u, col_light)| {
@@ -620,14 +622,14 @@ fn create_quad_greedy<M>(
     push_quad(atlas_pos, dim, origin, draw_dim, norm, meta);
 }
 
-pub fn create_quad<O: Vertex, M>(
+pub fn create_quad<O: render::Pipeline, M>(
     atlas_pos: Vec2<u16>,
     dim: Vec2<Vec2<u16>>,
     origin: Vec3<f32>,
     draw_dim: Vec2<Vec3<f32>>,
     norm: Vec3<f32>,
     meta: &M,
-    create_vertex: impl Fn(Vec2<u16>, Vec3<f32>, Vec3<f32>, &M) -> O,
+    create_vertex: impl Fn(Vec2<u16>, Vec3<f32>, Vec3<f32>, &M) -> O::Vertex,
 ) -> Quad<O> {
     Quad::new(
         create_vertex(atlas_pos, origin, norm, meta),

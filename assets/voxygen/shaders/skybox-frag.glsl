@@ -1,4 +1,4 @@
-#version 420 core
+#version 330 core
 
 #include <constants.glsl>
 
@@ -20,9 +20,14 @@
 #include <sky.glsl>
 #include <lod.glsl>
 
-layout(location = 0) in vec3 f_pos;
+in vec3 f_pos;
 
-layout(location = 0) out vec4 tgt_color;
+layout (std140)
+uniform u_locals {
+    vec4 nul;
+};
+
+out vec4 tgt_color;
 
 void main() {
     // tgt_color = vec4(MU_SCATTER, 1.0);

@@ -39,12 +39,11 @@ use crate::{
     key_state::KeyState,
     menu::char_selection::CharSelectionState,
     render::Renderer,
-    scene::{camera, terrain::Interaction, CameraMode, DebugShapeId, Scene, SceneData},
+    scene::{camera, terrain::Interaction, CameraMode, Scene, SceneData},
     settings::Settings,
     window::{AnalogGameInput, Event, GameInput},
     Direction, Error, GlobalState, PlayState, PlayStateResult,
 };
-use hashbrown::HashMap;
 use settings_change::Language::ChangeLanguage;
 
 /// The action to perform after a tick
@@ -74,7 +73,6 @@ pub struct SessionState {
     selected_entity: Option<(specs::Entity, std::time::Instant)>,
     interactable: Option<Interactable>,
     saved_zoom_dist: Option<f32>,
-    hitboxes: HashMap<specs::Entity, DebugShapeId>,
 }
 
 /// Represents an active game session (i.e., the one being played).
@@ -122,7 +120,6 @@ impl SessionState {
             selected_entity: None,
             interactable: None,
             saved_zoom_dist: None,
-            hitboxes: HashMap::new(),
         }
     }
 
@@ -142,8 +139,6 @@ impl SessionState {
         span!(_guard, "tick", "Session::tick");
 
         let mut client = self.client.borrow_mut();
-        self.scene
-            .maintain_debug_hitboxes(&client, &global_state.settings, &mut self.hitboxes);
         for event in client.tick(self.inputs.clone(), dt, crate::ecs::sys::add_local_systems)? {
             match event {
                 client::Event::Chat(m) => {
@@ -1394,16 +1389,7 @@ impl PlayState for SessionState {
     /// This method should be called once per frame.
     fn render(&mut self, renderer: &mut Renderer, settings: &Settings) {
         span!(_guard, "render", "<Session as PlayState>::render");
-        let mut drawer = match renderer
-            .start_recording_frame(self.scene.global_bind_group())
-            .expect("Unrecoverable render error when starting a new frame!")
-        {
-            Some(d) => d,
-            // Couldn't get swap chain texture this frame
-            None => return,
-        };
-
-        // Render world
+        // Render the screen using the global renderer
         {
             let client = self.client.borrow();
 
@@ -1425,27 +1411,16 @@ impl PlayState for SessionState {
                 particles_enabled: settings.graphics.particles_enabled,
                 is_aiming: self.is_aiming,
             };
-
             self.scene.render(
-                &mut drawer,
+                renderer,
                 client.state(),
                 client.entity(),
                 client.get_tick(),
                 &scene_data,
             );
         }
-
-        // Clouds
-        if let Some(mut second_pass) = drawer.second_pass() {
-            second_pass.draw_clouds();
-        }
-        // PostProcess and UI
-        let mut third_pass = drawer.third_pass();
-        third_pass.draw_postprocess();
         // Draw the UI to the screen
-        if let Some(mut ui_drawer) = third_pass.draw_ui() {
-            self.hud.render(&mut ui_drawer);
-        }; // Note: this semicolon is needed for the third_pass borrow to be dropped before it's lifetime ends
+        self.hud.render(renderer, self.scene.globals());
     }
 }
 

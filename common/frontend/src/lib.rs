@@ -47,6 +47,7 @@ where
     // this crate would be veloren_voxygen=debug.
     let base_exceptions = |env: EnvFilter| {
         env.add_directive("dot_vox::parser=warn".parse().unwrap())
+            .add_directive("gfx_device_gl=warn".parse().unwrap())
             .add_directive("veloren_common::trade=info".parse().unwrap())
             .add_directive("veloren_world::sim=info".parse().unwrap())
             .add_directive("veloren_world::civ=info".parse().unwrap())
@@ -57,8 +58,6 @@ where
             .add_directive("h2=info".parse().unwrap())
             .add_directive("tokio_util=info".parse().unwrap())
             .add_directive("rustls=info".parse().unwrap())
-            .add_directive("wgpu_core=info".parse().unwrap())
-            .add_directive("wgpu_core::device=warn".parse().unwrap())
             .add_directive("veloren_network_protocol=info".parse().unwrap())
             .add_directive("quinn_proto::connection=info".parse().unwrap())
             .add_directive(

@@ -10,7 +10,6 @@ use vek::*;
 #[serde(default)]
 pub struct InterfaceSettings {
     pub toggle_debug: bool,
-    pub toggle_hitboxes: bool,
     pub sct: bool,
     pub sct_player_batch: bool,
     pub sct_damage_batch: bool,
@@ -45,7 +44,6 @@ impl Default for InterfaceSettings {
     fn default() -> Self {
         Self {
             toggle_debug: false,
-            toggle_hitboxes: false,
             sct: true,
             sct_player_batch: false,
             sct_damage_batch: false,

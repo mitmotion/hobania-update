@@ -1,4 +1,4 @@
-#version 420 core
+#version 330 core
 
 #include <constants.glsl>
 
@@ -22,45 +22,46 @@
 #include <srgb.glsl>
 #include <cloud.glsl>
 
-layout(set = 1, binding = 0)
-uniform texture2D t_src_color;
-layout(set = 1, binding = 1)
-uniform sampler s_src_color;
+uniform sampler2D src_depth;
 
-layout(set = 1, binding = 2)
-uniform texture2D t_src_depth;
-layout(set = 1, binding = 3)
-uniform sampler s_src_depth;
+in vec2 f_pos;
 
-layout(location = 0) in vec2 uv;
-
-layout (std140, set = 1, binding = 4)
+layout (std140)
 uniform u_locals {
     mat4 proj_mat_inv;
     mat4 view_mat_inv;
 };
 
-layout(location = 0) out vec4 tgt_color;
+out vec4 tgt_color;
 
+float depth_at(vec2 uv) {
+    float buf_depth = texture(src_depth, uv).x;
+    vec4 clip_space = vec4(uv * 2.0 - 1.0, buf_depth, 1.0);
+    vec4 view_space = proj_mat_inv * clip_space;
+    view_space /= view_space.w;
+    return -view_space.z;
+}
 
 vec3 wpos_at(vec2 uv) {
-    float buf_depth = texture(sampler2D(t_src_depth, s_src_depth), uv).x;
+    float buf_depth = texture(src_depth, uv).x * 2.0 - 1.0;
     mat4 inv = view_mat_inv * proj_mat_inv;//inverse(all_mat);
-    vec4 clip_space = vec4((uv * 2.0 - 1.0) * vec2(1, -1), buf_depth, 1.0);
+    vec4 clip_space = vec4(uv * 2.0 - 1.0, buf_depth, 1.0);
     vec4 view_space = inv * clip_space;
     view_space /= view_space.w;
-    if (buf_depth == 0.0) {
+    if (buf_depth == 1.0) {
         vec3 direction = normalize(view_space.xyz);
-        return direction.xyz * 524288.0625 + cam_pos.xyz;
+        return direction.xyz * 100000.0 + cam_pos.xyz;
     } else {
         return view_space.xyz;
     }
 }
 
 void main() {
-    vec4 color = texture(sampler2D(t_src_color, s_src_color), uv);
+    vec2 uv = (f_pos + 1.0) * 0.5;
 
-    // Apply clouds
+    vec4 color = texture(src_color, uv);
+
+    // Apply clouds to `aa_color`
     #if (CLOUD_MODE != CLOUD_MODE_NONE)
         vec3 wpos = wpos_at(uv);
         float dist = distance(wpos, cam_pos.xyz);

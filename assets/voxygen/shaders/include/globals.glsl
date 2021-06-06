@@ -1,7 +1,5 @@
-#ifndef GLOBALS_GLSL
-#define GLOBALS_GLSL
-
-layout(std140, set = 0, binding = 0) uniform u_globals {
+layout (std140)
+uniform u_globals {
     mat4 view_mat;
     mat4 proj_mat;
     mat4 all_mat;
@@ -24,7 +22,6 @@ layout(std140, set = 0, binding = 0) uniform u_globals {
     // 1 - ThirdPerson
     uint cam_mode;
     float sprite_render_distance;
-    float globals_dummy; // Fix alignment.
 };
 
 // Specifies the pattern used in the player dithering
@@ -36,5 +33,3 @@ mat4 threshold_matrix = mat4(
 );
 float distance_divider = 2;
 float shadow_dithering = 0.5;
-
-#endif

@@ -7,17 +7,16 @@ struct Light {
     // mat4 light_proj;
 };
 
-layout (std140, set = 0, binding = 3)
+layout (std140)
 uniform u_lights {
-    // TODO: insert light max count constant here when loading the shaders
-    Light lights[20];
+    Light lights[31];
 };
 
 struct Shadow {
     vec4 shadow_pos_radius;
 };
 
-layout (std140, set = 0, binding = 4)
+layout (std140)
 uniform u_shadows {
     Shadow shadows[24];
 };

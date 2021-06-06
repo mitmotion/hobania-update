@@ -14,11 +14,7 @@ use super::{
     graphic::{self, Graphic},
     scale::{Scale, ScaleMode},
 };
-use crate::{
-    render::{Renderer, UiDrawer},
-    window::Window,
-    Error,
-};
+use crate::{render::Renderer, window::Window, Error};
 use common::slowjob::SlowJobPool;
 use common_base::span;
 use iced::{mouse, Cache, Size, UserInterface};
@@ -46,7 +42,7 @@ impl IcedUi {
         let renderer = window.renderer_mut();
 
         let scaled_resolution = scale.scaled_resolution().map(|e| e as f32);
-        let physical_resolution = renderer.resolution();
+        let physical_resolution = scale.physical_resolution();
 
         // TODO: examine how much mem fonts take up and reduce clones if significant
         Ok(Self {
@@ -163,7 +159,7 @@ impl IcedUi {
             // Avoid panic in graphic cache when minimizing.
             // Somewhat inefficient for elements that won't change size after a window
             // resize
-            let physical_resolution = renderer.resolution();
+            let physical_resolution = self.scale.physical_resolution();
             if physical_resolution.map(|e| e > 0).reduce_and() {
                 self.renderer
                     .resize(scaled_resolution, physical_resolution, renderer);
@@ -218,5 +214,5 @@ impl IcedUi {
         (messages, mouse_interaction)
     }
 
-    pub fn render<'a>(&'a self, drawer: &mut UiDrawer<'_, 'a>) { self.renderer.render(drawer); }
+    pub fn render(&self, renderer: &mut Renderer) { self.renderer.render(renderer, None); }
 }

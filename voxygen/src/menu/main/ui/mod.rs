@@ -6,7 +6,7 @@ mod servers;
 
 use crate::{
     i18n::{LanguageMetadata, LocalizationHandle},
-    render::UiDrawer,
+    render::Renderer,
     ui::{
         self,
         fonts::IcedFonts as Fonts,
@@ -477,7 +477,7 @@ pub struct MainMenuUi {
     controls: Controls,
 }
 
-impl MainMenuUi {
+impl<'a> MainMenuUi {
     pub fn new(global_state: &mut GlobalState) -> Self {
         // Load language
         let i18n = &global_state.i18n.read();
@@ -583,5 +583,5 @@ impl MainMenuUi {
         events
     }
 
-    pub fn render<'a>(&'a self, drawer: &mut UiDrawer<'_, 'a>) { self.ui.render(drawer); }
+    pub fn render(&self, renderer: &mut Renderer) { self.ui.render(renderer); }
 }

@@ -74,19 +74,16 @@ pub use dyn_lib::init;
 use std::ffi::CStr;
 
 use self::vek::*;
-use bytemuck::{Pod, Zeroable};
 
 type MatRaw = [[f32; 4]; 4];
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Pod, Zeroable, Default)]
-pub struct FigureBoneData(pub MatRaw, pub MatRaw);
+pub type FigureBoneData = (MatRaw, MatRaw);
 
 pub const MAX_BONE_COUNT: usize = 16;
 
 fn make_bone(mat: Mat4<f32>) -> FigureBoneData {
     let normal = mat.map_cols(Vec4::normalized);
-    FigureBoneData(mat.into_col_arrays(), normal.into_col_arrays())
+    (mat.into_col_arrays(), normal.into_col_arrays())
 }
 
 pub type Bone = Transform<f32, f32, f32>;

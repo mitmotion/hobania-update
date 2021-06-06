@@ -1,6 +1,6 @@
 use crate::{
     i18n::{Localization, LocalizationHandle},
-    render::UiDrawer,
+    render::Renderer,
     ui::{
         self,
         fonts::IcedFonts as Fonts,
@@ -1584,7 +1584,8 @@ impl CharSelectionUi {
         events
     }
 
-    pub fn render<'a>(&'a self, drawer: &mut UiDrawer<'_, 'a>) { self.ui.render(drawer); }
+    // TODO: do we need globals?
+    pub fn render(&self, renderer: &mut Renderer) { self.ui.render(renderer); }
 }
 
 #[derive(Default)]
