@@ -36,8 +36,8 @@ impl CharacterBehavior for Data {
         glider.ori = glider.ori.slerped_towards(
             Ori::from(data.inputs.look_dir)
                 .yawed_towards(data.ori.look_dir())
-                .pitched_up(inline_tweak::tweak!(0.7)),
-            inline_tweak::tweak!(3.0) * data.dt.0,
+                .pitched_up(inline_tweak::tweak!(0.5)),
+            inline_tweak::tweak!(5.0) * data.dt.0,
         );
 
         // If not on the ground while wielding glider enter gliding state

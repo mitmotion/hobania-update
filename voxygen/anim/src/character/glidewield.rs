@@ -23,7 +23,8 @@ impl Animation for GlideWieldAnimation {
         s_a: &SkeletonAttr,
     ) -> Self::Skeleton {
         let mut next = (*skeleton).clone();
-        let glider_ori = orientation.inverse() * glider_orientation;
+        let glider_ori = (orientation * next.torso.orientation * next.chest.orientation).inverse()
+            * glider_orientation;
         let glider_pos = Vec3::new(0.0, -5.0, 13.0);
         *rate = 1.0;
 
