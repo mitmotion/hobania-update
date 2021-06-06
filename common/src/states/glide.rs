@@ -119,7 +119,7 @@ impl CharacterBehavior for Data {
             let max_roll = tweak!(0.2) * PI;
             let inputs_rate = tweak!(5.0);
             let look_pitch_rate = tweak!(8.0);
-            let autoroll_rate = tweak!(8.0);
+            let autoroll_rate = tweak!(18.0);
             let yaw_correction_rate = tweak!(1.0);
             let char_yaw_follow_rate = tweak!(2.0);
             // ----
@@ -149,9 +149,10 @@ impl CharacterBehavior for Data {
                         glider.roll(data.dt.0 * inputs_rate * roll_input * max_roll);
                     }
                 } else {
+                    let tgt_up = self.tgt_up(max_roll, &tgt_dir, &flow_dir, data);
                     glider.slerp_roll_towards(
-                        self.tgt_up(max_roll, &tgt_dir, &flow_dir, data),
-                        autoroll_rate * data.dt.0,
+                        tgt_up,
+                        autoroll_rate * (1.0 - tgt_up.dot(*glider_up)) * data.dt.0,
                     );
                 }
 
