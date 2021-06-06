@@ -72,7 +72,7 @@ fn integrate_glider_forces(
         // rotates too much)
         let dn = glider_rel_dv.dot(*glider_up);
         if dn.is_sign_negative() {
-            dr -= dn * *glider_up / glider_up.magnitude_squared()
+            dr -= tweak!(0.7) * dn * *glider_up / glider_up.magnitude_squared()
         }
         if let Some(rot) =
             Dir::from_unnormalized(glider_pos + dr).map(|u| char_up.rotation_between(u))
