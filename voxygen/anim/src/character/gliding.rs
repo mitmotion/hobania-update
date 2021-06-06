@@ -48,6 +48,9 @@ impl Animation for GlidingAnimation {
         let glider_ori = chest_global_inv * glider_orientation;
         let glider_pos = Vec3::new(0.0, -5.0 + speedlog * 2.0, 13.0);
 
+        let cg = Vec3::unit_z() * s_a.scaler * 1.5;
+        next.torso.position = orientation.inverse() * cg - cg;
+
         next.head.orientation = Quaternion::rotation_x(0.5 + head_look.y * speednorm)
             * Quaternion::rotation_z(head_look.x);
 
