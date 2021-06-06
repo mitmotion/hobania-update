@@ -31,6 +31,7 @@ pub fn run(mut global_state: GlobalState, event_loop: EventLoop) {
         // Continuously run loop since we handle sleeping
         *control_flow = winit::event_loop::ControlFlow::Poll;
 
+        #[cfg(feature = "egui-ui")]
         global_state.egui_state.platform.handle_event(&event);
         // Get events for the ui.
         if let Some(event) = ui::Event::try_from(&event, global_state.window.window()) {

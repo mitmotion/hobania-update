@@ -22,6 +22,7 @@ use std::panic;
 #[cfg(any(feature = "hot-anim", feature = "hot-egui"))]
 use std::sync::Arc;
 use tracing::{error, info, warn};
+#[cfg(feature = "egui-ui")]
 use veloren_voxygen::ui::egui::EguiState;
 
 #[allow(clippy::manual_unwrap_or)]
@@ -206,12 +207,14 @@ fn main() {
 
     let lazy_init = SpriteRenderContext::new(window.renderer_mut());
 
+    #[cfg(feature = "egui-ui")]
     let egui_state = EguiState::new(&window);
 
     let global_state = GlobalState {
         audio,
         profile,
         window,
+        #[cfg(feature = "egui-ui")]
         egui_state,
         lazy_init,
         clock: Clock::new(std::time::Duration::from_secs_f64(

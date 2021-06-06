@@ -38,11 +38,12 @@ pub use i18n;
 
 #[cfg(feature = "singleplayer")]
 use crate::singleplayer::Singleplayer;
+#[cfg(feature = "egui-ui")]
+use crate::ui::egui::EguiState;
 use crate::{
     audio::AudioFrontend,
     profile::Profile,
     settings::Settings,
-    ui::egui::EguiState,
     window::{Event, Window},
 };
 use common::clock::Clock;
@@ -54,6 +55,7 @@ pub struct GlobalState {
     pub settings: Settings,
     pub profile: Profile,
     pub window: Window,
+    #[cfg(feature = "egui-ui")]
     pub egui_state: EguiState,
     pub lazy_init: scene::terrain::SpriteRenderContextLazy,
     pub audio: AudioFrontend,

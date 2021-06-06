@@ -11,7 +11,9 @@ use super::{
     Renderer, ShadowMap, ShadowMapRenderer,
 };
 use core::{num::NonZeroU32, ops::Range};
+#[cfg(feature = "egui-ui")]
 use egui_wgpu_backend::ScreenDescriptor;
+#[cfg(feature = "egui-ui")]
 use egui_winit_platform::Platform;
 use std::sync::Arc;
 use vek::Aabr;
@@ -55,7 +57,7 @@ impl<'frame> Pipelines<'frame> {
 struct RendererBorrow<'frame> {
     queue: &'frame wgpu::Queue,
     device: &'frame wgpu::Device,
-    sc_desc: &'frame wgpu::SwapChainDescriptor,
+    _sc_desc: &'frame wgpu::SwapChainDescriptor,
     shadow: Option<&'frame super::Shadow>,
     pipelines: Pipelines<'frame>,
     locals: &'frame super::locals::Locals,
@@ -63,6 +65,7 @@ struct RendererBorrow<'frame> {
     mode: &'frame super::super::RenderMode,
     quad_index_buffer_u16: &'frame Buffer<u16>,
     quad_index_buffer_u32: &'frame Buffer<u32>,
+    #[cfg(feature = "egui-ui")]
     egui_render_pass: &'frame mut egui_wgpu_backend::RenderPass,
 }
 
@@ -104,7 +107,7 @@ impl<'frame> Drawer<'frame> {
         let borrow = RendererBorrow {
             queue: &renderer.queue,
             device: &renderer.device,
-            sc_desc: &renderer.sc_desc,
+            _sc_desc: &renderer.sc_desc,
             shadow,
             pipelines,
             locals: &renderer.locals,
@@ -112,6 +115,7 @@ impl<'frame> Drawer<'frame> {
             mode: &renderer.mode,
             quad_index_buffer_u16: &renderer.quad_index_buffer_u16,
             quad_index_buffer_u32: &renderer.quad_index_buffer_u32,
+            #[cfg(feature = "egui-ui")]
             egui_render_pass: &mut renderer.egui_renderpass,
         };
 
@@ -266,14 +270,15 @@ impl<'frame> Drawer<'frame> {
         }
     }
 
+    #[cfg(feature = "egui-ui")]
     pub fn draw_egui(&mut self, platform: &mut Platform, scale_factor: f32) {
         let (_output, paint_commands) = platform.end_frame();
 
         let paint_jobs = platform.context().tessellate(paint_commands);
 
         let screen_descriptor = ScreenDescriptor {
-            physical_width: self.borrow.sc_desc.width,
-            physical_height: self.borrow.sc_desc.height,
+            physical_width: self.borrow._sc_desc.width,
+            physical_height: self.borrow._sc_desc.height,
             scale_factor: scale_factor as f32,
         };
 
@@ -303,6 +308,7 @@ impl<'frame> Drawer<'frame> {
         );
     }
 
+    #[cfg(feature = "egui-ui")]
     pub fn egui_renderpass(&mut self) -> &mut egui_wgpu_backend::RenderPass {
         self.borrow.egui_render_pass
     }

@@ -23,11 +23,12 @@ buildInputs = ["xorg.libxcb"]
 
 [features]
 hot-anim = ["voxygen-dynlib", "anim/use-dyn-lib"]
-hot-egui = ["voxygen-dynlib", "voxygen-egui/use-dyn-lib"]
+hot-egui = ["voxygen-dynlib", "voxygen-egui/use-dyn-lib", "egui",]
 singleplayer = ["server"]
 simd = ["vek/platform_intrinsics"]
 tracy = ["profiling", "profiling/profile-with-tracy", "common/tracy", "common-ecs/tracy", "common-frontend/tracy", "common-net/tracy", "common-systems/tracy", "common-state/tracy", "client/tracy"]
 plugins = ["client/plugins"]
+egui-ui = ["voxygen-egui", "egui", "egui_wgpu_backend", "egui_winit_platform"]
 
 default = ["singleplayer", "native-dialog", "plugins", "simd"]
 
@@ -43,8 +44,8 @@ common-state = {package = "veloren-common-state", path = "../common/state"}
 
 anim = {package = "veloren-voxygen-anim", path = "anim"}
 i18n = {package = "veloren-i18n", path = "i18n"}
-voxygen-egui = {package = "veloren-voxygen-egui", path = "egui"}
-voxygen-dynlib = {package = "veloren-voxygen-dynlib", path = "dynlib", optional=true}
+voxygen-egui = {package = "veloren-voxygen-egui", path = "egui", optional = true }
+voxygen-dynlib = {package = "veloren-voxygen-dynlib", path = "dynlib", optional = true}
 
 # Graphics
 winit = {version = "0.24.0", features = ["serde"]}
@@ -64,10 +65,10 @@ glyph_brush = "0.7.0"
 keyboard-keynames = { git = "https://gitlab.com/Frinksy/keyboard-keynames.git", rev = "a97ae509cdb9dc70cf1bf0af762d2d1d3a0d6e0c" }
 
 # EGUI
-egui = "0.11"
-egui_wgpu_backend = "0.7"
+egui = {version = "0.11", optional = true }
+egui_wgpu_backend = {version = "0.7", optional = true }
 #egui_wgpu_backend = { path = "../../egui_wgpu_backend" }
-egui_winit_platform = "0.6"
+egui_winit_platform = {version = "0.6", optional = true }
 #egui_winit_platform = { path = "../../egui_winit_platform" }
 
 # ECS
