@@ -84,14 +84,15 @@ impl Data {
                         .map_or(0.0, |moving_dir| moving_dir.dot(flow_dir.to_vec()).max(0.0)),
                 )
             })
-            .and_then(|d| {
-                if d.dot(*char_up) > max_roll.cos() {
-                    Some(d)
+            .and_then(|dir| {
+                if dir.dot(*char_up) > max_roll.cos() {
+                    Some(dir)
                 } else {
                     char_up
-                        .cross(*d)
+                        .cross(*dir)
                         .try_normalized()
                         .map(|axis| Quaternion::rotation_3d(max_roll, axis) * char_up)
+                        .filter(|dir| dir.dot(*self.glider.ori.up()).is_sign_positive())
                 }
             })
             .unwrap_or(char_up)
@@ -113,12 +114,12 @@ impl CharacterBehavior for Data {
             update.character = CharacterState::Idle;
         } else if !handle_climb(&data, &mut update) {
             // Tweaks
-            let def_pitch = MAX_LIFT_DRAG_RATIO_AOA * tweak!(1.0);
+            let def_pitch = MAX_LIFT_DRAG_RATIO_AOA * tweak!(2.0);
             let max_pitch = tweak!(0.3) * PI;
             let max_roll = tweak!(0.2) * PI;
             let inputs_rate = tweak!(5.0);
-            let look_pitch_rate = tweak!(5.0);
-            let autoroll_rate = tweak!(5.0);
+            let look_pitch_rate = tweak!(8.0);
+            let autoroll_rate = tweak!(8.0);
             let yaw_correction_rate = tweak!(1.0);
             let char_yaw_follow_rate = tweak!(2.0);
             // ----
