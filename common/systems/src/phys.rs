@@ -45,6 +45,7 @@ fn integrate_glider_forces(
     vel: &mut Vel,
     ori: &mut Ori,
     mass: &Mass,
+    body: &Body,
     character_state: &CharacterState,
     rel_wind: &Vel,
 ) -> Option<()> {
@@ -62,14 +63,15 @@ fn integrate_glider_forces(
 
     {
         let char_up = ori.up();
-        let glider_dist = tweak!(1.0);
+        // dist from centre of gravity
+        let glider_dist = tweak!(0.6) * body.height();
         let glider_pos = *char_up * glider_dist;
 
         let glider_up = glider.ori.up();
 
         let mut dr = glider_rel_dv;
-        // remove negative lift (for aesthetic reasons and because greater values of dv
-        // rotates too much)
+        // remove some negative lift (for aesthetic reasons and because greater values
+        // of dv rotates too much)
         let dn = glider_rel_dv.dot(*glider_up);
         if dn.is_sign_negative() {
             dr -= tweak!(0.7) * dn * *glider_up / glider_up.magnitude_squared()
@@ -123,7 +125,7 @@ fn integrate_forces(
                 vel.0 = new_v;
             }
             character_state.and_then(|cs| {
-                integrate_glider_forces(dt, new_v - vel.0, vel, ori, mass, cs, &rel_flow)
+                integrate_glider_forces(dt, new_v - vel.0, vel, ori, mass, body, cs, &rel_flow)
             });
         };
         debug_assert!(!vel.0.map(|a| a.is_nan()).reduce_or());
