@@ -54,25 +54,28 @@ fn integrate_glider_forces(
         _ => None,
     }?;
 
-    let dv_ = Some(dt.0 * glider.aerodynamic_forces(&rel_wind, AIR_DENSITY))
+    let glider_rel_dv = Some(dt.0 * glider.aerodynamic_forces(&rel_wind, AIR_DENSITY))
         .filter(|imp| !imp.is_approx_zero())
         .map(|imp| imp / mass.0 - dv)?;
 
-    vel.0 += dv_;
+    vel.0 += glider_rel_dv;
 
     {
-        let glider_dir = ori.up();
+        let char_up = ori.up();
         let glider_dist = tweak!(1.0);
-        let glider_pos = *glider_dir * glider_dist;
-        if let Some(rot) = Dir::from_unnormalized(glider_pos + dv_)
-            .map(|u| {
-                let s = glider_dir.dot(*u).powf(tweak!(10.0) * dt.0);
-                glider_dir.slerped_to(
-                    u,
-                    tweak!(-0.7) + tweak!(1.0) * s.max(0.0) + tweak!(0.0) * s.min(0.0),
-                )
-            })
-            .map(|u| glider_dir.rotation_between(u))
+        let glider_pos = *char_up * glider_dist;
+
+        let glider_up = glider.ori.up();
+
+        let mut dr = glider_rel_dv;
+        // remove negative lift (for aesthetic reasons and because greater values of dv
+        // rotates too much)
+        let dn = glider_rel_dv.dot(*glider_up);
+        if dn.is_sign_negative() {
+            dr -= dn * *glider_up / glider_up.magnitude_squared()
+        }
+        if let Some(rot) =
+            Dir::from_unnormalized(glider_pos + dr).map(|u| char_up.rotation_between(u))
         {
             *ori = ori.prerotated(rot);
         }
