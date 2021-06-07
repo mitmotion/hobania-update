@@ -10,20 +10,17 @@ use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 use vek::*;
 
-const PITCH_SLOW_TIME: f32 = 0.5;
 const MAX_LIFT_DRAG_RATIO_AOA: f32 = PI * 0.04;
 
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Data {
     pub glider: Glider,
-    timer: f32,
     inputs_disabled: bool,
 }
 
 impl Data {
     pub fn new(glider: Glider) -> Self {
         Self {
-            timer: 0.0,
             inputs_disabled: true,
             glider,
         }
@@ -40,25 +37,14 @@ impl Data {
     }
 
     fn roll_input(&self, inputs: &ControllerInputs) -> Option<f32> {
-        Some(Ori::from(inputs.look_dir).right().xy().dot(inputs.move_dir) * self.roll_modifier())
+        Some(Ori::from(inputs.look_dir).right().xy().dot(inputs.move_dir))
+            .map(|roll| roll * self.roll_modifier())
             .filter(|roll| roll.abs() > std::f32::EPSILON)
     }
 
-    fn pitch_modifier(&self) -> f32 {
-        if self.inputs_disabled {
-            0.0
-        } else {
-            tweak!(1.0) * self.timer.min(PITCH_SLOW_TIME) / PITCH_SLOW_TIME
-        }
-    }
+    fn pitch_modifier(&self) -> f32 { if self.inputs_disabled { 0.0 } else { 1.0 } }
 
-    fn roll_modifier(&self) -> f32 {
-        if self.inputs_disabled {
-            0.0
-        } else {
-            tweak!(1.0)
-        }
-    }
+    fn roll_modifier(&self) -> f32 { if self.inputs_disabled { 0.0 } else { 1.0 } }
 
     fn tgt_dir(&self, default_pitch: f32, max_pitch: f32, data: &JoinData) -> Dir {
         let char_fw = data.ori.look_dir();
@@ -174,7 +160,6 @@ impl CharacterBehavior for Data {
             );
 
             update.character = CharacterState::Glide(Self {
-                timer: self.timer + data.dt.0,
                 inputs_disabled: self.inputs_disabled && !data.inputs.move_dir.is_approx_zero(),
                 glider,
             });
