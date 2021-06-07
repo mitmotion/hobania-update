@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 use vek::*;
 
-const MAX_LIFT_DRAG_RATIO_AOA: f32 = PI * 0.04;
+pub const BASE_PITCH: f32 = 0.06 * PI; // 10.8°
 
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Data {
@@ -46,10 +46,10 @@ impl Data {
 
     fn roll_modifier(&self) -> f32 { if self.inputs_disabled { 0.0 } else { 1.0 } }
 
-    fn tgt_dir(&self, default_pitch: f32, max_pitch: f32, data: &JoinData) -> Dir {
+    fn tgt_dir(&self, base_pitch: f32, max_pitch: f32, data: &JoinData) -> Dir {
         let char_fw = data.ori.look_dir();
         if data.inputs.look_dir.dot(*char_fw) > max_pitch.cos() {
-            Quaternion::rotation_3d(default_pitch, Ori::from(data.inputs.look_dir).right())
+            Quaternion::rotation_3d(base_pitch, Ori::from(data.inputs.look_dir).right())
                 * data.inputs.look_dir
         } else {
             char_fw
@@ -71,15 +71,15 @@ impl Data {
                 )
             })
             .and_then(|dir| {
-                if dir.dot(*char_up) > max_roll.cos() {
-                    Some(dir)
-                } else {
-                    char_up
-                        .cross(*dir)
-                        .try_normalized()
-                        .map(|axis| Quaternion::rotation_3d(max_roll, axis) * char_up)
-                        .filter(|dir| dir.dot(*self.glider.ori.up()).is_sign_positive())
-                }
+                (dir.dot(*char_up) > max_roll.cos())
+                    .then_some(dir)
+                    .or_else(|| {
+                        char_up
+                            .cross(*dir)
+                            .try_normalized()
+                            .map(|axis| Quaternion::rotation_3d(max_roll, axis) * char_up)
+                    })
+                    .filter(|dir| dir.dot(*self.glider.ori.up()).is_sign_positive())
             })
             .unwrap_or(char_up)
     }
@@ -100,12 +100,12 @@ impl CharacterBehavior for Data {
             update.character = CharacterState::Idle;
         } else if !handle_climb(&data, &mut update) {
             // Tweaks
-            let def_pitch = MAX_LIFT_DRAG_RATIO_AOA * tweak!(2.0);
+            let base_pitch = BASE_PITCH * tweak!(1.0);
             let max_pitch = tweak!(0.3) * PI;
             let max_roll = tweak!(0.2) * PI;
             let inputs_rate = tweak!(5.0);
-            let look_pitch_rate = tweak!(8.0);
-            let autoroll_rate = tweak!(18.0);
+            let look_pitch_rate = tweak!(10.0);
+            let autoroll_rate = tweak!(10.0);
             let yaw_correction_rate = tweak!(1.0);
             let char_yaw_follow_rate = tweak!(2.0);
             // ----
@@ -116,7 +116,7 @@ impl CharacterBehavior for Data {
                 .map(|fluid| fluid.relative_flow(data.vel))
                 .unwrap_or_else(|| Vel(Vec3::unit_z()));
             let flow_dir = Dir::from_unnormalized(air_flow.0).unwrap_or_else(Dir::up);
-            let tgt_dir = self.tgt_dir(def_pitch, max_pitch, data);
+            let tgt_dir = self.tgt_dir(base_pitch, max_pitch, data);
 
             let char_up = data.ori.up();
 
@@ -138,7 +138,7 @@ impl CharacterBehavior for Data {
                     let tgt_up = self.tgt_up(max_roll, &tgt_dir, &flow_dir, data);
                     glider.slerp_roll_towards(
                         tgt_up,
-                        autoroll_rate * (1.0 - tgt_up.dot(*glider_up)) * data.dt.0,
+                        autoroll_rate * (1.0 - tgt_up.dot(*glider_up).powi(2)) * data.dt.0,
                     );
                 }
 
