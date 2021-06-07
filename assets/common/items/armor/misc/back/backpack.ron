@@ -16,4 +16,5 @@ ItemDef(
     tags: [
         Bag,
     ],
+    slots: 18,
 )
