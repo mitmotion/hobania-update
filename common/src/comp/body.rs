@@ -762,15 +762,19 @@ impl Drag for Body {
     ///
     /// This coefficient includes the reference area.
     fn parasite_drag_coefficient(&self) -> f32 {
+        // Scale modifier to reduce or increase drag as needed to give bodies reasonable
+        // terminal velocities for the gravitational acceleration of this world
+        // const SCALE_MODIFIER: f32 = 0.6; // if we can eventually have 1G
+        const SCALE_MODIFIER: f32 = 1.1; // for 2.5G
+
         // Reference area and drag coefficient assumes best-case scenario of the
         // orientation producing least amount of drag
         match self {
             // Cross-section, head/feet first
             Body::BipedLarge(_) | Body::BipedSmall(_) | Body::Golem(_) | Body::Humanoid(_) => {
-                // const SCALE: f32 = 0.7;
-                let radius = self.dimensions().xy().map(|a| inline_tweak::tweak!(0.6) * a * 0.5);
+                let radii = self.dimensions().xy().map(|a| SCALE_MODIFIER * a * 0.5);
                 const CD: f32 = 0.7;
-                CD * PI * radius.x * radius.y
+                CD * PI * radii.x * radii.y
             },
 
             // Cross-section, nose/tail first
@@ -778,13 +782,13 @@ impl Drag for Body {
             | Body::QuadrupedMedium(_)
             | Body::QuadrupedSmall(_)
             | Body::QuadrupedLow(_) => {
-                let radius = self.dimensions().map(|a| a * 0.5);
+                let radii = self.dimensions().map(|a| SCALE_MODIFIER * a * 0.5);
                 let cd: f32 = if matches!(self, Body::QuadrupedLow(_)) {
                     0.7
                 } else {
                     1.0
                 };
-                cd * PI * radius.x * radius.z
+                cd * PI * radii.x * radii.z
             },
 
             Body::BirdMedium(bird) => bird.parasite_drag_coefficient(),
@@ -793,11 +797,11 @@ impl Drag for Body {
 
             // Cross-section, zero-lift angle; exclude the fins
             Body::FishMedium(_) | Body::FishSmall(_) => {
-                let radius = self.dimensions().map(|a| a * 0.5);
+                let radii = self.dimensions().map(|a| SCALE_MODIFIER * a * 0.5);
                 // "A Simple Method to Determine Drag Coefficients in Aquatic Animals",
                 // D. Bilo and W. Nachtigall, 1980
                 const CD: f32 = 0.031;
-                CD * PI * radius.x * radius.z
+                CD * PI * radii.x * radii.z
             },
 
             Body::Object(object) => match object {
@@ -812,9 +816,9 @@ impl Drag for Body {
                 | object::Body::FireworkWhite
                 | object::Body::FireworkYellow
                 | object::Body::MultiArrow => {
-                    let radius = self.dimensions().map(|a| a * 0.5);
+                    let radii = self.dimensions().map(|a| SCALE_MODIFIER * a * 0.5);
                     const CD: f32 = 0.02;
-                    CD * PI * radius.x * radius.z
+                    CD * PI * radii.x * radii.z
                 },
 
                 // spherical-ish objects
@@ -831,13 +835,13 @@ impl Drag for Body {
                 | object::Body::Pumpkin3
                 | object::Body::Pumpkin4
                 | object::Body::Pumpkin5 => {
-                    let radius = self.dimensions().xy().map(|a| a * 0.5);
+                    let radii = self.dimensions().xy().map(|a| SCALE_MODIFIER * a * 0.5);
                     const CD: f32 = 0.5;
-                    CD * PI * radius.product()
+                    CD * PI * radii.product()
                 },
 
                 _ => {
-                    let dim = self.dimensions();
+                    let dim = self.dimensions().map(|a| SCALE_MODIFIER * a);
                     const CD: f32 = 2.0;
                     CD * (PI / 6.0 * dim.x * dim.y * dim.z).powf(2.0 / 3.0)
                 },
@@ -846,7 +850,7 @@ impl Drag for Body {
             Body::Ship(_) => {
                 // Airships tend to use the square of the cube root of its volume for
                 // reference area
-                let dim = self.dimensions();
+                let dim = self.dimensions().map(|a| SCALE_MODIFIER * a);
                 (PI / 6.0 * dim.x * dim.y * dim.z).powf(2.0 / 3.0)
             },
         }

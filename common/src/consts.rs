@@ -2,7 +2,7 @@
 pub const MAX_PICKUP_RANGE: f32 = 8.0;
 pub const MAX_MOUNT_RANGE: f32 = 14.0;
 
-pub const GRAVITY: f32 = 9.81;
+pub const GRAVITY: f32 = 25.0;
 pub const FRIC_GROUND: f32 = 0.15;
 
 // Values for air taken from http://www-mdp.eng.cam.ac.uk/web/library/enginfo/aerothermal_dvd_only/aero/atmos/atmos.html
