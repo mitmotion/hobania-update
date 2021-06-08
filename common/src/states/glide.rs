@@ -138,7 +138,7 @@ impl CharacterBehavior for Data {
                     let tgt_up = self.tgt_up(max_roll, &tgt_dir, &flow_dir, data);
                     glider.slerp_roll_towards(
                         tgt_up,
-                        autoroll_rate * (1.0 - tgt_up.dot(*glider_up).powi(2)) * data.dt.0,
+                        autoroll_rate * (1.0 - tgt_up.dot(*glider_up).max(0.0).powi(2)) * data.dt.0,
                     );
                 }
 
