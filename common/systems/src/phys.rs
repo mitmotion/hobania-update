@@ -667,6 +667,11 @@ impl<'a> PhysicsData<'a> {
                         // to lag (as observed in the 0.9 release party).
                         let dt = DeltaTime(read.dt.0.min(0.1));
 
+                        // Hack. FIXME: Implement gravity magic proper and/or set GRAVITY to 9.81.
+                        let custom_gravity = character_state.and_then(|cs| match cs {
+                            CharacterState::Glide(_) => Some(9.81),
+                            _ => None,
+                        });
                         match physics_state.in_fluid {
                             None => {
                                 vel.0.z -= dt.0 * GRAVITY;
@@ -681,7 +686,7 @@ impl<'a> PhysicsData<'a> {
                                     density,
                                     mass,
                                     &fluid,
-                                    GRAVITY,
+                                    custom_gravity.unwrap_or(GRAVITY),
                                 );
                             },
                         }
