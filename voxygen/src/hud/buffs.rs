@@ -359,10 +359,6 @@ impl<'a> Widget for BuffsBar<'a> {
                     let max_duration = buff.data.duration;
                     let current_duration = buff.dur;
                     // Percentage to determine which frame of the timer overlay is displayed
-                    let duration_percentage = current_duration.map_or(1000.0, |cur| {
-                        max_duration
-                            .map_or(1000.0, |max| cur.as_secs_f32() / max.as_secs_f32() * 1000.0)
-                    }) as u32;
                     let buff_img = hud::get_buff_image(buff.kind, self.imgs);
                     let buff_widget = Image::new(buff_img).w_h(40.0, 40.0);
                     // Sort buffs into rows of 6 slots
@@ -393,6 +389,10 @@ impl<'a> Widget for BuffsBar<'a> {
                         desc_txt.to_string()
                     };
                     // Timer overlay
+                    let duration_percentage = current_duration.map_or(1000.0, |cur| {
+                        max_duration
+                            .map_or(1000.0, |max| cur.as_secs_f32() / max.as_secs_f32() * 1000.0)
+                    }) as u32;
                     if Button::image(self.get_duration_image(duration_percentage))
                         .w_h(40.0, 40.0)
                         .middle_of(*id)
