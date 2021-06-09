@@ -3,7 +3,7 @@ use crate::{
     comp::{inventory::slot::EquipSlot, CharacterState, ControllerInputs, Ori, StateUpdate, Vel},
     glider::Glider,
     states::behavior::{CharacterBehavior, JoinData},
-    util::Dir,
+    util::{Dir, Plane, Projection},
 };
 use inline_tweak::tweak;
 use serde::{Deserialize, Serialize};
@@ -60,16 +60,19 @@ impl Data {
         }
     }
 
-    fn tgt_up(&self, max_roll: f32, tgt_dir: &Dir, flow_dir: &Dir, data: &JoinData) -> Dir {
+    fn roll_dir(&self, max_roll: f32, tgt_dir: &Dir, flow_dir: &Dir, data: &JoinData) -> Dir {
         let char_up = data.ori.up();
         Dir::from_unnormalized(tgt_dir.to_vec() + flow_dir.to_vec())
             .map(|tgt_lift_dir| {
+                // this rolls to decrease the surface exposed to unfavourable wind that is
+                // causing us to drift off course
                 tgt_lift_dir.slerped_to(
                     -*flow_dir,
                     Dir::from_unnormalized(data.vel.0)
                         .map_or(0.0, |moving_dir| moving_dir.dot(flow_dir.to_vec()).max(0.0)),
                 )
             })
+            .and_then(|dir| dir.projected(&Plane::from(data.ori.look_dir())))
             .and_then(|dir| {
                 (dir.dot(*char_up) > max_roll.cos())
                     .then_some(dir)
@@ -79,7 +82,6 @@ impl Data {
                             .try_normalized()
                             .map(|axis| Quaternion::rotation_3d(max_roll, axis) * char_up)
                     })
-                    .filter(|dir| dir.dot(*self.glider.ori.up()).is_sign_positive())
             })
             .unwrap_or(char_up)
     }
@@ -101,11 +103,11 @@ impl CharacterBehavior for Data {
         } else if !handle_climb(&data, &mut update) {
             // Tweaks
             let base_pitch = BASE_PITCH * tweak!(1.0);
-            let max_pitch = tweak!(0.3) * PI;
-            let max_roll = tweak!(0.2) * PI;
+            let max_pitch = tweak!(0.2) * PI;
+            let max_roll = tweak!(0.5) * PI;
             let inputs_rate = tweak!(5.0);
-            let look_pitch_rate = tweak!(10.0);
-            let autoroll_rate = tweak!(10.0);
+            let look_pitch_rate = tweak!(5.0);
+            let autoroll_rate = tweak!(5.0);
             let yaw_correction_rate = tweak!(1.0);
             let char_yaw_follow_rate = tweak!(2.0);
             // ----
@@ -118,39 +120,42 @@ impl CharacterBehavior for Data {
             let flow_dir = Dir::from_unnormalized(air_flow.0).unwrap_or_else(Dir::up);
             let tgt_dir = self.tgt_dir(base_pitch, max_pitch, data);
 
-            let char_up = data.ori.up();
-
             let ori = self.glider.ori;
             let mut glider = self.glider;
 
             {
+                let char_fw = data.ori.look_dir();
+                let char_up = data.ori.up();
                 let glider_up = ori.up();
-                let up_dot = glider_up.dot(*char_up);
+                let glider_right = ori.right();
+                let mut next_up = glider_up;
 
                 if let Some(roll_input) = self.roll_input(data.inputs) {
-                    if (up_dot - max_roll.cos()).is_sign_positive()
-                        || (ori.right().dot(*char_up).is_sign_positive()
-                            == roll_input.is_sign_positive())
-                    {
-                        glider.roll(data.dt.0 * inputs_rate * roll_input * max_roll);
-                    }
-                } else {
-                    let tgt_up = self.tgt_up(max_roll, &tgt_dir, &flow_dir, data);
-                    glider.slerp_roll_towards(
-                        tgt_up,
-                        autoroll_rate * (1.0 - tgt_up.dot(*glider_up).max(0.0).powi(2)) * data.dt.0,
+                    next_up = next_up.slerped_to(
+                        Quaternion::rotation_3d(roll_input * max_roll, char_fw) * char_up,
+                        data.dt.0 * inputs_rate,
                     );
+                } else {
+                    let roll_dir = self.roll_dir(max_roll, &tgt_dir, &flow_dir, data);
+                    let s = 1.0 - roll_dir.dot(*glider_up).abs();
+                    next_up = next_up.slerped_to(roll_dir, data.dt.0 * autoroll_rate * s);
                 }
 
                 if let Some(pitch_input) = self.pitch_input(data.inputs) {
-                    if (up_dot - max_pitch.cos()).is_sign_positive()
-                        || (ori.look_dir().dot(*char_up).is_sign_negative()
-                            == pitch_input.is_sign_positive())
-                    {
-                        glider.pitch(data.dt.0 * inputs_rate * pitch_input * max_pitch);
-                    }
+                    next_up = next_up.slerped_to(
+                        Quaternion::rotation_3d(pitch_input * max_pitch, glider_right) * char_up,
+                        data.dt.0 * inputs_rate,
+                    );
+                } else {
+                    // slerp un-pitching for more stable rolling
+                    let tgt_fw = tgt_dir.slerped_to(char_fw, tgt_dir.dot(*glider_right).powi(2));
+                    next_up = next_up.slerped_to(
+                        data.ori.pitched_towards(tgt_fw).up(),
+                        data.dt.0 * look_pitch_rate,
+                    );
                 }
-                glider.slerp_pitch_towards(tgt_dir, look_pitch_rate * data.dt.0);
+
+                glider.ori = ori.prerotated(glider_up.rotation_between(next_up));
             }
 
             glider.slerp_yaw_towards(-flow_dir, data.dt.0 * yaw_correction_rate);
