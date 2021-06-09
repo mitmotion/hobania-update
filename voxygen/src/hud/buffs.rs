@@ -9,13 +9,15 @@ use crate::{
     GlobalState,
 };
 
+use crate::hud::BuffInfo;
 use common::comp::{BuffKind, Buffs, Energy, Health};
 use conrod_core::{
     color,
     image::Id,
     widget::{self, Button, Image, Rectangle, Text},
-    widget_ids, Color, Colorable, Positionable, Sizeable, Widget, WidgetCommon,
+    widget_ids, Color, Colorable, Positionable, Sizeable, UiCell, Widget, WidgetCommon,
 };
+use std::time::Duration;
 widget_ids! {
     struct Ids {
         align,
@@ -204,26 +206,17 @@ impl<'a> Widget for BuffsBar<'a> {
                         max_duration
                             .map_or(1000.0, |max| cur.as_secs_f32() / max.as_secs_f32() * 1000.0)
                     }) as u32; // Percentage to determine which frame of the timer overlay is displayed
-                    let buff_img = hud::get_buff_image(buff.kind, self.imgs);
-                    let buff_widget = Image::new(buff_img).w_h(40.0, 40.0);
-                    // Sort buffs into rows of 11 slots
-                    let x = i % 6;
-                    let y = i / 6;
-                    let buff_widget = buff_widget.bottom_left_with_margins_on(
-                        state.ids.buffs_align,
-                        0.0 + y as f64 * (41.0),
-                        1.5 + x as f64 * (43.0),
-                    );
 
-                    buff_widget
-                        .color(
-                            if current_duration.map_or(false, |cur| cur.as_secs_f32() < 10.0) {
-                                Some(pulsating_col)
-                            } else {
-                                Some(norm_col)
-                            },
-                        )
-                        .set(*id, ui);
+                    self.create_buff_widget(
+                        state,
+                        ui,
+                        pulsating_col,
+                        norm_col,
+                        i,
+                        id,
+                        buff,
+                        current_duration,
+                    );
                     // Create Buff tooltip
                     let title = hud::get_buff_title(buff.kind, localized_strings);
                     let desc_txt = hud::get_buff_desc(buff.kind, buff.data, localized_strings);
@@ -426,6 +419,39 @@ impl<'a> Widget for BuffsBar<'a> {
 }
 
 impl<'a> BuffsBar<'a> {
+    fn create_buff_widget(
+        &self,
+        state: &State,
+        ui: &mut UiCell,
+        pulsating_col: Color,
+        norm_col: Color,
+        i: usize,
+        id: &conrod_core::widget::id::Id,
+        buff: &BuffInfo,
+        current_duration: Option<Duration>,
+    ) {
+        let buff_img = hud::get_buff_image(buff.kind, self.imgs);
+        let buff_widget = Image::new(buff_img).w_h(40.0, 40.0);
+        // Sort buffs into rows of 11 slots
+        let x = i % 6;
+        let y = i / 6;
+        let buff_widget = buff_widget.bottom_left_with_margins_on(
+            state.ids.buffs_align,
+            y as f64 * (41.0),
+            1.5 + x as f64 * (43.0),
+        );
+
+        buff_widget
+            .color(
+                if current_duration.map_or(false, |cur| cur.as_secs_f32() < 10.0) {
+                    Some(pulsating_col)
+                } else {
+                    Some(norm_col)
+                },
+            )
+            .set(*id, ui);
+    }
+
     fn get_duration_image(&self, duration_percentage: u32) -> Id {
         match duration_percentage as u64 {
             875..=1000 => self.imgs.nothing, // 8/8
