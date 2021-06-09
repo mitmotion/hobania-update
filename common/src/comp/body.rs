@@ -764,8 +764,8 @@ impl Drag for Body {
     fn parasite_drag_coefficient(&self) -> f32 {
         // Scale modifier to reduce or increase drag as needed to give bodies reasonable
         // terminal velocities for the gravitational acceleration of this world
-        // const SCALE_MODIFIER: f32 = 0.6; // if we can eventually have 1G
-        const SCALE_MODIFIER: f32 = 1.1; // for 2.5G
+        const SCALE_MODIFIER: f32 = 0.6; // if we can eventually have 1G
+        // const SCALE_MODIFIER: f32 = 1.1; // for 2.5G
 
         // Reference area and drag coefficient assumes best-case scenario of the
         // orientation producing least amount of drag
