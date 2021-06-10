@@ -94,11 +94,13 @@ impl TileGrid {
         let mut last_growth = 0;
         for i in 0..32 {
             if i - last_growth >= 4
-                || (inner_size(aabr) + if i % 2 == 0 {
+                || (inner_size(aabr)
+                    + if i % 2 == 0 {
                         Extent2::new(0, 1)
                     } else {
                         Extent2::new(1, 0)
-                    }).product()
+                    })
+                .product()
                     > area_range.end as i32
             {
                 break;

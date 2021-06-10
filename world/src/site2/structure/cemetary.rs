@@ -21,7 +21,7 @@ impl Structure for Cemetary {
     ) -> Option<Self> {
         let (tile_aabr, root) = site.tiles.find_near(Vec2::zero(), |tile, _| {
             if rng.gen_range(0..16) == 0 {
-                site.tiles.grow_aabr(tile, 15..20, (2, 2), 2).ok()
+                site.tiles.grow_aabr(tile, 45..50, (2, 2), 2).ok()
             } else {
                 None
             }
@@ -84,6 +84,17 @@ impl Render for Cemetary {
             }),
             false => Block::empty(),
         });
+        let flower_sprite = Fill::Block(match rng.gen_bool(0.1) {
+            true => Block::air(match rng.gen_range(0..6) {
+                0 => SpriteKind::BlueFlower,
+                1 => SpriteKind::PinkFlower,
+                2 => SpriteKind::PurpleFlower,
+                3 => SpriteKind::RedFlower,
+                4 => SpriteKind::WhiteFlower,
+                _ => SpriteKind::YellowFlower,
+            }),
+            false => Block::empty(),
+        });
         let structural_wood = Fill::Block(Block::new(BlockKind::Rock, Rgb::new(80, 80, 80)));
         let path = Fill::Block(Block::new(
             BlockKind::Rock,
@@ -93,7 +104,7 @@ impl Render for Cemetary {
         // Walls
         let inner = prim(Primitive::Aabb(Aabb {
             min: (self.bounds.min + 1).with_z(self.alt),
-            max: self.bounds.max.with_z(self.alt + roof),
+            max: (self.bounds.max).with_z(self.alt + roof),
         }));
         let outer = prim(Primitive::Aabb(Aabb {
             min: self.bounds.min.with_z(self.alt),
@@ -102,8 +113,6 @@ impl Render for Cemetary {
         fill(outer, wall_block);
 
         let walls = prim(Primitive::Xor(outer, inner));
-
-        // lol
 
         // Windows x axis
         {
@@ -141,9 +150,9 @@ impl Render for Cemetary {
             );
         }
 
-        // wall pillars
+        // Wall pillars
         let mut pillars_y = prim(Primitive::Empty);
-        for x in self.tile_aabr.min.x..self.tile_aabr.max.x + 2 {
+        for x in self.tile_aabr.min.x..self.tile_aabr.max.x + 1 {
             let pillar = prim(Primitive::Aabb(Aabb {
                 min: site
                     .tile_wpos(Vec2::new(x, self.tile_aabr.min.y))
@@ -154,7 +163,7 @@ impl Render for Cemetary {
             pillars_y = prim(Primitive::Or(pillars_y, pillar));
         }
         let mut pillars_x = prim(Primitive::Empty);
-        for y in self.tile_aabr.min.y..self.tile_aabr.max.y + 2 {
+        for y in self.tile_aabr.min.y..self.tile_aabr.max.y + 1 {
             let pillar = prim(Primitive::Aabb(Aabb {
                 min: site
                     .tile_wpos(Vec2::new(self.tile_aabr.min.x, y))
@@ -166,7 +175,46 @@ impl Render for Cemetary {
         }
         let pillars = prim(Primitive::And(pillars_x, pillars_y));
         fill(pillars, structural_wood);
+
+        // Fill inner
         fill(inner, Fill::Block(Block::empty()));
+
+        // Slice
+        let slice = prim(Primitive::Aabb(Aabb {
+            min: self.bounds.min.with_z(self.alt),
+            max: (self.bounds.max + 1).with_z(self.alt + 2),
+        }));
+        fill(slice, structural_wood);
+
+        // Entrance
+        let high = prim(Primitive::Pyramid {
+            aabb: Aabb {
+                min: Vec2::new(mid.x - 3, self.bounds.min.y).with_z(self.alt + 6),
+                max: Vec2::new(mid.x + 3, self.bounds.min.y + 1).with_z(self.alt + 9),
+            },
+            inset: Vec2::broadcast(5),
+        });
+        let door = prim(Primitive::Aabb(Aabb {
+            min: Vec2::new(mid.x - 3, self.bounds.min.y).with_z(self.alt),
+            max: Vec2::new(mid.x + 3, self.bounds.min.y + 1).with_z(self.alt + 6),
+        }));
+        let door_empty = prim(Primitive::Aabb(Aabb {
+            min: Vec2::new(mid.x - 2, self.bounds.min.y).with_z(self.alt),
+            max: Vec2::new(mid.x + 2, self.bounds.min.y + 1).with_z(self.alt + 6),
+        }));
+        let lamp_1 = prim(Primitive::Aabb(Aabb {
+            min: Vec2::new(mid.x - 3, self.bounds.min.y - 1).with_z(self.alt + 3),
+            max: Vec2::new(mid.x - 2, self.bounds.min.y).with_z(self.alt + 4),
+        }));
+        let lamp_2 = prim(Primitive::Aabb(Aabb {
+            min: Vec2::new(mid.x + 2, self.bounds.min.y - 1).with_z(self.alt + 3),
+            max: Vec2::new(mid.x + 3, self.bounds.min.y).with_z(self.alt + 4),
+        }));
+        fill(door, structural_wood);
+        fill(door_empty, Fill::Block(Block::empty()));
+        fill(high, structural_wood);
+        fill(lamp_1, lamp);
+        fill(lamp_2, lamp);
 
         // Floor
         let floor = prim(Primitive::Aabb(Aabb {
@@ -180,12 +228,6 @@ impl Render for Cemetary {
                 Rgb::new(48, 79, 30) + rng.gen_range(0..5),
             )),
         );
-
-        let slice = prim(Primitive::Aabb(Aabb {
-            min: self.bounds.min.with_z(self.alt),
-            max: (self.bounds.max + 1).with_z(self.alt + 2),
-        }));
-        fill(prim(Primitive::AndNot(slice, floor)), structural_wood);
 
         // Grass
         let grass = Aabb {
@@ -211,8 +253,25 @@ impl Render for Cemetary {
             }
         }
 
-        // Tombstones
+        // Horizontal paths
+        let cemetary = Aabb {
+            min: (self.bounds.min + 1).with_z(self.alt),
+            max: Vec2::new(self.bounds.max.x, self.bounds.max.y - 8).with_z(self.alt + roof),
+        };
 
+        for x in cemetary.min.x..cemetary.max.x {
+            for y in cemetary.min.y..cemetary.max.y {
+                let block = prim(Primitive::Aabb(Aabb {
+                    min: Vec2::new(x, y).with_z(self.alt),
+                    max: Vec2::new(x + 1, y + 1).with_z(self.alt + 1),
+                }));
+                if (y % 5 == 3 || y % 5 == 4) && rng.gen_bool(0.95) {
+                    fill(block, path);
+                }
+            }
+        }
+
+        // Tombstones
         let dalle_block = Fill::Block(Block::new(BlockKind::Rock, Rgb::new(40, 40, 40)));
 
         for x in grass.min.x..grass.max.x {
@@ -235,82 +294,96 @@ impl Render for Cemetary {
             }
         }
 
-        // Paths
-        for x in grass.min.x..grass.max.x {
-            for y in grass.min.y..grass.max.y {
+        // Floor
+        let floor = Aabb {
+            min: Vec2::new(self.bounds.min.x + 1, self.bounds.max.y - 8).with_z(self.alt + 1),
+            max: Vec2::new(self.bounds.max.x, self.bounds.max.y).with_z(self.alt + 2),
+        };
+        for x in floor.min.x..floor.max.x {
+            for y in floor.min.y..floor.max.y {
                 let block = prim(Primitive::Aabb(Aabb {
-                    min: Vec2::new(x, y).with_z(self.alt),
-                    max: Vec2::new(x + 1, y + 1).with_z(self.alt + 1),
+                    min: Vec2::new(x, y).with_z(self.alt + 1),
+                    max: Vec2::new(x + 1, y + 1).with_z(self.alt + 2),
                 }));
-                if (y % 5 == 3 || y % 5 == 4) && rng.gen_bool(0.95) {
-                    fill(block, path);
-                }
+                let flower_sprite = Fill::Block(match rng.gen_bool(0.3) {
+                    true => Block::air(match rng.gen_range(0..6) {
+                        0 => SpriteKind::BlueFlower,
+                        1 => SpriteKind::PinkFlower,
+                        2 => SpriteKind::PurpleFlower,
+                        3 => SpriteKind::RedFlower,
+                        4 => SpriteKind::WhiteFlower,
+                        _ => SpriteKind::YellowFlower,
+                    }),
+                    false => Block::empty(),
+                });
+                fill(block, flower_sprite);
             }
         }
 
-        /*let path_x = prim(Primitive::Aabb(Aabb {
-            min: Vec3::new(mid.x - 2, grass.min.y, self.alt),
-            max: Vec3::new(mid.x + 3, grass.max.y, self.alt + 1),
-        }));*/
-        for x in grass.min.x..grass.max.x {
-            for y in grass.min.y..grass.max.y {
-                let block = prim(Primitive::Aabb(Aabb {
-                    min: Vec2::new(x, y).with_z(self.alt),
-                    max: Vec2::new(x + 1, y + 1).with_z(self.alt + 1),
-                }));
-                if x > mid.x - 2 && x < mid.x + 2 && rng.gen_bool(0.95) {
-                    fill(block, path);
-                }
-            }
-        }
-        //fill(path_x, path);
-
-        /*let test1 = prim(Primitive::Cylinder(Aabb {
-            min: Vec3::new(mid.x - inline_tweak::tweak!(5), self.bounds.min.y - inline_tweak::tweak!(5), self.alt),
-            max: Vec3::new(mid.x + inline_tweak::tweak!(5), self.bounds.min.y + inline_tweak::tweak!(5), self.alt + 3),
+        // Crypt
+        let crypt = prim(Primitive::Aabb(Aabb {
+            min: Vec2::new(mid.x - 6, self.bounds.max.y - 8).with_z(self.alt + 1),
+            max: Vec2::new(mid.x + 6, self.bounds.max.y).with_z(self.alt + 6),
         }));
-        let test2 = prim(Primitive::Cylinder(Aabb {
-            min: Vec3::new(mid.x - 3, mid.y - 4, self.alt),
-            max: Vec3::new(mid.x + 3, mid.y + 4, self.alt),
+
+        let crypt_inner = prim(Primitive::Aabb(Aabb {
+            min: Vec2::new(mid.x - 5, self.bounds.max.y - 7).with_z(self.alt + 1),
+            max: Vec2::new(mid.x + 5, self.bounds.max.y - 1).with_z(self.alt + 6),
         }));
-        let xor = prim(Primitive::Xor(test1, test2));
 
-        let rotation = Mat3::new(
-            1, 0, 0,
-            0, 0, -1,
-            0, 1, 0
-        );
-        let rotated = prim(Primitive::Rotate(test1, rotation));
-        let translated =  prim(Primitive::Offset(rotated, Vec3::new(0, 5, 0)));
-        fill(translated, structural_wood);*/
+        let crypt_door = prim(Primitive::Aabb(Aabb {
+            min: Vec2::new(mid.x - 2, self.bounds.max.y - 8).with_z(self.alt + 1),
+            max: Vec2::new(mid.x + 2, self.bounds.max.y - 7).with_z(self.alt + 4),
+        }));
 
-        let high = prim(Primitive::Pyramid {
+        let roof = prim(Primitive::Pyramid {
             aabb: Aabb {
-                min: Vec2::new(mid.x - 3, self.bounds.min.y).with_z(self.alt + 6),
-                max: Vec2::new(mid.x + 3, self.bounds.min.y + 1).with_z(self.alt + 9),
+                min: Vec2::new(mid.x - 8, self.bounds.max.y - 8).with_z(self.alt + 6),
+                max: Vec2::new(mid.x + 8, self.bounds.max.y).with_z(self.alt + 10),
             },
-            inset: Vec2::broadcast(5),
+            inset: Vec2::broadcast(4),
         });
-        let door = prim(Primitive::Aabb(Aabb {
-            min: Vec2::new(mid.x - 3, self.bounds.min.y).with_z(self.alt + 1),
-            max: Vec2::new(mid.x + 3, self.bounds.min.y + 1).with_z(self.alt + 6),
-        }));
-        let door_empty = prim(Primitive::Aabb(Aabb {
-            min: Vec2::new(mid.x - 2, self.bounds.min.y).with_z(self.alt + 1),
-            max: Vec2::new(mid.x + 2, self.bounds.min.y + 1).with_z(self.alt + 6),
-        }));
+
         let lamp_1 = prim(Primitive::Aabb(Aabb {
-            min: Vec2::new(mid.x - 3, self.bounds.min.y - 1).with_z(self.alt + 3),
-            max: Vec2::new(mid.x - 2, self.bounds.min.y).with_z(self.alt + 4),
+            min: Vec2::new(mid.x - 3, self.bounds.max.y - 9).with_z(self.alt + 2),
+            max: Vec2::new(mid.x - 2, self.bounds.max.y - 8).with_z(self.alt + 3),
         }));
+
         let lamp_2 = prim(Primitive::Aabb(Aabb {
-            min: Vec2::new(mid.x + 2, self.bounds.min.y - 1).with_z(self.alt + 3),
-            max: Vec2::new(mid.x + 3, self.bounds.min.y).with_z(self.alt + 4),
+            min: Vec2::new(mid.x + 2, self.bounds.max.y - 9).with_z(self.alt + 2),
+            max: Vec2::new(mid.x + 3, self.bounds.max.y - 8).with_z(self.alt + 3),
         }));
-        fill(door, structural_wood);
-        fill(door_empty, Fill::Block(Block::empty()));
-        fill(high, structural_wood);
+
+        fill(crypt, structural_wood);
+        fill(crypt_inner, Fill::Block(Block::empty()));
+        fill(crypt_door, Fill::Block(Block::empty()));
+        fill(roof, structural_wood);
         fill(lamp_1, lamp);
         fill(lamp_2, lamp);
+
+        for x in cemetary.min.x..cemetary.max.x {
+            for y in cemetary.min.y..cemetary.max.y {
+                let block = prim(Primitive::Aabb(Aabb {
+                    min: Vec2::new(x, y).with_z(self.alt),
+                    max: Vec2::new(x + 1, y + 1).with_z(self.alt + 1),
+                }));
+                if x > mid.x - 3 && x < mid.x + 2 && rng.gen_bool(0.95) {
+                    fill(block, path);
+                }
+            }
+        }
+
+        // Vertical path
+        for x in cemetary.min.x..cemetary.max.x {
+            for y in cemetary.min.y..cemetary.max.y {
+                let block = prim(Primitive::Aabb(Aabb {
+                    min: Vec2::new(x, y).with_z(self.alt + 1),
+                    max: Vec2::new(x + 1, y + 1).with_z(self.alt + 2),
+                }));
+                if x > mid.x - 3 && x < mid.x + 2 {
+                    fill(block, Fill::Block(Block::empty()))
+                }
+            }
+        }
     }
 }

@@ -13,15 +13,19 @@ pub struct Hut {
 impl Structure for Hut {
     type Config = ();
 
-    fn choose_location<R: Rng>(cfg: Self::Config, land: &Land, site: &Site, rng: &mut R) -> Option<Self> {
-        let (tile_aabr, root) = site.tiles.find_near(
-            Vec2::zero(),
-            |tile, _| if rng.gen_range(0..16) == 0 {
+    fn choose_location<R: Rng>(
+        cfg: Self::Config,
+        land: &Land,
+        site: &Site,
+        rng: &mut R,
+    ) -> Option<Self> {
+        let (tile_aabr, root) = site.tiles.find_near(Vec2::zero(), |tile, _| {
+            if rng.gen_range(0..16) == 0 {
                 site.tiles.grow_aabr(tile, 4..9, (2, 2), 2).ok()
             } else {
                 None
-            },
-        )?;
+            }
+        })?;
         let center = (tile_aabr.min + (tile_aabr.max - 1)) / 2;
 
         Some(Self {
@@ -79,10 +83,13 @@ impl Render for Hut {
         }));
 
         let door_pos = site.tile_center_wpos(self.root);
-        let door = prim(Primitive::Aabb(Aabb {
-            min: door_pos.with_z(self.alt),
-            max: (door_pos + self.door_dir * 32).with_z(self.alt + 2),
-        }.made_valid()));
+        let door = prim(Primitive::Aabb(
+            Aabb {
+                min: door_pos.with_z(self.alt),
+                max: (door_pos + self.door_dir * 32).with_z(self.alt + 2),
+            }
+            .made_valid(),
+        ));
 
         let space = prim(Primitive::And(inner, door));
 
@@ -98,7 +105,7 @@ impl Render for Hut {
             / 2
             + roof_lip
             + 1;
-        let roof = prim(Primitive::Pyramid{
+        let roof = prim(Primitive::Pyramid {
             aabb: Aabb {
                 min: (self.bounds.min + 1 - roof_lip).with_z(self.alt + self.height),
                 max: (self.bounds.max - 1 + roof_lip).with_z(self.alt + self.height + roof_height),

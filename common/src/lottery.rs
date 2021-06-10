@@ -32,11 +32,8 @@ use crate::{
 };
 use rand::prelude::*;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::{convert::AsRef, marker::PhantomData};
 use tracing::warn;
-use std::{
-    convert::AsRef,
-    marker::PhantomData,
-};
 
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 pub struct Lottery<T, Items: AsRef<[(f32, T)]> = Vec<(f32, T)>> {
@@ -60,7 +57,11 @@ impl<T> From<Vec<(f32, T)>> for Lottery<T> {
             *rate = total - *rate;
         }
 
-        Self { items, total, phantom: PhantomData }
+        Self {
+            items,
+            total,
+            phantom: PhantomData,
+        }
     }
 }
 
@@ -73,7 +74,11 @@ impl<'a, T> Lottery<T, &'a mut [(f32, T)]> {
             *rate = total - *rate;
         }
 
-        Self { items, total, phantom: PhantomData }
+        Self {
+            items,
+            total,
+            phantom: PhantomData,
+        }
     }
 }
 

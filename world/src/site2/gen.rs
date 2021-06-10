@@ -67,7 +67,8 @@ impl Fill {
                 let inner = Aabr {
                     min: aabb.min.xy() - 1 + inset,
                     max: aabb.max.xy() - inset,
-                }.made_valid();
+                }
+                .made_valid();
                 aabb_contains(*aabb, pos)
                     && ((inner.projected_point(pos.xy()) - pos.xy())
                         .map(|e| e.abs())

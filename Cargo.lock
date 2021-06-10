@@ -2163,12 +2163,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "hashbrown"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
+dependencies = [
+ "ahash 0.7.2",
+]
+
+[[package]]
 name = "hashlink"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d99cf782f0dc4372d26846bec3de7804ceb5df083c2d4462c0b8d2330e894fa8"
 dependencies = [
- "hashbrown",
+ "hashbrown 0.9.1",
 ]
 
 [[package]]
@@ -2395,7 +2404,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "824845a0bf897a9042383849b02c1bc219c2383772efcd5c6f9766fa4b81aef3"
 dependencies = [
  "autocfg",
- "hashbrown",
+ "hashbrown 0.9.1",
  "serde",
 ]
 
@@ -3584,9 +3593,9 @@ dependencies = [
 
 [[package]]
 name = "packed_simd_2"
-version = "0.3.4"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3278e0492f961fd4ae70909f56b2723a7e8d01a228427294e19cdfdebda89a17"
+checksum = "0e64858a2d3733fdd61adfdd6da89aa202f7ff0e741d2fc7ed1e452ba9dc99d7"
 dependencies = [
  "cfg-if 0.1.10",
  "libm 0.1.4",
@@ -4639,7 +4648,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3a9dff29ab65f4b7b4a5a38ca78e73b35eb8ffd7d4b5e5a77fc6936a1735eab"
 dependencies = [
  "arrayvec",
- "hashbrown",
+ "hashbrown 0.9.1",
  "mopa",
  "rayon",
  "shred-derive",
@@ -4778,7 +4787,7 @@ version = "0.16.1"
 source = "git+https://github.com/amethyst/specs.git?rev=5a9b71035007be0e3574f35184acac1cd4530496#5a9b71035007be0e3574f35184acac1cd4530496"
 dependencies = [
  "crossbeam-queue",
- "hashbrown",
+ "hashbrown 0.9.1",
  "hibitset",
  "log",
  "rayon",
@@ -5496,7 +5505,7 @@ dependencies = [
  "byteorder",
  "clap",
  "futures-util",
- "hashbrown",
+ "hashbrown 0.9.1",
  "image",
  "num 0.4.0",
  "rayon",
@@ -5531,7 +5540,7 @@ dependencies = [
  "csv",
  "dot_vox",
  "enum-iterator",
- "hashbrown",
+ "hashbrown 0.9.1",
  "image",
  "indexmap",
  "lazy_static",
@@ -5598,7 +5607,7 @@ version = "0.9.0"
 dependencies = [
  "bincode",
  "flate2",
- "hashbrown",
+ "hashbrown 0.9.1",
  "image",
  "num-traits",
  "serde",
@@ -5615,7 +5624,7 @@ name = "veloren-common-state"
 version = "0.9.0"
 dependencies = [
  "bincode",
- "hashbrown",
+ "hashbrown 0.9.1",
  "num_cpus",
  "rayon",
  "scopeguard",
@@ -5637,7 +5646,7 @@ dependencies = [
 name = "veloren-common-systems"
 version = "0.9.0"
 dependencies = [
- "hashbrown",
+ "hashbrown 0.9.1",
  "indexmap",
  "ordered-float 2.1.1",
  "rand 0.8.3",
@@ -5666,7 +5675,7 @@ dependencies = [
  "crossbeam-channel",
  "futures-core",
  "futures-util",
- "hashbrown",
+ "hashbrown 0.11.2",
  "lazy_static",
  "lz-fear",
  "prometheus",
@@ -5692,7 +5701,7 @@ dependencies = [
  "bitflags",
  "bytes",
  "criterion",
- "hashbrown",
+ "hashbrown 0.11.2",
  "prometheus",
  "rand 0.8.3",
  "tokio",
@@ -5735,7 +5744,7 @@ dependencies = [
  "chrono",
  "crossbeam-channel",
  "futures-util",
- "hashbrown",
+ "hashbrown 0.9.1",
  "itertools 0.10.0",
  "lazy_static",
  "num_cpus",
@@ -5819,7 +5828,7 @@ dependencies = [
  "glutin",
  "glyph_brush",
  "guillotiere",
- "hashbrown",
+ "hashbrown 0.9.1",
  "iced_native",
  "iced_winit",
  "image",
@@ -5893,7 +5902,7 @@ dependencies = [
  "enum-iterator",
  "flate2",
  "fxhash",
- "hashbrown",
+ "hashbrown 0.9.1",
  "image",
  "inline_tweak",
  "itertools 0.10.0",
