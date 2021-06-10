@@ -356,25 +356,16 @@ impl<'a> Widget for BuffsBar<'a> {
                         max_duration
                             .map_or(1000.0, |max| cur.as_secs_f32() / max.as_secs_f32() * 1000.0)
                     }) as u32;
-                    let buff_img = hud::get_buff_image(buff.kind, self.imgs);
-                    let buff_widget = Image::new(buff_img).w_h(40.0, 40.0);
-                    // Sort buffs into rows of 6 slots
-                    let x = i % 6;
-                    let y = i / 6;
-                    let buff_widget = buff_widget.top_right_with_margins_on(
-                        state.ids.align,
-                        0.0 + y as f64 * (54.0),
-                        0.0 + x as f64 * (42.0),
+                    self.create_debuff_widget(
+                        state,
+                        ui,
+                        pulsating_col,
+                        norm_col,
+                        i,
+                        id,
+                        buff,
+                        current_duration,
                     );
-                    buff_widget
-                        .color(
-                            if current_duration.map_or(false, |cur| cur.as_secs_f32() < 10.0) {
-                                Some(pulsating_col)
-                            } else {
-                                Some(norm_col)
-                            },
-                        )
-                        .set(*id, ui);
                     // Create Buff tooltip
                     let title = hud::get_buff_title(buff.kind, localized_strings);
                     let desc_txt = hud::get_buff_desc(buff.kind, buff.data, localized_strings);
@@ -441,6 +432,38 @@ impl<'a> BuffsBar<'a> {
             1.5 + x as f64 * (43.0),
         );
 
+        buff_widget
+            .color(
+                if current_duration.map_or(false, |cur| cur.as_secs_f32() < 10.0) {
+                    Some(pulsating_col)
+                } else {
+                    Some(norm_col)
+                },
+            )
+            .set(*id, ui);
+    }
+
+    fn create_debuff_widget(
+        &self,
+        state: &State,
+        ui: &mut UiCell,
+        pulsating_col: Color,
+        norm_col: Color,
+        i: usize,
+        id: &conrod_core::widget::id::Id,
+        buff: &BuffInfo,
+        current_duration: Option<Duration>,
+    ) {
+        let buff_img = hud::get_buff_image(buff.kind, self.imgs);
+        let buff_widget = Image::new(buff_img).w_h(40.0, 40.0);
+        // Sort buffs into rows of 6 slots
+        let x = i % 6;
+        let y = i / 6;
+        let buff_widget = buff_widget.top_right_with_margins_on(
+            state.ids.align,
+            y as f64 * (54.0),
+            x as f64 * (42.0),
+        );
         buff_widget
             .color(
                 if current_duration.map_or(false, |cur| cur.as_secs_f32() < 10.0) {
