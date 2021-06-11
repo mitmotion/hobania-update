@@ -439,7 +439,7 @@ impl<'a> BuffsBar<'a> {
         buffs_tooltip: &Tooltip,
         id: &conrod_core::widget::id::Id,
         timer_id: &conrod_core::widget::id::Id,
-        desc: &String,
+        desc: &str,
         title_col: Color,
     ) -> TimesClicked {
         let max_duration = buff.data.duration;
