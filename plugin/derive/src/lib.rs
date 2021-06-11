@@ -14,7 +14,7 @@ pub fn global_state(_args: TokenStream, item: TokenStream) -> TokenStream {
 
         static mut PLUGIN_STATE: Option<PLUGIN_STATE_TYPE> = None;
 
-        static PLUGIN_STATE_GUARD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        static PLUGIN_STATE_GUARD: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
     };
     out.into()
 }
@@ -57,17 +57,13 @@ pub fn event_handler(_args: TokenStream, item: TokenStream) -> TokenStream {
                 }
                 // Artificially force the event handler to be type-correct
                 fn force_event<E: ::veloren_plugin_rt::api::Event>(event: E, inner: fn(E, &mut PLUGIN_STATE_TYPE) -> E::Response) -> E::Response {
-                    //let mut plugin_state = PLUGIN_STATE.lock().unwrap();
-
-                        assert_eq!(PLUGIN_STATE_GUARD.swap(true, std::sync::atomic::Ordering::Acquire), false);
-                        unsafe {
-                            if PLUGIN_STATE.is_none() {
-                                PLUGIN_STATE = Some(PLUGIN_STATE_TYPE::default());
-                            }
-                        }
-                        let out = inner(event, unsafe {PLUGIN_STATE.as_mut().unwrap()});
-                        PLUGIN_STATE_GUARD.store(false, std::sync::atomic::Ordering::Release);
-                        out
+                    assert_eq!(PLUGIN_STATE_GUARD.swap(true, std::sync::atomic::Ordering::Acquire), false);
+                    let out = inner(
+                        event,
+                        unsafe { PLUGIN_STATE.get_or_insert_with(core::default::Default::default) },
+                    );
+                    PLUGIN_STATE_GUARD.store(false, std::sync::atomic::Ordering::Release);
+                    out
 
                 }
                 ::veloren_plugin_rt::write_output(&force_event(input, inner))
