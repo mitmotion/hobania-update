@@ -9,12 +9,13 @@ use crate::{
     GlobalState,
 };
 
+use crate::hud::BuffInfo;
 use common::comp::{BuffKind, Buffs, Energy, Health};
 use conrod_core::{
     color,
     image::Id,
-    widget::{self, Button, Image, Rectangle, Text},
-    widget_ids, Color, Colorable, Positionable, Sizeable, Widget, WidgetCommon,
+    widget::{self, button::TimesClicked, Button, Image, Rectangle, Text},
+    widget_ids, Color, Colorable, Positionable, Sizeable, UiCell, Widget, WidgetCommon,
 };
 widget_ids! {
     struct Ids {
@@ -98,7 +99,7 @@ impl<'a> Widget for BuffsBar<'a> {
 
     fn style(&self) -> Self::Style {}
 
-    fn update(self, args: widget::UpdateArgs<Self>) -> Self::Event {
+    fn update(mut self, args: widget::UpdateArgs<Self>) -> Self::Event {
         let widget::UpdateArgs { state, ui, .. } = args;
         let mut event = Vec::new();
         let localized_strings = self.localized_strings;
@@ -198,12 +199,7 @@ impl<'a> Widget for BuffsBar<'a> {
                 .iter()
                 .enumerate()
                 .for_each(|(i, ((id, timer_id), buff))| {
-                    let max_duration = buff.data.duration;
                     let current_duration = buff.dur;
-                    let duration_percentage = current_duration.map_or(1000.0, |cur| {
-                        max_duration
-                            .map_or(1000.0, |max| cur.as_secs_f32() / max.as_secs_f32() * 1000.0)
-                    }) as u32; // Percentage to determine which frame of the timer overlay is displayed
                     let buff_img = hud::get_buff_image(buff.kind, self.imgs);
                     let buff_widget = Image::new(buff_img).w_h(40.0, 40.0);
                     // Sort buffs into rows of 11 slots
@@ -225,23 +221,22 @@ impl<'a> Widget for BuffsBar<'a> {
                         )
                         .set(*id, ui);
                     // Create Buff tooltip
-                    let title = hud::get_buff_title(buff.kind, localized_strings);
                     let desc_txt = hud::get_buff_desc(buff.kind, buff.data, localized_strings);
                     let remaining_time = hud::get_buff_time(*buff);
                     let click_to_remove = format!("<{}>", &localized_strings.get("buff.remove"));
-                    let desc = format!("{}\n\n{}\n\n{}", desc_txt, remaining_time, click_to_remove);
                     // Timer overlay
-                    if Button::image(self.get_duration_image(duration_percentage))
-                        .w_h(40.0, 40.0)
-                        .middle_of(*id)
-                        .with_tooltip(
-                            self.tooltip_manager,
-                            title,
-                            &desc,
+                    if self
+                        .create_effect_button(
+                            buff,
+                            current_duration,
+                            localized_strings,
+                            ui,
                             &buffs_tooltip,
+                            id,
+                            timer_id,
+                            &format!("{}\n\n{}\n\n{}", desc_txt, remaining_time, click_to_remove),
                             BUFF_COLOR,
                         )
-                        .set(*timer_id, ui)
                         .was_clicked()
                     {
                         event.push(Event::RemoveBuff(buff.kind));
@@ -356,7 +351,6 @@ impl<'a> Widget for BuffsBar<'a> {
                 .iter()
                 .enumerate()
                 .for_each(|(i, (((id, timer_id), txt_id), buff))| {
-                    let max_duration = buff.data.duration;
                     let current_duration = buff.dur;
                     // Percentage to determine which frame of the timer overlay is displayed
                     let buff_img = hud::get_buff_image(buff.kind, self.imgs);
@@ -379,35 +373,31 @@ impl<'a> Widget for BuffsBar<'a> {
                         )
                         .set(*id, ui);
                     // Create Buff tooltip
-                    let title = hud::get_buff_title(buff.kind, localized_strings);
                     let desc_txt = hud::get_buff_desc(buff.kind, buff.data, localized_strings);
                     let remaining_time = hud::get_buff_time(*buff);
                     let click_to_remove = format!("<{}>", &localized_strings.get("buff.remove"));
-                    let desc = if buff.is_buff {
-                        format!("{}\n\n{}", desc_txt, click_to_remove)
+                    let desc;
+                    let title_col;
+                    if buff.is_buff {
+                        desc = format!("{}\n\n{}", desc_txt, click_to_remove);
+                        title_col = BUFF_COLOR;
                     } else {
-                        desc_txt.to_string()
+                        desc = desc_txt.to_string();
+                        title_col = DEBUFF_COLOR;
                     };
                     // Timer overlay
-                    let duration_percentage = current_duration.map_or(1000.0, |cur| {
-                        max_duration
-                            .map_or(1000.0, |max| cur.as_secs_f32() / max.as_secs_f32() * 1000.0)
-                    }) as u32;
-                    if Button::image(self.get_duration_image(duration_percentage))
-                        .w_h(40.0, 40.0)
-                        .middle_of(*id)
-                        .with_tooltip(
-                            self.tooltip_manager,
-                            title,
-                            &desc,
+                    if self
+                        .create_effect_button(
+                            buff,
+                            current_duration,
+                            localized_strings,
+                            ui,
                             &buffs_tooltip,
-                            if buff.is_buff {
-                                BUFF_COLOR
-                            } else {
-                                DEBUFF_COLOR
-                            },
+                            id,
+                            timer_id,
+                            &desc,
+                            title_col,
                         )
-                        .set(*timer_id, ui)
                         .was_clicked()
                     {
                         event.push(Event::RemoveBuff(buff.kind));
@@ -438,5 +428,36 @@ impl<'a> BuffsBar<'a> {
             0..=124 => self.imgs.buff_6,     // 1/8
             _ => self.imgs.nothing,
         }
+    }
+
+    fn create_effect_button(
+        &mut self,
+        buff: &BuffInfo,
+        current_duration: Option<std::time::Duration>,
+        localized_strings: &Localization,
+        ui: &mut UiCell,
+        buffs_tooltip: &Tooltip,
+        id: &conrod_core::widget::id::Id,
+        timer_id: &conrod_core::widget::id::Id,
+        desc: &String,
+        title_col: Color,
+    ) -> TimesClicked {
+        let max_duration = buff.data.duration;
+        let duration_percentage = current_duration.map_or(1000.0, |cur| {
+            max_duration.map_or(1000.0, |max| cur.as_secs_f32() / max.as_secs_f32() * 1000.0)
+        }) as u32; // Percentage to determine which frame of the timer overlay is displayed
+        let title = hud::get_buff_title(buff.kind, localized_strings);
+
+        Button::image(self.get_duration_image(duration_percentage))
+            .w_h(40.0, 40.0)
+            .middle_of(*id)
+            .with_tooltip(
+                self.tooltip_manager,
+                title,
+                &desc,
+                &buffs_tooltip,
+                title_col,
+            )
+            .set(*timer_id, ui)
     }
 }
