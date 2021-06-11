@@ -339,7 +339,7 @@ impl Body {
                     (humanoid::Species::Danari, humanoid::BodyType::Male) => 1.5,
                     (humanoid::Species::Danari, humanoid::BodyType::Female) => 1.4,
                 };
-                Vec3::new(1.5, 0.5, height)
+                Vec3::new(1.2, 0.5, height)
             },
             Body::Object(object) => object.dimensions(),
             Body::QuadrupedMedium(body) => match body.species {
