@@ -228,13 +228,19 @@ pub fn read_data<T: DeserializeOwned>(
     position: u64,
     length: u64,
 ) -> Result<T, bincode::Error> {
-    bincode::deserialize(&read_bytes(memory, position, length))
+    bincode::deserialize(
+        &read_bytes(memory, position, length).ok_or(bincode::ErrorKind::SizeLimit)?,
+    )
 }
 
 /// This function read raw bytes from memory at a position with the array length
-pub fn read_bytes(memory: &Memory, position: u64, length: u64) -> Vec<u8> {
-    memory.view()[(position as usize)..(position as usize) + length as usize]
-        .iter()
-        .map(|x| x.get())
-        .collect()
+pub fn read_bytes(memory: &Memory, position: u64, length: u64) -> Option<Vec<u8>> {
+    Some(
+        memory
+            .view()
+            .get((position as usize)..(position as usize) + length as usize)?
+            .iter()
+            .map(|x| x.get())
+            .collect(),
+    )
 }

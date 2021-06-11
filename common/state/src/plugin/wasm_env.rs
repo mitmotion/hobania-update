@@ -9,7 +9,7 @@ use super::{
 };
 
 #[derive(Clone)]
-pub struct HostFunctionEnvironement {
+pub struct HostFunctionEnvironment {
     pub ecs: Arc<EcsAccessManager>, /* This represent the pointer to the ECS object (set to
                                      * i32::MAX if to ECS is
                                      * availible) */
@@ -20,7 +20,7 @@ pub struct HostFunctionEnvironement {
     pub name: String, // This represent the plugin name
 }
 
-impl HostFunctionEnvironement {
+impl HostFunctionEnvironment {
     pub fn new(
         name: String,
         ecs: Arc<EcsAccessManager>,
@@ -67,9 +67,15 @@ impl HostFunctionEnvironement {
     ) -> Result<T, bincode::Error> {
         memory_manager::read_data(self.memory.get_ref().unwrap(), position, length)
     }
+
+    /// This function is a safe interface to WASM memory that reads memory from
+    /// pointer and length returning an object
+    pub fn read_bytes(&self, position: u64, length: u64) -> Option<Vec<u8>> {
+        memory_manager::read_bytes(self.memory.get_ref().unwrap(), position, length)
+    }
 }
 
-impl WasmerEnv for HostFunctionEnvironement {
+impl WasmerEnv for HostFunctionEnvironment {
     fn init_with_instance(&mut self, instance: &Instance) -> Result<(), HostEnvInitError> {
         let memory = instance.exports.get_memory("memory").unwrap();
         self.memory.initialize(memory.clone());

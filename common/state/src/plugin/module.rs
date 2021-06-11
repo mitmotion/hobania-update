@@ -1,5 +1,6 @@
+use hashbrown::HashSet;
 use std::{
-    collections::HashSet,
+    borrow::Cow,
     convert::TryInto,
     marker::PhantomData,
     sync::{Arc, Mutex},
@@ -11,7 +12,7 @@ use wasmer::{imports, Cranelift, Function, Instance, Memory, Module, Store, Valu
 use super::{
     errors::{PluginError, PluginModuleError},
     memory_manager::{self, EcsAccessManager, EcsWorld, MemoryManager},
-    wasm_env::HostFunctionEnvironement,
+    wasm_env::HostFunctionEnvironment,
 };
 
 use plugin_api::{Action, EcsAccessError, Event, Retrieve, RetrieveError, RetrieveResult};
@@ -39,7 +40,7 @@ impl PluginModule {
         let module = Module::new(&store, &wasm_data).expect("Can't compile");
 
         // This is the function imported into the wasm environement
-        fn raw_emit_actions(env: &HostFunctionEnvironement, ptr: i64, len: i64) {
+        fn raw_emit_actions(env: &HostFunctionEnvironment, ptr: i64, len: i64) {
             handle_actions(match env.read_data(from_i64(ptr), from_i64(len)) {
                 Ok(e) => e,
                 Err(e) => {
@@ -49,7 +50,7 @@ impl PluginModule {
             });
         }
 
-        fn raw_retrieve_action(env: &HostFunctionEnvironement, ptr: i64, len: i64) -> i64 {
+        fn raw_retrieve_action(env: &HostFunctionEnvironment, ptr: i64, len: i64) -> i64 {
             let out = match env.read_data(from_i64(ptr), from_i64(len)) {
                 Ok(data) => retrieve_action(&env.ecs, data),
                 Err(e) => Err(RetrieveError::BincodeError(e.to_string())),
@@ -60,8 +61,15 @@ impl PluginModule {
             to_i64(env.write_data_as_pointer(&out).unwrap())
         }
 
-        fn dbg(a: i32) {
-            println!("WASM DEBUG: {}", a);
+        fn raw_print(env: &HostFunctionEnvironment, ptr: i64, len: i64) {
+            if let Some(msg) = env
+                .read_bytes(from_i64(ptr), from_i64(len))
+                .and_then(|bytes| String::from_utf8(bytes).ok())
+            {
+                tracing::info!("[{}] {}", env.name, msg);
+            } else {
+                tracing::error!("Logging message from plugin {} failed!", env.name);
+            }
         }
 
         let ecs = Arc::new(EcsAccessManager::default());
@@ -70,9 +78,9 @@ impl PluginModule {
         // Create an import object.
         let import_object = imports! {
             "env" => {
-                "raw_emit_actions" => Function::new_native_with_env(&store, HostFunctionEnvironement::new(name.clone(), ecs.clone(),memory_manager.clone()), raw_emit_actions),
-                "raw_retrieve_action" => Function::new_native_with_env(&store, HostFunctionEnvironement::new(name.clone(), ecs.clone(),memory_manager.clone()), raw_retrieve_action),
-                "dbg" => Function::new_native(&store, dbg),
+                "raw_emit_actions" => Function::new_native_with_env(&store, HostFunctionEnvironment::new(name.clone(), ecs.clone(), memory_manager.clone()), raw_emit_actions),
+                "raw_retrieve_action" => Function::new_native_with_env(&store, HostFunctionEnvironment::new(name.clone(), ecs.clone(), memory_manager.clone()), raw_retrieve_action),
+                "raw_print" => Function::new_native_with_env(&store, HostFunctionEnvironment::new(name.clone(), ecs.clone(), memory_manager.clone()), raw_print),
             }
         };
 
@@ -112,7 +120,7 @@ impl PluginModule {
     where
         T: Event,
     {
-        if !self.events.contains(&request.function_name) {
+        if !self.events.contains(request.function_name.as_ref()) {
             return None;
         }
         // Store the ECS Pointer for later use in `retreives`
@@ -131,7 +139,7 @@ impl PluginModule {
 /// reencoding for each module in every plugin)
 pub struct PreparedEventQuery<T> {
     bytes: Vec<u8>,
-    function_name: String,
+    function_name: Cow<'static, str>,
     _phantom: PhantomData<T>,
 }
 
@@ -214,17 +222,20 @@ fn execute_raw(
             .ok_or_else(PluginModuleError::InvalidArgumentType)?,
     );
 
-    let bytes = memory_manager::read_bytes(&module.memory, u128_pointer, 16);
+    // TODO: Codify error
+    let bytes = memory_manager::read_bytes(&module.memory, u128_pointer, 16).unwrap();
 
     // We read the return object and deserialize it
 
     // The first 8 bytes are encoded as le and represent the pointer to the data
     // The next 8 bytes are encoded as le and represent the length of the data
+    // TODO: Codify error
     Ok(memory_manager::read_bytes(
         &module.memory,
         u64::from_le_bytes(bytes[0..8].try_into().unwrap()),
         u64::from_le_bytes(bytes[8..16].try_into().unwrap()),
-    ))
+    )
+    .unwrap())
 }
 
 fn retrieve_action(

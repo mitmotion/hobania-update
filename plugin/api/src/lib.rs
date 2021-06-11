@@ -1,9 +1,8 @@
-pub extern crate common;
+//#![deny(missing_docs)]
 
-pub use common::comp::Health;
+pub use common::{comp::Health, resources::GameMode, uid::Uid};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-
-pub use common::{resources::GameMode, uid::Uid};
+use std::borrow::Cow;
 
 mod errors;
 
@@ -97,7 +96,7 @@ pub enum RetrieveResult {
 pub trait Event: Serialize + DeserializeOwned + Send + Sync {
     type Response: Serialize + DeserializeOwned + Send + Sync;
 
-    fn get_event_name(&self) -> String;
+    fn get_event_name(&self) -> Cow<'static, str>;
 }
 
 /// This module contains all events from the api
@@ -141,7 +140,9 @@ pub mod event {
     impl Event for ChatCommandEvent {
         type Response = Result<Vec<String>, String>;
 
-        fn get_event_name(&self) -> String { format!("on_command_{}", self.command) }
+        fn get_event_name(&self) -> Cow<'static, str> {
+            Cow::Owned(format!("on_command_{}", self.command))
+        }
     }
 
     /// This struct represent a player
@@ -172,7 +173,7 @@ pub mod event {
     impl Event for PlayerJoinEvent {
         type Response = PlayerJoinResult;
 
-        fn get_event_name(&self) -> String { "on_join".to_owned() }
+        fn get_event_name(&self) -> Cow<'static, str> { Cow::Borrowed("on_join") }
     }
 
     /// This is the return type of an `on_join` event. See [`PlayerJoinEvent`]
@@ -213,7 +214,7 @@ pub mod event {
     impl Event for PluginLoadEvent {
         type Response = ();
 
-        fn get_event_name(&self) -> String { "on_load".to_owned() }
+        fn get_event_name(&self) -> Cow<'static, str> { Cow::Borrowed("on_load") }
     }
 
     // impl Default for PlayerJoinResult {

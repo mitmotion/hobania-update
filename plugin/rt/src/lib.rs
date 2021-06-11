@@ -1,24 +1,35 @@
-pub extern crate plugin_derive;
+extern crate plugin_derive;
 
 pub mod retrieve;
 
-use api::RetrieveError;
-pub use retrieve::*;
-
-use std::convert::TryInto;
-
-pub use retrieve::*;
-
 pub use plugin_api as api;
-pub use plugin_derive::*;
+pub use plugin_derive::{event_handler, global_state};
+pub use retrieve::*;
 
+use api::RetrieveError;
 use serde::{de::DeserializeOwned, Serialize};
+use std::{convert::TryInto, marker::PhantomData};
+
+pub struct Game {
+    phantom: PhantomData<()>,
+}
+
+impl Game {
+    /// This is not strictly unsafe today, but it may become unsafe in the
+    /// future. No safety guarantees are listed because we don't intend this
+    /// to ever be manually called. Do not use this function!
+    pub unsafe fn __new() -> Self {
+        Self {
+            phantom: PhantomData,
+        }
+    }
+}
 
 #[cfg(target_arch = "wasm32")]
 extern "C" {
     fn raw_emit_actions(ptr: i64, len: i64);
     fn raw_retrieve_action(ptr: i64, len: i64) -> i64;
-    pub fn dbg(i: i32);
+    fn raw_print(ptr: i64, len: i64);
 }
 
 pub fn retrieve_action<T: DeserializeOwned>(_actions: &api::Retrieve) -> Result<T, RetrieveError> {
@@ -49,6 +60,19 @@ pub fn emit_actions(_actions: Vec<api::Action>) {
             raw_emit_actions(to_i64(ret.as_ptr() as _), to_i64(ret.len() as _));
         }
     }
+}
+
+pub fn print_str(s: &str) {
+    let bytes = s.as_bytes();
+    unsafe {
+        // Safety: ptr and len are valid for byte slice
+        raw_print(to_i64(bytes.as_ptr() as _), to_i64(bytes.len() as _));
+    }
+}
+
+#[macro_export]
+macro_rules! log {
+    ($($x:tt)*) => { $crate::print_str(&format!($($x)*)) };
 }
 
 pub fn read_input<T>(ptr: i64, len: i64) -> Result<T, &'static str>
