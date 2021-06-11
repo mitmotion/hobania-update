@@ -194,7 +194,12 @@ impl SessionState {
             self.mumble_link.update(player_pos, player_pos);
         }
 
-        for event in client.tick(self.inputs.clone(), dt, crate::ecs::sys::add_local_systems)? {
+        for event in client.tick(
+            self.inputs.clone(),
+            dt,
+            global_state.clock.total_tick_time(),
+            crate::ecs::sys::add_local_systems,
+        )? {
             match event {
                 client::Event::Chat(m) => {
                     self.hud.new_message(m);

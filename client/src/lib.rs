@@ -29,9 +29,9 @@ use common::{
         invite::{InviteKind, InviteResponse},
         skills::Skill,
         slot::{EquipSlot, InvSlotId, Slot},
-        CharacterState, ChatMode, ControlAction, ControlEvent, Controller, ControllerInputs,
-        GroupManip, InputKind, InventoryAction, InventoryEvent, InventoryUpdateEvent,
-        MapMarkerChange, UtteranceKind,
+        CharacterState, ChatMode, CommandGenerator, ControlAction, ControlEvent, Controller,
+        ControllerInputs, GroupManip, InputKind, InventoryAction, InventoryEvent,
+        InventoryUpdateEvent, MapMarkerChange, RemoteController, UtteranceKind,
     },
     event::{EventBus, LocalEvent},
     grid::Grid,
@@ -73,7 +73,7 @@ use num::traits::FloatConst;
 use rayon::prelude::*;
 use specs::Component;
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::VecDeque,
     mem,
     sync::Arc,
     time::{Duration, Instant},
@@ -179,6 +179,9 @@ pub struct Client {
     pending_invites: HashSet<Uid>,
     // The pending trade the client is involved in, and it's id
     pending_trade: Option<(TradeId, PendingTrade, Option<SitePrices>)>,
+
+    local_command_gen: CommandGenerator,
+    next_control: Controller,
 
     network: Option<Network>,
     participant: Option<Participant>,
@@ -636,6 +639,9 @@ impl Client {
             pending_invites: HashSet::new(),
             pending_trade: None,
 
+            local_command_gen: CommandGenerator::default(),
+            next_control: Controller::default(),
+
             network: Some(network),
             participant: Some(participant),
             general_stream: stream,
@@ -753,9 +759,7 @@ impl Client {
                     | ClientGeneral::Character(_)
                     | ClientGeneral::Spectate => &mut self.character_screen_stream,
                     //Only in game
-                    ClientGeneral::ControllerInputs(_)
-                    | ClientGeneral::ControlEvent(_)
-                    | ClientGeneral::ControlAction(_)
+                    ClientGeneral::Control(_)
                     | ClientGeneral::SetViewDistance(_)
                     | ClientGeneral::BreakBlock(_)
                     | ClientGeneral::PlaceBlock(_, _)
@@ -902,9 +906,11 @@ impl Client {
                 ControlAction::InventoryAction(InventoryAction::Swap(equip, slot)),
             ),
             (Slot::Inventory(inv1), Slot::Inventory(inv2)) => {
-                self.send_msg(ClientGeneral::ControlEvent(ControlEvent::InventoryEvent(
-                    InventoryEvent::Swap(inv1, inv2),
-                )))
+                self.next_control
+                    .events
+                    .push(ControlEvent::InventoryEvent(InventoryEvent::Swap(
+                        inv1, inv2,
+                    )));
             },
         }
     }
@@ -914,9 +920,10 @@ impl Client {
             Slot::Equip(equip) => {
                 self.control_action(ControlAction::InventoryAction(InventoryAction::Drop(equip)))
             },
-            Slot::Inventory(inv) => self.send_msg(ClientGeneral::ControlEvent(
-                ControlEvent::InventoryEvent(InventoryEvent::Drop(inv)),
-            )),
+            Slot::Inventory(inv) => self
+                .next_control
+                .events
+                .push(ControlEvent::InventoryEvent(InventoryEvent::Drop(inv))),
         }
     }
 
@@ -929,9 +936,9 @@ impl Client {
             if let TradeAction::Decline = action {
                 self.pending_trade.take();
             }
-            self.send_msg(ClientGeneral::ControlEvent(
-                ControlEvent::PerformTradeAction(id, action),
-            ));
+            self.next_control
+                .events
+                .push(ControlEvent::PerformTradeAction(id, action));
         }
     }
 
@@ -947,11 +954,9 @@ impl Client {
             (Slot::Equip(equip), slot) | (slot, Slot::Equip(equip)) => self.control_action(
                 ControlAction::InventoryAction(InventoryAction::Swap(equip, slot)),
             ),
-            (Slot::Inventory(inv1), Slot::Inventory(inv2)) => {
-                self.send_msg(ClientGeneral::ControlEvent(ControlEvent::InventoryEvent(
-                    InventoryEvent::SplitSwap(inv1, inv2),
-                )))
-            },
+            (Slot::Inventory(inv1), Slot::Inventory(inv2)) => self.next_control.events.push(
+                ControlEvent::InventoryEvent(InventoryEvent::SplitSwap(inv1, inv2)),
+            ),
         }
     }
 
@@ -960,9 +965,10 @@ impl Client {
             Slot::Equip(equip) => {
                 self.control_action(ControlAction::InventoryAction(InventoryAction::Drop(equip)))
             },
-            Slot::Inventory(inv) => self.send_msg(ClientGeneral::ControlEvent(
-                ControlEvent::InventoryEvent(InventoryEvent::SplitDrop(inv)),
-            )),
+            Slot::Inventory(inv) => self
+                .next_control
+                .events
+                .push(ControlEvent::InventoryEvent(InventoryEvent::SplitDrop(inv))),
         }
     }
 
@@ -974,10 +980,9 @@ impl Client {
             if self.is_dead() {
                 return;
             }
-
-            self.send_msg(ClientGeneral::ControlEvent(ControlEvent::InventoryEvent(
-                InventoryEvent::Pickup(uid),
-            )));
+            self.next_control
+                .events
+                .push(ControlEvent::InventoryEvent(InventoryEvent::Pickup(uid)));
         }
     }
 
@@ -988,7 +993,7 @@ impl Client {
         }
 
         if let Some(uid) = self.state.read_component_copied(npc_entity) {
-            self.send_msg(ClientGeneral::ControlEvent(ControlEvent::Interact(uid)));
+            self.next_control.events.push(ControlEvent::Interact(uid));
         }
     }
 
@@ -1034,7 +1039,7 @@ impl Client {
         let (can_craft, required_sprite) = self.can_craft_recipe(recipe);
         let has_sprite = required_sprite.map_or(true, |s| Some(s) == craft_sprite.map(|(_, s)| s));
         if can_craft && has_sprite {
-            self.send_msg(ClientGeneral::ControlEvent(ControlEvent::InventoryEvent(
+            self.next_control.events.push(ControlEvent::InventoryEvent(
                 InventoryEvent::CraftRecipe {
                     craft_event: CraftEvent::Simple {
                         recipe: recipe.to_string(),
@@ -1042,7 +1047,7 @@ impl Client {
                     },
                     craft_sprite: craft_sprite.map(|(pos, _)| pos),
                 },
-            )));
+            ));
             true
         } else {
             false
@@ -1062,12 +1067,12 @@ impl Client {
     pub fn salvage_item(&mut self, slot: InvSlotId, salvage_pos: Vec3<i32>) -> bool {
         let is_salvageable = self.can_salvage_item(slot);
         if is_salvageable {
-            self.send_msg(ClientGeneral::ControlEvent(ControlEvent::InventoryEvent(
+            self.next_control.events.push(ControlEvent::InventoryEvent(
                 InventoryEvent::CraftRecipe {
                     craft_event: CraftEvent::Salvage(slot),
                     craft_sprite: Some(salvage_pos),
                 },
-            )));
+            ));
         }
         is_salvageable
     }
@@ -1169,18 +1174,16 @@ impl Client {
 
     pub fn sites_mut(&mut self) -> &mut HashMap<SiteId, SiteInfoRich> { &mut self.sites }
 
-    pub fn enable_lantern(&mut self) {
-        self.send_msg(ClientGeneral::ControlEvent(ControlEvent::EnableLantern));
-    }
+    pub fn enable_lantern(&mut self) { self.next_control.events.push(ControlEvent::EnableLantern); }
 
     pub fn disable_lantern(&mut self) {
-        self.send_msg(ClientGeneral::ControlEvent(ControlEvent::DisableLantern));
+        self.next_control.events.push(ControlEvent::DisableLantern);
     }
 
     pub fn remove_buff(&mut self, buff_id: BuffKind) {
-        self.send_msg(ClientGeneral::ControlEvent(ControlEvent::RemoveBuff(
-            buff_id,
-        )));
+        self.next_control
+            .events
+            .push(ControlEvent::RemoveBuff(buff_id));
     }
 
     pub fn unlock_skill(&mut self, skill: Skill) {
@@ -1208,43 +1211,43 @@ impl Client {
     pub fn is_trading(&self) -> bool { self.pending_trade.is_some() }
 
     pub fn send_invite(&mut self, invitee: Uid, kind: InviteKind) {
-        self.send_msg(ClientGeneral::ControlEvent(ControlEvent::InitiateInvite(
-            invitee, kind,
-        )))
+        self.next_control
+            .events
+            .push(ControlEvent::InitiateInvite(invitee, kind));
     }
 
     pub fn accept_invite(&mut self) {
         // Clear invite
         self.invite.take();
-        self.send_msg(ClientGeneral::ControlEvent(ControlEvent::InviteResponse(
-            InviteResponse::Accept,
-        )));
+        self.next_control
+            .events
+            .push(ControlEvent::InviteResponse(InviteResponse::Accept));
     }
 
     pub fn decline_invite(&mut self) {
         // Clear invite
         self.invite.take();
-        self.send_msg(ClientGeneral::ControlEvent(ControlEvent::InviteResponse(
-            InviteResponse::Decline,
-        )));
+        self.next_control
+            .events
+            .push(ControlEvent::InviteResponse(InviteResponse::Decline));
     }
 
     pub fn leave_group(&mut self) {
-        self.send_msg(ClientGeneral::ControlEvent(ControlEvent::GroupManip(
-            GroupManip::Leave,
-        )));
+        self.next_control
+            .events
+            .push(ControlEvent::GroupManip(GroupManip::Leave));
     }
 
     pub fn kick_from_group(&mut self, uid: Uid) {
-        self.send_msg(ClientGeneral::ControlEvent(ControlEvent::GroupManip(
-            GroupManip::Kick(uid),
-        )));
+        self.next_control
+            .events
+            .push(ControlEvent::GroupManip(GroupManip::Kick(uid)));
     }
 
     pub fn assign_group_leader(&mut self, uid: Uid) {
-        self.send_msg(ClientGeneral::ControlEvent(ControlEvent::GroupManip(
-            GroupManip::AssignLeader(uid),
-        )));
+        self.next_control
+            .events
+            .push(ControlEvent::GroupManip(GroupManip::AssignLeader(uid)));
     }
 
     pub fn is_riding(&self) -> bool {
@@ -1265,11 +1268,11 @@ impl Client {
 
     pub fn mount(&mut self, entity: EcsEntity) {
         if let Some(uid) = self.state.read_component_copied(entity) {
-            self.send_msg(ClientGeneral::ControlEvent(ControlEvent::Mount(uid)));
+            self.next_control.events.push(ControlEvent::Mount(uid));
         }
     }
 
-    pub fn unmount(&mut self) { self.send_msg(ClientGeneral::ControlEvent(ControlEvent::Unmount)); }
+    pub fn unmount(&mut self) { self.next_control.events.push(ControlEvent::Unmount); }
 
     pub fn respawn(&mut self) {
         if self
@@ -1279,7 +1282,7 @@ impl Client {
             .get(self.entity())
             .map_or(false, |h| h.is_dead)
         {
-            self.send_msg(ClientGeneral::ControlEvent(ControlEvent::Respawn));
+            self.next_control.events.push(ControlEvent::Respawn);
         }
     }
 
@@ -1340,7 +1343,7 @@ impl Client {
     }
 
     pub fn utter(&mut self, kind: UtteranceKind) {
-        self.send_msg(ClientGeneral::ControlEvent(ControlEvent::Utterance(kind)));
+        self.next_control.events.push(ControlEvent::Utterance(kind));
     }
 
     pub fn toggle_sneak(&mut self) {
@@ -1392,15 +1395,7 @@ impl Client {
     }
 
     fn control_action(&mut self, control_action: ControlAction) {
-        if let Some(controller) = self
-            .state
-            .ecs()
-            .write_storage::<Controller>()
-            .get_mut(self.entity())
-        {
-            controller.push_action(control_action);
-        }
-        self.send_msg(ClientGeneral::ControlAction(control_action));
+        self.next_control.actions.push(control_action);
     }
 
     pub fn view_distance(&self) -> Option<u32> { self.view_distance }
@@ -1523,11 +1518,11 @@ impl Client {
                 )
             });
 
-        self.send_msg(ClientGeneral::ControlEvent(ControlEvent::ChangeAbility {
+        self.next_control.events.push(ControlEvent::ChangeAbility {
             slot,
             auxiliary_key,
             new_ability,
-        }))
+        });
     }
 
     pub fn acknolwedge_persistence_load_error(&mut self) {
@@ -1540,6 +1535,7 @@ impl Client {
         &mut self,
         inputs: ControllerInputs,
         dt: Duration,
+        total_tick_time: Duration,
         add_foreign_systems: impl Fn(&mut DispatcherBuilder),
     ) -> Result<Vec<Event>, Error> {
         span!(_guard, "tick", "Client::tick");
@@ -1566,30 +1562,25 @@ impl Client {
         // Pass character actions from frontend input to the player's entity.
         if self.presence.is_some() {
             prof_span!("handle and send inputs");
-            if let Err(e) = self
+            self.next_control.inputs = inputs;
+            let con = std::mem::take(&mut self.next_control);
+            let rcon = self.local_command_gen.gen(total_tick_time, con);
+            let commands = self
                 .state
                 .ecs()
-                .write_storage::<Controller>()
+                .write_storage::<RemoteController>()
                 .entry(self.entity())
-                .map(|entry| {
-                    entry
-                        .or_insert_with(|| Controller {
-                            inputs: inputs.clone(),
-                            queued_inputs: BTreeMap::new(),
-                            events: Vec::new(),
-                            actions: Vec::new(),
-                        })
-                        .inputs = inputs.clone();
-                })
-            {
-                let entry = self.entity();
-                error!(
-                    ?e,
-                    ?entry,
-                    "Couldn't access controller component on client entity"
-                );
-            }
-            self.send_msg_err(ClientGeneral::ControllerInputs(Box::new(inputs)))?;
+                .map(|rc| {
+                    let rc = rc.or_insert_with(RemoteController::default);
+                    rc.push(rcon);
+                    rc.commands().clone()
+                });
+            match commands {
+                Ok(commands) => self.send_msg_err(ClientGeneral::Control(commands))?,
+                Err(e) => {
+                    error!(?e, "couldn't create RemoteController for own entity");
+                },
+            };
         }
 
         // 2) Build up a list of events for this frame, to be passed to the frontend.
@@ -2020,6 +2011,17 @@ impl Client {
     ) -> Result<(), Error> {
         prof_span!("handle_server_in_game_msg");
         match msg {
+            ServerGeneral::AckControl(acked_ids) => {
+                if let Some(remote_controller) = self
+                    .state
+                    .ecs()
+                    .write_storage::<RemoteController>()
+                    .get_mut(self.entity())
+                {
+                    remote_controller.acked(acked_ids);
+                    remote_controller.maintain();
+                }
+            },
             ServerGeneral::GroupUpdate(change_notification) => {
                 use comp::group::ChangeNotification::*;
                 // Note: we use a hashmap since this would not work with entities outside
@@ -2803,8 +2805,12 @@ mod tests {
             let mut clock = Clock::new(Duration::from_secs_f64(SPT));
 
             //tick
-            let events_result: Result<Vec<Event>, Error> =
-                client.tick(comp::ControllerInputs::default(), clock.dt(), |_| {});
+            let events_result: Result<Vec<Event>, Error> = client.tick(
+                comp::ControllerInputs::default(),
+                clock.dt(),
+                clock.total_tick_time(),
+                |_| {},
+            );
 
             //chat functionality
             client.send_chat("foobar".to_string());

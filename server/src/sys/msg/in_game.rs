@@ -3,8 +3,7 @@ use crate::TerrainPersistence;
 use crate::{client::Client, presence::Presence, Settings};
 use common::{
     comp::{
-        Admin, CanBuild, ControlEvent, Controller, ForceUpdate, Health, Ori, Player, Pos, SkillSet,
-        Vel,
+        Admin, CanBuild, ForceUpdate, Health, Ori, Player, Pos, RemoteController, SkillSet, Vel,
     },
     event::{EventBus, ServerEvent},
     link::Is,
@@ -42,7 +41,7 @@ impl Sys {
         positions: &mut WriteStorage<'_, Pos>,
         velocities: &mut WriteStorage<'_, Vel>,
         orientations: &mut WriteStorage<'_, Ori>,
-        controllers: &mut WriteStorage<'_, Controller>,
+        remote_controllers: &mut WriteStorage<'_, RemoteController>,
         settings: &Read<'_, Settings>,
         build_areas: &Read<'_, BuildAreas>,
         player_physics_settings: &mut Write<'_, PlayerPhysicsSettings>,
@@ -83,31 +82,36 @@ impl Sys {
                     ))?;
                 }
             },
-            ClientGeneral::ControllerInputs(inputs) => {
+            ClientGeneral::Control(rc) => {
                 if presence.kind.controlling_char() {
-                    if let Some(controller) = controllers.get_mut(entity) {
-                        controller.inputs.update_with_new(*inputs);
-                    }
-                }
-            },
-            ClientGeneral::ControlEvent(event) => {
-                if presence.kind.controlling_char() {
-                    // Skip respawn if client entity is alive
-                    if let ControlEvent::Respawn = event {
-                        if healths.get(entity).map_or(true, |h| !h.is_dead) {
-                            //Todo: comment why return!
-                            return Ok(());
-                        }
-                    }
-                    if let Some(controller) = controllers.get_mut(entity) {
-                        controller.push_event(event);
-                    }
-                }
-            },
-            ClientGeneral::ControlAction(event) => {
-                if presence.kind.controlling_char() {
-                    if let Some(controller) = controllers.get_mut(entity) {
-                        controller.push_action(event);
+                    if let Ok(remote_controller) = remote_controllers
+                        .entry(entity)
+                        .map(|e| e.or_insert_with(Default::default))
+                    {
+                        let ids = remote_controller.append(rc);
+                        remote_controller.maintain();
+                        // confirm controls
+                        client.send(ServerGeneral::AckControl(ids))?;
+                        //Todo: FIXME!!!
+                        /*
+                                                            // Skip respawn if client entity is alive
+                                    if let ControlEvent::Respawn = event {
+                                        if healths.get(entity).map_or(true, |h| !h.is_dead) {
+                                            //Todo: comment why return!
+                                            return Ok(());
+                                        }
+                                    }
+                                }
+                                if let Some(controller) = controllers.get_mut(entity) {
+                                    controller.push_event(event);
+                                }
+                            }
+                        },
+                        ClientGeneral::ControlAction(event) => {
+                            if presence.kind.controlling_char() {
+                                if let Some(controller) = controllers.get_mut(entity) {
+                                    controller.push_action(event);
+                                         */
                     }
                 }
             },
@@ -330,7 +334,7 @@ impl<'a> System<'a> for Sys {
         WriteStorage<'a, Ori>,
         WriteStorage<'a, Presence>,
         WriteStorage<'a, Client>,
-        WriteStorage<'a, Controller>,
+        WriteStorage<'a, RemoteController>,
         Read<'a, Settings>,
         Read<'a, BuildAreas>,
         Write<'a, PlayerPhysicsSettings>,
@@ -360,7 +364,7 @@ impl<'a> System<'a> for Sys {
             mut orientations,
             mut presences,
             mut clients,
-            mut controllers,
+            mut remote_controllers,
             settings,
             build_areas,
             mut player_physics_settings,
@@ -396,7 +400,7 @@ impl<'a> System<'a> for Sys {
                     &mut positions,
                     &mut velocities,
                     &mut orientations,
-                    &mut controllers,
+                    &mut remote_controllers,
                     &settings,
                     &build_areas,
                     &mut player_physics_settings,

@@ -92,6 +92,8 @@ impl Clock {
         }
     }
 
+    pub fn total_tick_time(&self) -> Duration { self.total_tick_time }
+
     /// Do not modify without asking @xMAC94x first!
     pub fn tick(&mut self) {
         span!(_guard, "tick", "Clock::tick");

@@ -63,9 +63,7 @@ pub enum ClientGeneral {
     Character(CharacterId),
     Spectate,
     //Only in game
-    ControllerInputs(Box<comp::ControllerInputs>),
-    ControlEvent(comp::ControlEvent),
-    ControlAction(comp::ControlAction),
+    Control(comp::ControlCommands),
     SetViewDistance(u32),
     BreakBlock(Vec3<i32>),
     PlaceBlock(Vec3<i32>, Block),
@@ -122,9 +120,7 @@ impl ClientMsg {
                             c_type == ClientType::Game && presence.is_none()
                         },
                         //Only in game
-                        ClientGeneral::ControllerInputs(_)
-                        | ClientGeneral::ControlEvent(_)
-                        | ClientGeneral::ControlAction(_)
+                        ClientGeneral::Control(_)
                         | ClientGeneral::SetViewDistance(_)
                         | ClientGeneral::BreakBlock(_)
                         | ClientGeneral::PlaceBlock(_, _)

@@ -40,6 +40,8 @@ pub mod loot_owner;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod projectile;
 #[cfg(not(target_arch = "wasm32"))]
+mod remote_controller;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod shockwave;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod skillset;
@@ -105,6 +107,7 @@ pub use self::{
     player::{AliasError, Player, MAX_ALIAS_LEN},
     poise::{Poise, PoiseChange, PoiseState},
     projectile::{Projectile, ProjectileConstructor},
+    remote_controller::{CommandGenerator, ControlCommands, RemoteController},
     shockwave::{Shockwave, ShockwaveHitEntities},
     skillset::{
         skills::{self, Skill},

@@ -135,6 +135,7 @@ pub enum UtteranceKind {
      * sounds */
 }
 
+/// instantaneous Events that can happen anytime and are
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ControlEvent {
     //ToggleLantern,
@@ -158,6 +159,8 @@ pub enum ControlEvent {
     },
 }
 
+/// in contrast to events, action move a entity between 2 states, we want to
+/// limit when they can happen
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ControlAction {
     SwapEquippedWeapons,

@@ -10,6 +10,7 @@ mod interpolation;
 pub mod melee;
 mod mount;
 pub mod phys;
+pub mod predict_controller;
 pub mod projectile;
 mod shockwave;
 mod stats;
@@ -19,6 +20,7 @@ use common_ecs::{dispatch, System};
 use specs::DispatcherBuilder;
 
 pub fn add_local_systems(dispatch_builder: &mut DispatcherBuilder) {
+    dispatch::<predict_controller::Sys>(dispatch_builder, &[]);
     //TODO: don't run interpolation on server
     dispatch::<interpolation::Sys>(dispatch_builder, &[]);
     dispatch::<mount::Sys>(dispatch_builder, &[]);
