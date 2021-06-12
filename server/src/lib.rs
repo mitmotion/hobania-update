@@ -94,6 +94,7 @@ use prometheus::Registry;
 use prometheus_hyper::Server as PrometheusServer;
 use specs::{join::Join, Builder, Entity as EcsEntity, SystemData, WorldExt};
 use std::{
+    borrow::Cow,
     i32,
     ops::{Deref, DerefMut},
     sync::Arc,
@@ -1017,12 +1018,12 @@ impl Server {
                     );
                     return;
                 };
-                let rs = plugin_manager.execute_event(
+                let rs = plugin_manager.execute_event::<plugin_api::event::Command>(
                     &ecs_world,
-                    &plugin_api::event::ChatCommandEvent {
-                        command: kwd.clone(),
-                        command_args: args.split(' ').map(|x| x.to_owned()).collect(),
-                        player: plugin_api::event::Player { id: uid },
+                    &plugin_api::event::command::RawCommand {
+                        entity: uid,
+                        cmd: &kwd,
+                        args: Cow::Owned(args.split(' ').collect()),
                     },
                 );
                 match rs {

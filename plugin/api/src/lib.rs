@@ -1,14 +1,32 @@
 //#![deny(missing_docs)]
 
-pub use common::{comp::Health, resources::GameMode, uid::Uid};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::borrow::Cow;
+pub mod entity;
+pub mod event;
+pub mod raw;
 
 mod errors;
 
-pub use errors::*;
-pub use event::*;
+pub use self::{errors::*, event::Event};
+pub use common::{resources::GameMode, uid::Uid};
 
+use self::{entity::Entity, raw::RawAction};
+use common::comp::Health;
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::{borrow::Cow, marker::PhantomData};
+
+pub struct Game {
+    emit_action: fn(RawAction),
+}
+
+impl Game {
+    pub fn __new(emit_action: fn(RawAction)) -> Self { Self { emit_action } }
+
+    fn emit(&self, action: RawAction) { (self.emit_action)(action) }
+
+    pub fn entity(&self, uid: Uid) -> Entity<'_> { Entity { game: self, uid } }
+}
+
+/*
 /// The [`Action`] enum represents a push modification that will be made in the
 /// ECS in the next tick Note that all actions when sent are async and will not
 /// be executed in order like [`Retrieve`] that are sync. All actions sent will
@@ -28,7 +46,7 @@ pub use event::*;
 /// // You can also use this to only send one action
 /// emit_action(Action::KillEntity(Uid(1)));
 /// ```
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub enum Action {
     ServerClose,
     Print(String),
@@ -223,3 +241,4 @@ pub mod event {
     //     }
     // }
 }
+*/

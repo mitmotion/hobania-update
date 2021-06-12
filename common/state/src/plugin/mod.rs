@@ -81,13 +81,13 @@ impl Plugin {
         })
     }
 
-    pub fn execute_prepared<T>(
+    pub fn execute_prepared<'a, T>(
         &self,
         ecs: &EcsWorld,
-        event: &PreparedEventQuery<T>,
-    ) -> Result<Vec<T::Response>, PluginError>
+        event: &PreparedEventQuery<'a, T>,
+    ) -> Result<Vec<<T as Event<'a>>::Response>, PluginError>
     where
-        T: Event,
+        T: Event<'a>,
     {
         self.modules
             .iter()
@@ -119,13 +119,13 @@ impl PluginMgr {
         Self::from_dir(assets_path)
     }
 
-    pub fn execute_prepared<T>(
+    pub fn execute_prepared<'a, T>(
         &self,
         ecs: &EcsWorld,
-        event: &PreparedEventQuery<T>,
-    ) -> Result<Vec<T::Response>, PluginError>
+        event: &PreparedEventQuery<'a, T>,
+    ) -> Result<Vec<<T as Event<'a>>::Response>, PluginError>
     where
-        T: Event,
+        T: Event<'a>,
     {
         Ok(self
             .plugins
@@ -137,15 +137,15 @@ impl PluginMgr {
             .collect())
     }
 
-    pub fn execute_event<T>(
+    pub fn execute_event<'a, T>(
         &self,
         ecs: &EcsWorld,
-        event: &T,
-    ) -> Result<Vec<T::Response>, PluginError>
+        raw_event: &'a T::Raw,
+    ) -> Result<Vec<<T as Event<'a>>::Response>, PluginError>
     where
-        T: Event,
+        T: Event<'a>,
     {
-        self.execute_prepared(ecs, &PreparedEventQuery::new(event)?)
+        self.execute_prepared::<T>(ecs, &PreparedEventQuery::new(raw_event)?)
     }
 
     pub fn from_dir<P: AsRef<Path>>(path: P) -> Result<Self, PluginError> {

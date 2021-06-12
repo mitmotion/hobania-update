@@ -8,10 +8,10 @@ use common_state::plugin::memory_manager::EcsWorld;
 #[cfg(feature = "plugins")]
 use common_state::plugin::PluginMgr;
 use hashbrown::HashMap;
-use plugin_api::event::{PlayerJoinEvent, PlayerJoinResult};
+use plugin_api::event::player_join::{PlayerJoin, PlayerJoinResponse, RawPlayerJoin};
 use specs::Component;
 use specs_idvs::IdvStorage;
-use std::{str::FromStr, sync::Arc};
+use std::{borrow::Cow, str::FromStr, sync::Arc};
 use tokio::{runtime::Runtime, sync::oneshot};
 use tracing::{error, info};
 
@@ -141,15 +141,17 @@ impl LoginProvider {
                 {
                     // Plugin player join hooks execute for all players, but are only allowed to
                     // filter non-admins.
-                    match plugin_manager.execute_event(&world, &PlayerJoinEvent {
-                        player_name: username.clone(),
-                        player_id: *uuid.as_bytes(),
+                    match plugin_manager.execute_event::<PlayerJoin>(&world, &RawPlayerJoin {
+                        uuid: *uuid.as_bytes(),
+                        alias: Cow::Borrowed(&username),
                     }) {
                         Ok(e) => {
                             if admin.is_none() {
                                 for i in e.into_iter() {
-                                    if let PlayerJoinResult::Kick(a) = i {
-                                        return Some(Err(RegisterError::Kicked(a)));
+                                    if let PlayerJoinResponse::Reject { reason } = i {
+                                        return Some(Err(RegisterError::Kicked(
+                                            reason.into_owned(),
+                                        )));
                                     }
                                 }
                             }

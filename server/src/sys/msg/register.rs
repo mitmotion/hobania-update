@@ -5,7 +5,7 @@ use crate::{
     EditableSettings,
 };
 use common::{
-    comp::{Admin, Player, Stats},
+    comp::{Admin, Health, Player, Stats},
     event::{EventBus, ServerEvent},
     uid::{Uid, UidAllocator},
 };
@@ -15,7 +15,6 @@ use common_net::msg::{
     ServerGeneral, ServerRegisterAnswer,
 };
 use hashbrown::HashMap;
-use plugin_api::Health;
 use specs::{
     storage::StorageEntry, Entities, Join, Read, ReadExpect, ReadStorage, WriteExpect, WriteStorage,
 };

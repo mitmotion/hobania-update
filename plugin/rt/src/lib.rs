@@ -1,61 +1,47 @@
 extern crate plugin_derive;
 
-pub mod retrieve;
-
 pub use plugin_api as api;
 pub use plugin_derive::{event_handler, global_state};
-pub use retrieve::*;
 
-use api::RetrieveError;
-use serde::{de::DeserializeOwned, Serialize};
-use std::{convert::TryInto, marker::PhantomData};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::{
+    borrow::{Cow, ToOwned},
+    convert::TryInto,
+    marker::PhantomData,
+};
 
-pub struct Game {
-    phantom: PhantomData<()>,
-}
-
-impl Game {
-    /// This is not strictly unsafe today, but it may become unsafe in the
-    /// future. No safety guarantees are listed because we don't intend this
-    /// to ever be manually called. Do not use this function!
-    pub unsafe fn __new() -> Self {
-        Self {
-            phantom: PhantomData,
-        }
-    }
-}
+pub fn __game() -> api::Game { api::Game::__new(|_| todo!()) }
 
 #[cfg(target_arch = "wasm32")]
 extern "C" {
     fn raw_emit_actions(ptr: i64, len: i64);
-    fn raw_retrieve_action(ptr: i64, len: i64) -> i64;
+    fn raw_request(ptr: i64, len: i64) -> i64;
     fn raw_print(ptr: i64, len: i64);
 }
 
-pub fn retrieve_action<T: DeserializeOwned>(_actions: &api::Retrieve) -> Result<T, RetrieveError> {
+pub fn request(req: api::raw::RawRequest) -> Result<api::raw::RawResponse<'static>, ()> {
     #[cfg(target_arch = "wasm32")]
     {
-        let ret = bincode::serialize(&_actions).expect("Can't serialize action in emit");
-        unsafe {
-            let ptr = raw_retrieve_action(to_i64(ret.as_ptr() as _), to_i64(ret.len() as _));
+        let ret = bincode::serialize(&req).expect("Can't serialize action in emit");
+        let bytes = unsafe {
+            let ptr = raw_request(to_i64(ret.as_ptr() as _), to_i64(ret.len() as _));
             let ptr = from_i64(ptr);
             let len =
                 u64::from_le_bytes(std::slice::from_raw_parts(ptr as _, 8).try_into().unwrap());
-            let a = ::std::slice::from_raw_parts((ptr + 8) as _, len as _);
-            bincode::deserialize::<Result<T, RetrieveError>>(&a)
-                .map_err(|x| RetrieveError::BincodeError(x.to_string()))?
-        }
+            ::std::slice::from_raw_parts((ptr + 8) as *const u8, len as _)
+        };
+        bincode::deserialize::<Result<api::raw::RawResponse<'static>, ()>>(bytes).map_err(|_| ())?
     }
     #[cfg(not(target_arch = "wasm32"))]
-    unreachable!()
+    panic!("Requests are not implemented for non-WASM targets")
 }
 
-pub fn emit_action(action: api::Action) { emit_actions(vec![action]) }
+pub fn emit_action(action: api::raw::RawAction) { emit_actions(&[action]) }
 
-pub fn emit_actions(_actions: Vec<api::Action>) {
+pub fn emit_actions(actions: &[api::raw::RawAction]) {
     #[cfg(target_arch = "wasm32")]
     {
-        let ret = bincode::serialize(&_actions).expect("Can't serialize action in emit");
+        let ret = bincode::serialize(actions.as_ref()).expect("Can't serialize action in emit");
         unsafe {
             raw_emit_actions(to_i64(ret.as_ptr() as _), to_i64(ret.len() as _));
         }
@@ -75,9 +61,10 @@ macro_rules! log {
     ($($x:tt)*) => { $crate::print_str(&format!($($x)*)) };
 }
 
-pub fn read_input<T>(ptr: i64, len: i64) -> Result<T, &'static str>
+/// Safety: Data pointed to by `ptr` must outlive 'a
+pub unsafe fn read_input<'a, T>(ptr: i64, len: i64) -> Result<T, &'static str>
 where
-    T: DeserializeOwned,
+    T: Deserialize<'a>,
 {
     let slice = unsafe { ::std::slice::from_raw_parts(from_i64(ptr) as _, from_i64(len) as _) };
     bincode::deserialize(slice).map_err(|_| "Failed to deserialize function input")

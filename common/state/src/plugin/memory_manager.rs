@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use specs::{
     storage::GenericReadStorage, Component, Entities, Entity, Read, ReadStorage, WriteStorage,
 };
@@ -223,8 +223,8 @@ impl MemoryManager {
 
 /// This function read data from memory at a position with the array length and
 /// converts it to an object using bincode
-pub fn read_data<T: DeserializeOwned>(
-    memory: &Memory,
+pub fn read_data<'a, T: for<'b> Deserialize<'b>>(
+    memory: &'a Memory,
     position: u64,
     length: u64,
 ) -> Result<T, bincode::Error> {

@@ -1,46 +1,49 @@
 use veloren_plugin_rt::{
-    api::{event::*, Action, GameMode},
+    api::{event, GameMode, *},
     *,
 };
 
 #[event_handler]
-pub fn on_load(load: PluginLoadEvent) {
-    match load.game_mode {
-        GameMode::Server => emit_action(Action::Print("Hello, server!".to_owned())),
-        GameMode::Client => emit_action(Action::Print("Hello, client!".to_owned())),
-        GameMode::Singleplayer => emit_action(Action::Print("Hello, singleplayer!".to_owned())),
+pub fn on_load(game: &Game, init: event::Init) {
+    match init.mode() {
+        GameMode::Server => log!("Hello, server!"),
+        GameMode::Client => log!("Hello, client!"),
+        GameMode::Singleplayer => log!("Hello, singleplayer!"),
     }
 }
 
 #[event_handler]
-pub fn on_command_testplugin(command: ChatCommandEvent) -> Result<Vec<String>, String> {
-    Ok(vec![format!(
-        "Player of id {:?} named {} with {:?} sended command with args {:?}",
-        command.player.id,
-        command
-            .player
-            .get_player_name()
-            .expect("Can't get player name"),
-        command
-            .player
-            .get_entity_health()
-            .expect("Can't get player health"),
-        command.command_args
-    )])
+pub fn on_command_test(game: &Game, cmd: event::Command) -> Result<Vec<String>, String> {
+    Ok(vec![
+        format!(
+            "Entity with uid {:?} named {} with {:?} sent command with args {:?}",
+            cmd.entity().uid(),
+            cmd.entity().get_name(),
+            cmd.entity().get_health(),
+            cmd.args(),
+        )
+        .into(),
+    ])
 }
 
 #[global_state]
 #[derive(Default)]
 struct State {
-    counter: bool,
+    total_joined: u64,
 }
 
 #[event_handler]
-pub fn on_join(input: PlayerJoinEvent, state: &mut State) -> PlayerJoinResult {
-    state.counter = !state.counter;
-    if !state.counter {
-        PlayerJoinResult::Kick(format!("You are a cheater {:?}", input))
+pub fn on_join(
+    game: &Game,
+    player_join: event::PlayerJoin,
+    state: &mut State,
+) -> event::PlayerJoinResponse<'static> {
+    state.total_joined += 1;
+    if state.total_joined > 10 {
+        event::PlayerJoinResponse::Reject {
+            reason: "Too many people have joined!".into(),
+        }
     } else {
-        PlayerJoinResult::None
+        event::PlayerJoinResponse::Accept
     }
 }

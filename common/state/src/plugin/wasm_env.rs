@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use wasmer::{Function, HostEnvInitError, Instance, LazyInit, Memory, WasmerEnv};
 
 use super::{
@@ -60,8 +60,8 @@ impl HostFunctionEnvironment {
 
     /// This function is a safe interface to WASM memory that reads memory from
     /// pointer and length returning an object
-    pub fn read_data<T: DeserializeOwned>(
-        &self,
+    pub fn read_data<'a, T: for<'b> Deserialize<'b>>(
+        &'a self,
         position: u64,
         length: u64,
     ) -> Result<T, bincode::Error> {

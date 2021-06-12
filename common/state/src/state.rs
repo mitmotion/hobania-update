@@ -31,7 +31,7 @@ use specs::{
     storage::{MaskedStorage as EcsMaskedStorage, Storage as EcsStorage},
     Component, DispatcherBuilder, Entity as EcsEntity, WorldExt,
 };
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 use vek::*;
 
 /// How much faster should an in-game day be compared to a real day?
@@ -238,11 +238,13 @@ impl State {
                     uid_allocator: &ecs.read_resource::<UidAllocator>().into(),
                     player: ecs.read_component().into(),
                 };
-                if let Err(e) = plugin_mgr
-                    .execute_event(&ecs_world, &plugin_api::event::PluginLoadEvent {
-                        game_mode,
-                    })
-                {
+                if let Err(e) = plugin_mgr.execute_event::<plugin_api::event::Init>(
+                    &ecs_world,
+                    &plugin_api::event::init::RawInit {
+                        mode: game_mode,
+                        phantom: PhantomData,
+                    },
+                ) {
                     tracing::debug!(?e, "Failed to run plugin init");
                     tracing::info!("Plugins disabled, enable debug logging for more information.");
                     PluginMgr::default()

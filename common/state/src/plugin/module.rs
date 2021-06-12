@@ -15,7 +15,10 @@ use super::{
     wasm_env::HostFunctionEnvironment,
 };
 
-use plugin_api::{Action, EcsAccessError, Event, Retrieve, RetrieveError, RetrieveResult};
+use plugin_api::{
+    raw::{RawAction, RawRequest, RawResponse},
+    EcsAccessError, Event,
+};
 
 #[derive(Clone)]
 /// This structure represent the WASM State of the plugin.
@@ -41,19 +44,20 @@ impl PluginModule {
 
         // This is the function imported into the wasm environement
         fn raw_emit_actions(env: &HostFunctionEnvironment, ptr: i64, len: i64) {
-            handle_actions(match env.read_data(from_i64(ptr), from_i64(len)) {
-                Ok(e) => e,
-                Err(e) => {
-                    tracing::error!(?e, "Can't decode action");
-                    return;
+            match env.read_data::<Vec<RawAction>>(from_i64(ptr), from_i64(len)) {
+                Ok(actions) => {
+                    for action in actions {
+                        tracing::debug!("At this point, we should handle {:?}", action);
+                    }
                 },
-            });
+                Err(e) => tracing::error!(?e, "Can't decode action"),
+            }
         }
 
-        fn raw_retrieve_action(env: &HostFunctionEnvironment, ptr: i64, len: i64) -> i64 {
+        fn raw_request(env: &HostFunctionEnvironment, ptr: i64, len: i64) -> i64 {
             let out = match env.read_data(from_i64(ptr), from_i64(len)) {
-                Ok(data) => retrieve_action(&env.ecs, data),
-                Err(e) => Err(RetrieveError::BincodeError(e.to_string())),
+                Ok(data) => request(&env.ecs, data),
+                Err(e) => Err(()),
             };
 
             // If an error happen set the i64 to 0 so the WASM side can tell an error
@@ -79,7 +83,7 @@ impl PluginModule {
         let import_object = imports! {
             "env" => {
                 "raw_emit_actions" => Function::new_native_with_env(&store, HostFunctionEnvironment::new(name.clone(), ecs.clone(), memory_manager.clone()), raw_emit_actions),
-                "raw_retrieve_action" => Function::new_native_with_env(&store, HostFunctionEnvironment::new(name.clone(), ecs.clone(), memory_manager.clone()), raw_retrieve_action),
+                "raw_request" => Function::new_native_with_env(&store, HostFunctionEnvironment::new(name.clone(), ecs.clone(), memory_manager.clone()), raw_request),
                 "raw_print" => Function::new_native_with_env(&store, HostFunctionEnvironment::new(name.clone(), ecs.clone(), memory_manager.clone()), raw_print),
             }
         };
@@ -112,13 +116,13 @@ impl PluginModule {
 
     /// This function tries to execute an event for the current module. Will
     /// return None if the event doesn't exists
-    pub fn try_execute<T>(
+    pub fn try_execute<'a, T>(
         &self,
         ecs: &EcsWorld,
         request: &PreparedEventQuery<T>,
-    ) -> Option<Result<T::Response, PluginModuleError>>
+    ) -> Option<Result<<T as Event<'a>>::Response, PluginModuleError>>
     where
-        T: Event,
+        T: Event<'a>,
     {
         if !self.events.contains(request.function_name.as_ref()) {
             return None;
@@ -137,23 +141,20 @@ impl PluginModule {
 
 /// This structure represent a Pre-encoded event object (Useful to avoid
 /// reencoding for each module in every plugin)
-pub struct PreparedEventQuery<T> {
+pub struct PreparedEventQuery<'a, T> {
     bytes: Vec<u8>,
-    function_name: Cow<'static, str>,
+    function_name: Cow<'a, str>,
     _phantom: PhantomData<T>,
 }
 
-impl<T: Event> PreparedEventQuery<T> {
+impl<'a, T: Event<'a>> PreparedEventQuery<'a, T> {
     /// Create a prepared query from an event reference (Encode to bytes the
     /// struct) This Prepared Query is used by the `try_execute` method in
     /// `PluginModule`
-    pub fn new(event: &T) -> Result<Self, PluginError>
-    where
-        T: Event,
-    {
+    pub fn new(raw_event: &'a <T as Event<'a>>::Raw) -> Result<Self, PluginError> {
         Ok(Self {
-            bytes: bincode::serialize(&event).map_err(PluginError::Encoding)?,
-            function_name: event.get_event_name(),
+            bytes: bincode::serialize(raw_event).map_err(PluginError::Encoding)?,
+            function_name: T::get_handler_name(raw_event),
             _phantom: PhantomData::default(),
         })
     }
@@ -238,74 +239,58 @@ fn execute_raw(
     .unwrap())
 }
 
-fn retrieve_action(
-    ecs: &EcsAccessManager,
-    action: Retrieve,
-) -> Result<RetrieveResult, RetrieveError> {
-    match action {
-        Retrieve::GetPlayerName(e) => {
+fn request<'a>(ecs: &'a EcsAccessManager, req: RawRequest) -> Result<RawResponse<'a>, ()> {
+    match req {
+        RawRequest::EntityName(e) => {
             // Safety: No reference is leaked out the function so it is safe.
             let world = unsafe {
-                ecs.get().ok_or(RetrieveError::EcsAccessError(
-                    EcsAccessError::EcsPointerNotAvailable,
-                ))?
+                ecs.get().ok_or(
+                    (), /* RetrieveError::EcsAccessError(EcsAccessError::EcsPointerNotAvailable) */
+                )?
             };
-            let player = world.uid_allocator.retrieve_entity_internal(e.0).ok_or(
-                RetrieveError::EcsAccessError(EcsAccessError::EcsEntityNotFound(e)),
+            let entity = world.uid_allocator.retrieve_entity_internal(e.0).ok_or(
+                (), /* RetrieveError::EcsAccessError(EcsAccessError::EcsEntityNotFound(e)) */
             )?;
 
-            Ok(RetrieveResult::GetPlayerName(
-                world
+            Ok(RawResponse::EntityName(Cow::Borrowed(
+                &world
                     .player
-                    .get(player)
+                    .get(entity)
                     .ok_or_else(|| {
+                        /*
                         RetrieveError::EcsAccessError(EcsAccessError::EcsComponentNotFound(
                             e,
                             "Player".to_owned(),
                         ))
+                        */
                     })?
-                    .alias
-                    .to_owned(),
-            ))
+                    .alias,
+            )))
         },
-        Retrieve::GetEntityHealth(e) => {
+        RawRequest::EntityHealth(e) => {
             // Safety: No reference is leaked out the function so it is safe.
             let world = unsafe {
-                ecs.get().ok_or(RetrieveError::EcsAccessError(
-                    EcsAccessError::EcsPointerNotAvailable,
-                ))?
+                ecs.get().ok_or(
+                    (), /*RetrieveError::EcsAccessError(
+                            EcsAccessError::EcsPointerNotAvailable,
+                        )*/
+                )?
             };
-            let player = world.uid_allocator.retrieve_entity_internal(e.0).ok_or(
-                RetrieveError::EcsAccessError(EcsAccessError::EcsEntityNotFound(e)),
+            let entity = world.uid_allocator.retrieve_entity_internal(e.0).ok_or(
+                (), /*
+                    RetrieveError::EcsAccessError(EcsAccessError::EcsEntityNotFound(e))*/
             )?;
-            Ok(RetrieveResult::GetEntityHealth(
-                *world.health.get(player).ok_or_else(|| {
+            Ok(RawResponse::EntityHealth(
+                *world.health.get(entity).ok_or_else(|| {
+                    /*
                     RetrieveError::EcsAccessError(EcsAccessError::EcsComponentNotFound(
                         e,
                         "Health".to_owned(),
                     ))
+                    */
                 })?,
             ))
         },
-    }
-}
-
-fn handle_actions(actions: Vec<Action>) {
-    for action in actions {
-        match action {
-            Action::ServerClose => {
-                tracing::info!("Server closed by plugin");
-                std::process::exit(-1);
-            },
-            Action::Print(e) => {
-                tracing::info!("{}", e);
-            },
-            Action::PlayerSendMessage(a, b) => {
-                tracing::info!("SendMessage {} -> {}", a, b);
-            },
-            Action::KillEntity(e) => {
-                tracing::info!("Kill Entity {}", e);
-            },
-        }
+        RawRequest::PlayerUidByName(_) => todo!(),
     }
 }
