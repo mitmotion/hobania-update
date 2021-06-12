@@ -667,7 +667,15 @@ impl<'a> PhysicsData<'a> {
             &write.previous_phys_cache,
             &write.orientations,
         );
-        span!(guard, "Apply terrain collision");
+        span!(
+            guard,
+            "{}",
+            if terrain_like_entities {
+                "voxel terrain collision"
+            } else {
+                "cylinder terrain collision"
+            }
+        );
         job.cpu_stats.measure(ParMode::Rayon);
         let (land_on_grounds, mut outcomes) = (
             &read.entities,
@@ -1130,36 +1138,36 @@ impl<'a> PhysicsData<'a> {
         write.outcomes.append(&mut outcomes);
 
         prof_span!(guard, "write deferred pos and vel");
-        for (_, pos, vel, pos_vel_defer, _) in (
+        (
             &read.entities,
             &mut write.positions,
             &mut write.velocities,
             &mut write.pos_vel_defers,
             &read.colliders,
         )
-            .join()
+            .par_join()
             .filter(|tuple| matches!(tuple.4, Collider::Voxel { .. }) == terrain_like_entities)
-        {
-            if let Some(new_pos) = pos_vel_defer.pos.take() {
-                *pos = new_pos;
-            }
-            if let Some(new_vel) = pos_vel_defer.vel.take() {
-                *vel = new_vel;
-            }
-        }
+            .for_each(|(_, pos, vel, pos_vel_defer, _)| {
+                if let Some(new_pos) = pos_vel_defer.pos.take() {
+                    *pos = new_pos;
+                }
+                if let Some(new_vel) = pos_vel_defer.vel.take() {
+                    *vel = new_vel;
+                }
+            });
         drop(guard);
 
         prof_span!(guard, "record ori into phys_cache");
-        for (ori, previous_phys_cache, _) in (
+        (
             &write.orientations,
             &mut write.previous_phys_cache,
             &read.colliders,
         )
-            .join()
+            .par_join()
             .filter(|tuple| matches!(tuple.2, Collider::Voxel { .. }) == terrain_like_entities)
-        {
-            previous_phys_cache.ori = ori.to_quat();
-        }
+            .for_each(|(ori, previous_phys_cache, _)| {
+                previous_phys_cache.ori = ori.to_quat();
+            });
         drop(guard);
 
         let mut event_emitter = read.event_bus.emitter();
