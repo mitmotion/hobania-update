@@ -9,6 +9,7 @@ use crate::{
     GlobalState,
 };
 
+use crate::hud::BuffInfo;
 use common::comp::{BuffKind, Buffs, Energy, Health};
 use conrod_core::{
     color,
@@ -186,6 +187,8 @@ impl<'a> Widget for BuffsBar<'a> {
                 pulsating_col,
                 norm_col,
                 &buffs_tooltip,
+                |info| info.is_buff,
+                BUFF_COLOR,
             );
 
             // Create Debuff Widgets
@@ -197,6 +200,8 @@ impl<'a> Widget for BuffsBar<'a> {
                 pulsating_col,
                 norm_col,
                 &buffs_tooltip,
+                |info| !info.is_buff,
+                DEBUFF_COLOR,
             );
         }
 
@@ -330,11 +335,13 @@ impl<'a> BuffsBar<'a> {
         state: &mut ConrodState<'_, State>,
         ui: &mut UiCell,
         event: &mut Vec<Event>,
-        localized_strings: &&Localization,
+        localized_strings: &Localization,
         buffs: &Buffs,
         pulsating_col: Color,
         norm_col: Color,
         buffs_tooltip: &Tooltip,
+        filterspec: impl Fn(&BuffInfo) -> bool,
+        color: Color,
     ) {
         let mut buff_vec = state
             .ids
@@ -346,7 +353,7 @@ impl<'a> BuffsBar<'a> {
                 buffs
                     .iter_active()
                     .map(hud::get_buff_info)
-                    .filter(|info| info.is_buff),
+                    .filter(filterspec),
             )
             .collect::<Vec<_>>();
 
@@ -393,13 +400,7 @@ impl<'a> BuffsBar<'a> {
                 if Button::image(self.get_duration_image(duration_percentage))
                     .w_h(40.0, 40.0)
                     .middle_of(*id)
-                    .with_tooltip(
-                        self.tooltip_manager,
-                        title,
-                        &desc,
-                        &buffs_tooltip,
-                        BUFF_COLOR,
-                    )
+                    .with_tooltip(self.tooltip_manager, title, &desc, &buffs_tooltip, color)
                     .set(*timer_id, ui)
                     .was_clicked()
                 {
@@ -417,6 +418,8 @@ impl<'a> BuffsBar<'a> {
         pulsating_col: Color,
         norm_col: Color,
         buffs_tooltip: &Tooltip,
+        filterspec: impl Fn(&BuffInfo) -> bool,
+        color: Color,
     ) {
         let mut debuff_vec = state
             .ids
@@ -428,7 +431,7 @@ impl<'a> BuffsBar<'a> {
                 buffs
                     .iter_active()
                     .map(hud::get_buff_info)
-                    .filter(|info| !info.is_buff),
+                    .filter(filterspec),
             )
             .collect::<Vec<_>>();
 
@@ -473,13 +476,7 @@ impl<'a> BuffsBar<'a> {
                 Image::new(self.get_duration_image(duration_percentage))
                     .w_h(40.0, 40.0)
                     .middle_of(*id)
-                    .with_tooltip(
-                        self.tooltip_manager,
-                        title,
-                        &desc,
-                        &buffs_tooltip,
-                        DEBUFF_COLOR,
-                    )
+                    .with_tooltip(self.tooltip_manager, title, &desc, &buffs_tooltip, color)
                     .set(*timer_id, ui);
             });
     }
