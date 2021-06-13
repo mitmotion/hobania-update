@@ -10,7 +10,12 @@ use crate::{
 };
 
 use common::comp::{BuffKind, Buffs, Energy, Health};
-use conrod_core::{color, image::Id, widget::{self, Button, Image, Rectangle, Text}, widget_ids, Color, Colorable, Positionable, Sizeable, Widget, WidgetCommon, UiCell};
+use conrod_core::{
+    color,
+    image::Id,
+    widget::{self, Button, Image, Rectangle, State as ConrodState, Text},
+    widget_ids, Color, Colorable, Positionable, Sizeable, UiCell, Widget, WidgetCommon,
+};
 widget_ids! {
     struct Ids {
         align,
@@ -93,8 +98,8 @@ impl<'a> Widget for BuffsBar<'a> {
 
     fn style(&self) -> Self::Style {}
 
-    fn update(self, args: widget::UpdateArgs<Self>) -> Self::Event {
-        let widget::UpdateArgs { state, ui, .. } = args;
+    fn update(mut self, args: widget::UpdateArgs<Self>) -> Self::Event {
+        let widget::UpdateArgs { mut state, ui, .. } = args;
         let mut event = Vec::new();
         let localized_strings = self.localized_strings;
         let buffs = self.buffs;
@@ -172,10 +177,27 @@ impl<'a> Widget for BuffsBar<'a> {
             };
 
             // Create Buff Widgets
-            self.create_buff_widgets(state, ui, &mut event, &localized_strings, buffs, pulsating_col, norm_col, &buffs_tooltip);
+            self.create_buff_widgets(
+                &mut state,
+                ui,
+                &mut event,
+                &localized_strings,
+                buffs,
+                pulsating_col,
+                norm_col,
+                &buffs_tooltip,
+            );
 
             // Create Debuff Widgets
-            self.create_debuff_widgets(state, ui, localized_strings, buffs, pulsating_col, norm_col, &buffs_tooltip);
+            self.create_debuff_widgets(
+                &mut state,
+                ui,
+                localized_strings,
+                buffs,
+                pulsating_col,
+                norm_col,
+                &buffs_tooltip,
+            );
         }
 
         if let BuffPosition::Map = buff_position {
@@ -303,7 +325,17 @@ impl<'a> BuffsBar<'a> {
         }
     }
 
-    fn create_buff_widgets(self, state: &mut State, ui: &mut UiCell, mut event: &mut Vec<Event>, localized_strings: &&Localization, buffs: &Buffs, pulsating_col: Color, norm_col: Color, buffs_tooltip: &Tooltip) {
+    fn create_buff_widgets(
+        &mut self,
+        state: &mut ConrodState<'_, State>,
+        ui: &mut UiCell,
+        event: &mut Vec<Event>,
+        localized_strings: &&Localization,
+        buffs: &Buffs,
+        pulsating_col: Color,
+        norm_col: Color,
+        buffs_tooltip: &Tooltip,
+    ) {
         let mut buff_vec = state
             .ids
             .buffs
@@ -376,7 +408,16 @@ impl<'a> BuffsBar<'a> {
             });
     }
 
-    fn create_debuff_widgets(self, state: &mut State, ui: &mut UiCell, localized_strings: &Localization, buffs: &Buffs, pulsating_col: Color, norm_col: Color, buffs_tooltip: &Tooltip) {
+    fn create_debuff_widgets(
+        &mut self,
+        state: &mut ConrodState<'_, State>,
+        ui: &mut UiCell,
+        localized_strings: &Localization,
+        buffs: &Buffs,
+        pulsating_col: Color,
+        norm_col: Color,
+        buffs_tooltip: &Tooltip,
+    ) {
         let mut debuff_vec = state
             .ids
             .debuffs
