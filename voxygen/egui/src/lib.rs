@@ -46,6 +46,7 @@ const MAINTAIN_EGUI_FN: &[u8] = b"maintain_egui_inner\0";
 pub fn maintain(
     platform: &mut Platform,
     egui_state: &mut EguiInnerState,
+    egui_windows: &mut EguiWindows,
     client: &Client,
     debug_info: &Option<DebugInfo>,
     added_cylinder_shape_id: Option<u64>,
@@ -55,6 +56,7 @@ pub fn maintain(
         maintain_egui_inner(
             platform,
             egui_state,
+            egui_windows,
             client,
             debug_info,
             added_cylinder_shape_id,
@@ -71,6 +73,7 @@ pub fn maintain(
             fn(
                 &mut Platform,
                 &mut EguiInnerState,
+                &mut EguiWindows,
                 &Client,
                 &Option<DebugInfo>,
                 Option<u64>,
@@ -89,6 +92,7 @@ pub fn maintain(
         maintain_fn(
             platform,
             egui_state,
+            egui_windows,
             client,
             debug_info,
             added_cylinder_shape_id,
@@ -117,11 +121,10 @@ pub struct EguiInnerState {
     max_entity_distance: f32,
     selected_entity_cylinder_height: f32,
     frame_times: Vec<f32>,
-    windows: EguiWindows,
 }
 
-#[derive(Default)]
-struct EguiWindows {
+#[derive(Clone, Default)]
+pub struct EguiWindows {
     egui_inspection: bool,
     egui_settings: bool,
     egui_memory: bool,
@@ -136,7 +139,6 @@ impl Default for EguiInnerState {
             max_entity_distance: 100000.0,
             selected_entity_cylinder_height: 10.0,
             frame_times: Vec::new(),
-            windows: Default::default(),
         }
     }
 }
@@ -163,6 +165,7 @@ pub struct EguiActions {
 pub fn maintain_egui_inner(
     platform: &mut Platform,
     egui_state: &mut EguiInnerState,
+    egui_windows: &mut EguiWindows,
     client: &Client,
     debug_info: &Option<DebugInfo>,
     added_cylinder_shape_id: Option<u64>,
@@ -204,8 +207,8 @@ pub fn maintain_egui_inner(
             });
             ui.group(|ui| {
                 ui.vertical(|ui| {
-                    ui.checkbox(&mut egui_state.windows.ecs_entities, "ECS Entities");
-                    ui.checkbox(&mut egui_state.windows.frame_time, "Frame Time");
+                    ui.checkbox(&mut egui_windows.ecs_entities, "ECS Entities");
+                    ui.checkbox(&mut egui_windows.frame_time, "Frame Time");
                 });
             });
 
@@ -213,57 +216,57 @@ pub fn maintain_egui_inner(
                 ui.vertical(|ui| {
                     ui.label("Show EGUI Windows");
                     ui.horizontal(|ui| {
-                        ui.checkbox(&mut egui_state.windows.egui_inspection, "🔍 Inspection");
-                        ui.checkbox(&mut egui_state.windows.egui_settings, "🔍 Settings");
-                        ui.checkbox(&mut egui_state.windows.egui_memory, "📝 Memory");
+                        ui.checkbox(&mut egui_windows.egui_inspection, "🔍 Inspection");
+                        ui.checkbox(&mut egui_windows.egui_settings, "🔍 Settings");
+                        ui.checkbox(&mut egui_windows.egui_memory, "📝 Memory");
                     })
                 })
             });
         });
 
     Window::new("🔧 Settings")
-        .open(&mut egui_state.windows.egui_settings)
+        .open(&mut egui_windows.egui_settings)
         .scroll(true)
         .show(ctx, |ui| {
             ctx.settings_ui(ui);
         });
     Window::new("🔍 Inspection")
-        .open(&mut egui_state.windows.egui_inspection)
+        .open(&mut egui_windows.egui_inspection)
         .scroll(true)
         .show(ctx, |ui| {
             ctx.inspection_ui(ui);
         });
 
     Window::new("📝 Memory")
-        .open(&mut egui_state.windows.egui_memory)
+        .open(&mut egui_windows.egui_memory)
         .resizable(false)
         .show(ctx, |ui| {
             ctx.memory_ui(ui);
         });
 
-    if egui_state.windows.frame_time {
-        Window::new("Frame Time")
-            .default_width(200.0)
-            .default_height(200.0)
-            .show(ctx, |ui| {
-                let plot = Plot::default().curve(Curve::from_values_iter(
-                    egui_state
-                        .frame_times
-                        .iter()
-                        .enumerate()
-                        .map(|(i, x)| Value::new(i as f64, *x)),
-                ));
-                ui.add(plot);
-            });
-    }
+    Window::new("Frame Time")
+        .open(&mut egui_windows.frame_time)
+        .default_width(200.0)
+        .default_height(200.0)
+        .show(ctx, |ui| {
+            let plot = Plot::new("Frame Time").curve(Curve::from_values_iter(
+                egui_state
+                    .frame_times
+                    .iter()
+                    .enumerate()
+                    .map(|(i, x)| Value::new(i as f64, *x)),
+            ));
+            ui.add(plot);
+        });
 
-    if egui_state.windows.ecs_entities {
+    if egui_windows.ecs_entities {
         let ecs = client.state().ecs();
 
         let positions = client.state().ecs().read_storage::<comp::Pos>();
         let client_pos = positions.get(client.entity());
 
         egui::Window::new("ECS Entities")
+            .open(&mut egui_windows.ecs_entities)
             .default_width(500.0)
             .default_height(500.0)
             .show(ctx, |ui| {
@@ -383,7 +386,6 @@ pub fn maintain_egui_inner(
             });
         if let Some(selected_entity_info) = &mut egui_state.selected_entity_info {
             let selected_entity = ecs.entities().entity(selected_entity_info.entity_id);
-            //let selected_entity_id = selected_entity_info.entity_id;
             if !selected_entity.gen().is_alive() {
                 previous_selected_entity = mem::take(&mut egui_state.selected_entity_info);
             } else {

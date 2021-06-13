@@ -7,11 +7,12 @@ use common::debug_info::DebugInfo;
 use core::mem;
 use egui::FontDefinitions;
 use egui_winit_platform::{Platform, PlatformDescriptor};
-use voxygen_egui::{DebugShapeAction, EguiInnerState};
+use voxygen_egui::{DebugShapeAction, EguiInnerState, EguiWindows};
 
 pub struct EguiState {
     pub platform: Platform,
     egui_inner_state: EguiInnerState,
+    egui_windows: EguiWindows,
     new_debug_shape_id: Option<u64>,
 }
 
@@ -28,6 +29,7 @@ impl EguiState {
         Self {
             platform,
             egui_inner_state: EguiInnerState::default(),
+            egui_windows: EguiWindows::default(),
             new_debug_shape_id: None,
         }
     }
@@ -36,6 +38,7 @@ impl EguiState {
         let egui_actions = voxygen_egui::maintain(
             &mut self.platform,
             &mut self.egui_inner_state,
+            &mut self.egui_windows,
             client,
             debug_info,
             mem::take(&mut self.new_debug_shape_id),

@@ -367,7 +367,7 @@ impl Renderer {
 
         #[cfg(feature = "egui-ui")]
         let egui_renderpass =
-            egui_wgpu_backend::RenderPass::new(&*device, TextureFormat::Bgra8UnormSrgb);
+            egui_wgpu_backend::RenderPass::new(&*device, TextureFormat::Bgra8UnormSrgb, 1);
 
         Ok(Self {
             device,

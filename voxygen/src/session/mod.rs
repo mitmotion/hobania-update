@@ -1014,9 +1014,13 @@ impl PlayState for SessionState {
 
             // Maintain egui (debug interface)
             #[cfg(feature = "egui-ui")]
-            global_state
-                .egui_state
-                .maintain(&self.client.borrow(), &mut self.scene, &debug_info);
+            if global_state.settings.interface.toggle_debug {
+                global_state.egui_state.maintain(
+                    &self.client.borrow(),
+                    &mut self.scene,
+                    &debug_info,
+                );
+            }
 
             // Look for changes in the localization files
             if global_state.i18n.reloaded() {
@@ -1458,7 +1462,9 @@ impl PlayState for SessionState {
         drop(third_pass);
 
         #[cfg(feature = "egui-ui")]
-        drawer.draw_egui(&mut global_state.egui_state.platform, _scale_factor);
+        if global_state.settings.interface.toggle_debug {
+            drawer.draw_egui(&mut global_state.egui_state.platform, _scale_factor);
+        }
     }
 }
 
