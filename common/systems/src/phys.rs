@@ -217,7 +217,7 @@ impl<'a> PhysicsData<'a> {
             let half_height = (z_limits.1 - z_limits.0) / 2.0;
 
             phys_cache.velocity_dt = vel.0 * self.read.dt.0;
-            let entity_center = position.0 + Vec3::new(0.0, z_limits.0 + half_height, 0.0);
+            let entity_center = position.0 + Vec3::new(0.0, 0.0, z_limits.0 + half_height);
             let flat_radius = collider.map(|c| c.get_radius()).unwrap_or(0.5) * scale;
             let radius = (flat_radius.powi(2) + half_height.powi(2)).sqrt();
 
@@ -342,11 +342,12 @@ impl<'a> PhysicsData<'a> {
 
                     let mut vel_delta = Vec3::zero();
 
-                    let query_center = previous_cache.center.xy();
-                    let query_radius = previous_cache.collision_boundary;
+                    let query_p0 = pos.0.xy();
+                    let query_p1 = (pos.0 + previous_cache.velocity_dt).xy();
+                    let query_radius = previous_cache.scaled_radius;
 
                     spatial_grid
-                        .in_circle_aabr(query_center, query_radius)
+                        .in_swept_circle(query_p0, query_p1, query_radius)
                         .filter_map(|entity| {
                             read.uids
                                 .get(entity)

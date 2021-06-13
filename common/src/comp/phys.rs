@@ -53,6 +53,8 @@ pub struct PreviousPhysCache {
     /// Calculates a Sphere over the Entity for quick boundary checking
     pub collision_boundary: f32,
     pub scale: f32,
+    /// The scaled radius of the collider, with defaults if the collider or the
+    /// scale are absent
     pub scaled_radius: f32,
     pub ori: Quaternion<f32>,
 }

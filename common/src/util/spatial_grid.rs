@@ -100,6 +100,45 @@ impl SpatialGrid {
         self.in_aabr(aabr)
     }
 
+    /// Get an iterator over the entities in cells that overlap with a circle of
+    /// the given radius whose center is swept across the line from p0 to p1
+    /// NOTE: for best optimization of the iterator use `for_each`
+    /// rather than a for loop
+    pub fn in_swept_circle<'a>(
+        &'a self,
+        p0: Vec2<f32>,
+        p1: Vec2<f32>,
+        radius: f32,
+    ) -> impl Iterator<Item = specs::Entity> + 'a {
+        let iter = |max_entity_radius, grid: &'a hashbrown::HashMap<_, _>, lg2_cell_size| {
+            // Add buffer for other entity radius
+            let ylo = (p0.y.min(p1.y) - radius - max_entity_radius) as i32;
+            let yhi = (p0.y.max(p1.y) + radius + max_entity_radius) as i32;
+            // Convert to cells
+            let ylo = ylo >> lg2_cell_size;
+            let yhi = (yhi + (1 << lg2_cell_size) - 1) >> lg2_cell_size;
+
+            (ylo..=yhi)
+                .flat_map(move |y| {
+                    let mid = LineSegment2 { start: p0, end: p1 }
+                        .projected_point(Vec2::new(p0.x, y as f32));
+                    let xlo = (mid.x - radius - max_entity_radius) as i32;
+                    let xhi = (mid.x + radius + max_entity_radius) as i32;
+                    let xlo = xlo >> lg2_cell_size;
+                    let xhi = (xhi + (1 << lg2_cell_size) - 1) >> lg2_cell_size;
+                    (xlo..=xhi).map(move |x| Vec2::new(x, y))
+                })
+                .flat_map(move |cell| grid.get(&cell).into_iter().flatten())
+                .copied()
+        };
+
+        iter(self.radius_cutoff as f32, &self.grid, self.lg2_cell_size).chain(iter(
+            self.largest_large_radius as f32,
+            &self.large_grid,
+            self.lg2_large_cell_size,
+        ))
+    }
+
     pub fn clear(&mut self) {
         self.grid.clear();
         self.large_grid.clear();
