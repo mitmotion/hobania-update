@@ -201,7 +201,6 @@ impl<'a> Widget for BuffsBar<'a> {
                 norm_col,
                 &buffs_tooltip,
                 |info| !info.is_buff,
-                DEBUFF_COLOR,
             );
         }
 
@@ -341,7 +340,6 @@ impl<'a> BuffsBar<'a> {
         norm_col: Color,
         buffs_tooltip: &Tooltip,
         filterspec: impl Fn(&BuffInfo) -> bool,
-        color: Color,
     ) {
         let mut buff_vec = state
             .ids
@@ -400,7 +398,7 @@ impl<'a> BuffsBar<'a> {
                 if Button::image(self.get_duration_image(duration_percentage))
                     .w_h(40.0, 40.0)
                     .middle_of(*id)
-                    .with_tooltip(self.tooltip_manager, title, &desc, &buffs_tooltip, color)
+                    .with_tooltip(self.tooltip_manager, title, &desc, &buffs_tooltip, BUFF_COLOR)
                     .set(*timer_id, ui)
                     .was_clicked()
                 {
@@ -419,7 +417,6 @@ impl<'a> BuffsBar<'a> {
         norm_col: Color,
         buffs_tooltip: &Tooltip,
         filterspec: impl Fn(&BuffInfo) -> bool,
-        color: Color,
     ) {
         let mut debuff_vec = state
             .ids
@@ -476,7 +473,7 @@ impl<'a> BuffsBar<'a> {
                 Image::new(self.get_duration_image(duration_percentage))
                     .w_h(40.0, 40.0)
                     .middle_of(*id)
-                    .with_tooltip(self.tooltip_manager, title, &desc, &buffs_tooltip, color)
+                    .with_tooltip(self.tooltip_manager, title, &desc, &buffs_tooltip, DEBUFF_COLOR)
                     .set(*timer_id, ui);
             });
     }
