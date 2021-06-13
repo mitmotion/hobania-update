@@ -188,7 +188,6 @@ impl<'a> Widget for BuffsBar<'a> {
                 norm_col,
                 &buffs_tooltip,
                 |info| info.is_buff,
-                BUFF_COLOR,
             );
 
             // Create Debuff Widgets
