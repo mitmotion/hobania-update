@@ -397,7 +397,13 @@ impl<'a> BuffsBar<'a> {
                 if Button::image(self.get_duration_image(duration_percentage))
                     .w_h(40.0, 40.0)
                     .middle_of(*id)
-                    .with_tooltip(self.tooltip_manager, title, &desc, &buffs_tooltip, BUFF_COLOR)
+                    .with_tooltip(
+                        self.tooltip_manager,
+                        title,
+                        &desc,
+                        &buffs_tooltip,
+                        BUFF_COLOR,
+                    )
                     .set(*timer_id, ui)
                     .was_clicked()
                 {
@@ -472,7 +478,13 @@ impl<'a> BuffsBar<'a> {
                 Image::new(self.get_duration_image(duration_percentage))
                     .w_h(40.0, 40.0)
                     .middle_of(*id)
-                    .with_tooltip(self.tooltip_manager, title, &desc, &buffs_tooltip, DEBUFF_COLOR)
+                    .with_tooltip(
+                        self.tooltip_manager,
+                        title,
+                        &desc,
+                        &buffs_tooltip,
+                        DEBUFF_COLOR,
+                    )
                     .set(*timer_id, ui);
             });
     }
