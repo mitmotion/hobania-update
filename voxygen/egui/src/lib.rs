@@ -507,7 +507,7 @@ fn selected_entity_window(
                             .spacing([40.0, 4.0])
                             .striped(true)
                             .show(ui, |ui| {
-                                two_col_row(ui, "Name", format!("{}", stats.name));
+                                two_col_row(ui, "Name", stats.name.to_string());
                                 two_col_row(ui, "Damage Reduction", format!("{:.1}", stats.damage_reduction));
                                 two_col_row(ui, "Max Health Modifier", format!("{:.1}", stats.max_health_modifier));
                                 two_col_row(ui, "Move Speed Modifier", format!("{:.1}", stats.move_speed_modifier));
@@ -521,8 +521,8 @@ fn selected_entity_window(
                             .spacing([40.0, 4.0])
                             .striped(true)
                             .show(ui, |ui| {
-                                two_col_row(ui, "Type", format!("{}", body.to_string()));
-                                two_col_row(ui, "Species", format!("{}", body_species(body)));
+                                two_col_row(ui, "Type", body.to_string());
+                                two_col_row(ui, "Species", body_species(body));
                             });
 
                     });
@@ -552,7 +552,7 @@ fn selected_entity_window(
                                     poise_state_label(ui, poise);
                                     ui.end_row();
                                     two_col_row(ui, "Current", format!("{}/{}", poise.current(), poise.maximum()));
-                                    two_col_row(ui, "Base Max", format!("{}", poise.base_max()));
+                                    two_col_row(ui, "Base Max", poise.base_max().to_string());
                                 });
                         });
                 }
@@ -632,10 +632,10 @@ fn selected_entity_window(
                             .spacing([40.0, 4.0])
                             .striped(true)
                             .show(ui, |ui| {
-                                two_col_row(ui, "On Ground", format!("{}", if physics_state.on_ground { "True" } else { "False " }));
-                                two_col_row(ui, "On Ceiling", format!("{}", if physics_state.on_ceiling { "True" } else { "False " }));
+                                two_col_row(ui, "On Ground", (if physics_state.on_ground { "True" } else { "False " }).to_string());
+                                two_col_row(ui, "On Ceiling", (if physics_state.on_ceiling { "True" } else { "False " }).to_string());
                                 two_col_row(ui, "On Wall", physics_state.on_wall.map_or("-".to_owned(), |x| format!("{:.1},{:.1},{:.1}", x.x, x.y, x.z )));
-                                two_col_row(ui, "Touching Entities", format!("{}", physics_state.touch_entities.len()));
+                                two_col_row(ui, "Touching Entities", physics_state.touch_entities.len().to_string());
                                 two_col_row(ui, "In Fluid", match physics_state.in_fluid {
 
                                     Some(Fluid::Air { elevation, .. }) => format!("Air (Elevation: {:.1})", elevation),

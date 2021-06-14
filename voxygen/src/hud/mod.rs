@@ -80,6 +80,7 @@ use common::{
         BuffData, BuffKind, Item,
     },
     consts::MAX_PICKUP_RANGE,
+    debug_info::DebugInfo,
     outcome::Outcome,
     slowjob::SlowJobPool,
     terrain::{SpriteKind, TerrainChunk},
@@ -108,7 +109,6 @@ use std::{
     time::{Duration, Instant},
 };
 use vek::*;
-use common::debug_info::DebugInfo;
 
 const TEXT_COLOR: Color = Color::Rgba(1.0, 1.0, 1.0, 1.0);
 const TEXT_VELORITE: Color = Color::Rgba(0.0, 0.66, 0.66, 1.0);

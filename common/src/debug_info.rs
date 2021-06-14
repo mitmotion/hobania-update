@@ -1,6 +1,5 @@
-
-use std::time::Duration;
 use crate::comp;
+use std::time::Duration;
 
 pub struct DebugInfo {
     pub tps: f64,
