@@ -122,7 +122,7 @@ impl<'a> Widget for Buttons<'a> {
     #[allow(clippy::unused_unit)] // TODO: Pending review in #587
     fn style(&self) -> Self::Style { () }
 
-    fn update(mut self, args: widget::UpdateArgs<Self>) -> Self::Event {
+    fn update(self, args: widget::UpdateArgs<Self>) -> Self::Event {
         let widget::UpdateArgs { state, ui, .. } = args;
         let invs = self.client.inventories();
         let inventory = match invs.get(self.client.entity()) {
@@ -429,7 +429,7 @@ impl<'a> Widget for Buttons<'a> {
 }
 
 impl<'a> Buttons<'a> {
-    fn create_button_tooltip(&mut self, ui: &mut UiCell) -> Tooltip<'a> {
+    fn create_button_tooltip(&self, ui: &mut UiCell) -> Tooltip<'a> {
         Tooltip::new({
             // Edge images [t, b, r, l]
             // Corner images [tr, tl, br, bl]
