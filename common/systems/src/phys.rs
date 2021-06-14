@@ -342,12 +342,14 @@ impl<'a> PhysicsData<'a> {
 
                     let mut vel_delta = Vec3::zero();
 
-                    let query_p0 = pos.0.xy();
-                    let query_p1 = (pos.0 + previous_cache.velocity_dt).xy();
+                    let query_line = LineSegment2 {
+                        start: pos.0.xy(),
+                        end: (pos.0 + previous_cache.velocity_dt).xy(),
+                    };
                     let query_radius = previous_cache.scaled_radius;
 
                     spatial_grid
-                        .in_swept_circle(query_p0, query_p1, query_radius)
+                        .in_swept_circle(query_line, query_radius)
                         .filter_map(|entity| {
                             read.uids
                                 .get(entity)
@@ -920,7 +922,7 @@ impl<'a> PhysicsData<'a> {
 
                     // Compute center and radius of tick path bounding sphere for the entity
                     // for broad checks of whether it will collide with a voxel collider
-                    let path_sphere = {
+                    let (path_sphere, query_line, query_radius) = {
                         // TODO: duplicated with maintain_pushback_cache, make a common function
                         // to call to compute all this info?
                         let z_limits = calc_z_limit(character_state, Some(collider));
@@ -934,16 +936,20 @@ impl<'a> PhysicsData<'a> {
                         let radius = (flat_radius.powi(2) + half_height.powi(2)).sqrt();
                         let path_bounding_radius = radius + (pos_delta / 2.0).magnitude();
 
-                        Sphere {
+                        let path_sphere = Sphere {
                             center: path_center,
                             radius: path_bounding_radius,
-                        }
+                        };
+                        let query_line = LineSegment2 {
+                            start: pos.0.xy(),
+                            end: (pos.0 + pos_delta).xy(),
+                        };
+                        let query_radius = flat_radius;
+                        (path_sphere, query_line, query_radius)
                     };
                     // Collide with terrain-like entities
-                    let query_center = path_sphere.center.xy();
-                    let query_radius = path_sphere.radius;
                     voxel_collider_spatial_grid
-                        .in_circle_aabr(query_center, query_radius)
+                        .in_swept_circle(query_line, query_radius)
                         .filter_map(|entity| {
                             positions
                                 .get(entity)

@@ -101,29 +101,33 @@ impl SpatialGrid {
     }
 
     /// Get an iterator over the entities in cells that overlap with a circle of
-    /// the given radius whose center is swept across the line from p0 to p1
+    /// the given radius whose center is swept across the given line segment
     /// NOTE: for best optimization of the iterator use `for_each`
     /// rather than a for loop
     pub fn in_swept_circle<'a>(
         &'a self,
-        p0: Vec2<f32>,
-        p1: Vec2<f32>,
+        line: LineSegment2<f32>,
         radius: f32,
     ) -> impl Iterator<Item = specs::Entity> + 'a {
-        let iter = |max_entity_radius, grid: &'a hashbrown::HashMap<_, _>, lg2_cell_size| {
+        let iter = |max_entity_radius: f32, grid: &'a hashbrown::HashMap<_, _>, lg2_cell_size| {
+            let min = line.start.map2(line.end, f32::min);
+            let max = line.start.map2(line.end, f32::max);
             // Add buffer for other entity radius
-            let ylo = (p0.y.min(p1.y) - radius - max_entity_radius) as i32;
-            let yhi = (p0.y.max(p1.y) + radius + max_entity_radius) as i32;
+            let ylo = (min.y - radius - max_entity_radius).floor() as i32;
+            let yhi = (max.y + radius + max_entity_radius).ceil() as i32;
             // Convert to cells
             let ylo = ylo >> lg2_cell_size;
             let yhi = (yhi + (1 << lg2_cell_size) - 1) >> lg2_cell_size;
 
             (ylo..=yhi)
                 .flat_map(move |y| {
-                    let mid = LineSegment2 { start: p0, end: p1 }
-                        .projected_point(Vec2::new(p0.x, y as f32));
-                    let xlo = (mid.x - radius - max_entity_radius) as i32;
-                    let xhi = (mid.x + radius + max_entity_radius) as i32;
+                    // 1. project points from outside the line onto the line
+                    let xlo = line.projected_point(Vec2::new(min.x, y as f32)).x;
+                    let xhi = line.projected_point(Vec2::new(max.x, y as f32)).x;
+                    // 2. subtract/add the radius to create a gap around the line
+                    let xlo = (xlo - radius - max_entity_radius).floor() as i32;
+                    let xhi = (xhi + radius + max_entity_radius).ceil() as i32;
+                    // 3. convert from voxel coordinates to cell coordinates
                     let xlo = xlo >> lg2_cell_size;
                     let xhi = (xhi + (1 << lg2_cell_size) - 1) >> lg2_cell_size;
                     (xlo..=xhi).map(move |x| Vec2::new(x, y))
