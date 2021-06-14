@@ -12,7 +12,7 @@ use client::Client;
 use common::comp::{SkillSet, Stats};
 use conrod_core::{
     widget::{self, Button, Image, Text},
-    widget_ids, Color, Colorable, Positionable, Sizeable, Widget, WidgetCommon,
+    widget_ids, Color, Colorable, Positionable, Sizeable, UiCell, Widget, WidgetCommon,
 };
 widget_ids! {
     struct Ids {
@@ -122,7 +122,7 @@ impl<'a> Widget for Buttons<'a> {
     #[allow(clippy::unused_unit)] // TODO: Pending review in #587
     fn style(&self) -> Self::Style { () }
 
-    fn update(self, args: widget::UpdateArgs<Self>) -> Self::Event {
+    fn update(mut self, args: widget::UpdateArgs<Self>) -> Self::Event {
         let widget::UpdateArgs { state, ui, .. } = args;
         let invs = self.client.inventories();
         let inventory = match invs.get(self.client.entity()) {
@@ -133,23 +133,7 @@ impl<'a> Widget for Buttons<'a> {
         let localized_strings = self.localized_strings;
         let arrow_ani = (self.pulse * 4.0/* speed factor */).cos() * 0.5 + 0.8; //Animation timer
 
-        let button_tooltip = Tooltip::new({
-            // Edge images [t, b, r, l]
-            // Corner images [tr, tl, br, bl]
-            let edge = &self.rot_imgs.tt_side;
-            let corner = &self.rot_imgs.tt_corner;
-            ImageFrame::new(
-                [edge.cw180, edge.none, edge.cw270, edge.cw90],
-                [corner.none, corner.cw270, corner.cw90, corner.cw180],
-                Color::Rgba(0.08, 0.07, 0.04, 1.0),
-                5.0,
-            )
-        })
-        .title_font_size(self.fonts.cyri.scale(15))
-        .parent(ui.window)
-        .desc_font_size(self.fonts.cyri.scale(12))
-        .font_id(self.fonts.cyri.conrod_id)
-        .desc_text_color(TEXT_COLOR);
+        let button_tooltip = &self.create_button_tooltip(ui);
         // Bag
         if Button::image(if !self.show_bag {
             self.imgs.bag
@@ -441,5 +425,27 @@ impl<'a> Widget for Buttons<'a> {
         }
 
         None
+    }
+}
+
+impl<'a> Buttons<'a> {
+    fn create_button_tooltip(&mut self, ui: &mut UiCell) -> Tooltip<'a> {
+        Tooltip::new({
+            // Edge images [t, b, r, l]
+            // Corner images [tr, tl, br, bl]
+            let edge = &self.rot_imgs.tt_side;
+            let corner = &self.rot_imgs.tt_corner;
+            ImageFrame::new(
+                [edge.cw180, edge.none, edge.cw270, edge.cw90],
+                [corner.none, corner.cw270, corner.cw90, corner.cw180],
+                Color::Rgba(0.08, 0.07, 0.04, 1.0),
+                5.0,
+            )
+        })
+        .title_font_size(self.fonts.cyri.scale(15))
+        .parent(ui.window)
+        .desc_font_size(self.fonts.cyri.scale(12))
+        .font_id(self.fonts.cyri.conrod_id)
+        .desc_text_color(TEXT_COLOR)
     }
 }
