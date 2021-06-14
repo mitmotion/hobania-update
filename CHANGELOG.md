@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Removed
+
+### Fixed
+
+## [0.10.0] - 2021-06-12
+
+### Added
+
 - New Skills for Climbing: Climbing Speed and Climbing Cost
 - Pickaxes (can be used to collect gems and mine weak rock)
 - You can now jump out of rolls for a slight jump boost
@@ -67,6 +77,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add chest to each dungeon with unique loot
 - Added a new option in the graphics menu to enable GPU timing (not always supported). The timing values can be viewed in the HUD debug info (F3) and will be saved as chrome trace files in the working directory when taking a screenshot.
 - Added new Present Mode option in the graphics menu. Selecting Fifo (i.e. vsync) or Mailbox can be used to eliminate screen tearing.
+- Quality color indicators next to recipe names in crafting menu
+- New cave visuals: Ridges, pits, new sprites, colors
+- Veins in caves to dig through to uncover ore
+- Armor material system with 6 armor sets each in hide, mail and cloth categories
+- New armor stats including max energy, energy reward, critical hit damage
+- Meat drops from animals
+- New ores, plants and hides to be looted from the world and processed into craft ingredients
+- Added more crafting stations, loom, spinning wheel, tanning rack, forge
 
 ### Changed
 
@@ -120,6 +138,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optimized rendering of quads (most of the graphics in the game) using an index buffer, decreasing the number of vertices that need to be processed by 33%.
 - Moved the rest of screenshot work into the background. Screenshoting no longer induces large pauses.
 - Reworked tidal warrior to have unique attacks
+- Reworked yeti to have unique attacks
+- Widened recipe name list in crafting menu
+- Reworked animal loot tables
+- NPC hitboxes better fit their model.
 
 ### Removed
 
@@ -127,6 +149,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Gravity component has been removed
 - In-air movement has been removed
 - Energy cost of deploying the glider has been removed
+- Removed steel and cultist loot tables
 
 ### Fixed
 
@@ -152,6 +175,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed an issue where prices weren't properly making their way from econsim to the actual trade values.
 - Fixed entities with voxel colliders being off by one physics tick for collision.
 - Airships no longer oscillate dramatically into the sky due to mistaking velocity for acceleration.
+- The login and character selection screens no longer cause high GPU usage when the framerate limit is set to Unlimited.
 
 ## [0.9.0] - 2021-03-20
 
@@ -713,7 +737,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _0.1.0 was part of the legacy engine_
 
-[unreleased]: https://gitlab.com/veloren/veloren/compare?from=v0.9.0&to=master
+[unreleased]: https://gitlab.com/veloren/veloren/compare?from=v0.10.0&to=master
+[0.9.0]: https://gitlab.com/veloren/veloren/compare?from=v0.9.0&to=v0.10.0
 [0.9.0]: https://gitlab.com/veloren/veloren/compare?from=v0.8.0&to=v0.9.0
 [0.8.0]: https://gitlab.com/veloren/veloren/compare?from=v0.7.0&to=v0.8.0
 [0.7.0]: https://gitlab.com/veloren/veloren/compare?from=v0.6.0&to=v0.7.0

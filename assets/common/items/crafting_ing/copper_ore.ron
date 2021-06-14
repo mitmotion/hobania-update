@@ -1,9 +1,0 @@
-ItemDef(
-    name: "Copper Ore",
-    description: "A brown metal. Key part of bronze.",
-    kind: Ingredient(
-        kind: "CopperOre",
-    ),
-    quality: Common,
-    tags: [],
-)

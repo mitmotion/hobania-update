@@ -1,9 +1,0 @@
-ItemDef(
-    name: "Bloodstone Ore",
-    description: "A deep red ore.",
-    kind: Ingredient(
-        kind: "BloodstoneOre",
-    ),
-    quality: Common,
-    tags: [],
-)

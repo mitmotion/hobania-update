@@ -37,7 +37,7 @@ impl Entity {
     pub fn get_body(&self) -> comp::Body {
         match self.rng(PERM_GENUS).gen::<f32>() {
             // we want 5% airships, 45% birds, 50% humans
-            x if x < 0.05 => comp::Body::Ship(comp::ship::Body::DefaultAirship),
+            x if x < 0.05 => comp::ship::Body::random_with(&mut self.rng(PERM_BODY)).into(),
             x if x < 0.45 => {
                 let species = *(&comp::bird_medium::ALL_SPECIES)
                     .choose(&mut self.rng(PERM_SPECIES))
@@ -91,7 +91,7 @@ impl Entity {
 
         let back = match rng.gen_range(0..5) {
             0 => Some(comp::Item::new_from_asset_expect(
-                "common.items.armor.agile.back",
+                "common.items.armor.hide.rawhide.back",
             )),
             1 => Some(comp::Item::new_from_asset_expect(
                 "common.items.armor.misc.back.backpack",
@@ -127,7 +127,7 @@ impl Entity {
             "common.items.npc_armor.pants.leather_blue",
         ));
         let shoulder = Some(comp::Item::new_from_asset_expect(
-            "common.items.armor.swift.shoulder",
+            "common.items.armor.hide.leather.shoulder",
         ));
 
         LoadoutBuilder::build_loadout(self.get_body(), Some(main_tool), None, None)

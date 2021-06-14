@@ -96,6 +96,7 @@ image_ids! {
         crafting_icon: "voxygen.element.ui.generic.buttons.anvil",
         crafting_icon_hover: "voxygen.element.ui.generic.buttons.anvil_hover",
         crafting_icon_press: "voxygen.element.ui.generic.buttons.anvil_press",
+        quality_indicator: "voxygen.element.ui.crafting.quality_indicator",
         icon_armor: "voxygen.element.ui.crafting.icons.armors",
         icon_tools: "voxygen.element.ui.crafting.icons.crafting_tools",
         icon_dismantle: "voxygen.element.ui.crafting.icons.dismantle",
@@ -106,6 +107,7 @@ image_ids! {
         icon_utility: "voxygen.element.ui.crafting.icons.utilities",
         icon_weapon: "voxygen.element.ui.crafting.icons.weapons",
         icon_bag: "voxygen.element.items.item_bag_leather_large",
+        icon_processed_material: "voxygen.element.ui.crafting.icons.processed_material",
 
         // Group Window
         member_frame: "voxygen.element.ui.groups.group_member_frame",
@@ -586,6 +588,7 @@ image_ids! {
         debuff_burning_0: "voxygen.element.de_buffs.debuff_burning_0",
         debuff_crippled_0: "voxygen.element.de_buffs.debuff_cripple_0",
         debuff_frozen_0: "voxygen.element.de_buffs.debuff_frozen_0",
+        debuff_wet_0: "voxygen.element.de_buffs.debuff_wet_0",
 
         // Animation Frames
         // Buff Frame

@@ -140,6 +140,10 @@ pub struct Renderer {
 
     #[cfg(feature = "egui-ui")]
     egui_renderpass: egui_wgpu_backend::RenderPass,
+
+    // This checks is added because windows resizes the window to 0,0 when
+    // minimizing and this causes a bunch of validation errors
+    is_minimized: bool,
 }
 
 impl Renderer {
@@ -403,6 +407,8 @@ impl Renderer {
 
             #[cfg(feature = "egui-ui")]
             egui_renderpass,
+
+            is_minimized: false,
         })
     }
 
@@ -493,6 +499,7 @@ impl Renderer {
     pub fn on_resize(&mut self, dims: Vec2<u32>) -> Result<(), RenderError> {
         // Avoid panics when creating texture with w,h of 0,0.
         if dims.x != 0 && dims.y != 0 {
+            self.is_minimized = false;
             // Resize swap chain
             self.resolution = dims;
             self.sc_desc.width = dims.x;
@@ -559,6 +566,8 @@ impl Renderer {
                     },
                 }
             }
+        } else {
+            self.is_minimized = true;
         }
 
         Ok(())
@@ -735,6 +744,10 @@ impl Renderer {
             "Renderer::start_recording_frame"
         );
 
+        if self.is_minimized {
+            return Ok(None);
+        }
+
         // Try to get the latest profiling results
         if self.mode.profiler_enabled {
             // Note: this lags a few frames behind
@@ -869,7 +882,8 @@ impl Renderer {
                 return Ok(None);
             },
             Err(err @ wgpu::SwapChainError::Outdated) => {
-                warn!("{}. This will probably be resolved on the next frame", err);
+                warn!("{}. Recreating the swapchain", err);
+                self.swap_chain = self.device.create_swap_chain(&self.surface, &self.sc_desc);
                 return Ok(None);
             },
             Err(err @ wgpu::SwapChainError::OutOfMemory) => return Err(err.into()),

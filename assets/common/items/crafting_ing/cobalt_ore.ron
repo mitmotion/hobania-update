@@ -1,9 +1,0 @@
-ItemDef(
-    name: "Cobalt Ore",
-    description: "A blue, shiny ore.",
-    kind: Ingredient(
-        kind: "CobaltOre",
-    ),
-    quality: Common,
-    tags: [],
-)

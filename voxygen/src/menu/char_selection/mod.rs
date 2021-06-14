@@ -230,6 +230,8 @@ impl PlayState for CharSelectionState {
 
     fn name(&self) -> &'static str { "Character Selection" }
 
+    fn capped_fps(&self) -> bool { true }
+
     fn render(&mut self, global_state: &mut GlobalState) {
         let renderer = global_state.window.renderer_mut();
 

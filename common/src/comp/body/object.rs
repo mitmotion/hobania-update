@@ -74,8 +74,8 @@ make_case_elim!(
         FireworkYellow = 59,
         MultiArrow = 60,
         BoltNature = 61,
-        MeatDrop = 62,
-        Steak = 63,
+        ToughMeat = 62,
+        BeastMeat = 63,
         Crossbow = 64,
         ArrowTurret = 65,
         Coins = 66,
@@ -84,6 +84,10 @@ make_case_elim!(
         ClayRocket = 69,
         HaniwaSentry = 70,
         SeaLantern = 71,
+        Snowball = 72,
+        BirdMeat = 73,
+        FishMeat = 74,
+        SmallMeat = 75,
     }
 );
 
@@ -94,7 +98,7 @@ impl Body {
     }
 }
 
-pub const ALL_OBJECTS: [Body; 72] = [
+pub const ALL_OBJECTS: [Body; 76] = [
     Body::Arrow,
     Body::Bomb,
     Body::Scarecrow,
@@ -157,8 +161,8 @@ pub const ALL_OBJECTS: [Body; 72] = [
     Body::FireworkYellow,
     Body::MultiArrow,
     Body::BoltNature,
-    Body::MeatDrop,
-    Body::Steak,
+    Body::ToughMeat,
+    Body::BeastMeat,
     Body::Crossbow,
     Body::ArrowTurret,
     Body::Coins,
@@ -167,6 +171,10 @@ pub const ALL_OBJECTS: [Body; 72] = [
     Body::ClayRocket,
     Body::HaniwaSentry,
     Body::SeaLantern,
+    Body::Snowball,
+    Body::BirdMeat,
+    Body::FishMeat,
+    Body::SmallMeat,
 ];
 
 impl From<Body> for super::Body {
@@ -238,8 +246,8 @@ impl Body {
             Body::FireworkYellow => "firework_yellow",
             Body::MultiArrow => "multi_arrow",
             Body::BoltNature => "bolt_nature",
-            Body::MeatDrop => "meat_drop",
-            Body::Steak => "steak",
+            Body::ToughMeat => "tough_meat",
+            Body::BeastMeat => "beast_meat",
             Body::Crossbow => "crossbow",
             Body::ArrowTurret => "arrow_turret",
             Body::Coins => "coins",
@@ -248,6 +256,10 @@ impl Body {
             Body::ClayRocket => "clay_rocket",
             Body::HaniwaSentry => "haniwa_sentry",
             Body::SeaLantern => "sea_lantern",
+            Body::Snowball => "snowball",
+            Body::BirdMeat => "bird_meat",
+            Body::FishMeat => "fish_meat",
+            Body::SmallMeat => "small_meat",
         }
     }
 
@@ -270,6 +282,7 @@ impl Body {
             Body::Crate => 300.0, // let's say it's a lot of wood and maybe some contents
             Body::Scarecrow => 900.0,
             Body::TrainingDummy => 2000.0,
+            Body::Snowball => 0.9 * WATER_DENSITY,
             // let them sink
             _ => 1.1 * WATER_DENSITY,
         };
@@ -323,14 +336,14 @@ impl Body {
             | Body::LanternGroundOpen
             | Body::LanternStanding
             | Body::LanternStanding2 => 3.0,
-            Body::MeatDrop => 5.0,
+            Body::ToughMeat => 50.0,
+            Body::BeastMeat => 50.0,
             Body::PotionBlue | Body::PotionGreen | Body::PotionRed => 5.0,
             Body::Pouch => 1.0,
             Body::Pumpkin | Body::Pumpkin2 | Body::Pumpkin3 | Body::Pumpkin4 | Body::Pumpkin5 => {
                 10.0
             },
             Body::Scarecrow => 50.0,
-            Body::Steak => 2.0,
             Body::Table | Body::Table2 | Body::Table3 => 50.0,
             Body::Tent => 50.0,
             Body::TrainingDummy => 60.0,
@@ -340,6 +353,10 @@ impl Body {
             Body::ClayRocket => 50.0,
             Body::HaniwaSentry => 300.0,
             Body::SeaLantern => 1000.0,
+            Body::Snowball => 7360.0, // 2.5 m diamter
+            Body::FishMeat => 10.0,
+            Body::BirdMeat => 10.0,
+            Body::SmallMeat => 10.0,
         };
 
         Mass(m)
@@ -354,6 +371,7 @@ impl Body {
             Body::Crossbow => Vec3::new(3.0, 3.0, 1.5),
             Body::HaniwaSentry => Vec3::new(0.8, 0.8, 1.4),
             Body::SeaLantern => Vec3::new(0.5, 0.5, 1.0),
+            Body::Snowball => Vec3::broadcast(2.5),
             _ => Vec3::broadcast(0.5),
         }
     }

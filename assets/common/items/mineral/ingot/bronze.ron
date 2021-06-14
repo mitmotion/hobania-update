@@ -1,0 +1,9 @@
+ItemDef(
+    name: "Bronze Ingot",
+    description: "A sturdy alloy made from combining copper and tin.",
+    kind: Ingredient(
+        kind: "BronzeIngot",
+    ),
+    quality: Low,
+    tags: [MetalIngot],
+)

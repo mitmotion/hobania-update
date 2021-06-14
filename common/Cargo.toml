@@ -1,6 +1,6 @@
 [package]
 name = "veloren-common"
-version = "0.9.0"
+version = "0.10.0"
 authors = ["Joshua Barretto <joshua.s.barretto@gmail.com>", "Maciej Ćwięka <mckol363@gmail.com>", "Imbris <imbrisf@gmail.com>"]
 edition = "2018"
 
@@ -8,7 +8,8 @@ edition = "2018"
 no-assets = []
 tracy = ["common-base/tracy"]
 simd = ["vek/platform_intrinsics"]
-bin_csv = ["csv", "structopt"]
+bin_csv = ["ron", "csv", "structopt"]
+bin_graphviz = ["petgraph"]
 
 default = ["simd"]
 
@@ -20,13 +21,20 @@ common-base = { package = "veloren-common-base", path = "base" }
 # Serde
 serde = { version = "1.0.110", features = ["derive", "rc"] }
 
+# Util
+enum-iterator = "0.6"
+vek = { version = "=0.14.1", features = ["serde"] }
+
+# Strum
+strum = "0.20"
+strum_macros = "0.20"
+
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 approx = "0.4.0"
 clap = "2.33"
 crossbeam-utils = "0.8.1"
 bitflags = "1.2"
 crossbeam-channel = "0.5"
-enum-iterator = "0.6"
 lazy_static = "1.4.0"
 num-derive = "0.3"
 num-traits = "0.2"
@@ -35,7 +43,6 @@ rayon = "1.5"
 roots = "0.0.6"
 spin_sleep = "1.0"
 tracing = { version = "0.1", default-features = false }
-vek = { version = "=0.14.1", features = ["serde"] }
 uuid = { version = "0.8.1", default-features = false, features = ["serde", "v4"] }
 rand = "0.8"
 
@@ -46,23 +53,23 @@ dot_vox = "4.0"
 # Assets
 serde_repr = "0.1.6"
 
+# csv import
+ron = { version = "0.6", default-features = false, optional = true }
 # csv export
 csv = { version = "1.1.3", optional = true }
 structopt = { version = "0.3.13", optional = true }
+# graphviz exporters
+petgraph = { version = "0.5.1", optional = true }
 
 # Data structures
-hashbrown = { version = "0.9", features = ["rayon", "serde", "nightly"] }
+hashbrown = { version = "0.11", features = ["rayon", "serde", "nightly"] }
 slotmap = { version = "1.0", features = ["serde"] }
 indexmap = "1.3.0"
 slab = "0.4.2"
 
-# Strum
-strum = "0.20"
-strum_macros = "0.20"
-
 # ECS
-specs = { git = "https://github.com/amethyst/specs.git", features = ["serde", "storage-event-control", "nightly"], rev = "5a9b71035007be0e3574f35184acac1cd4530496" }
-specs-idvs = { git = "https://gitlab.com/veloren/specs-idvs.git", rev = "b65fb220e94f5d3c9bc30074a076149763795556" }
+specs = { git = "https://github.com/amethyst/specs.git", features = ["serde", "storage-event-control", "nightly"], rev = "f985bec5d456f7b0dd8aae99848f9473c2cd9d46" }
+specs-idvs = { git = "https://gitlab.com/veloren/specs-idvs.git", rev = "8be2abcddf8f524cb5876e8dd20a7e47cfaf7573" }
 
 [dev-dependencies]
 #bench
@@ -86,3 +93,7 @@ required-features = ["bin_csv"]
 [[bin]]
 name = "csv_import"
 required-features = ["bin_csv"]
+
+[[bin]]
+name = "recipe_graphviz"
+required-features = ["bin_graphviz"]

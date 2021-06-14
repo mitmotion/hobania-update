@@ -317,6 +317,8 @@ impl PlayState for MainMenuState {
 
     fn name(&self) -> &'static str { "Title" }
 
+    fn capped_fps(&self) -> bool { true }
+
     fn render(&mut self, global_state: &mut GlobalState) {
         let renderer = global_state.window.renderer_mut();
 

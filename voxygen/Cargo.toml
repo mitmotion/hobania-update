@@ -3,7 +3,7 @@ authors = ["Joshua Barretto <joshua.s.barretto@gmail.com>", "Imbris <imbrisf@gma
 default-run = "veloren-voxygen"
 edition = "2018"
 name = "veloren-voxygen"
-version = "0.9.0"
+version = "0.10.0"
 # Cargo thinks it should build the voxygen binary even when a specific bench is specified for building
 # Uncomment below and comment out default-run if you want to avoid this
 # autobins = false
@@ -23,7 +23,7 @@ buildInputs = ["xorg.libxcb"]
 
 [features]
 hot-anim = ["voxygen-dynlib", "anim/use-dyn-lib"]
-hot-egui = ["voxygen-dynlib", "voxygen-egui/use-dyn-lib", "egui",]
+hot-egui = ["voxygen-dynlib", "voxygen-egui/use-dyn-lib", "egui"]
 singleplayer = ["server"]
 simd = ["vek/platform_intrinsics"]
 tracy = ["profiling", "profiling/profile-with-tracy", "common/tracy", "common-ecs/tracy", "common-frontend/tracy", "common-net/tracy", "common-systems/tracy", "common-state/tracy", "client/tracy"]
@@ -72,8 +72,8 @@ egui_winit_platform = {version = "0.7", optional = true }
 #egui_winit_platform = { path = "../../egui_winit_platform" }
 
 # ECS
-specs = {git = "https://github.com/amethyst/specs.git", rev = "5a9b71035007be0e3574f35184acac1cd4530496"}
-specs-idvs = { git = "https://gitlab.com/veloren/specs-idvs.git", rev = "b65fb220e94f5d3c9bc30074a076149763795556" }
+specs = {git = "https://github.com/amethyst/specs.git", rev = "f985bec5d456f7b0dd8aae99848f9473c2cd9d46"}
+specs-idvs = { git = "https://gitlab.com/veloren/specs-idvs.git", rev = "8be2abcddf8f524cb5876e8dd20a7e47cfaf7573" }
 
 # Mathematics
 vek = {version = "=0.14.1", features = ["serde"]}
@@ -98,7 +98,7 @@ dot_vox = "4.0"
 enum-iterator = "0.6"
 futures-executor = "0.3"
 guillotiere = "0.6"
-hashbrown = {version = "0.9", features = ["rayon", "serde", "nightly"]}
+hashbrown = {version = "0.11", features = ["rayon", "serde", "nightly"]}
 image = {version = "0.23.12", default-features = false, features = ["ico", "png"]}
 lazy_static = "1.4.0"
 native-dialog = { version = "0.5.2", optional = true }

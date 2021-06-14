@@ -310,8 +310,8 @@ impl PlayState for SessionState {
                 .read_storage::<comp::CharacterState>()
                 .get(player_entity)
             {
-                if cr.charge_frac() > 0.25 {
-                    fov_scaling -= 3.0 * cr.charge_frac() / 4.0;
+                if cr.charge_frac() > 0.5 {
+                    fov_scaling -= 3.0 * cr.charge_frac() / 5.0;
                 }
                 let max_dist = if let Some(dist) = self.saved_zoom_dist {
                     dist
@@ -1395,6 +1395,8 @@ impl PlayState for SessionState {
     }
 
     fn name(&self) -> &'static str { "Session" }
+
+    fn capped_fps(&self) -> bool { false }
 
     /// Render the session to the screen.
     ///

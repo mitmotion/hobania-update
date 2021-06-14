@@ -20,6 +20,7 @@ pub use widgets::{
     image_slider::ImageSlider,
     ingame::{Ingame, Ingameable},
     item_tooltip::{ItemTooltip, ItemTooltipManager, ItemTooltipable},
+    outlined_text::OutlinedText,
     radio_list::RadioList,
     slot,
     toggle_button::ToggleButton,
@@ -284,7 +285,7 @@ impl Ui {
     pub fn handle_event(&mut self, event: Event) {
         match event.0 {
             Input::Resize(w, h) => {
-                if w > 1.0 && h > 1.0 {
+                if w > 0.0 && h > 0.0 {
                     self.window_resized = Some(Vec2::new(w, h))
                 }
             },
@@ -674,7 +675,7 @@ impl Ui {
                 }
                 .intersection(window_scissor);
 
-                if intersection.is_valid() {
+                if intersection.is_valid() && intersection.size().map(|s| s > 0).reduce_and() {
                     intersection
                 } else {
                     // TODO: What should we return here
