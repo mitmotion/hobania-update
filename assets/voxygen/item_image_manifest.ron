@@ -65,6 +65,10 @@
         "voxel.weapon.sceptre.wood-nature",
         (-1.0, 0.0, 0.0), (-90.0, 55.0, 0.0), 1.0,
     ),
+    Tool("example_pick"): VoxTrans(
+        "voxel.weapon.tool.pickaxe_green-0",
+        (0.0, 0.0, 0.0), (-135.0, 90.0, 0.0), 1.0,
+    ),
     Tool("example_dagger"): VoxTrans(
         "voxel.weapon.dagger.dagger_basic-0",
         (0.0, 0.0, 0.0), (90.0, 90.0, 0.0), 1.0,
@@ -2272,6 +2276,10 @@
     Consumable("Coconut"): Png(
         "element.items.item_coconut",
     ),
+    Consumable("CactusColada"): VoxTrans(
+        "voxel.object.cactus_drink",
+        (-1.0, 1.0, 0.0), (-50.0, 30.0, 20.0), 0.8,
+    ),
     Consumable("PotionMed"): VoxTrans(
         "voxel.object.potion_red",
         (0.0, 0.0, 0.0), (-50.0, 30.0, 20.0), 0.7,
@@ -2447,6 +2455,10 @@
     Ingredient("Stones"): VoxTrans(
         "voxel.sprite.rocks.rock-0",
         (0.0, 0.0, 0.0), (-50.0, 40.0, 20.0), 0.8,
+    ),
+    Ingredient("Cactus"): VoxTrans(
+        "voxel.sprite.cacti.flat_cactus_med",
+        (0.0, 0.0, 0.0), (-50.0, 40.0, 20.0), 0.9,
     ),
     Ingredient("Seashells"): VoxTrans(
         "voxel.sprite.seashells.shell-0",

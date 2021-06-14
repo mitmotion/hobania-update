@@ -1005,7 +1005,7 @@ fn handle_spawn(
                 );
 
                 let body = body();
-                let loadout = LoadoutBuilder::build_loadout(body, None, None, None).build();
+                let loadout = LoadoutBuilder::from_default(&body).build();
                 let inventory = Inventory::new_with_loadout(loadout);
 
                 let mut entity_base = server
@@ -2610,6 +2610,7 @@ fn parse_skill_tree(skill_tree: &str) -> CmdResult<comp::skills::SkillGroupKind>
         "bow" => Ok(SkillGroupKind::Weapon(ToolKind::Bow)),
         "staff" => Ok(SkillGroupKind::Weapon(ToolKind::Staff)),
         "sceptre" => Ok(SkillGroupKind::Weapon(ToolKind::Sceptre)),
+        "mining" => Ok(SkillGroupKind::Weapon(ToolKind::Pick)),
         _ => Err(format!("{} is not a skill group!", skill_tree)),
     }
 }

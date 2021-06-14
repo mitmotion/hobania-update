@@ -8,8 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added a skill tree for mining, which gains xp from mining ores and gems.
 
 ### Changed
+- Entity-entity pushback is no longer applied in forced movement states like rolling and leaping.
 
 ### Removed
 
