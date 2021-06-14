@@ -11,8 +11,8 @@ use crate::{
 use client::Client;
 use common::comp::{SkillSet, Stats};
 use conrod_core::{
-    widget::{self, Button, Image, Text},
-    widget_ids, Color, Colorable, Positionable, Sizeable, Widget, WidgetCommon,
+    widget::{self, button::TimesClicked, Button, Image, State as ConrodState, Text},
+    widget_ids, Color, Colorable, Positionable, Sizeable, UiCell, Widget, WidgetCommon,
 };
 widget_ids! {
     struct Ids {
@@ -122,7 +122,7 @@ impl<'a> Widget for Buttons<'a> {
     #[allow(clippy::unused_unit)] // TODO: Pending review in #587
     fn style(&self) -> Self::Style { () }
 
-    fn update(self, args: widget::UpdateArgs<Self>) -> Self::Event {
+    fn update(mut self, args: widget::UpdateArgs<Self>) -> Self::Event {
         let widget::UpdateArgs { state, ui, .. } = args;
         let invs = self.client.inventories();
         let inventory = match invs.get(self.client.entity()) {
@@ -339,24 +339,9 @@ impl<'a> Widget for Buttons<'a> {
         }
         // Diary
         let unspent_sp = self.skill_set.has_available_sp();
-        if Button::image(if !unspent_sp {
-            self.imgs.spellbook_button
-        } else {
-            self.imgs.spellbook_hover
-        })
-        .w_h(28.0, 25.0)
-        .left_from(state.ids.map_button, 10.0)
-        .hover_image(self.imgs.spellbook_hover)
-        .press_image(self.imgs.spellbook_press)
-        .with_tooltip(
-            self.tooltip_manager,
-            &localized_strings.get("hud.diary"),
-            "",
-            &button_tooltip,
-            TEXT_COLOR,
-        )
-        .set(state.ids.spellbook_button, ui)
-        .was_clicked()
+        if self
+            .create_spellbook_button(state, ui, &localized_strings, &button_tooltip, unspent_sp)
+            .was_clicked()
         {
             return Some(Event::ToggleSpell);
         }
@@ -441,5 +426,34 @@ impl<'a> Widget for Buttons<'a> {
         }
 
         None
+    }
+}
+
+impl<'a> Buttons<'a> {
+    fn create_spellbook_button(
+        &mut self,
+        state: &mut ConrodState<'_, State>,
+        ui: &mut UiCell,
+        localized_strings: &&Localization,
+        button_tooltip: &Tooltip,
+        unspent_sp: bool,
+    ) -> TimesClicked {
+        Button::image(if unspent_sp {
+            self.imgs.spellbook_hover
+        } else {
+            self.imgs.spellbook_button
+        })
+        .w_h(28.0, 25.0)
+        .left_from(state.ids.map_button, 10.0)
+        .hover_image(self.imgs.spellbook_hover)
+        .press_image(self.imgs.spellbook_press)
+        .with_tooltip(
+            self.tooltip_manager,
+            &localized_strings.get("hud.diary"),
+            "",
+            &button_tooltip,
+            TEXT_COLOR,
+        )
+        .set(state.ids.spellbook_button, ui)
     }
 }
