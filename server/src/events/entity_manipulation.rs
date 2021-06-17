@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
     comp::{
-        agent::{Sound, SoundKind},
+        agent::{Agent, AgentEvent, Sound, SoundKind},
         biped_large, bird_large, quadruped_low, quadruped_medium, quadruped_small,
         skills::SkillGroupKind,
         theropod, PhysicsState,
@@ -59,6 +59,13 @@ pub fn handle_damage(server: &Server, entity: EcsEntity, change: HealthChange) {
     let ecs = &server.state.ecs();
     if let Some(mut health) = ecs.write_storage::<Health>().get_mut(entity) {
         health.change_by(change);
+    }
+    // This if statement filters out anything under 5 damage, for DOT ticks
+    // TODO: Find a better way to separate direct damage from DOT here
+    if change.amount < -50 {
+        if let Some(agent) = ecs.write_storage::<Agent>().get_mut(entity) {
+            agent.inbox.push_front(AgentEvent::Hurt);
+        }
     }
 }
 
@@ -423,6 +430,7 @@ pub fn handle_destroy(server: &mut Server, entity: EcsEntity, cause: HealthSourc
                     bird_large::Species::Cockatrice => {
                         "common.loot_tables.creature.bird_large.cockatrice"
                     },
+                    bird_large::Species::Roc => "common.loot_tables.creature.bird_large.roc",
                     _ => "common.loot_tables.creature.bird_large.phoenix",
                 },
                 Some(common::comp::Body::FishMedium(_)) => "common.loot_tables.creature.fish",
@@ -431,7 +439,11 @@ pub fn handle_destroy(server: &mut Server, entity: EcsEntity, cause: HealthSourc
                     biped_large::Species::Wendigo => {
                         "common.loot_tables.creature.biped_large.wendigo"
                     },
-                    biped_large::Species::Troll => "common.loot_tables.creature.biped_large.troll",
+                    biped_large::Species::Cavetroll
+                    | biped_large::Species::Mountaintroll
+                    | biped_large::Species::Swamptroll => {
+                        "common.loot_tables.creature.biped_large.troll"
+                    },
                     biped_large::Species::Occultsaurok
                     | biped_large::Species::Mightysaurok
                     | biped_large::Species::Slysaurok => {

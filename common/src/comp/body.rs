@@ -413,6 +413,7 @@ impl Body {
             Body::BirdLarge(body) => match body.species {
                 bird_large::Species::Cockatrice => 4000,
                 bird_large::Species::Phoenix => 6000,
+                bird_large::Species::Roc => 5000,
             },
             Body::Humanoid(_) => 750,
             _ => 1000,
@@ -472,13 +473,18 @@ impl Body {
             },
             Body::FishMedium(_) => 250,
             Body::Dragon(_) => 5000,
-            Body::BirdLarge(_) => 3000,
+            Body::BirdLarge(bird_large) => match bird_large.species {
+                bird_large::Species::Roc => 2800,
+                _ => 3000,
+            },
             Body::FishSmall(_) => 20,
             Body::BipedLarge(biped_large) => match biped_large.species {
                 biped_large::Species::Ogre => 3200,
                 biped_large::Species::Cyclops => 3200,
                 biped_large::Species::Wendigo => 2800,
-                biped_large::Species::Troll => 2400,
+                biped_large::Species::Cavetroll => 2400,
+                biped_large::Species::Mountaintroll => 2400,
+                biped_large::Species::Swamptroll => 2400,
                 biped_large::Species::Dullahan => 3000,
                 biped_large::Species::Mindflayer => 12500,
                 biped_large::Species::Tidalwarrior => 16000,
@@ -512,6 +518,7 @@ impl Body {
             Body::Theropod(theropod) => match theropod.species {
                 theropod::Species::Archaeos => 3500,
                 theropod::Species::Odonto => 3000,
+                theropod::Species::Ntouka => 3000,
                 _ => 1100,
             },
             Body::QuadrupedLow(quadruped_low) => match quadruped_low.species {
@@ -522,7 +529,7 @@ impl Body {
                 quadruped_low::Species::Tortoise => 900,
                 quadruped_low::Species::Rocksnapper => 1400,
                 quadruped_low::Species::Pangolin => 400,
-                quadruped_low::Species::Maneater => 700,
+                quadruped_low::Species::Maneater => 1300,
                 quadruped_low::Species::Sandshark => 900,
                 quadruped_low::Species::Hakulaq => 500,
                 quadruped_low::Species::Lavadrake => 1600,
@@ -589,13 +596,18 @@ impl Body {
             },
             Body::FishMedium(_) => 10,
             Body::Dragon(_) => 500,
-            Body::BirdLarge(_) => 120,
+            Body::BirdLarge(bird_large) => match bird_large.species {
+                bird_large::Species::Roc => 110,
+                _ => 120,
+            },
             Body::FishSmall(_) => 10,
             Body::BipedLarge(biped_large) => match biped_large.species {
                 biped_large::Species::Ogre => 70,
                 biped_large::Species::Cyclops => 80,
                 biped_large::Species::Wendigo => 80,
-                biped_large::Species::Troll => 60,
+                biped_large::Species::Cavetroll => 60,
+                biped_large::Species::Mountaintroll => 60,
+                biped_large::Species::Swamptroll => 60,
                 biped_large::Species::Dullahan => 120,
                 biped_large::Species::Yeti => 0,
                 biped_large::Species::Harvester => 80,
@@ -675,7 +687,11 @@ impl Body {
     pub fn base_poise(&self) -> u32 {
         match self {
             Body::Humanoid(_) => 100,
-            Body::BipedLarge(_) => 250,
+            Body::BipedLarge(biped_large) => match biped_large.species {
+                biped_large::Species::Mindflayer => 320,
+                biped_large::Species::Minotaur => 280,
+                _ => 250,
+            },
             Body::Golem(_) => 300,
             _ => 100,
         }

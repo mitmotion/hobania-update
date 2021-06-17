@@ -1,5 +1,5 @@
 use crate::{
-    comp::{humanoid, quadruped_low, quadruped_medium, quadruped_small, ship, Body},
+    comp::{humanoid, quadruped_low, quadruped_medium, quadruped_small, ship, Body, UtteranceKind},
     path::Chaser,
     rtsim::RtSimController,
     trade::{PendingTrade, ReducedInventory, SiteId, SitePrices, TradeId, TradeResult},
@@ -96,7 +96,7 @@ bitflags::bitflags! {
 
 /// # Behavior Component
 /// This component allow an Entity to register one or more behavior tags.
-/// These tags act as flags of what an Entity can do, or what it is doing.  
+/// These tags act as flags of what an Entity can do, or what it is doing.
 /// Behaviors Tags can be added and removed as the Entity lives, to update its
 /// state when needed
 #[derive(Default, Copy, Clone, Debug)]
@@ -117,7 +117,7 @@ impl From<BehaviorCapability> for Behavior {
 }
 
 impl Behavior {
-    /// Builder function  
+    /// Builder function
     /// Set capabilities if Option is Some
     pub fn maybe_with_capabilities(
         mut self,
@@ -261,6 +261,7 @@ pub enum AgentEvent {
         )>,
     ),
     ServerSound(Sound),
+    Hurt,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -297,6 +298,7 @@ pub enum SoundKind {
     Explosion,
     Beam,
     Shockwave,
+    Utterance(UtteranceKind, Body),
 }
 
 #[derive(Clone, Debug)]
