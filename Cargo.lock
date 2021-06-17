@@ -1459,9 +1459,9 @@ dependencies = [
 
 [[package]]
 name = "egui_winit_platform"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69ff13f463b60b77361ddf2125e6cbfe410fc66bf4004a8e720508ce9027a6b6"
+checksum = "cd4cf17c0cd4dbcf2f8fef55a3592b9b7cfd970576c7302d8ba5c521b8560371"
 dependencies = [
  "egui",
  "winit",

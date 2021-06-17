@@ -12,7 +12,7 @@ be-dyn-lib = []
 client = {package = "veloren-client", path = "../../client"}
 common = {package = "veloren-common", path = "../../common"}
 egui = "0.12"
-egui_winit_platform = "0.7"
+egui_winit_platform = "0.8"
 voxygen-dynlib = {package = "veloren-voxygen-dynlib", path = "../dynlib"}
 
 # Hot Reloading
