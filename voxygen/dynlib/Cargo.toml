@@ -6,7 +6,6 @@ edition = "2018"
 
 [dependencies]
 find_folder = {version = "0.3.0"}
-lazy_static = {version = "1.4.0"}
 libloading = {version = "0.7"}
 notify = {version = "5.0.0-pre.2"}
 tracing = "0.1"

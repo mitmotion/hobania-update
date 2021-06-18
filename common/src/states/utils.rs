@@ -16,7 +16,6 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-
 use strum_macros::Display;
 use vek::*;
 

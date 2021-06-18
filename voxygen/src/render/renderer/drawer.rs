@@ -57,7 +57,8 @@ impl<'frame> Pipelines<'frame> {
 struct RendererBorrow<'frame> {
     queue: &'frame wgpu::Queue,
     device: &'frame wgpu::Device,
-    _sc_desc: &'frame wgpu::SwapChainDescriptor,
+    #[cfg(feature = "egui-ui")]
+    sc_desc: &'frame wgpu::SwapChainDescriptor,
     shadow: Option<&'frame super::Shadow>,
     pipelines: Pipelines<'frame>,
     locals: &'frame super::locals::Locals,
@@ -107,7 +108,7 @@ impl<'frame> Drawer<'frame> {
         let borrow = RendererBorrow {
             queue: &renderer.queue,
             device: &renderer.device,
-            _sc_desc: &renderer.sc_desc,
+            sc_desc: &renderer.sc_desc,
             shadow,
             pipelines,
             locals: &renderer.locals,
@@ -278,8 +279,8 @@ impl<'frame> Drawer<'frame> {
         let paint_jobs = platform.context().tessellate(paint_commands);
 
         let screen_descriptor = ScreenDescriptor {
-            physical_width: self.borrow._sc_desc.width,
-            physical_height: self.borrow._sc_desc.height,
+            physical_width: self.borrow.sc_desc.width,
+            physical_height: self.borrow.sc_desc.height,
             scale_factor: scale_factor as f32,
         };
 
@@ -307,11 +308,6 @@ impl<'frame> Drawer<'frame> {
             &screen_descriptor,
             None,
         );
-    }
-
-    #[cfg(feature = "egui-ui")]
-    pub fn egui_renderpass(&mut self) -> &mut egui_wgpu_backend::RenderPass {
-        self.borrow.egui_render_pass
     }
 
     /// Does nothing if the shadow pipelines are not available or shadow map

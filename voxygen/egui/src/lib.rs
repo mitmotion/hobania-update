@@ -1,7 +1,10 @@
 #![feature(stmt_expr_attributes)]
-mod character_states;
+
 #[cfg(all(feature = "be-dyn-lib", feature = "use-dyn-lib"))]
 compile_error!("Can't use both \"be-dyn-lib\" and \"use-dyn-lib\" features at once");
+
+mod character_states;
+
 use client::{Client, Join, World, WorldExt};
 use common::{
     comp,
@@ -25,15 +28,10 @@ use crate::character_states::draw_char_state_group;
 use common::comp::{aura::AuraKind::Buff, Body, Fluid};
 use egui_winit_platform::Platform;
 #[cfg(feature = "use-dyn-lib")]
-use lazy_static::lazy_static;
-#[cfg(feature = "use-dyn-lib")]
-use std::ffi::CStr;
-#[cfg(feature = "use-dyn-lib")]
-use std::sync::Arc;
-#[cfg(feature = "use-dyn-lib")]
-use std::sync::Mutex;
-#[cfg(feature = "use-dyn-lib")]
-use voxygen_dynlib::LoadedLib;
+use {
+    lazy_static::lazy_static, std::ffi::CStr, std::sync::Arc, std::sync::Mutex,
+    voxygen_dynlib::LoadedLib,
+};
 
 #[cfg(feature = "use-dyn-lib")]
 lazy_static! {
@@ -69,7 +67,7 @@ pub fn maintain(
         let lib = &lock.as_ref().unwrap().lib;
 
         #[allow(clippy::type_complexity)]
-        let maintain_fn: libloading::Symbol<
+        let maintain_fn: voxygen_dynlib::Symbol<
             fn(
                 &mut Platform,
                 &mut EguiInnerState,
@@ -148,12 +146,12 @@ pub enum DebugShapeAction {
         radius: f32,
         height: f32,
     },
+    RemoveShape(u64),
     SetPosAndColor {
         id: u64,
         pos: [f32; 4],
         color: [f32; 4],
     },
-    RemoveCylinder(u64),
 }
 
 #[derive(Default)]
@@ -217,7 +215,7 @@ pub fn maintain_egui_inner(
                     ui.label("Show EGUI Windows");
                     ui.horizontal(|ui| {
                         ui.checkbox(&mut egui_windows.egui_inspection, "🔍 Inspection");
-                        ui.checkbox(&mut egui_windows.egui_settings, "🔍 Settings");
+                        ui.checkbox(&mut egui_windows.egui_settings, "🔧 Settings");
                         ui.checkbox(&mut egui_windows.egui_memory, "📝 Memory");
                     })
                 })
@@ -398,7 +396,7 @@ pub fn maintain_egui_inner(
         if let Some(debug_shape_id) = previous.debug_shape_id {
             egui_actions
                 .actions
-                .push(DebugShapeAction::RemoveCylinder(debug_shape_id));
+                .push(DebugShapeAction::RemoveShape(debug_shape_id));
         }
     };
 
@@ -409,7 +407,7 @@ pub fn maintain_egui_inner(
             {
                 egui_actions
                     .actions
-                    .push(DebugShapeAction::RemoveCylinder(debug_shape_id));
+                    .push(DebugShapeAction::RemoveShape(debug_shape_id));
                 egui_actions.actions.push(DebugShapeAction::AddCylinder {
                     radius: 1.0,
                     height: selected_entity_cylinder_height,

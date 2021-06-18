@@ -20,21 +20,31 @@ pub fn draw_char_state_group(
         },
         CharacterState::DashMelee(data) => dash_melee_grid(ui, data),
         CharacterState::ChargedMelee(data) => charged_melee_grid(ui, data),
+        // Character states with no associated data to display
+        CharacterState::Dance
+        | CharacterState::Idle
+        | CharacterState::Sit
+        | CharacterState::GlideWield
+        | CharacterState::Sneak
+        | CharacterState::Talk
+        | CharacterState::Wielding => {},
         CharacterState::LeapMelee(data) => leap_melee_grid(ui, data),
-        _ => {},
+        _ => {
+            ui.label("<Rendering not yet implemented for this state>");
+        },
     };
 }
 
 fn charged_melee_grid(ui: &mut Ui, data: &charged_melee::Data) {
     Grid::new("selected_entity_charged_melee_grid")
-            .spacing([40.0, 4.0])
-            .max_col_width(100.0)
-            .striped(true)
-            .show(ui, |ui| #[rustfmt::skip] {
+        .spacing([40.0, 4.0])
+        .max_col_width(100.0)
+        .striped(true)
+        .show(ui, |ui| #[rustfmt::skip] {
                 two_col_row(ui, "Stage Section", data.stage_section.to_string());
                 two_col_row(ui, "Timer", format!("{}ms", data.timer.as_millis()));
                 two_col_row(ui, "Charge Amount", format!("{:.1}", data.charge_amount));
-                two_col_row(ui, "Exhausted", (if data.exhausted { "True" } else { "False" }).to_string());
+                two_col_row(ui, "Exhausted", if data.exhausted { "True" } else { "False" });
             });
 }
 
@@ -56,22 +66,22 @@ fn dash_melee_grid(ui: &mut Ui, data: &dash_melee::Data) {
             .max_col_width(100.0)
             .striped(true)
             .show(ui, |ui| #[rustfmt::skip] {
-                two_col_row(ui, "Auto Charge", (if data.auto_charge { "True" } else { "False " }).to_string());
+                two_col_row(ui, "Auto Charge", if data.auto_charge { "True" } else { "False " });
                 two_col_row(ui, "Timer", format!("{}ms", data.timer.as_millis()));
                 two_col_row(ui, "Stage Section", data.stage_section.to_string());
-                two_col_row(ui, "Exhausted", (if data.exhausted { "True" } else { "False " }).to_string());
+                two_col_row(ui, "Exhausted", if data.exhausted { "True" } else { "False " });
                 two_col_row(ui, "Charge End Timer", format!("{}ms", data.charge_end_timer.as_millis()));
             });
 }
 
 fn leap_melee_grid(ui: &mut Ui, data: &leap_melee::Data) {
     Grid::new("selected_entity_leap_melee_grid")
-            .spacing([40.0, 4.0])
-            .max_col_width(100.0)
-            .striped(true)
-            .show(ui, |ui| #[rustfmt::skip] {
+        .spacing([40.0, 4.0])
+        .max_col_width(100.0)
+        .striped(true)
+        .show(ui, |ui| #[rustfmt::skip] {
                 two_col_row(ui, "Stage Section", data.stage_section.to_string());
                 two_col_row(ui, "Timer", format!("{}ms", data.timer.as_millis()));
-                two_col_row(ui, "Exhausted", (if data.exhausted { "True" } else { "False " }).to_string());
+                two_col_row(ui, "Exhausted", if data.exhausted { "True" } else { "False " });
             });
 }

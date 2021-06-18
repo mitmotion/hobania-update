@@ -9,10 +9,14 @@ use std::{
 use find_folder::Search;
 use std::{
     env,
+    env::consts::DLL_SUFFIX,
     path::{Path, PathBuf},
     sync::Arc,
 };
 use tracing::{debug, error, info};
+
+// Re-exports
+pub use libloading::Symbol;
 
 /// LoadedLib holds a loaded dynamic library and the location of library file
 /// with the appropriate OS specific name and extension i.e.
@@ -111,14 +115,17 @@ impl LoadedLib {
     }
 }
 
+/// Initialise a watcher.
+///
+/// This will search for the directory named `package_source_dir` and watch the
+/// files within it for any changes.
 pub fn init(
     lib_storage: Arc<Mutex<Option<LoadedLib>>>,
     package: &'static str,
     dyn_package: &'static str,
     package_source_dir: &'static str,
 ) {
-    let mut lock = lib_storage.lock().unwrap();
-    *lock = Some(LoadedLib::compile_load(dyn_package));
+    *lib_storage.lock().unwrap() = Some(LoadedLib::compile_load(dyn_package));
 
     // TODO: use crossbeam
     let (reload_send, reload_recv) = mpsc::channel();
@@ -138,7 +145,6 @@ pub fn init(
 
     watcher.watch(watch_dir, RecursiveMode::Recursive).unwrap();
 
-    let loaded_lib_clone = Arc::clone(&lib_storage);
     // Start reloader that watcher signals
     // "Debounces" events since I can't find the option to do this in the latest
     // `notify`
@@ -158,7 +164,7 @@ pub fn init(
                     "Hot reloading {} because files in `{}` modified.", package, package_source_dir
                 );
 
-                hotreload(dyn_package, loaded_lib_clone.clone());
+                hotreload(dyn_package, &lib_storage);
             }
         })
         .unwrap();
@@ -172,15 +178,11 @@ fn compiled_file(dyn_package: &str) -> String { dyn_lib_file(dyn_package, false)
 fn active_file(dyn_package: &str) -> String { dyn_lib_file(dyn_package, true) }
 
 fn dyn_lib_file(dyn_package: &str, active: bool) -> String {
-    #[cfg(target_os = "windows")]
-    const FILE_EXT: &str = ".dll";
-    #[cfg(not(target_os = "windows"))]
-    const FILE_EXT: &str = ".so";
     format!(
         "{}{}{}",
         dyn_package.replace("-", "_"),
         if active { "_active" } else { "" },
-        FILE_EXT
+        DLL_SUFFIX
     )
 }
 
@@ -209,7 +211,7 @@ fn event_fn(res: notify::Result<notify::Event>, sender: &mpsc::Sender<String>) {
 ///
 /// This will reload the dynamic library by first internally calling compile
 /// and then reloading the library.
-fn hotreload(dyn_package: &str, loaded_lib: Arc<Mutex<Option<LoadedLib>>>) {
+fn hotreload(dyn_package: &str, loaded_lib: &Mutex<Option<LoadedLib>>) {
     // Do nothing if recompile failed.
     if compile(dyn_package) {
         let mut lock = loaded_lib.lock().unwrap();

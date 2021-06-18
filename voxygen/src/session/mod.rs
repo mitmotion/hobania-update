@@ -1408,7 +1408,9 @@ impl PlayState for SessionState {
     /// This method should be called once per frame.
 
     fn render(&mut self, global_state: &mut GlobalState) {
-        let _scale_factor = global_state.window.window().scale_factor() as f32;
+        #[cfg(feature = "egui-ui")]
+        let scale_factor = global_state.window.window().scale_factor() as f32;
+
         let renderer = global_state.window.renderer_mut();
         let settings = &global_state.settings;
 
@@ -1470,7 +1472,7 @@ impl PlayState for SessionState {
 
         #[cfg(feature = "egui-ui")]
         if global_state.settings.interface.toggle_debug {
-            drawer.draw_egui(&mut global_state.egui_state.platform, _scale_factor);
+            drawer.draw_egui(&mut global_state.egui_state.platform, scale_factor);
         }
     }
 }

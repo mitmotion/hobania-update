@@ -4,7 +4,6 @@ use crate::{
 };
 use client::Client;
 use common::debug_info::DebugInfo;
-use core::mem;
 use egui::FontDefinitions;
 use egui_winit_platform::{Platform, PlatformDescriptor};
 use voxygen_egui::{DebugShapeAction, EguiInnerState, EguiWindows};
@@ -41,7 +40,7 @@ impl EguiState {
             &mut self.egui_windows,
             client,
             debug_info,
-            mem::take(&mut self.new_debug_shape_id),
+            self.new_debug_shape_id.take(),
         );
 
         egui_actions.actions.iter().for_each(|action| match action {
@@ -52,7 +51,7 @@ impl EguiState {
                 });
                 self.new_debug_shape_id = Some(shape_id.0);
             },
-            DebugShapeAction::RemoveCylinder(debug_shape_id) => {
+            DebugShapeAction::RemoveShape(debug_shape_id) => {
                 scene.debug.remove_shape(DebugShapeId(*debug_shape_id));
             },
             DebugShapeAction::SetPosAndColor { id, pos, color } => {

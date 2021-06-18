@@ -66,19 +66,13 @@ pub mod ship;
 pub mod theropod;
 pub mod vek;
 
-#[cfg(feature = "use-dyn-lib")]
-use std::ffi::CStr;
-
 use self::vek::*;
 use bytemuck::{Pod, Zeroable};
 #[cfg(feature = "use-dyn-lib")]
-use lazy_static::lazy_static;
-#[cfg(feature = "use-dyn-lib")]
-use std::sync::Arc;
-#[cfg(feature = "use-dyn-lib")]
-use std::sync::Mutex;
-#[cfg(feature = "use-dyn-lib")]
-use voxygen_dynlib::LoadedLib;
+use {
+    lazy_static::lazy_static, std::ffi::CStr, std::sync::Arc, std::sync::Mutex,
+    voxygen_dynlib::LoadedLib,
+};
 
 type MatRaw = [[f32; 4]; 4];
 
@@ -131,7 +125,7 @@ pub fn compute_matrices<S: Skeleton>(
         let lib = &lock.as_ref().unwrap().lib;
 
         #[allow(clippy::type_complexity)]
-        let compute_fn: libloading::Symbol<
+        let compute_fn: voxygen_dynlib::Symbol<
             fn(&S, Mat4<f32>, &mut [FigureBoneData; MAX_BONE_COUNT]) -> Vec3<f32>,
         > = unsafe { lib.get(S::COMPUTE_FN) }.unwrap_or_else(|e| {
             panic!(
@@ -183,7 +177,7 @@ pub trait Animation {
             let lib = &lock.as_ref().unwrap().lib;
 
             #[allow(clippy::type_complexity)]
-            let update_fn: libloading::Symbol<
+            let update_fn: voxygen_dynlib::Symbol<
                 fn(
                     &Self::Skeleton,
                     Self::Dependency<'a>,
