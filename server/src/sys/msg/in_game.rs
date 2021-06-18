@@ -1,4 +1,4 @@
-use crate::{client::Client, presence::Presence, Settings};
+use crate::{client::Client, presence::Presence, Settings, TerrainPersistence};
 use common::{
     comp::{
         Admin, CanBuild, ControlEvent, Controller, ForceUpdate, Health, Ori, Player, Pos, SkillSet,
@@ -36,6 +36,7 @@ impl Sys {
         settings: &Read<'_, Settings>,
         build_areas: &Read<'_, BuildAreas>,
         player_physics_settings: &mut Write<'_, PlayerPhysicsSettings>,
+        terrain_persistence: &mut Write<'_, TerrainPersistence>,
         maybe_player: &Option<&Player>,
         maybe_admin: &Option<&Admin>,
         msg: ClientGeneral,
@@ -198,7 +199,10 @@ impl Sys {
                                 .filter(|aabb| aabb.contains_point(pos))
                                 .and_then(|_| terrain.get(pos).ok())
                             {
-                                block_changes.set(pos, block.into_vacant());
+                                let block = block.into_vacant();
+                                block_changes.set(pos, block);
+                                // TODO: Only modify if succeeded
+                                terrain_persistence.set_block(pos, block);
                             }
                         }
                     }
@@ -217,6 +221,8 @@ impl Sys {
                                 .is_some()
                             {
                                 block_changes.try_set(pos, block);
+                                // TODO: Only modify if succeeded
+                                terrain_persistence.set_block(pos, block);
                             }
                         }
                     }
@@ -287,6 +293,7 @@ impl<'a> System<'a> for Sys {
         Read<'a, Settings>,
         Read<'a, BuildAreas>,
         Write<'a, PlayerPhysicsSettings>,
+        Write<'a, TerrainPersistence>,
         ReadStorage<'a, Player>,
         ReadStorage<'a, Admin>,
     );
@@ -315,6 +322,7 @@ impl<'a> System<'a> for Sys {
             settings,
             build_areas,
             mut player_physics_settings,
+            mut terrain_persistence,
             players,
             admins,
         ): Self::SystemData,
@@ -349,6 +357,7 @@ impl<'a> System<'a> for Sys {
                     &settings,
                     &build_areas,
                     &mut player_physics_settings,
+                    &mut terrain_persistence,
                     &player,
                     &maybe_admin,
                     msg,

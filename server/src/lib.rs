@@ -32,6 +32,7 @@ pub mod state_ext;
 pub mod sys;
 #[cfg(not(feature = "worldgen"))] mod test_world;
 pub mod wiring;
+pub mod terrain_persistence;
 
 // Reexports
 pub use crate::{
@@ -54,6 +55,7 @@ use crate::{
     rtsim::RtSim,
     state_ext::StateExt,
     sys::sentinel::{DeletedEntities, TrackedComps},
+    terrain_persistence::TerrainPersistence,
 };
 #[cfg(not(feature = "worldgen"))]
 use common::grid::Grid;
@@ -213,6 +215,7 @@ impl Server {
         state.ecs_mut().insert(ecs_system_metrics);
         state.ecs_mut().insert(tick_metrics);
         state.ecs_mut().insert(physics_metrics);
+        state.ecs_mut().insert(TerrainPersistence::default());
         state
             .ecs_mut()
             .write_resource::<SlowJobPool>()
@@ -823,6 +826,8 @@ impl Server {
     pub fn cleanup(&mut self) {
         // Cleanup the local state
         self.state.cleanup();
+
+        self.state.ecs().write_resource::<TerrainPersistence>().unload_all();
     }
 
     fn initialize_client(
