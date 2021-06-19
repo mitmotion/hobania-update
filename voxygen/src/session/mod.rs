@@ -1033,7 +1033,94 @@ impl PlayState for SessionState {
                         self.client.borrow_mut().send_chat(msg);
                     },
                     HudEvent::SendCommand(name, args) => {
-                        self.client.borrow_mut().send_command(name, args);
+                        use common::{terrain::TerrainGrid, volumes::dyna::Dyna};
+                        use common_net::msg::compression::{
+                            image_terrain_chonk, write_image_terrain, CompressedData,
+                            GridLtrPacking, QuadPngEncoding,
+                        };
+                        use std::{fs::File, io::Write};
+                        match &*name {
+                            "save_chunk" => {
+                                if let Some(filename) = args.get(0) {
+                                    let client = self.client.borrow();
+                                    let player = client.entity();
+                                    let ecs = client.state().ecs();
+                                    let pos = ecs.read_storage::<Pos>().get(player).unwrap();
+                                    let terrain = ecs.read_resource::<TerrainGrid>();
+                                    let chunk_key = terrain.pos_key(pos.0.xy().as_());
+                                    let chunk = terrain.get_key(chunk_key).unwrap();
+
+                                    let (pngs, indices) = image_terrain_chonk(
+                                        QuadPngEncoding::<1>(),
+                                        GridLtrPacking,
+                                        &chunk,
+                                    )
+                                    .and_then(|x| x.decompress())
+                                    .unwrap();
+                                    let ranges: [_; 4] = [
+                                        0..indices[0],
+                                        indices[0]..indices[1],
+                                        indices[1]..indices[2],
+                                        indices[2]..pngs.len(),
+                                    ];
+                                    for i in 0..4 {
+                                        let mut f =
+                                            File::create(&format!("{}_{}.png", filename, i))
+                                                .unwrap();
+                                        f.write_all(&pngs[ranges[i].clone()]).unwrap();
+                                    }
+                                }
+                            },
+                            "load_chunk" => {
+                                if let (Some(filename), Some(z_off)) =
+                                    (args.get(0), args.get(1).and_then(i32::parse))
+                                {
+                                    let client = self.client.borrow();
+                                    let player = client.entity();
+                                    let ecs = client.state().ecs();
+                                    let pos = ecs.read_storage::<Pos>().get(player).unwrap();
+                                    let terrain = ecs.read_resource::<TerrainGrid>();
+                                    let chunk_key = terrain.pos_key(pos.0.xy().as_());
+                                    let mut pngs = Vec::new();
+                                    let mut indices = [0; 3];
+                                    for i in 0..4 {
+                                        let file =
+                                            File::open(&format!("{}_{}.png", filename, i)).unwrap();
+                                        let _ = file.read_to_end(&mut pngs);
+                                        if i < 3 {
+                                            indices[i] = pngs.len();
+                                        }
+                                    }
+                                    let dyna =
+                                        Dyna::filled(Vec3::new(32, 32, 512), Block::air(), ());
+                                    write_image_terrain(
+                                        QuadPngEncoding::<1>(),
+                                        GridLtrPacking,
+                                        &mut dyna,
+                                        CompressedData::compress((pngs, indices, 1)),
+                                        Vec3::new(0, 0, 0),
+                                        Vec3::new(32, 32, 512),
+                                    );
+                                    for i in 0..32 {
+                                        for j in 0..32 {
+                                            for k in 0..512 {
+                                                let blockpos = Vec3::new(
+                                                    chunk_key + i,
+                                                    chunk_key + j,
+                                                    k + z_off,
+                                                );
+                                                if let Some(block) = dyna.get(Vec3::new(i, j, k)) {
+                                                    client.place_block(blockpos, block);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            _ => {
+                                self.client.borrow_mut().send_command(name, args);
+                            },
+                        }
                     },
                     HudEvent::CharacterSelection => {
                         self.client.borrow_mut().request_remove_character()
