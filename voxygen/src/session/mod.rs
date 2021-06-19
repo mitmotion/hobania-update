@@ -1033,23 +1033,31 @@ impl PlayState for SessionState {
                         self.client.borrow_mut().send_chat(msg);
                     },
                     HudEvent::SendCommand(name, args) => {
-                        use common::{terrain::TerrainGrid, volumes::dyna::Dyna};
+                        use common::{
+                            terrain::{sprite::SpriteKind, TerrainGrid},
+                            volumes::dyna::{ColumnAccess, Dyna},
+                        };
                         use common_net::msg::compression::{
                             image_terrain_chonk, write_image_terrain, CompressedData,
                             GridLtrPacking, QuadPngEncoding,
                         };
-                        use std::{fs::File, io::Write};
+                        use std::{
+                            fs::File,
+                            io::{Read, Write},
+                            str::FromStr,
+                        };
                         match &*name {
                             "save_chunk" => {
                                 if let Some(filename) = args.get(0) {
                                     let client = self.client.borrow();
                                     let player = client.entity();
                                     let ecs = client.state().ecs();
-                                    let pos = ecs.read_storage::<Pos>().get(player).unwrap();
+                                    let positions = ecs.read_storage::<Pos>();
+                                    let pos = positions.get(player).unwrap();
                                     let terrain = ecs.read_resource::<TerrainGrid>();
-                                    let chunk_key = terrain.pos_key(pos.0.xy().as_());
+                                    let pos_xy: Vec3<i32> = pos.0.as_();
+                                    let chunk_key = terrain.pos_key(pos_xy);
                                     let chunk = terrain.get_key(chunk_key).unwrap();
-
                                     let (pngs, indices) = image_terrain_chonk(
                                         QuadPngEncoding::<1>(),
                                         GridLtrPacking,
@@ -1072,45 +1080,59 @@ impl PlayState for SessionState {
                                 }
                             },
                             "load_chunk" => {
-                                if let (Some(filename), Some(z_off)) =
-                                    (args.get(0), args.get(1).and_then(i32::parse))
-                                {
-                                    let client = self.client.borrow();
+                                if let (Some(filename), Some(z_off)) = (
+                                    args.get(0),
+                                    args.get(1).and_then(|s| i32::from_str(&*s).ok()),
+                                ) {
+                                    let mut client = self.client.borrow_mut();
                                     let player = client.entity();
                                     let ecs = client.state().ecs();
-                                    let pos = ecs.read_storage::<Pos>().get(player).unwrap();
-                                    let terrain = ecs.read_resource::<TerrainGrid>();
-                                    let chunk_key = terrain.pos_key(pos.0.xy().as_());
+                                    let positions = ecs.read_storage::<Pos>();
+                                    let pos = positions.get(player).unwrap();
+                                    let ipos: Vec3<i32> = pos.0.as_();
+                                    let chunk_key = TerrainGrid::chunk_key(ipos);
+                                    drop(positions);
+                                    drop(ecs);
                                     let mut pngs = Vec::new();
                                     let mut indices = [0; 3];
+                                    let mut height = 0;
                                     for i in 0..4 {
-                                        let file =
+                                        use image::{codecs::png::PngDecoder, ImageDecoder};
+                                        let mut file =
                                             File::open(&format!("{}_{}.png", filename, i)).unwrap();
                                         let _ = file.read_to_end(&mut pngs);
+                                        if i == 0 {
+                                            let decoder = PngDecoder::new(&pngs[..]).unwrap();
+                                            let (w, h) = decoder.dimensions();
+                                            height = (w * h) / (32 * 32);
+                                        }
                                         if i < 3 {
                                             indices[i] = pngs.len();
                                         }
                                     }
-                                    let dyna =
-                                        Dyna::filled(Vec3::new(32, 32, 512), Block::air(), ());
+                                    let mut dyna: Dyna<Block, (), ColumnAccess> = Dyna::filled(
+                                        Vec3::new(32, 32, height),
+                                        Block::air(SpriteKind::Empty),
+                                        (),
+                                    );
                                     write_image_terrain(
                                         QuadPngEncoding::<1>(),
                                         GridLtrPacking,
                                         &mut dyna,
-                                        CompressedData::compress((pngs, indices, 1)),
+                                        &CompressedData::compress(&(pngs, indices), 1),
                                         Vec3::new(0, 0, 0),
-                                        Vec3::new(32, 32, 512),
+                                        Vec3::new(32, 32, height),
                                     );
                                     for i in 0..32 {
                                         for j in 0..32 {
-                                            for k in 0..512 {
+                                            for k in 0..height as i32 {
                                                 let blockpos = Vec3::new(
-                                                    chunk_key + i,
-                                                    chunk_key + j,
-                                                    k + z_off,
+                                                    32 * chunk_key.x + i,
+                                                    32 * chunk_key.y + j,
+                                                    ipos.z + k + z_off,
                                                 );
-                                                if let Some(block) = dyna.get(Vec3::new(i, j, k)) {
-                                                    client.place_block(blockpos, block);
+                                                if let Ok(block) = dyna.get(Vec3::new(i, j, k)) {
+                                                    client.place_block(blockpos, *block);
                                                 }
                                             }
                                         }
