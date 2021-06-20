@@ -1,7 +1,7 @@
 mod ui;
 
 use crate::{
-    render::{Drawer, GlobalsBindGroup, Renderer},
+    render::{Drawer, GlobalsBindGroup},
     scene::simple::{self as scene, Scene},
     session::SessionState,
     settings::Settings,
@@ -20,7 +20,7 @@ pub struct CharSelectionState {
     char_selection_ui: CharSelectionUi,
     client: Rc<RefCell<Client>>,
     scene: Scene,
-    need_shadow_clear: bool,
+    need_shadow_clear: RefCell<bool>,
 }
 
 impl CharSelectionState {
@@ -37,7 +37,7 @@ impl CharSelectionState {
             char_selection_ui,
             client,
             scene,
-            need_shadow_clear: false,
+            need_shadow_clear: RefCell::new(false),
         }
     }
 
@@ -75,7 +75,7 @@ impl PlayState for CharSelectionState {
             .set_scale_mode(global_state.settings.interface.ui_scale);
 
         // Clear shadow textures since we don't render to them here
-        self.need_shadow_clear = true;
+        *self.need_shadow_clear.borrow_mut() = true;
     }
 
     fn tick(&mut self, global_state: &mut GlobalState, events: Vec<WinEvent>) -> PlayStateResult {
@@ -236,10 +236,10 @@ impl PlayState for CharSelectionState {
 
     fn globals_bind_group(&self) -> &GlobalsBindGroup { self.scene.global_bind_group() }
 
-    fn render<'a>(&'a mut self, mut drawer: &mut Drawer<'a>, _: &Settings) {
-        if self.need_shadow_clear {
+    fn render<'a>(&'a self, drawer: &mut Drawer<'a>, _: &Settings) {
+        if *self.need_shadow_clear.borrow() {
             drawer.clear_shadows();
-            self.need_shadow_clear = false;
+            *self.need_shadow_clear.borrow_mut() = false;
         }
 
         let client = self.client.borrow();

@@ -169,6 +169,10 @@ fn handle_main_events_cleared(
     let mut capped_fps = false;
 
     drop(guard);
+
+    #[cfg(feature = "egui-ui")]
+    let scale_factor = global_state.window.window().scale_factor() as f32;
+
     if let Some(last) = states.last_mut() {
         capped_fps = last.capped_fps();
 
@@ -185,7 +189,6 @@ fn handle_main_events_cleared(
 
             #[cfg(feature = "egui-ui")]
             if global_state.settings.interface.toggle_debug {
-                let scale_factor = global_state.window.window().scale_factor() as f32;
                 drawer.draw_egui(&mut global_state.egui_state.platform, scale_factor);
             }
         };

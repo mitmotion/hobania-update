@@ -7,7 +7,7 @@ use super::char_selection::CharSelectionState;
 use crate::singleplayer::Singleplayer;
 use crate::{
     i18n::LocalizationHandle,
-    render::{Drawer, GlobalsBindGroup, Renderer},
+    render::{Drawer, GlobalsBindGroup},
     settings::Settings,
     window::Event,
     Direction, GlobalState, PlayState, PlayStateResult,
@@ -325,7 +325,7 @@ impl PlayState for MainMenuState {
 
     fn globals_bind_group(&self) -> &GlobalsBindGroup { self.scene.global_bind_group() }
 
-    fn render<'a>(&'a mut self, mut drawer: &mut Drawer<'a>, _: &Settings) {
+    fn render<'a>(&'a self, drawer: &mut Drawer<'a>, _: &Settings) {
         // Draw the UI to the screen.
         let mut third_pass = drawer.third_pass();
         if let Some(mut ui_drawer) = third_pass.draw_ui() {

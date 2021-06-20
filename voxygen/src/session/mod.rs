@@ -38,7 +38,7 @@ use crate::{
     hud::{Event as HudEvent, Hud, HudInfo, LootMessage, PromptDialogSettings},
     key_state::KeyState,
     menu::char_selection::CharSelectionState,
-    render::{Drawer, GlobalsBindGroup, Renderer},
+    render::{Drawer, GlobalsBindGroup},
     scene::{camera, terrain::Interaction, CameraMode, DebugShapeId, Scene, SceneData},
     settings::Settings,
     window::{AnalogGameInput, Event, GameInput},
@@ -1413,7 +1413,7 @@ impl PlayState for SessionState {
     /// Render the session to the screen.
     ///
     /// This method should be called once per frame.
-    fn render<'a>(&'a mut self, mut drawer: &mut Drawer<'a>, settings: &Settings) {
+    fn render<'a>(&'a self, mut drawer: &mut Drawer<'a>, settings: &Settings) {
         span!(_guard, "render", "<Session as PlayState>::render");
 
         // Render world

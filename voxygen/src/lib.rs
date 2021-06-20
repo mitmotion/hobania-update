@@ -43,7 +43,7 @@ use crate::ui::egui::EguiState;
 use crate::{
     audio::AudioFrontend,
     profile::Profile,
-    render::{Drawer, GlobalsBindGroup, Renderer},
+    render::{Drawer, GlobalsBindGroup},
     settings::Settings,
     window::{Event, Window},
 };
@@ -143,5 +143,5 @@ pub trait PlayState {
     fn globals_bind_group(&self) -> &GlobalsBindGroup;
 
     /// Draw the play state.
-    fn render<'a>(&'a mut self, drawer: &mut Drawer<'a>, settings: &Settings);
+    fn render<'a>(&'a self, drawer: &mut Drawer<'a>, settings: &Settings);
 }
