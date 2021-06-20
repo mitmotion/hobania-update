@@ -35,68 +35,11 @@ use {
 
 #[cfg(feature = "use-dyn-lib")]
 lazy_static! {
-    pub static ref LIB: Arc<Mutex<Option<LoadedLib>>> = Arc::new(Mutex::new(None));
+    static ref LIB: Arc<Mutex<Option<LoadedLib>>> = Arc::new(Mutex::new(None));
 }
 
 #[cfg(feature = "use-dyn-lib")]
 const MAINTAIN_EGUI_FN: &[u8] = b"maintain_egui_inner\0";
-
-pub fn maintain(
-    platform: &mut Platform,
-    egui_state: &mut EguiInnerState,
-    egui_windows: &mut EguiWindows,
-    client: &Client,
-    debug_info: &Option<DebugInfo>,
-    added_cylinder_shape_id: Option<u64>,
-) -> EguiActions {
-    #[cfg(not(feature = "use-dyn-lib"))]
-    {
-        maintain_egui_inner(
-            platform,
-            egui_state,
-            egui_windows,
-            client,
-            debug_info,
-            added_cylinder_shape_id,
-        )
-    }
-
-    #[cfg(feature = "use-dyn-lib")]
-    {
-        let lock = LIB.lock().unwrap();
-        let lib = &lock.as_ref().unwrap().lib;
-
-        #[allow(clippy::type_complexity)]
-        let maintain_fn: voxygen_dynlib::Symbol<
-            fn(
-                &mut Platform,
-                &mut EguiInnerState,
-                &mut EguiWindows,
-                &Client,
-                &Option<DebugInfo>,
-                Option<u64>,
-            ) -> EguiActions,
-        > = unsafe { lib.get(MAINTAIN_EGUI_FN) }.unwrap_or_else(|e| {
-            panic!(
-                "Trying to use: {} but had error: {:?}",
-                CStr::from_bytes_with_nul(MAINTAIN_EGUI_FN)
-                    .map(CStr::to_str)
-                    .unwrap()
-                    .unwrap(),
-                e
-            )
-        });
-
-        maintain_fn(
-            platform,
-            egui_state,
-            egui_windows,
-            client,
-            debug_info,
-            added_cylinder_shape_id,
-        )
-    }
-}
 
 pub struct SelectedEntityInfo {
     entity_id: u32,
@@ -157,6 +100,73 @@ pub enum DebugShapeAction {
 #[derive(Default)]
 pub struct EguiActions {
     pub actions: Vec<DebugShapeAction>,
+}
+
+#[cfg(feature = "use-dyn-lib")]
+pub fn init() {
+    voxygen_dynlib::init(
+        Arc::clone(&LIB),
+        "veloren-voxygen-egui",
+        "veloren-voxygen-egui-dyn",
+        "egui",
+    );
+}
+
+pub fn maintain(
+    platform: &mut Platform,
+    egui_state: &mut EguiInnerState,
+    egui_windows: &mut EguiWindows,
+    client: &Client,
+    debug_info: &Option<DebugInfo>,
+    added_cylinder_shape_id: Option<u64>,
+) -> EguiActions {
+    #[cfg(not(feature = "use-dyn-lib"))]
+    {
+        maintain_egui_inner(
+            platform,
+            egui_state,
+            egui_windows,
+            client,
+            debug_info,
+            added_cylinder_shape_id,
+        )
+    }
+
+    #[cfg(feature = "use-dyn-lib")]
+    {
+        let lock = LIB.lock().unwrap();
+        let lib = &lock.as_ref().unwrap().lib;
+
+        #[allow(clippy::type_complexity)]
+        let maintain_fn: voxygen_dynlib::Symbol<
+            fn(
+                &mut Platform,
+                &mut EguiInnerState,
+                &mut EguiWindows,
+                &Client,
+                &Option<DebugInfo>,
+                Option<u64>,
+            ) -> EguiActions,
+        > = unsafe { lib.get(MAINTAIN_EGUI_FN) }.unwrap_or_else(|e| {
+            panic!(
+                "Trying to use: {} but had error: {:?}",
+                CStr::from_bytes_with_nul(MAINTAIN_EGUI_FN)
+                    .map(CStr::to_str)
+                    .unwrap()
+                    .unwrap(),
+                e
+            )
+        });
+
+        maintain_fn(
+            platform,
+            egui_state,
+            egui_windows,
+            client,
+            debug_info,
+            added_cylinder_shape_id,
+        )
+    }
 }
 
 #[cfg_attr(feature = "be-dyn-lib", export_name = "maintain_egui_inner")]

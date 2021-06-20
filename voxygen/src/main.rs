@@ -150,26 +150,16 @@ fn main() {
     assets::start_hot_reloading();
     i18n::start_hot_reloading();
 
-    // Initialise watcher for animation hotreloading
+    // Initialise watcher for animation hot-reloading
     #[cfg(feature = "hot-anim")]
     {
-        voxygen_dynlib::init(
-            Arc::clone(&anim::LIB),
-            "veloren-voxygen-anim",
-            "veloren-voxygen-anim-dyn",
-            "anim",
-        );
+        anim::init();
     }
 
-    // Initialise watcher for egui hotreloading
+    // Initialise watcher for egui hot-reloading
     #[cfg(feature = "hot-egui")]
     {
-        voxygen_dynlib::init(
-            Arc::clone(&voxygen_egui::LIB),
-            "veloren-voxygen-egui",
-            "veloren-voxygen-egui-dyn",
-            "egui",
-        );
+        voxygen_egui::init();
     }
 
     // Setup audio

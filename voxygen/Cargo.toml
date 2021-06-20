@@ -22,8 +22,8 @@ runtimeLibs = ["libGL", "xorg.libX11", "xorg.libXcursor", "xorg.libXrandr", "xor
 buildInputs = ["xorg.libxcb"]
 
 [features]
-hot-anim = ["voxygen-dynlib", "anim/use-dyn-lib"]
-hot-egui = ["voxygen-dynlib", "voxygen-egui/use-dyn-lib", "egui"]
+hot-anim = ["anim/use-dyn-lib"]
+hot-egui = ["voxygen-egui/use-dyn-lib", "egui"]
 singleplayer = ["server"]
 simd = ["vek/platform_intrinsics"]
 tracy = ["profiling", "profiling/profile-with-tracy", "common/tracy", "common-ecs/tracy", "common-frontend/tracy", "common-net/tracy", "common-systems/tracy", "common-state/tracy", "client/tracy"]
@@ -47,7 +47,6 @@ common-state = {package = "veloren-common-state", path = "../common/state"}
 anim = {package = "veloren-voxygen-anim", path = "anim"}
 i18n = {package = "veloren-i18n", path = "i18n"}
 voxygen-egui = {package = "veloren-voxygen-egui", path = "egui", optional = true }
-voxygen-dynlib = {package = "veloren-voxygen-dynlib", path = "dynlib", optional = true}
 
 # Graphics
 winit = {version = "0.25.0", features = ["serde"]}

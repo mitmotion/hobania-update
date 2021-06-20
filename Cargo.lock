@@ -6176,7 +6176,6 @@ dependencies = [
  "veloren-i18n",
  "veloren-server",
  "veloren-voxygen-anim",
- "veloren-voxygen-dynlib",
  "veloren-voxygen-egui",
  "veloren-world",
  "wgpu",

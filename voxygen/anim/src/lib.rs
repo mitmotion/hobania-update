@@ -91,7 +91,17 @@ pub type Bone = Transform<f32, f32, f32>;
 
 #[cfg(feature = "use-dyn-lib")]
 lazy_static! {
-    pub static ref LIB: Arc<Mutex<Option<LoadedLib>>> = Arc::new(Mutex::new(None));
+    static ref LIB: Arc<Mutex<Option<LoadedLib>>> = Arc::new(Mutex::new(None));
+}
+
+#[cfg(feature = "use-dyn-lib")]
+pub fn init() {
+    voxygen_dynlib::init(
+        Arc::clone(&LIB),
+        "veloren-voxygen-anim",
+        "veloren-voxygen-anim-dyn",
+        "anim",
+    );
 }
 
 pub trait Skeleton: Send + Sync + 'static {
