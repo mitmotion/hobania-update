@@ -145,6 +145,8 @@ fn do_command(
         ChatCommand::Light => handle_light,
         ChatCommand::MakeBlock => handle_make_block,
         ChatCommand::MakeSprite => handle_make_sprite,
+        ChatCommand::MakeRgb => handle_make_rgb,
+        ChatCommand::MakePalette => handle_make_palette,
         ChatCommand::Motd => handle_motd,
         ChatCommand::Object => handle_object,
         ChatCommand::PermitBuild => handle_permit_build,
@@ -561,6 +563,57 @@ fn handle_make_sprite(
     } else {
         Err(action.help_string())
     }
+}
+
+fn handle_make_rgb(
+    server: &mut Server,
+    _client: EcsEntity,
+    target: EcsEntity,
+    args: String,
+    action: &ChatCommand,
+) -> CmdResult<()> {
+    if let (Some(block_name), Some(r), Some(g), Some(b)) = scan_fmt_some!(&args, &action.arg_fmt(), String, u8, u8, u8) {
+        if let Ok(bk) = BlockKind::try_from(block_name.as_str()) {
+            let pos = position(server, target, "target")?;
+            let pos = pos.0.map(|e| e.floor() as i32);
+            let new_block = Block::new(bk, Rgb::new(r, g, b));
+            server.state.set_block(pos, new_block);
+            server.state.ecs().write_resource::<crate::TerrainPersistence>().set_block(pos, new_block);
+            Ok(())
+        } else {
+            Err(format!("Invalid block kind: {}", block_name))
+        }
+    } else {
+        Err(action.help_string())
+    }
+}
+
+fn handle_make_palette(
+    server: &mut Server,
+    _client: EcsEntity,
+    target: EcsEntity,
+    args: String,
+    action: &ChatCommand,
+) -> CmdResult<()> {
+    let pos = position(server, target, "target")?;
+    let pos = pos.0.map(|e| e.floor() as i32);
+    for x in -8..9 {
+        for y in -8..9 {
+            if x == 0 || y == 0 { continue; }
+
+            for z in 0..16 {
+                let r = (8 + x + if x > 0 { -1 } else { 0 }) * 16 + 8;
+                let g = (8 + y + if y > 0 { -1 } else { 0 }) * 16 + 8;
+                let b = z * 16;
+
+                let pos = pos + Vec3::new(x, y, z * 3);
+                let new_block = Block::new(BlockKind::Misc, Rgb::new(r as u8, g as u8, b as u8));
+                server.state.set_block(pos, new_block);
+                server.state.ecs().write_resource::<crate::TerrainPersistence>().set_block(pos, new_block);
+            }
+        }
+    }
+    Ok(())
 }
 
 fn handle_motd(
