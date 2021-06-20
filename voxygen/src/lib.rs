@@ -43,6 +43,7 @@ use crate::ui::egui::EguiState;
 use crate::{
     audio::AudioFrontend,
     profile::Profile,
+    render::{Drawer, GlobalsBindGroup, Renderer},
     settings::Settings,
     window::{Event, Window},
 };
@@ -139,6 +140,8 @@ pub trait PlayState {
     /// Determines whether the play state should have an enforced FPS cap
     fn capped_fps(&self) -> bool;
 
+    fn globals_bind_group(&self) -> &GlobalsBindGroup;
+
     /// Draw the play state.
-    fn render(&mut self, global_state: &mut GlobalState);
+    fn render<'a>(&'a mut self, drawer: &mut Drawer<'a>, settings: &Settings);
 }

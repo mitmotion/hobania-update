@@ -38,7 +38,9 @@ use crate::{
     hud::{Event as HudEvent, Hud, HudInfo, LootMessage, PromptDialogSettings},
     key_state::KeyState,
     menu::char_selection::CharSelectionState,
+    render::{Drawer, GlobalsBindGroup, Renderer},
     scene::{camera, terrain::Interaction, CameraMode, DebugShapeId, Scene, SceneData},
+    settings::Settings,
     window::{AnalogGameInput, Event, GameInput},
     Direction, Error, GlobalState, PlayState, PlayStateResult,
 };
@@ -1406,25 +1408,13 @@ impl PlayState for SessionState {
 
     fn capped_fps(&self) -> bool { false }
 
+    fn globals_bind_group(&self) -> &GlobalsBindGroup { self.scene.global_bind_group() }
+
     /// Render the session to the screen.
     ///
     /// This method should be called once per frame.
-    fn render(&mut self, global_state: &mut GlobalState) {
-        #[cfg(feature = "egui-ui")]
-        let scale_factor = global_state.window.window().scale_factor() as f32;
-
-        let renderer = global_state.window.renderer_mut();
-        let settings = &global_state.settings;
-
+    fn render<'a>(&'a mut self, mut drawer: &mut Drawer<'a>, settings: &Settings) {
         span!(_guard, "render", "<Session as PlayState>::render");
-        let mut drawer = match renderer
-            .start_recording_frame(self.scene.global_bind_group())
-            .expect("Unrecoverable render error when starting a new frame!")
-        {
-            Some(d) => d,
-            // Couldn't get swap chain texture this frame
-            None => return,
-        };
 
         // Render world
         {
@@ -1469,13 +1459,6 @@ impl PlayState for SessionState {
         if let Some(mut ui_drawer) = third_pass.draw_ui() {
             self.hud.render(&mut ui_drawer);
         }; // Note: this semicolon is needed for the third_pass borrow to be dropped before it's lifetime ends
-
-        drop(third_pass);
-
-        #[cfg(feature = "egui-ui")]
-        if global_state.settings.interface.toggle_debug {
-            drawer.draw_egui(&mut global_state.egui_state.platform, scale_factor);
-        }
     }
 }
 

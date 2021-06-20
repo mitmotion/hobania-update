@@ -1,8 +1,10 @@
 mod ui;
 
 use crate::{
+    render::{Drawer, GlobalsBindGroup, Renderer},
     scene::simple::{self as scene, Scene},
     session::SessionState,
+    settings::Settings,
     window::Event as WinEvent,
     Direction, GlobalState, PlayState, PlayStateResult,
 };
@@ -232,18 +234,9 @@ impl PlayState for CharSelectionState {
 
     fn capped_fps(&self) -> bool { true }
 
-    fn render(&mut self, global_state: &mut GlobalState) {
-        let renderer = global_state.window.renderer_mut();
+    fn globals_bind_group(&self) -> &GlobalsBindGroup { self.scene.global_bind_group() }
 
-        let mut drawer = match renderer
-            .start_recording_frame(self.scene.global_bind_group())
-            .expect("Unrecoverable render error when starting a new frame!")
-        {
-            Some(d) => d,
-            // Couldn't get swap chain texture this fime
-            None => return,
-        };
-
+    fn render<'a>(&'a mut self, mut drawer: &mut Drawer<'a>, _: &Settings) {
         if self.need_shadow_clear {
             drawer.clear_shadows();
             self.need_shadow_clear = false;

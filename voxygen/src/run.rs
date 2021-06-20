@@ -170,10 +170,25 @@ fn handle_main_events_cleared(
 
     drop(guard);
     if let Some(last) = states.last_mut() {
+        capped_fps = last.capped_fps();
+
         span!(guard, "Render");
         // Render the screen using the global renderer
-        last.render(global_state);
-        capped_fps = last.capped_fps();
+
+        if let Some(mut drawer) = global_state
+            .window
+            .renderer_mut()
+            .start_recording_frame(last.globals_bind_group())
+            .expect("Unrecoverable render error when starting a new frame!")
+        {
+            last.render(&mut drawer, &global_state.settings);
+
+            #[cfg(feature = "egui-ui")]
+            if global_state.settings.interface.toggle_debug {
+                let scale_factor = global_state.window.window().scale_factor() as f32;
+                drawer.draw_egui(&mut global_state.egui_state.platform, scale_factor);
+            }
+        };
 
         drop(guard);
     }
