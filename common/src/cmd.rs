@@ -334,13 +334,13 @@ impl ChatCommand {
                 "Adds a new build area",
                 Some(Admin),
             ),
-            ChatCommand::BuildAreaList => cmd(vec![], "List all build areas", Some(Admin)),
+            ChatCommand::BuildAreaList => cmd(vec![], "List all build areas", None),
             ChatCommand::BuildAreaRemove => cmd(
                 vec![Any("name", Required)],
                 "Removes specified build area",
                 Some(Admin),
             ),
-            ChatCommand::Campfire => cmd(vec![], "Spawns a campfire", Some(Admin)),
+            ChatCommand::Campfire => cmd(vec![], "Spawns a campfire", None),
             ChatCommand::DebugColumn => cmd(
                 vec![Integer("x", 15000, Required), Integer("y", 15000, Required)],
                 "Prints some debug information about a column",
@@ -459,17 +459,17 @@ impl ChatCommand {
                     Float("strength", 5.0, Optional),
                 ],
                 "Spawn entity with light",
-                Some(Admin),
+                None,
             ),
             ChatCommand::MakeBlock => cmd(
                 vec![Enum("block", BLOCK_KINDS.clone(), Required)],
                 "Make a block at your location",
-                Some(Admin),
+                None,
             ),
             ChatCommand::MakeSprite => cmd(
                 vec![Enum("sprite", SPRITE_KINDS.clone(), Required)],
                 "Make a sprite at your location",
-                Some(Admin),
+                None,
             ),
             ChatCommand::Motd => cmd(vec![Message(Optional)], "View the server description", None),
             ChatCommand::Object => cmd(
@@ -531,7 +531,7 @@ impl ChatCommand {
             ChatCommand::Site => cmd(
                 vec![Message(Required)],
                 "Teleport to a site",
-                Some(Moderator),
+                None,
             ),
             ChatCommand::SkillPoint => cmd(
                 vec![
@@ -569,12 +569,12 @@ impl ChatCommand {
             ChatCommand::Time => cmd(
                 vec![Enum("time", TIMES.clone(), Optional)],
                 "Set the time of day",
-                Some(Admin),
+                None,
             ),
             ChatCommand::Tp => cmd(
                 vec![PlayerName(Optional)],
                 "Teleport to another player",
-                Some(Moderator),
+                None,
             ),
             ChatCommand::Unban => cmd(
                 vec![Any("username", Required)],
@@ -585,7 +585,7 @@ impl ChatCommand {
             ChatCommand::Waypoint => cmd(
                 vec![],
                 "Set your waypoint to your current position",
-                Some(Admin),
+                None,
             ),
             ChatCommand::Wiring => cmd(vec![], "Create wiring element", Some(Admin)),
             ChatCommand::Whitelist => cmd(

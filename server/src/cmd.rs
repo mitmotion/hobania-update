@@ -519,10 +519,13 @@ fn handle_make_block(
     if let Some(block_name) = scan_fmt_some!(&args, &action.arg_fmt(), String) {
         if let Ok(bk) = BlockKind::from_str(block_name.as_str()) {
             let pos = position(server, target, "target")?;
+            let new_block = Block::new(bk, Rgb::broadcast(255));
+            let pos = pos.0.map(|e| e.floor() as i32);
             server.state.set_block(
-                pos.0.map(|e| e.floor() as i32),
-                Block::new(bk, Rgb::broadcast(255)),
+                pos,
+                new_block,
             );
+            server.state.ecs().write_resource::<crate::TerrainPersistence>().set_block(pos, new_block);
             Ok(())
         } else {
             Err(format!("Invalid block kind: {}", block_name))
@@ -550,6 +553,7 @@ fn handle_make_sprite(
                 .unwrap_or_else(|| Block::air(SpriteKind::Empty))
                 .with_sprite(sk);
             server.state.set_block(pos, new_block);
+            server.state.ecs().write_resource::<crate::TerrainPersistence>().set_block(pos, new_block);
             Ok(())
         } else {
             Err(format!("Invalid sprite kind: {}", sprite_name))
