@@ -1409,7 +1409,6 @@ impl PlayState for SessionState {
     /// Render the session to the screen.
     ///
     /// This method should be called once per frame.
-
     fn render(&mut self, global_state: &mut GlobalState) {
         #[cfg(feature = "egui-ui")]
         let scale_factor = global_state.window.window().scale_factor() as f32;
