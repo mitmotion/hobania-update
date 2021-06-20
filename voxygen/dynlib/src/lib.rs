@@ -9,7 +9,7 @@ use std::{
 use find_folder::Search;
 use std::{
     env,
-    env::consts::DLL_SUFFIX,
+    env::consts::{DLL_PREFIX, DLL_SUFFIX},
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -179,7 +179,8 @@ fn active_file(dyn_package: &str) -> String { dyn_lib_file(dyn_package, true) }
 
 fn dyn_lib_file(dyn_package: &str, active: bool) -> String {
     format!(
-        "{}{}{}",
+        "{}{}{}{}",
+        DLL_PREFIX,
         dyn_package.replace("-", "_"),
         if active { "_active" } else { "" },
         DLL_SUFFIX
