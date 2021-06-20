@@ -120,12 +120,11 @@ impl LoadedLib {
 /// This will search for the directory named `package_source_dir` and watch the
 /// files within it for any changes.
 pub fn init(
-    lib_storage: Arc<Mutex<Option<LoadedLib>>>,
     package: &'static str,
     dyn_package: &'static str,
     package_source_dir: &'static str,
-) {
-    *lib_storage.lock().unwrap() = Some(LoadedLib::compile_load(dyn_package));
+) -> Arc<Mutex<Option<LoadedLib>>> {
+    let lib_storage = Arc::new(Mutex::new(Some(LoadedLib::compile_load(dyn_package))));
 
     // TODO: use crossbeam
     let (reload_send, reload_recv) = mpsc::channel();
@@ -148,6 +147,7 @@ pub fn init(
     // Start reloader that watcher signals
     // "Debounces" events since I can't find the option to do this in the latest
     // `notify`
+    let lib_storage_clone = Arc::clone(&lib_storage);
     std::thread::Builder::new()
         .name(format!("{}_hotreload_watcher", package))
         .spawn(move || {
@@ -164,13 +164,15 @@ pub fn init(
                     "Hot reloading {} because files in `{}` modified.", package, package_source_dir
                 );
 
-                hotreload(dyn_package, &lib_storage);
+                hotreload(dyn_package, &lib_storage_clone);
             }
         })
         .unwrap();
 
     // Let the watcher live forever
     std::mem::forget(watcher);
+
+    lib_storage
 }
 
 fn compiled_file(dyn_package: &str) -> String { dyn_lib_file(dyn_package, false) }

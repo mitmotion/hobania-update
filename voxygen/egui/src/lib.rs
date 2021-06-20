@@ -35,7 +35,8 @@ use {
 
 #[cfg(feature = "use-dyn-lib")]
 lazy_static! {
-    static ref LIB: Arc<Mutex<Option<LoadedLib>>> = Arc::new(Mutex::new(None));
+    static ref LIB: Arc<Mutex<Option<LoadedLib>>> =
+        voxygen_dynlib::init("veloren-voxygen-egui", "veloren-voxygen-egui-dyn", "egui");
 }
 
 #[cfg(feature = "use-dyn-lib")]
@@ -103,14 +104,7 @@ pub struct EguiActions {
 }
 
 #[cfg(feature = "use-dyn-lib")]
-pub fn init() {
-    voxygen_dynlib::init(
-        Arc::clone(&LIB),
-        "veloren-voxygen-egui",
-        "veloren-voxygen-egui-dyn",
-        "egui",
-    );
-}
+pub fn init() { lazy_static::initialize(&LIB); }
 
 pub fn maintain(
     platform: &mut Platform,
