@@ -19,8 +19,10 @@ pub struct TerrainPersistence {
 
 impl Default for TerrainPersistence {
     fn default() -> Self {
-        let mut path = PathBuf::from(std::env::var("VELOREN_TERRAIN_DATA").unwrap_or_else(|_| String::new()));
-        path.push("chunks");
+        let mut path = std::env::var("VELOREN_TERRAIN_DATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| common_base::userdata_dir_workspace!());
+        path.push("terrain");
 
         std::fs::create_dir_all(&path).unwrap();
 
