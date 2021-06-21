@@ -30,6 +30,7 @@ use crate::{
     block::BlockGen,
     civ::Place,
     column::ColumnGen,
+    layer::spot::Spot,
     site::Site,
     util::{
         seed_expan, DHashSet, FastNoise, FastNoise2d, RandomField, Sampler, StructureGen2d,
@@ -1415,6 +1416,8 @@ impl WorldSim {
 
         this.generate_cliffs();
 
+        Spot::generate(&mut this);
+
         if opts.seed_elements {
             this.seed_elements();
         }
@@ -2136,6 +2139,7 @@ pub struct SimChunk {
     pub path: (Way, Path),
     pub cave: (Way, Cave),
     pub cliff_height: f32,
+    pub spot: Option<Spot>,
 
     pub contains_waypoint: bool,
 }
@@ -2367,6 +2371,7 @@ impl SimChunk {
             path: Default::default(),
             cave: Default::default(),
             cliff_height: 0.0,
+            spot: None,
 
             contains_waypoint: false,
         }
