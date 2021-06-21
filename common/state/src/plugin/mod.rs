@@ -38,34 +38,38 @@ pub struct Plugin {
 }
 
 impl Plugin {
-    pub fn from_path(path: &Path) -> Result<Self, PluginError> {
-        if !path.is_dir() {
+    pub fn from_dir(directory: &Path) -> Result<Self, PluginError> {
+        if !directory.is_dir() {
             return Err(PluginError::NoConfig);
         }
 
-        let mut toml = PathBuf::from(path);
+        let mut toml_path = PathBuf::from(directory);
 
-        toml.push("plugin.toml");
+        toml_path.push("plugin.toml");
 
-        let data =
-            toml::de::from_slice::<PluginData>(&std::fs::read(toml).map_err(PluginError::Io)?)
+        let plugin_config =
+            toml::de::from_slice::<PluginData>(&std::fs::read(toml_path).map_err(PluginError::Io)?)
                 .map_err(PluginError::Toml)?;
 
-        let modules = data
+        let modules = plugin_config
             .modules
             .iter()
-            .map(|path1| {
-                let mut module_file = PathBuf::from(path);
-                module_file.push(path1);
+            .map(|module_path| {
+                let mut module_file = PathBuf::from(directory);
+                module_file.push(module_path);
                 let wasm_data = std::fs::read(module_file).map_err(PluginError::Io)?;
-                PluginModule::new(data.name.to_owned(), &wasm_data).map_err(|e| {
-                    PluginError::PluginModuleError(data.name.to_owned(), "<init>".to_owned(), e)
+                PluginModule::new(plugin_config.name.to_owned(), &wasm_data).map_err(|e| {
+                    PluginError::PluginModuleError(
+                        plugin_config.name.to_owned(),
+                        "<init>".to_owned(),
+                        e,
+                    )
                 })
             })
             .collect::<Result<_, _>>()?;
 
         Ok(Plugin {
-            data,
+            data: plugin_config,
             modules,
             files: HashMap::new(),
         })
@@ -198,7 +202,7 @@ impl PluginMgr {
                     Plugin::from_reader(fs::File::open(entry.path()).map_err(PluginError::Io)?)
                         .map(Some)
                 } else {
-                    Plugin::from_path(&entry.path()).map(Some)
+                    Plugin::from_dir(&entry.path()).map(Some)
                 }
             })
             .filter_map(Result::transpose)

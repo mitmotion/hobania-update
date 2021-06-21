@@ -1,10 +1,5 @@
 use hashbrown::HashSet;
-use std::{
-    borrow::Cow,
-    convert::TryInto,
-    marker::PhantomData,
-    sync::{Arc, RwLock},
-};
+use std::{borrow::Cow, convert::TryInto, marker::PhantomData, sync::Arc};
 
 use specs::saveload::MarkerAllocator;
 use wasmer::{imports, Cranelift, Function, Instance, Memory, Module, Store, Value, JIT};
@@ -24,7 +19,7 @@ use plugin_api::{
 /// This structure represent the WASM State of the plugin.
 pub struct PluginModule {
     ecs: Arc<EcsAccessManager>,
-    wasm_state: Arc<RwLock<Instance>>,
+    wasm_state: Instance,
     memory_manager: Arc<MemoryManager>,
     events: HashSet<String>,
     allocator: Function,
@@ -109,7 +104,7 @@ impl PluginModule {
                 .iter()
                 .map(|(name, _)| name.to_string())
                 .collect(),
-            wasm_state: Arc::new(RwLock::new(instance)),
+            wasm_state: instance,
             name,
         })
     }
@@ -129,8 +124,12 @@ impl PluginModule {
         }
         // Store the ECS Pointer for later use in `retreives`
         let bytes = match self.ecs.execute_with(ecs, || {
-            let state = self.wasm_state.read().unwrap();
-            execute_raw(self, &state, &request.function_name, &request.bytes)
+            execute_raw(
+                self,
+                &self.wasm_state,
+                &request.function_name,
+                &request.bytes,
+            )
         }) {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),

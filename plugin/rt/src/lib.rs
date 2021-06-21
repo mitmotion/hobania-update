@@ -8,7 +8,10 @@ use std::{
     borrow::{Cow, ToOwned},
     convert::TryInto,
     marker::PhantomData,
+    sync::Mutex,
 };
+
+use once_cell::sync::Lazy;
 
 pub fn __game() -> api::Game { api::Game::__new(|_| todo!()) }
 
@@ -72,7 +75,9 @@ where
     let slice = unsafe { ::std::slice::from_raw_parts(from_i64(ptr) as _, from_i64(len) as _) };
     let output = bincode::deserialize(slice).map_err(|_| "Failed to deserialize function input");
     // We free the allocated buffer if it exists.
-    if let Some((a, b)) = BUFFERS
+    if let Some((a, _)) = BUFFERS
+        .lock()
+        .unwrap()
         .iter_mut()
         .find(|(a, b)| !*a && b.as_ptr() as u64 == from_i64(ptr))
     {
@@ -120,14 +125,15 @@ pub fn write_output(value: impl Serialize) -> i64 {
 
 // Synchronisation safety is handled by the bool which enforces the Buffer to be
 // used once at a time so no problem (is_free_to_use, data)
-static mut BUFFERS: Vec<(bool, Vec<u8>)> = Vec::new();
+static BUFFERS: Lazy<Mutex<Vec<(bool, Vec<u8>)>>> = Lazy::new(|| Mutex::new(Vec::new()));
 
 /// Allocate buffer from wasm linear memory
 /// # Safety
 /// This function should never be used only intented to by used by the host
 #[no_mangle]
-pub unsafe fn wasm_prepare_buffer(size: i32) -> i64 {
-    if let Some((a, x)) = BUFFERS.iter_mut().find(|(x, _)| *x) {
+pub fn wasm_prepare_buffer(size: i32) -> i64 {
+    let mut buf = BUFFERS.lock().unwrap();
+    if let Some((a, x)) = buf.iter_mut().find(|(x, _)| *x) {
         *a = false;
         if x.len() < size as usize {
             *x = vec![0u8; size as usize];
@@ -136,7 +142,7 @@ pub unsafe fn wasm_prepare_buffer(size: i32) -> i64 {
     } else {
         let vec = vec![0u8; size as usize];
         let ptr = vec.as_ptr() as i64;
-        BUFFERS.push((false, vec));
+        buf.push((false, vec));
         ptr
     }
 }

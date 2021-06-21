@@ -6009,6 +6009,7 @@ name = "veloren-plugin-rt"
 version = "0.1.0"
 dependencies = [
  "bincode",
+ "once_cell",
  "serde",
  "veloren-plugin-api",
  "veloren-plugin-derive",
