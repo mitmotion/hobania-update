@@ -49,10 +49,13 @@ pub fn emit_actions(actions: &[api::raw::RawAction]) {
 }
 
 pub fn print_str(s: &str) {
-    let bytes = s.as_bytes();
-    unsafe {
-        // Safety: ptr and len are valid for byte slice
-        raw_print(to_i64(bytes.as_ptr() as _), to_i64(bytes.len() as _));
+    #[cfg(target_arch = "wasm32")]
+    {
+        let bytes = s.as_bytes();
+        unsafe {
+            // Safety: ptr and len are valid for byte slice
+            raw_print(to_i64(bytes.as_ptr() as _), to_i64(bytes.len() as _));
+        }
     }
 }
 
@@ -67,7 +70,15 @@ where
     T: Deserialize<'a>,
 {
     let slice = unsafe { ::std::slice::from_raw_parts(from_i64(ptr) as _, from_i64(len) as _) };
-    bincode::deserialize(slice).map_err(|_| "Failed to deserialize function input")
+    let output = bincode::deserialize(slice).map_err(|_| "Failed to deserialize function input");
+    // We free the allocated buffer if it exists.
+    if let Some((a, b)) = BUFFERS
+        .iter_mut()
+        .find(|(a, b)| !*a && b.as_ptr() as u64 == from_i64(ptr))
+    {
+        *a = true;
+    }
+    output
 }
 
 /// This function split a u128 in two u64 encoding them as le bytes
@@ -107,13 +118,25 @@ pub fn write_output(value: impl Serialize) -> i64 {
     }
 }
 
-static mut BUFFERS: Vec<u8> = Vec::new();
+// Synchronisation safety is handled by the bool which enforces the Buffer to be
+// used once at a time so no problem (is_free_to_use, data)
+static mut BUFFERS: Vec<(bool, Vec<u8>)> = Vec::new();
 
 /// Allocate buffer from wasm linear memory
 /// # Safety
 /// This function should never be used only intented to by used by the host
 #[no_mangle]
 pub unsafe fn wasm_prepare_buffer(size: i32) -> i64 {
-    BUFFERS = vec![0u8; size as usize];
-    BUFFERS.as_ptr() as i64
+    if let Some((a, x)) = BUFFERS.iter_mut().find(|(x, _)| *x) {
+        *a = false;
+        if x.len() < size as usize {
+            *x = vec![0u8; size as usize];
+        }
+        x.as_ptr() as i64
+    } else {
+        let vec = vec![0u8; size as usize];
+        let ptr = vec.as_ptr() as i64;
+        BUFFERS.push((false, vec));
+        ptr
+    }
 }

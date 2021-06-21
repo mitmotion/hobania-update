@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use wasmer::{Function, HostEnvInitError, Instance, LazyInit, Memory, WasmerEnv};
 
 use super::{

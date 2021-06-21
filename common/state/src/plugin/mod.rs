@@ -38,6 +38,39 @@ pub struct Plugin {
 }
 
 impl Plugin {
+    pub fn from_path(path: &Path) -> Result<Self, PluginError> {
+        if !path.is_dir() {
+            return Err(PluginError::NoConfig);
+        }
+
+        let mut toml = PathBuf::from(path);
+
+        toml.push("plugin.toml");
+
+        let data =
+            toml::de::from_slice::<PluginData>(&std::fs::read(toml).map_err(PluginError::Io)?)
+                .map_err(PluginError::Toml)?;
+
+        let modules = data
+            .modules
+            .iter()
+            .map(|path1| {
+                let mut module_file = PathBuf::from(path);
+                module_file.push(path1);
+                let wasm_data = std::fs::read(module_file).map_err(PluginError::Io)?;
+                PluginModule::new(data.name.to_owned(), &wasm_data).map_err(|e| {
+                    PluginError::PluginModuleError(data.name.to_owned(), "<init>".to_owned(), e)
+                })
+            })
+            .collect::<Result<_, _>>()?;
+
+        Ok(Plugin {
+            data,
+            modules,
+            files: HashMap::new(),
+        })
+    }
+
     pub fn from_reader<R: Read>(mut reader: R) -> Result<Self, PluginError> {
         let mut buf = Vec::new();
         reader.read_to_end(&mut buf).map_err(PluginError::Io)?;
@@ -165,7 +198,7 @@ impl PluginMgr {
                     Plugin::from_reader(fs::File::open(entry.path()).map_err(PluginError::Io)?)
                         .map(Some)
                 } else {
-                    Ok(None)
+                    Plugin::from_path(&entry.path()).map(Some)
                 }
             })
             .filter_map(Result::transpose)

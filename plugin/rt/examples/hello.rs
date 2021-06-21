@@ -14,16 +14,17 @@ pub fn on_load(game: &Game, init: event::Init) {
 
 #[event_handler]
 pub fn on_command_test(game: &Game, cmd: event::Command) -> Result<Vec<String>, String> {
-    Ok(vec![
-        format!(
-            "Entity with uid {:?} named {} with {:?} sent command with args {:?}",
-            cmd.entity().uid(),
-            cmd.entity().get_name(),
-            cmd.entity().get_health(),
-            cmd.args(),
-        )
-        .into(),
-    ])
+    Ok(vec!["test".to_owned()])
+    // Ok(vec![
+    //     format!(
+    //         "Entity with uid {:?} named {} with {:?} sent command with args
+    // {:?}",         cmd.entity().uid(),
+    //         cmd.entity().get_name(),
+    //         cmd.entity().get_health(),
+    //         cmd.args(),
+    //     )
+    //     .into(),
+    // ])
 }
 
 #[global_state]

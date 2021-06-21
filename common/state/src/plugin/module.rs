@@ -3,7 +3,7 @@ use std::{
     borrow::Cow,
     convert::TryInto,
     marker::PhantomData,
-    sync::{Arc, Mutex},
+    sync::{Arc, RwLock},
 };
 
 use specs::saveload::MarkerAllocator;
@@ -17,14 +17,14 @@ use super::{
 
 use plugin_api::{
     raw::{RawAction, RawRequest, RawResponse},
-    EcsAccessError, Event,
+    Event,
 };
 
 #[derive(Clone)]
 /// This structure represent the WASM State of the plugin.
 pub struct PluginModule {
     ecs: Arc<EcsAccessManager>,
-    wasm_state: Arc<Mutex<Instance>>,
+    wasm_state: Arc<RwLock<Instance>>,
     memory_manager: Arc<MemoryManager>,
     events: HashSet<String>,
     allocator: Function,
@@ -57,7 +57,7 @@ impl PluginModule {
         fn raw_request(env: &HostFunctionEnvironment, ptr: i64, len: i64) -> i64 {
             let out = match env.read_data(from_i64(ptr), from_i64(len)) {
                 Ok(data) => request(&env.ecs, data),
-                Err(e) => Err(()),
+                Err(_) => Err(()),
             };
 
             // If an error happen set the i64 to 0 so the WASM side can tell an error
@@ -109,7 +109,7 @@ impl PluginModule {
                 .iter()
                 .map(|(name, _)| name.to_string())
                 .collect(),
-            wasm_state: Arc::new(Mutex::new(instance)),
+            wasm_state: Arc::new(RwLock::new(instance)),
             name,
         })
     }
@@ -129,8 +129,8 @@ impl PluginModule {
         }
         // Store the ECS Pointer for later use in `retreives`
         let bytes = match self.ecs.execute_with(ecs, || {
-            let mut state = self.wasm_state.lock().unwrap();
-            execute_raw(self, &mut state, &request.function_name, &request.bytes)
+            let state = self.wasm_state.read().unwrap();
+            execute_raw(self, &state, &request.function_name, &request.bytes)
         }) {
             Ok(e) => e,
             Err(e) => return Some(Err(e)),
@@ -189,7 +189,7 @@ pub fn from_i64(i: i64) -> u64 { u64::from_le_bytes(i.to_le_bytes()) }
 #[allow(clippy::needless_range_loop)]
 fn execute_raw(
     module: &PluginModule,
-    instance: &mut Instance,
+    instance: &Instance,
     event_name: &str,
     bytes: &[u8],
 ) -> Result<Vec<u8>, PluginModuleError> {

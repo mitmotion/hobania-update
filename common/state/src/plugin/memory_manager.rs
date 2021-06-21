@@ -1,6 +1,6 @@
-use std::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicPtr, Ordering};
 
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use specs::{
     storage::GenericReadStorage, Component, Entities, Entity, Read, ReadStorage, WriteStorage,
 };
@@ -104,19 +104,8 @@ impl EcsAccessManager {
     }
 }
 
-pub struct MemoryManager {
-    pub pointer: AtomicU64,
-    pub length: AtomicU32,
-}
-
-impl Default for MemoryManager {
-    fn default() -> Self {
-        Self {
-            pointer: AtomicU64::new(0),
-            length: AtomicU32::new(0),
-        }
-    }
-}
+#[derive(Default)]
+pub struct MemoryManager;
 
 impl MemoryManager {
     /// This function check if the buffer is wide enough if not it realloc the
@@ -128,9 +117,6 @@ impl MemoryManager {
         object_length: u32,
         allocator: &Function,
     ) -> Result<u64, MemoryAllocationError> {
-        if self.length.load(Ordering::SeqCst) >= object_length {
-            return Ok(self.pointer.load(Ordering::SeqCst));
-        }
         let pointer = allocator
             .call(&[Value::I32(object_length as i32)])
             .map_err(MemoryAllocationError::CantAllocate)?;
@@ -139,8 +125,6 @@ impl MemoryManager {
                 .i64()
                 .ok_or(MemoryAllocationError::InvalidReturnType)?,
         );
-        self.length.store(object_length, Ordering::SeqCst);
-        self.pointer.store(pointer, Ordering::SeqCst);
         Ok(pointer)
     }
 
