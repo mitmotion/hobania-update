@@ -1181,4 +1181,43 @@ impl Scene {
             keep
         });
     }
+
+    pub fn maintain_debug_relative_wind(
+        &mut self,
+        client: &Client,
+        settings: &Settings,
+        debug_shape_id: &mut Option<DebugShapeId>,
+    ) {
+        if settings.interface.toggle_hitboxes {
+            let ecs = client.state().ecs();
+            let entity = client.entity();
+
+            let rel_flow = ecs
+                .read_storage::<comp::PhysicsState>()
+                .get(entity)
+                .and_then(|physics| physics.in_fluid)
+                .and_then(|fluid| {
+                    ecs.read_storage::<comp::Vel>()
+                        .get(entity)
+                        .map(|vel| fluid.relative_flow(vel))
+                });
+
+            if let (Some(pos), Some(rel_flow)) = (
+                ecs.read_storage::<comp::Pos>().get(entity).copied(),
+                rel_flow,
+            ) {
+                if let Some(shape_id) = debug_shape_id {
+                    self.debug.remove_shape(*shape_id);
+                }
+                let shape_id = self
+                    .debug
+                    .add_shape(DebugShape::Line([Vec3::zero(), rel_flow.0 * 0.2]));
+                debug_shape_id.insert(shape_id);
+
+                let hb_pos = [pos.0.x, pos.0.y, pos.0.z + 2.0, 0.0];
+                let color = [0.0, 1.0, 1.0, 0.5];
+                self.debug.set_pos_and_color(shape_id, hb_pos, color);
+            }
+        }
+    }
 }
