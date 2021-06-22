@@ -32,29 +32,32 @@ impl CharacterBehavior for Data {
         handle_dodge_input(data, &mut update);
         handle_wield(data, &mut update);
 
-        let mut glider = self.0;
-        glider.ori = glider.ori.slerped_towards(
-            Ori::from(data.inputs.look_dir)
-                .yawed_towards(data.ori.look_dir())
-                .pitched_up(inline_tweak::tweak!(0.5)),
-            inline_tweak::tweak!(5.0) * data.dt.0,
-        );
+        // If still in this state, do the things
+        if matches!(update.character, CharacterState::GlideWield(_)) {
+            let mut glider = self.0;
+            glider.ori = glider.ori.slerped_towards(
+                Ori::from(data.inputs.look_dir)
+                    .yawed_towards(data.ori.look_dir())
+                    .pitched_up(inline_tweak::tweak!(0.5)),
+                inline_tweak::tweak!(5.0) * data.dt.0,
+            );
 
-        // If not on the ground while wielding glider enter gliding state
-        update.character = if data.physics.on_ground.is_none() {
-            CharacterState::Glide(glide::Data::new(glider))
-        } else if data
-            .physics
-            .in_liquid()
-            .map(|depth| depth > 0.5)
-            .unwrap_or(false)
-        {
-            CharacterState::Idle
-        } else if data.inventory.equipped(EquipSlot::Glider).is_none() {
-            CharacterState::Idle
-        } else {
-            CharacterState::GlideWield(Self(glider))
-        };
+            // If not on the ground while wielding glider enter gliding state
+            update.character = if data.physics.on_ground.is_none() {
+                CharacterState::Glide(glide::Data::new(glider))
+            } else if data
+                .physics
+                .in_liquid()
+                .map(|depth| depth > 0.5)
+                .unwrap_or(false)
+            {
+                CharacterState::Idle
+            } else if data.inventory.equipped(EquipSlot::Glider).is_none() {
+                CharacterState::Idle
+            } else {
+                CharacterState::GlideWield(Self(glider))
+            };
+        }
 
         update
     }
