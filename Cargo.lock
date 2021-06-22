@@ -611,30 +611,11 @@ dependencies = [
 
 [[package]]
 name = "clipboard_wayland"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61bcb8cde0387fde807b9b7af66ce8bd1665ef736e46e6e47fda82ea003e6ade"
-dependencies = [
- "smithay-clipboard",
-]
-
-[[package]]
-name = "clipboard_wayland"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6f6364a9f7a66f2ac1a1a098aa1c7f6b686f2496c6ac5e5c0d773445df912747"
 dependencies = [
  "smithay-clipboard",
-]
-
-[[package]]
-name = "clipboard_x11"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40403aa5220e5cd303d32dc4248cac8aa92bf47e3ae31e0e2481081755a63ff1"
-dependencies = [
- "thiserror",
- "x11rb",
 ]
 
 [[package]]
@@ -721,6 +702,12 @@ dependencies = [
  "bytes",
  "memchr",
 ]
+
+[[package]]
+name = "comma"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96677551532ffe910f470bd767a9a7daf9ba53b1f5532e0891dba6c735f692e5"
 
 [[package]]
 name = "concurrent-queue"
@@ -927,8 +914,8 @@ dependencies = [
  "lazy_static",
  "libc",
  "mach 0.3.2",
- "ndk 0.3.0",
- "ndk-glue 0.3.0",
+ "ndk",
+ "ndk-glue",
  "nix 0.20.0",
  "oboe",
  "parking_lot 0.11.1",
@@ -1048,6 +1035,20 @@ checksum = "e022feadec601fba1649cfa83586381a4ad31c6bf3a9ab7d408118b05dd9889d"
 dependencies = [
  "cast",
  "itertools 0.9.0",
+]
+
+[[package]]
+name = "crossbeam"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd01a6eb3daaafa260f6fc94c3a6c36390abc2080e38e3e34ced87393fb77d80"
+dependencies = [
+ "cfg-if 1.0.0",
+ "crossbeam-channel",
+ "crossbeam-deque 0.8.0",
+ "crossbeam-epoch 0.9.3",
+ "crossbeam-queue",
+ "crossbeam-utils 0.8.3",
 ]
 
 [[package]]
@@ -2391,13 +2392,13 @@ dependencies = [
 
 [[package]]
 name = "iced_core"
-version = "0.3.0"
-source = "git+https://github.com/hecrj/iced?rev=8d882d787e6b7fd7c2435f42f82933e2ed904edf#8d882d787e6b7fd7c2435f42f82933e2ed904edf"
+version = "0.4.0"
+source = "git+https://github.com/Imberflur/iced?tag=winit-0.25#18a48a5eeefd2aa6e50f5dd0751ac2e94c88a9eb"
 
 [[package]]
 name = "iced_futures"
-version = "0.2.0"
-source = "git+https://github.com/hecrj/iced?rev=8d882d787e6b7fd7c2435f42f82933e2ed904edf#8d882d787e6b7fd7c2435f42f82933e2ed904edf"
+version = "0.3.0"
+source = "git+https://github.com/Imberflur/iced?tag=winit-0.25#18a48a5eeefd2aa6e50f5dd0751ac2e94c88a9eb"
 dependencies = [
  "futures",
  "log",
@@ -2406,8 +2407,8 @@ dependencies = [
 
 [[package]]
 name = "iced_graphics"
-version = "0.1.0"
-source = "git+https://github.com/hecrj/iced?rev=8d882d787e6b7fd7c2435f42f82933e2ed904edf#8d882d787e6b7fd7c2435f42f82933e2ed904edf"
+version = "0.2.0"
+source = "git+https://github.com/Imberflur/iced?tag=winit-0.25#18a48a5eeefd2aa6e50f5dd0751ac2e94c88a9eb"
 dependencies = [
  "bytemuck",
  "glam",
@@ -2419,8 +2420,8 @@ dependencies = [
 
 [[package]]
 name = "iced_native"
-version = "0.3.0"
-source = "git+https://github.com/hecrj/iced?rev=8d882d787e6b7fd7c2435f42f82933e2ed904edf#8d882d787e6b7fd7c2435f42f82933e2ed904edf"
+version = "0.4.0"
+source = "git+https://github.com/Imberflur/iced?tag=winit-0.25#18a48a5eeefd2aa6e50f5dd0751ac2e94c88a9eb"
 dependencies = [
  "iced_core",
  "iced_futures",
@@ -2431,16 +2432,16 @@ dependencies = [
 
 [[package]]
 name = "iced_style"
-version = "0.2.0"
-source = "git+https://github.com/hecrj/iced?rev=8d882d787e6b7fd7c2435f42f82933e2ed904edf#8d882d787e6b7fd7c2435f42f82933e2ed904edf"
+version = "0.3.0"
+source = "git+https://github.com/Imberflur/iced?tag=winit-0.25#18a48a5eeefd2aa6e50f5dd0751ac2e94c88a9eb"
 dependencies = [
  "iced_core",
 ]
 
 [[package]]
 name = "iced_winit"
-version = "0.2.0"
-source = "git+https://github.com/hecrj/iced?rev=8d882d787e6b7fd7c2435f42f82933e2ed904edf#8d882d787e6b7fd7c2435f42f82933e2ed904edf"
+version = "0.3.0"
+source = "git+https://github.com/Imberflur/iced?tag=winit-0.25#18a48a5eeefd2aa6e50f5dd0751ac2e94c88a9eb"
 dependencies = [
  "iced_futures",
  "iced_graphics",
@@ -2448,7 +2449,7 @@ dependencies = [
  "log",
  "thiserror",
  "winapi 0.3.9",
- "window_clipboard 0.1.4",
+ "window_clipboard",
  "winit",
 ]
 
@@ -2651,7 +2652,7 @@ dependencies = [
 [[package]]
 name = "keyboard-keynames"
 version = "0.1.0"
-source = "git+https://gitlab.com/Frinksy/keyboard-keynames.git?rev=a97ae509cdb9dc70cf1bf0af762d2d1d3a0d6e0c#a97ae509cdb9dc70cf1bf0af762d2d1d3a0d6e0c"
+source = "git+https://gitlab.com/Frinksy/keyboard-keynames.git?rev=9ae8f89014d0b0c5b61d0e821c5aeb6140c5c0dc#9ae8f89014d0b0c5b61d0e821c5aeb6140c5c0dc"
 dependencies = [
  "libc",
  "memmap",
@@ -3043,6 +3044,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "mio-misc"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ddf05411bb159cdb5801bb10002afb66cb4572be656044315e363460ce69dc2"
+dependencies = [
+ "crossbeam",
+ "crossbeam-queue",
+ "log",
+ "mio 0.7.11",
+]
+
+[[package]]
 name = "miow"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3113,40 +3126,14 @@ dependencies = [
 
 [[package]]
 name = "ndk"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5eb167c1febed0a496639034d0c76b3b74263636045db5489eee52143c246e73"
-dependencies = [
- "jni-sys",
- "ndk-sys",
- "num_enum 0.4.3",
- "thiserror",
-]
-
-[[package]]
-name = "ndk"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8794322172319b972f528bf90c6b467be0079f1fa82780ffb431088e741a73ab"
 dependencies = [
  "jni-sys",
  "ndk-sys",
- "num_enum 0.5.1",
+ "num_enum",
  "thiserror",
-]
-
-[[package]]
-name = "ndk-glue"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bdf399b8b7a39c6fb153c4ec32c72fd5fe789df24a647f229c239aa7adb15241"
-dependencies = [
- "lazy_static",
- "libc",
- "log",
- "ndk 0.2.1",
- "ndk-macro",
- "ndk-sys",
 ]
 
 [[package]]
@@ -3158,7 +3145,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "log",
- "ndk 0.3.0",
+ "ndk",
  "ndk-macro",
  "ndk-sys",
 ]
@@ -3483,34 +3470,12 @@ dependencies = [
 
 [[package]]
 name = "num_enum"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca565a7df06f3d4b485494f25ba05da1435950f4dc263440eda7a6fa9b8e36e4"
-dependencies = [
- "derivative",
- "num_enum_derive 0.4.3",
-]
-
-[[package]]
-name = "num_enum"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "226b45a5c2ac4dd696ed30fa6b94b057ad909c7b7fc2e0d0808192bced894066"
 dependencies = [
  "derivative",
- "num_enum_derive 0.5.1",
-]
-
-[[package]]
-name = "num_enum_derive"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ffa5a33ddddfee04c0283a7653987d634e880347e96b5b2ed64de07efb59db9d"
-dependencies = [
- "proc-macro-crate",
- "proc-macro2 1.0.26",
- "quote 1.0.9",
- "syn 1.0.72",
+ "num_enum_derive",
 ]
 
 [[package]]
@@ -3587,8 +3552,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4cfb2390bddb9546c0f7448fd1d2abdd39e6075206f960991eb28c7fa7f126c4"
 dependencies = [
  "jni",
- "ndk 0.3.0",
- "ndk-glue 0.3.0",
+ "ndk",
+ "ndk-glue",
  "num-derive",
  "num-traits",
  "oboe-sys",
@@ -4382,9 +4347,9 @@ dependencies = [
 
 [[package]]
 name = "rodio"
-version = "0.13.1"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b65c2eda643191f6d1bb12ea323a9db8d9ba95374e9be3780b5a9fb5cfb8520f"
+checksum = "4d98f5e557b61525057e2bc142c8cd7f0e70d75dc32852309bec440e6e046bf9"
 dependencies = [
  "cpal",
  "lewton",
@@ -5718,13 +5683,12 @@ dependencies = [
 
 [[package]]
 name = "veloren-client"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "async-channel",
  "authc",
  "byteorder",
  "clap",
- "futures-util",
  "hashbrown 0.11.2",
  "image",
  "num 0.4.0",
@@ -5750,7 +5714,7 @@ dependencies = [
 
 [[package]]
 name = "veloren-common"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "approx 0.4.0",
  "bitflags",
@@ -5768,6 +5732,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "ordered-float 2.1.1",
+ "petgraph 0.5.1",
  "rand 0.8.3",
  "rayon",
  "ron",
@@ -5792,7 +5757,7 @@ dependencies = [
 
 [[package]]
 name = "veloren-common-assets"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "assets_manager",
  "dot_vox",
@@ -5806,7 +5771,7 @@ dependencies = [
 
 [[package]]
 name = "veloren-common-base"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "directories-next",
  "tracing",
@@ -5815,7 +5780,7 @@ dependencies = [
 
 [[package]]
 name = "veloren-common-ecs"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "float-cmp",
  "specs",
@@ -5825,7 +5790,7 @@ dependencies = [
 
 [[package]]
 name = "veloren-common-frontend"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "termcolor",
  "tracing",
@@ -5838,7 +5803,7 @@ dependencies = [
 
 [[package]]
 name = "veloren-common-net"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "bincode",
  "flate2",
@@ -5856,7 +5821,7 @@ dependencies = [
 
 [[package]]
 name = "veloren-common-state"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "bincode",
  "hashbrown 0.11.2",
@@ -5879,7 +5844,7 @@ dependencies = [
 
 [[package]]
 name = "veloren-common-systems"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "hashbrown 0.11.2",
  "indexmap",
@@ -5899,7 +5864,7 @@ dependencies = [
 
 [[package]]
 name = "veloren-i18n"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "clap",
  "deunicode",
@@ -5925,7 +5890,7 @@ dependencies = [
  "crossbeam-channel",
  "futures-core",
  "futures-util",
- "hashbrown 0.9.1",
+ "hashbrown 0.11.2",
  "lazy_static",
  "lz-fear",
  "prometheus",
@@ -5951,7 +5916,7 @@ dependencies = [
  "bitflags",
  "bytes",
  "criterion",
- "hashbrown 0.9.1",
+ "hashbrown 0.11.2",
  "prometheus",
  "rand 0.8.3",
  "tokio",
@@ -5988,7 +5953,7 @@ dependencies = [
 
 [[package]]
 name = "veloren-server"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "atomicwrites",
  "authc",
@@ -6032,7 +5997,7 @@ dependencies = [
 
 [[package]]
 name = "veloren-server-cli"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "ansi-parser",
  "clap",
@@ -6056,12 +6021,13 @@ dependencies = [
 
 [[package]]
 name = "veloren-voxygen"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "backtrace",
  "bincode",
  "bytemuck",
  "chrono",
+ "comma",
  "conrod_core",
  "conrod_winit",
  "copy_dir",
@@ -6119,14 +6085,14 @@ dependencies = [
  "veloren-world",
  "wgpu",
  "wgpu-profiler",
- "window_clipboard 0.2.0",
+ "window_clipboard",
  "winit",
  "winres",
 ]
 
 [[package]]
 name = "veloren-voxygen-anim"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "bytemuck",
  "find_folder",
@@ -6140,14 +6106,14 @@ dependencies = [
 
 [[package]]
 name = "veloren-voxygen-anim-dyn"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "veloren-voxygen-anim",
 ]
 
 [[package]]
 name = "veloren-world"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "arr_macro",
  "assets_manager",
@@ -6694,7 +6660,7 @@ dependencies = [
 [[package]]
 name = "wgpu"
 version = "0.8.0"
-source = "git+https://github.com/gfx-rs/wgpu-rs.git?rev=7486bdad64bb5d17b709ecccb41e063469efff88#7486bdad64bb5d17b709ecccb41e063469efff88"
+source = "git+https://github.com/gfx-rs/wgpu.git?rev=a92b8549a8e2cb9dac781bafc5ed32828f3caf46#a92b8549a8e2cb9dac781bafc5ed32828f3caf46"
 dependencies = [
  "arrayvec",
  "js-sys",
@@ -6714,7 +6680,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core"
 version = "0.8.0"
-source = "git+https://github.com/gfx-rs/wgpu?rev=53eab747a32414232be45d47cae8a43a369395d0#53eab747a32414232be45d47cae8a43a369395d0"
+source = "git+https://github.com/gfx-rs/wgpu.git?rev=a92b8549a8e2cb9dac781bafc5ed32828f3caf46#a92b8549a8e2cb9dac781bafc5ed32828f3caf46"
 dependencies = [
  "arrayvec",
  "bitflags",
@@ -6754,7 +6720,7 @@ dependencies = [
 [[package]]
 name = "wgpu-types"
 version = "0.8.0"
-source = "git+https://github.com/gfx-rs/wgpu?rev=53eab747a32414232be45d47cae8a43a369395d0#53eab747a32414232be45d47cae8a43a369395d0"
+source = "git+https://github.com/gfx-rs/wgpu.git?rev=a92b8549a8e2cb9dac781bafc5ed32828f3caf46#a92b8549a8e2cb9dac781bafc5ed32828f3caf46"
 dependencies = [
  "bitflags",
  "serde",
@@ -6824,34 +6790,22 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "window_clipboard"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37cf16659e398a96f4ab8deff2b9db2ca0c3c5d6c1b59b1d577b7f888f0f03c6"
-dependencies = [
- "clipboard-win 4.0.3",
- "clipboard_macos",
- "clipboard_wayland 0.1.2",
- "clipboard_x11 0.2.0",
- "raw-window-handle",
-]
-
-[[package]]
-name = "window_clipboard"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f6a6c83705a9008993d91151c1f5d249f5e87ef752b862ea968bd62f15202ab"
 dependencies = [
  "clipboard-win 4.0.3",
  "clipboard_macos",
- "clipboard_wayland 0.2.0",
- "clipboard_x11 0.3.1",
+ "clipboard_wayland",
+ "clipboard_x11",
  "raw-window-handle",
 ]
 
 [[package]]
 name = "winit"
-version = "0.24.0"
-source = "git+https://gitlab.com/veloren/winit.git?branch=macos-test-spiffed#488c511802dfd95ca54f6f76a38547c93c7b02c9"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "79610794594d5e86be473ef7763f604f2159cbac8c94debd00df8fb41e86c2f8"
 dependencies = [
  "bitflags",
  "cocoa",
@@ -6863,15 +6817,16 @@ dependencies = [
  "lazy_static",
  "libc",
  "log",
- "mio 0.6.23",
- "mio-extras",
- "ndk 0.2.1",
- "ndk-glue 0.2.1",
+ "mio 0.7.11",
+ "mio-misc",
+ "ndk",
+ "ndk-glue",
  "ndk-sys",
  "objc",
  "parking_lot 0.11.1",
  "percent-encoding",
  "raw-window-handle",
+ "scopeguard",
  "serde",
  "smithay-client-toolkit",
  "wayland-client 0.28.5",
