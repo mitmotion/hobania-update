@@ -367,6 +367,7 @@ impl World {
                 chunk: sim_chunk,
             },
             chunk: &mut chunk,
+            entities: Vec::new(),
         };
 
         layer::apply_caves_to(&mut canvas, &mut dynamic_rng);
@@ -382,6 +383,10 @@ impl World {
             .iter()
             .for_each(|site| index.sites[*site].apply_to(&mut canvas, &mut dynamic_rng));
 
+        let mut supplement = ChunkSupplement {
+            entities: canvas.entities,
+        };
+
         let gen_entity_pos = |dynamic_rng: &mut rand::rngs::ThreadRng| {
             let lpos2d = TerrainChunkSize::RECT_SIZE
                 .map(|sz| dynamic_rng.gen::<u32>().rem_euclid(sz) as i32);
@@ -396,10 +401,6 @@ impl World {
             }
 
             (Vec3::from(chunk_wpos2d) + lpos).map(|e: i32| e as f32) + 0.5
-        };
-
-        let mut supplement = ChunkSupplement {
-            entities: Vec::new(),
         };
 
         if sim_chunk.contains_waypoint {
