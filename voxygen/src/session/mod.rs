@@ -1460,6 +1460,8 @@ impl PlayState for SessionState {
             self.hud.render(&mut ui_drawer);
         }; // Note: this semicolon is needed for the third_pass borrow to be dropped before it's lifetime ends
     }
+
+    fn egui_enabled(&self) -> bool { true }
 }
 
 /// Max distance an entity can be "targeted"

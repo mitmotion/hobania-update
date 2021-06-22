@@ -20,7 +20,6 @@ pub struct CharSelectionState {
     char_selection_ui: CharSelectionUi,
     client: Rc<RefCell<Client>>,
     scene: Scene,
-    need_shadow_clear: RefCell<bool>,
 }
 
 impl CharSelectionState {
@@ -37,7 +36,6 @@ impl CharSelectionState {
             char_selection_ui,
             client,
             scene,
-            need_shadow_clear: RefCell::new(false),
         }
     }
 
@@ -75,7 +73,7 @@ impl PlayState for CharSelectionState {
             .set_scale_mode(global_state.settings.interface.ui_scale);
 
         // Clear shadow textures since we don't render to them here
-        *self.need_shadow_clear.borrow_mut() = true;
+        global_state.window.clear_shadows_next_frame = true;
     }
 
     fn tick(&mut self, global_state: &mut GlobalState, events: Vec<WinEvent>) -> PlayStateResult {
@@ -237,11 +235,6 @@ impl PlayState for CharSelectionState {
     fn globals_bind_group(&self) -> &GlobalsBindGroup { self.scene.global_bind_group() }
 
     fn render<'a>(&'a self, drawer: &mut Drawer<'a>, _: &Settings) {
-        if *self.need_shadow_clear.borrow() {
-            drawer.clear_shadows();
-            *self.need_shadow_clear.borrow_mut() = false;
-        }
-
         let client = self.client.borrow();
         let (humanoid_body, loadout) =
             Self::get_humanoid_body_inventory(&self.char_selection_ui, &client);
@@ -263,4 +256,6 @@ impl PlayState for CharSelectionState {
             self.char_selection_ui.render(&mut ui_drawer);
         };
     }
+
+    fn egui_enabled(&self) -> bool { false }
 }

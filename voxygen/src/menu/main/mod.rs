@@ -332,6 +332,8 @@ impl PlayState for MainMenuState {
             self.main_menu_ui.render(&mut ui_drawer);
         };
     }
+
+    fn egui_enabled(&self) -> bool { false }
 }
 
 fn get_client_msg_error(

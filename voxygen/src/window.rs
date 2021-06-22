@@ -544,6 +544,8 @@ pub struct Window {
     message_receiver: channel::Receiver<String>,
     // Used for screenshots & fullscreen toggle to deduplicate/postpone to after event handler
     take_screenshot: bool,
+    // Used to clear the shadow textures when entering a PlayState that doesn't utilise shadows
+    pub clear_shadows_next_frame: bool,
     toggle_fullscreen: bool,
     pub key_layout: Option<KeyLayout>,
 }
@@ -640,6 +642,7 @@ impl Window {
             message_sender,
             message_receiver,
             take_screenshot: false,
+            clear_shadows_next_frame: false,
             toggle_fullscreen: false,
             key_layout,
         };

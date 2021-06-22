@@ -144,4 +144,7 @@ pub trait PlayState {
 
     /// Draw the play state.
     fn render<'a>(&'a self, drawer: &mut Drawer<'a>, settings: &Settings);
+
+    /// Determines whether egui will be rendered for this play state
+    fn egui_enabled(&self) -> bool;
 }
