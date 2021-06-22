@@ -75,6 +75,7 @@ pub struct SessionState {
     interactable: Option<Interactable>,
     saved_zoom_dist: Option<f32>,
     hitboxes: HashMap<specs::Entity, DebugShapeId>,
+    debug_wind: Option<DebugShapeId>,
 }
 
 /// Represents an active game session (i.e., the one being played).
@@ -123,6 +124,7 @@ impl SessionState {
             interactable: None,
             saved_zoom_dist: None,
             hitboxes: HashMap::new(),
+            debug_wind: None,
         }
     }
 
@@ -144,6 +146,8 @@ impl SessionState {
         let mut client = self.client.borrow_mut();
         self.scene
             .maintain_debug_hitboxes(&client, &global_state.settings, &mut self.hitboxes);
+        self.scene
+            .maintain_debug_relative_wind(&client, &global_state.settings, &mut self.debug_wind);
         for event in client.tick(self.inputs.clone(), dt, crate::ecs::sys::add_local_systems)? {
             match event {
                 client::Event::Chat(m) => {
@@ -1366,6 +1370,12 @@ impl PlayState for SessionState {
 
                 // Runs if either in a multiplayer server or the singleplayer server is unpaused
                 if !global_state.paused() {
+                    self.scene.maintain(
+                        global_state.window.renderer_mut(),
+                        &mut global_state.audio,
+                        &scene_data,
+                        &client,
+                    );
                     self.scene.maintain(
                         global_state.window.renderer_mut(),
                         &mut global_state.audio,
