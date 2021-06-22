@@ -232,7 +232,7 @@ pub fn angle_of_attack(ori: &Ori, rel_flow_dir: &Dir) -> f32 {
 
 /// Total lift coefficient for a finite wing of symmetric aerofoil shape and
 /// elliptical pressure distribution. (Multiplied by reference area.)
-fn lift_coefficient(
+pub fn lift_coefficient(
     planform_area: f32,
     angle_of_attack: f32,
     lift_slope: f32,
@@ -355,7 +355,7 @@ impl WingShape {
 }
 
 /// Induced drag coefficient (drag due to lift)
-fn induced_drag_coefficient(aspect_ratio: f32, lift_coefficient: f32) -> f32 {
+pub fn induced_drag_coefficient(aspect_ratio: f32, lift_coefficient: f32) -> f32 {
     let ar = aspect_ratio;
     if ar > 25.0 {
         tracing::warn!(

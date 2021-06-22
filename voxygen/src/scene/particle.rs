@@ -9,8 +9,10 @@ use crate::{
 use common::{
     assets::{AssetExt, DotVoxAsset},
     comp::{
-        self, aura, beam, body, buff, item::Reagent, object, shockwave, BeamSegment, Body,
-        CharacterState, Ori, Pos, Shockwave, Vel,
+        self, aura, beam, body, buff,
+        fluid_dynamics::{angle_of_attack, induced_drag_coefficient, lift_coefficient, Glide},
+        item::Reagent,
+        object, shockwave, BeamSegment, Body, CharacterState, Ori, Pos, Shockwave, Vel,
     },
     figure::Segment,
     outcome::Outcome,
@@ -18,6 +20,7 @@ use common::{
     spiral::Spiral2d,
     states::{self, utils::StageSection},
     terrain::TerrainChunk,
+    util::Dir,
     vol::{RectRasterableVol, SizedVol},
 };
 use common_base::span;
@@ -561,16 +564,69 @@ impl ParticleMgr {
         let dt = scene_data.state.get_delta_time();
         let mut rng = thread_rng();
 
-        for (entity, pos, vel, character_state, body) in (
+        for (entity, pos, vel, ori, character_state, body) in (
             &ecs.entities(),
             &ecs.read_storage::<Pos>(),
             ecs.read_storage::<Vel>().maybe(),
+            &ecs.read_storage::<Ori>(),
             &ecs.read_storage::<CharacterState>(),
             &ecs.read_storage::<Body>(),
         )
             .join()
         {
             match character_state {
+                CharacterState::Glide(data) => {
+                    let trail_tick_count =
+                        33.max(self.scheduler.heartbeats(Duration::from_millis(1)));
+                    let trail = ecs
+                        .read_storage::<comp::PhysicsState>()
+                        .get(entity)
+                        .and_then(|physics| physics.in_fluid)
+                        .and_then(|fluid| {
+                            vel.map(|vel| (fluid.dynamic_pressure(vel), fluid.relative_flow(vel)))
+                        })
+                        .and_then(|(q, rel_flow)| {
+                            Some(rel_flow.0.magnitude_squared())
+                                .filter(|v_sq| v_sq > &std::f32::EPSILON)
+                                .map(|v_sq| (q, Dir::new(rel_flow.0 / v_sq.sqrt())))
+                        })
+                        .map(|(q, flow_dir)| {
+                            // hacky heuristic for vortex trails; they're nowhere near an accurate
+                            // representation, but
+                            // - it's sort of the right direction
+                            // - it scales with induced drag (which is due to these vortices)
+                            let wing_shape = data.glider.wing_shape();
+                            let aoa = angle_of_attack(data.glider.ori(), &flow_dir);
+                            let c_l = lift_coefficient(
+                                data.glider.planform_area(),
+                                aoa,
+                                wing_shape.lift_slope(),
+                                wing_shape.stall_angle(),
+                            );
+                            let c_d_i = induced_drag_coefficient(wing_shape.aspect_ratio(), c_l);
+                            -q * *data.glider.ori().look_dir() * c_d_i.abs()
+                        })
+                        .unwrap_or_default();
+
+                    self.particles.reserve(trail_tick_count as usize);
+                    for i in 0..trail_tick_count {
+                        let (left_tip, right_tip) = data.glider.wing_tips((pos, ori, body));
+                        self.particles.push(Particle::new_directed(
+                            Duration::from_millis(300),
+                            time + i as f64 / 1000.0,
+                            ParticleMode::Vortex,
+                            left_tip.0,
+                            left_tip.0 + trail * 0.2,
+                        ));
+                        self.particles.push(Particle::new_directed(
+                            Duration::from_millis(300),
+                            time + i as f64 / 1000.0,
+                            ParticleMode::Vortex,
+                            right_tip.0,
+                            right_tip.0 + trail * 0.2,
+                        ));
+                    }
+                },
                 CharacterState::Boost(_) => {
                     self.particles.resize_with(
                         self.particles.len()

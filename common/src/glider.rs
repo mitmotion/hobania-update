@@ -1,7 +1,7 @@
 use crate::{
     comp::{
         fluid_dynamics::{Drag, Glide, WingShape},
-        Ori,
+        Body, Ori, Pos,
     },
     util::Dir,
 };
@@ -17,6 +17,7 @@ pub struct Glider {
     pub wing_shape: WingShape,
     pub planform_area: f32,
     pub ori: Ori,
+    span_length: f32,
 }
 
 impl Glider {
@@ -32,8 +33,22 @@ impl Glider {
         Self {
             wing_shape: WingShape::Elliptical { aspect_ratio },
             planform_area,
+            span_length,
             ori,
         }
+    }
+
+    pub fn pos(&self, pilot: (&Pos, &Ori, &Body)) -> Pos {
+        let height = pilot.2.dimensions().z;
+        let cg = Vec3::unit_z() * height * tweak!(0.7);
+        let pos_from_cg = *pilot.1.up() * height * tweak!(0.5);
+        Pos(pilot.0.0 + cg + pos_from_cg)
+    }
+
+    pub fn wing_tips(&self, pilot: (&Pos, &Ori, &Body)) -> (Pos, Pos) {
+        let right = tweak!(0.65) * *self.ori.right() * self.span_length / 2.0;
+        let pos = self.pos(pilot).0;
+        (Pos(pos - right), Pos(pos + right))
     }
 
     pub fn roll(&mut self, angle_right: f32) { self.ori = self.ori.rolled_right(angle_right); }

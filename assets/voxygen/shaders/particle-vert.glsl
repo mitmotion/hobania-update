@@ -72,6 +72,7 @@ const int WATER = 30;
 const int ICE_SPIKES = 31;
 const int DRIP = 32;
 const int TORNADO = 33;
+const int VORTEX = 34;
 
 // meters per second squared (acceleration)
 const float earth_gravity = 9.807;
@@ -551,6 +552,29 @@ void main() {
                 vec3((2.5 * (1 - slow_start(0.05)))),
                 vec4(vec3(1.2 + 0.5 * percent()), 1),
                 spin_in_axis(vec3(rand6, rand7, rand8), percent() * 10 + 3 * rand9)
+            );
+            break;
+        case VORTEX:
+            f_reflect = 1.0;
+            float mag = length(inst_dir);
+            float s = 4 * start_end(max(0, slow_start(2.0) - 0.3), 0);
+            float r = 0.2 * (pow(1 * rand0, 2) + pow(rand1 * 2, 2) + pow(rand2 * 4, 2));
+            attr = Attr(
+                spiral_motion(
+                    s * normalize(inst_dir) * mag,
+                    0.5 * max(0, slow_start(2.0) - 0.3) * max(0, floor(0.5 * r - 0.5)) * min(linear_scale(10), 1),
+                    lifetime / (20.0 * inst_lifespan),
+                    0.4 * r,
+                    1.1 * inst_time * (length(inst_dir))
+                ),
+                vec3(
+                    (1.0 - 0.5 * abs(r))
+                    * (1.5 + 0.5 * sin(tick.x * 10 - lifetime * 10))
+                    * max(0, mag - 12) * s
+                    * 0.02
+                ),
+                vec4(vec3(1, 1, 1), 1),
+                spin_in_axis(inst_dir, tick.z)
             );
             break;
         default:
