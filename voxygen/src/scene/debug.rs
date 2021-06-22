@@ -24,8 +24,24 @@ impl DebugShape {
         };
         match self {
             DebugShape::Line([a, b]) => {
-                let h = Vec3::new(0.0, 1.0, 0.0);
-                mesh.push_quad(quad(*a, a + h, b + h, *b));
+                // Creates two quads to make the line visible from all directions (except when
+                // perfectly parallel to the view). Duplicate both quads with
+                // opposite normals to make them double-sided.
+
+                // Width
+                let w = 0.05;
+
+                let vert = Vec3::unit_z() * w;
+                mesh.push_quad(quad(*a - vert, a + vert, b + vert, *b - vert));
+                mesh.push_quad(quad(*b - vert, b + vert, a + vert, *a - vert));
+
+                let horiz = (b - a)
+                    .cross(Vec3::unit_z())
+                    .try_normalized()
+                    .unwrap_or_else(Vec3::unit_y)
+                    * w;
+                mesh.push_quad(quad(*a - horiz, a + horiz, b + horiz, *b - horiz));
+                mesh.push_quad(quad(*b - horiz, b + horiz, a + horiz, *a - horiz));
             },
             DebugShape::Cylinder { radius, height } => {
                 const SUBDIVISIONS: usize = 16;
