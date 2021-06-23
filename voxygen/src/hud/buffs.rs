@@ -14,7 +14,7 @@ use common::comp::{BuffKind, Buffs, Energy, Health};
 use conrod_core::{
     color,
     image::Id,
-    widget::{self, Button, Image, Rectangle, State as ConrodState, Text},
+    widget::{self, id::List, Button, Image, Rectangle, Text},
     widget_ids, Color, Colorable, Positionable, Sizeable, UiCell, Widget, WidgetCommon,
 };
 widget_ids! {
@@ -179,7 +179,6 @@ impl<'a> Widget for BuffsBar<'a> {
 
             // Create Buff Widgets
             self.create_buff_widgets(
-                &mut state,
                 ui,
                 &mut event,
                 &localized_strings,
@@ -188,18 +187,30 @@ impl<'a> Widget for BuffsBar<'a> {
                 norm_col,
                 &buffs_tooltip,
                 |info| info.is_buff,
+                &state.ids.buffs,
+                &state.ids.buff_timers,
+                state.ids.buffs_align,
+                std::cmp::Reverse(buff.kind),
+                BUFF_COLOR,
+                true,
             );
 
             // Create Debuff Widgets
-            self.create_debuff_widgets(
-                &mut state,
+            self.create_buff_widgets(
                 ui,
+                &mut event,
                 localized_strings,
                 buffs,
                 pulsating_col,
                 norm_col,
                 &buffs_tooltip,
                 |info| !info.is_buff,
+                &state.ids.debuffs,
+                &state.ids.debuff_timers,
+                state.ids.debuffs_align,
+                buff.kind,
+                DEBUFF_COLOR,
+                false,
             );
         }
 
@@ -330,7 +341,6 @@ impl<'a> BuffsBar<'a> {
 
     fn create_buff_widgets(
         &mut self,
-        state: &mut ConrodState<'_, State>,
         ui: &mut UiCell,
         event: &mut Vec<Event>,
         localized_strings: &Localization,
@@ -339,13 +349,17 @@ impl<'a> BuffsBar<'a> {
         norm_col: Color,
         buffs_tooltip: &Tooltip,
         filterspec: impl Fn(&BuffInfo) -> bool,
+        a: &List,
+        b: &List,
+        c: conrod_core::widget::id::Id,
+        d: BuffInfo,
+        e: Color,
+        f: bool,
     ) {
-        let mut buff_vec = state
-            .ids
-            .buffs
+        let mut buff_vec = a
             .iter()
             .copied()
-            .zip(state.ids.buff_timers.iter().copied())
+            .zip(b.iter().copied())
             .zip(
                 buffs
                     .iter_active()
@@ -355,7 +369,7 @@ impl<'a> BuffsBar<'a> {
             .collect::<Vec<_>>();
 
         // Sort the buffs by kind
-        buff_vec.sort_by_key(|((_id, _timer_id), buff)| std::cmp::Reverse(buff.kind));
+        buff_vec.sort_by_key(|((_id, _timer_id), buff)| d);
 
         buff_vec
             .iter()
@@ -372,11 +386,14 @@ impl<'a> BuffsBar<'a> {
                 // Sort buffs into rows of 11 slots
                 let x = i % 6;
                 let y = i / 6;
-                let buff_widget = buff_widget.bottom_left_with_margins_on(
-                    state.ids.buffs_align,
-                    0.0 + y as f64 * (41.0),
-                    1.5 + x as f64 * (43.0),
-                );
+                let buff_widget;
+                let bottom = 0.0 + y as f64 * (41.0);
+                let left = 1.5 + x as f64 * (43.0);
+                if f {
+                    buff_widget = buff_widget.bottom_left_with_margins_on(c, bottom, left);
+                } else {
+                    buff_widget = buff_widget.bottom_right_with_margins_on(c, bottom, left);
+                }
 
                 buff_widget
                     .color(
@@ -391,101 +408,27 @@ impl<'a> BuffsBar<'a> {
                 let title = hud::get_buff_title(buff.kind, localized_strings);
                 let desc_txt = hud::get_buff_desc(buff.kind, buff.data, localized_strings);
                 let remaining_time = hud::get_buff_time(*buff);
-                let click_to_remove = format!("<{}>", &localized_strings.get("buff.remove"));
-                let desc = format!("{}\n\n{}\n\n{}", desc_txt, remaining_time, click_to_remove);
-                // Timer overlay
-                if Button::image(self.get_duration_image(duration_percentage))
+                let mut desc = format!("{}\n\n{}", desc_txt, remaining_time);
+                let image;
+                let image_id = self.get_duration_image(duration_percentage);
+                if f {
+                    let click_to_remove = format!("<{}>", &localized_strings.get("buff.remove"));
+                    desc = format!("{}\n\n{}", desc, click_to_remove);
+                    // Timer overlay
+                    image = Button::image(image_id);
+                } else {
+                    image = Image::new(image_id);
+                }
+
+                let clickable_image = image
                     .w_h(40.0, 40.0)
                     .middle_of(*id)
-                    .with_tooltip(
-                        self.tooltip_manager,
-                        title,
-                        &desc,
-                        &buffs_tooltip,
-                        BUFF_COLOR,
-                    )
-                    .set(*timer_id, ui)
-                    .was_clicked()
-                {
+                    .with_tooltip(self.tooltip_manager, title, &desc, &buffs_tooltip, e)
+                    .set(*timer_id, ui);
+
+                if f && clickable_image.was_clicked() {
                     event.push(Event::RemoveBuff(buff.kind));
                 };
-            });
-    }
-
-    fn create_debuff_widgets(
-        &mut self,
-        state: &mut ConrodState<'_, State>,
-        ui: &mut UiCell,
-        localized_strings: &Localization,
-        buffs: &Buffs,
-        pulsating_col: Color,
-        norm_col: Color,
-        buffs_tooltip: &Tooltip,
-        filterspec: impl Fn(&BuffInfo) -> bool,
-    ) {
-        let mut debuff_vec = state
-            .ids
-            .debuffs
-            .iter()
-            .copied()
-            .zip(state.ids.debuff_timers.iter().copied())
-            .zip(
-                buffs
-                    .iter_active()
-                    .map(hud::get_buff_info)
-                    .filter(filterspec),
-            )
-            .collect::<Vec<_>>();
-
-        // Sort the debuffs by kind
-        debuff_vec.sort_by_key(|((_id, _timer_id), debuff)| debuff.kind);
-
-        debuff_vec
-            .iter()
-            .enumerate()
-            .for_each(|(i, ((id, timer_id), debuff))| {
-                let max_duration = debuff.data.duration;
-                let current_duration = debuff.dur;
-                let duration_percentage = current_duration.map_or(1000.0, |cur| {
-                    max_duration
-                        .map_or(1000.0, |max| cur.as_secs_f32() / max.as_secs_f32() * 1000.0)
-                }) as u32; // Percentage to determine which frame of the timer overlay is displayed
-                let debuff_img = hud::get_buff_image(debuff.kind, self.imgs);
-                let debuff_widget = Image::new(debuff_img).w_h(40.0, 40.0);
-                // Sort buffs into rows of 11 slots
-                let x = i % 6;
-                let y = i / 6;
-                let debuff_widget = debuff_widget.bottom_right_with_margins_on(
-                    state.ids.debuffs_align,
-                    0.0 + y as f64 * (41.0),
-                    1.5 + x as f64 * (43.0),
-                );
-
-                debuff_widget
-                    .color(
-                        if current_duration.map_or(false, |cur| cur.as_secs_f32() < 10.0) {
-                            Some(pulsating_col)
-                        } else {
-                            Some(norm_col)
-                        },
-                    )
-                    .set(*id, ui);
-                // Create Debuff tooltip
-                let title = hud::get_buff_title(debuff.kind, localized_strings);
-                let desc_txt = hud::get_buff_desc(debuff.kind, debuff.data, localized_strings);
-                let remaining_time = hud::get_buff_time(*debuff);
-                let desc = format!("{}\n\n{}", desc_txt, remaining_time);
-                Image::new(self.get_duration_image(duration_percentage))
-                    .w_h(40.0, 40.0)
-                    .middle_of(*id)
-                    .with_tooltip(
-                        self.tooltip_manager,
-                        title,
-                        &desc,
-                        &buffs_tooltip,
-                        DEBUFF_COLOR,
-                    )
-                    .set(*timer_id, ui);
             });
     }
 }
