@@ -309,6 +309,20 @@ impl Block {
             Block::air(SpriteKind::Empty)
         }
     }
+
+    #[inline]
+    pub fn from_u32(x: u32) -> Option<Self> {
+        let [bk, r, g, b] = x.to_le_bytes();
+        Some(Self {
+            kind: BlockKind::from_u8(bk)?,
+            attr: [r, g, b],
+        })
+    }
+
+    #[inline]
+    pub fn to_u32(&self) -> u32 {
+        u32::from_le_bytes([self.kind as u8, self.attr[0], self.attr[1], self.attr[2]])
+    }
 }
 
 #[cfg(test)]

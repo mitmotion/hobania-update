@@ -113,7 +113,11 @@ pub struct Chunk {
 impl Chunk {
     pub fn deserialize_from<R: io::Read + Clone>(reader: R) -> Option<Self> {
         // Attempt deserialization through various versions
-        if let Ok(data) = bincode::deserialize_from::<_, version::V2>(reader.clone())
+        if let Ok(data) = bincode::deserialize_from::<_, version::V3>(reader.clone())
+            .map_err(|err| { warn!("Error when loading V3: {:?}", err); err })
+        {
+            Some(Chunk::from(data))
+        } else if let Ok(data) = bincode::deserialize_from::<_, version::V2>(reader.clone())
             .map_err(|err| { warn!("Error when loading V2: {:?}", err); err })
         {
             Some(Chunk::from(data))
@@ -134,10 +138,18 @@ impl Chunk {
 }
 
 mod version {
-    pub type Current = V2;
+    pub type Current = V3;
 
     fn version_magic(n: u16) -> u64 {
         (n as u64) | (0x3352ACEEA789 << 16)
+    }
+
+    fn version<'de, D: serde::Deserializer<'de>, const V: u16>(de: D) -> Result<u64, D::Error> {
+        u64::deserialize(de).and_then(|x| if x == version_magic(V) {
+            Ok(x)
+        } else {
+            Err(serde::de::Error::invalid_value(serde::de::Unexpected::Unsigned(x), &"correct version"))
+        })
     }
 
     use super::*;
@@ -146,9 +158,9 @@ mod version {
 
     impl From<Chunk> for Current {
         fn from(chunk: Chunk) -> Self {
-            Self { version: version_magic(2), blocks: chunk.blocks
+            Self { version: version_magic(3), blocks: chunk.blocks
                 .into_iter()
-                .map(|(pos, b)| (pos.x as u8, pos.y as u8, pos.z as i16, b))
+                .map(|(pos, b)| (pos.x as u8, pos.y as u8, pos.z as i16, b.to_u32()))
                 .collect() }
         }
     }
@@ -173,18 +185,26 @@ mod version {
         pub blocks: Vec<(u8, u8, i16, Block)>,
     }
 
-    fn version<'de, D: serde::Deserializer<'de>, const V: u16>(de: D) -> Result<u64, D::Error> {
-        u64::deserialize(de).and_then(|x| if x == version_magic(V) {
-            Ok(x)
-        } else {
-            Err(serde::de::Error::invalid_value(serde::de::Unexpected::Unsigned(x), &"correct version"))
-        })
-    }
-
     impl From<V2> for Chunk {
         fn from(v2: V2) -> Self { Self { blocks: v2.blocks
             .into_iter()
             .map(|(x, y, z, b)| (Vec3::new(x as i32, y as i32, z as i32), b))
+            .collect() } }
+    }
+
+    // V2
+
+    #[derive(Serialize, Deserialize)]
+    pub struct V3 {
+        #[serde(deserialize_with = "version::<_, 3>")]
+        pub version: u64,
+        pub blocks: Vec<(u8, u8, i16, u32)>,
+    }
+
+    impl From<V3> for Chunk {
+        fn from(v3: V3) -> Self { Self { blocks: v3.blocks
+            .into_iter()
+            .map(|(x, y, z, b)| (Vec3::new(x as i32, y as i32, z as i32), Block::from_u32(b).unwrap_or(Block::empty())))
             .collect() } }
     }
 }
