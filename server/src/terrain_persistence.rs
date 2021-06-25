@@ -103,6 +103,10 @@ impl TerrainPersistence {
         let key = pos.xy().map2(TerrainChunk::RECT_SIZE, |e, sz| e.div_euclid(sz as i32));
         self.load_chunk(key).blocks.insert(pos - key * TerrainChunk::RECT_SIZE.map(|e| e as i32), block);
     }
+
+    pub fn reset_block(&mut self, key: Vec2<i32>, rpos: Vec3<i32>) {
+        self.load_chunk(key).blocks.remove(&rpos);
+    }
 }
 
 #[derive(Default, Serialize, Deserialize)]

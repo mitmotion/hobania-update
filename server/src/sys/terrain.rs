@@ -156,8 +156,19 @@ impl<'a> System<'a> for Sys {
                 },
             };
 
-            for (key, block) in terrain_persistence.load_chunk(key).blocks() {
-                chunk.set(key, block);
+            // Terrain persistence
+            let mut resets = Vec::new();
+            for (rpos, new_block) in terrain_persistence.load_chunk(key).blocks() {
+                chunk.map(rpos, |block| {
+                    if block == new_block {
+                        resets.push(rpos);
+                    }
+                    new_block
+                });
+            }
+            // Reset any unchanged blocks
+            for rpos in resets {
+                terrain_persistence.reset_block(key, rpos);
             }
 
             // Arcify the chunk
