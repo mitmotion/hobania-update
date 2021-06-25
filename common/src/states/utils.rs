@@ -340,7 +340,7 @@ pub fn handle_orientation(data: &JoinData, update: &mut StateUpdate, efficiency:
         .or_else(|| {
             data.physics
                 .on_ground
-                .then_some(data.ori.look_dir().to_horizontal().unwrap_or_default())
+                .map(|_| data.ori.look_dir().to_horizontal().unwrap_or_default())
         })
     {
         let rate = {
