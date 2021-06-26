@@ -87,6 +87,26 @@ overflow-checks = false
 debug-assertions = false
 lto = true
 debug = false
+panic = "abort" # don't need unwinding so we can skip including the landing pads for that
+# line tables so we can have useful backtraces for in-house crates
+[profile.release.package."veloren-network"]
+debug = 1
+[profile.release.package."veloren-network-protocol"]
+debug = 1
+[profile.release.package."veloren-common"]
+debug = 1
+[profile.release.package."veloren-common-systems"]
+debug = 1
+[profile.release.package."veloren-client"]
+debug = 1
+[profile.release.package."veloren-server"]
+debug = 1
+[profile.release.package."veloren-server-cli"]
+debug = 1
+[profile.release.package."veloren-voxygen"]
+debug = 1
+[profile.release.package."veloren-world"]
+debug = 1
 
 # used for cargo bench
 [profile.bench]
@@ -109,16 +129,10 @@ key = "veloren-nix.cachix.org-1:zokfKJqVsNV6kI/oJdLF6TYBdNPYGSb+diMVQPn/5Rc="
 buildInputs = ["openssl"]
 nativeBuildInputs = ["pkg-config"]
 
-[workspace.metadata.nix.crateOverride.shaderc-sys]
-buildInputs = ["shaderc"]
-nativeBuildInputs = ["cmake", "python3", "gnumake"]
-
 [patch.crates-io]
-# macos CI fix isn't released yet
-winit = { git = "https://gitlab.com/veloren/winit.git", branch = "macos-test-spiffed" }
 vek = { git = "https://gitlab.com/veloren/vek.git", branch = "fix_intrinsics2" }
 # patch wgpu so we can use wgpu-profiler crate
-wgpu = { git = "https://github.com/gfx-rs/wgpu-rs.git", rev = "7486bdad64bb5d17b709ecccb41e063469efff88" }
+wgpu = { git = "https://github.com/gfx-rs/wgpu.git", rev = "a92b8549a8e2cb9dac781bafc5ed32828f3caf46" }
 
 # # use the latest fixes in naga (remove when updates trickle down to wgpu-rs)
 # naga = { git = "https://github.com/gfx-rs/naga.git", rev = "3a0f0144112ff621dd7f731bf455adf6cab19164" }

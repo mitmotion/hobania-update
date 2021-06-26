@@ -12,8 +12,10 @@ mod character_state;
 pub mod compass;
 #[cfg(not(target_arch = "wasm32"))]
 mod controller;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod dialogue;
 #[cfg(not(target_arch = "wasm32"))] mod energy;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod fluid_dynamics;
 #[cfg(not(target_arch = "wasm32"))] pub mod group;
 mod health;
@@ -66,6 +68,7 @@ pub use self::{
     controller::{
         Climb, ControlAction, ControlEvent, Controller, ControllerInputs, GroupManip, InputAttr,
         InputKind, InventoryAction, InventoryEvent, InventoryManip, MountState, Mounting,
+        UtteranceKind,
     },
     energy::{Energy, EnergyChange, EnergySource},
     fluid_dynamics::Fluid,

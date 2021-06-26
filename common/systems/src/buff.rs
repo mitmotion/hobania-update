@@ -1,11 +1,15 @@
 use common::{
     comp::{
-        fluid_dynamics::Fluid, Buff, BuffCategory, BuffChange, BuffEffect, BuffId, BuffKind,
-        BuffSource, Buffs, Energy, Health, HealthChange, HealthSource, Inventory, ModifierKind,
-        PhysicsState, Stats,
+        buff::{
+            Buff, BuffCategory, BuffChange, BuffData, BuffEffect, BuffId, BuffKind, BuffSource,
+            Buffs,
+        },
+        fluid_dynamics::{Fluid, LiquidKind},
+        Energy, Health, HealthChange, HealthSource, Inventory, ModifierKind, PhysicsState, Stats,
     },
     event::{EventBus, ServerEvent},
     resources::DeltaTime,
+    terrain::SpriteKind,
     Damage, DamageSource,
 };
 use common_ecs::{Job, Origin, Phase, System};
@@ -45,46 +49,88 @@ impl<'a> System<'a> for Sys {
         // Set to false to avoid spamming server
         buffs.set_event_emission(false);
         stats.set_event_emission(false);
-        for (entity, mut buff_comp, energy, mut stat, health) in (
+        for (entity, mut buff_comp, energy, mut stat, health, physics_state) in (
             &read_data.entities,
             &mut buffs,
             &read_data.energies,
             &mut stats,
             &read_data.healths,
+            read_data.physics_states.maybe(),
         )
             .join()
         {
+            // Apply buffs to entity based off of their current physics_state
+            if let Some(physics_state) = physics_state {
+                if matches!(
+                    physics_state.on_ground.and_then(|b| b.get_sprite()),
+                    Some(SpriteKind::EnsnaringVines)
+                ) {
+                    // If on ensnaring vines, apply ensnared debuff
+                    server_emitter.emit(ServerEvent::Buff {
+                        entity,
+                        buff_change: BuffChange::Add(Buff::new(
+                            BuffKind::Ensnared,
+                            BuffData::new(1.0, Some(Duration::from_secs_f32(1.0))),
+                            Vec::new(),
+                            BuffSource::World,
+                        )),
+                    });
+                }
+                if matches!(
+                    physics_state.in_fluid,
+                    Some(Fluid::Liquid {
+                        kind: LiquidKind::Lava,
+                        ..
+                    })
+                ) {
+                    // If in lava fluid, apply burning debuff
+                    server_emitter.emit(ServerEvent::Buff {
+                        entity,
+                        buff_change: BuffChange::Add(Buff::new(
+                            BuffKind::Burning,
+                            BuffData::new(200.0, None),
+                            vec![BuffCategory::Natural],
+                            BuffSource::World,
+                        )),
+                    });
+                } else if matches!(
+                    physics_state.in_fluid,
+                    Some(Fluid::Liquid {
+                        kind: LiquidKind::Water,
+                        ..
+                    })
+                ) && buff_comp.kinds.contains_key(&BuffKind::Burning)
+                {
+                    // If in water fluid and currently burning, remove burning debuffs
+                    server_emitter.emit(ServerEvent::Buff {
+                        entity,
+                        buff_change: BuffChange::RemoveByKind(BuffKind::Burning),
+                    });
+                }
+            }
+
             let (buff_comp_kinds, buff_comp_buffs): (
                 &HashMap<BuffKind, Vec<BuffId>>,
                 &mut HashMap<BuffId, Buff>,
             ) = buff_comp.parts();
             let mut expired_buffs = Vec::<BuffId>::new();
+
             // For each buff kind present on entity, if the buff kind queues, only ticks
             // duration of strongest buff of that kind, else it ticks durations of all buffs
             // of that kind. Any buffs whose durations expire are marked expired.
             for (kind, ids) in buff_comp_kinds.iter() {
-                // Only get the physics state component if the entity has the burning buff, as
-                // we don't need it for any other conditions yet
-                let in_fluid = if matches!(kind, BuffKind::Burning) {
-                    read_data
-                        .physics_states
-                        .get(entity)
-                        .and_then(|p| p.in_fluid)
-                } else {
-                    None
-                };
                 if kind.queues() {
                     if let Some((Some(buff), id)) =
                         ids.get(0).map(|id| (buff_comp_buffs.get_mut(id), id))
                     {
-                        tick_buff(*id, buff, dt, in_fluid, |id| expired_buffs.push(id));
+                        tick_buff(*id, buff, dt, |id| expired_buffs.push(id));
                     }
                 } else {
                     for (id, buff) in buff_comp_buffs
                         .iter_mut()
                         .filter(|(i, _)| ids.iter().any(|id| id == *i))
                     {
-                        tick_buff(*id, buff, dt, in_fluid, |id| expired_buffs.push(id));
+                        tick_buff(*id, buff, dt, |id| expired_buffs.push(id));
                     }
                 }
             }
@@ -240,13 +286,7 @@ impl<'a> System<'a> for Sys {
     }
 }
 
-fn tick_buff(
-    id: u64,
-    buff: &mut Buff,
-    dt: f32,
-    in_fluid: Option<Fluid>,
-    mut expire_buff: impl FnMut(u64),
-) {
+fn tick_buff(id: u64, buff: &mut Buff, dt: f32, mut expire_buff: impl FnMut(u64)) {
     // If a buff is recently applied from an aura, do not tick duration
     if buff
         .cat_ids
@@ -256,11 +296,6 @@ fn tick_buff(
         return;
     }
     if let Some(remaining_time) = &mut buff.time {
-        // Extinguish Burning buff when in water
-        if matches!(buff.kind, BuffKind::Burning) && matches!(in_fluid, Some(Fluid::Water { .. })) {
-            *remaining_time = Duration::default();
-        }
-
         if let Some(new_duration) = remaining_time.checked_sub(Duration::from_secs_f32(dt)) {
             // The buff still continues.
             *remaining_time = new_duration;

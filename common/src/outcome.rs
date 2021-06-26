@@ -1,5 +1,6 @@
 use crate::{comp, uid::Uid};
-use comp::{beam, item::Reagent, poise::PoiseState};
+use comp::{beam, item::Reagent, poise::PoiseState, skills::SkillGroupKind, UtteranceKind};
+use hashbrown::HashSet;
 use serde::{Deserialize, Serialize};
 use vek::*;
 
@@ -36,6 +37,7 @@ pub enum Outcome {
     ExpChange {
         uid: Uid,
         exp: i32,
+        xp_pools: HashSet<SkillGroupKind>,
     },
     SkillPointGain {
         uid: Uid,
@@ -71,6 +73,11 @@ pub enum Outcome {
     GroundSlam {
         pos: Vec3<f32>,
     },
+    Utterance {
+        pos: Vec3<f32>,
+        body: comp::Body,
+        kind: UtteranceKind,
+    },
 }
 
 impl Outcome {
@@ -85,7 +92,8 @@ impl Outcome {
             | Outcome::Damage { pos, .. }
             | Outcome::Block { pos, .. }
             | Outcome::PoiseChange { pos, .. }
-            | Outcome::GroundSlam { pos } => Some(*pos),
+            | Outcome::GroundSlam { pos }
+            | Outcome::Utterance { pos, .. } => Some(*pos),
             Outcome::BreakBlock { pos, .. } => Some(pos.map(|e| e as f32 + 0.5)),
             Outcome::ExpChange { .. } | Outcome::ComboChange { .. } => None,
         }

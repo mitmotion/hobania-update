@@ -1,6 +1,6 @@
 ItemDef(
     name: "Gold Ring",
-    description: "Someone is surely missing it...",
+    description: "A plain gold ring... almost as if it is missing a gem.",
     kind: Armor((
         kind: Ring("Gold"),
         stats: (

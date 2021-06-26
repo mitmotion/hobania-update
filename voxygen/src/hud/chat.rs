@@ -168,6 +168,7 @@ pub struct State {
 pub enum Event {
     TabCompletionStart(String),
     SendMessage(String),
+    SendCommand(String, Vec<String>),
     Focus(Id),
     ChangeChatTab(Option<usize>),
     ShowChatTabSettings(usize),
@@ -202,6 +203,8 @@ impl<'a> Widget for Chat<'a> {
     #[allow(clippy::redundant_clone)] // TODO: Pending review in #587
     #[allow(clippy::single_match)] // TODO: Pending review in #587
     fn update(self, args: widget::UpdateArgs<Self>) -> Self::Event {
+        common_base::prof_span!("Chat::update");
+
         let widget::UpdateArgs { id, state, ui, .. } = args;
 
         let mut events = Vec::new();
@@ -645,7 +648,17 @@ impl<'a> Widget for Chat<'a> {
                     s.history.truncate(self.history_max);
                 }
             });
-            events.push(Event::SendMessage(msg));
+            if let Some(msg) = msg.strip_prefix('/') {
+                match msg.parse::<comma::Command>() {
+                    Ok(cmd) => events.push(Event::SendCommand(cmd.name, cmd.arguments)),
+                    Err(err) => self.new_messages.push_back(ChatMsg {
+                        chat_type: ChatType::CommandError,
+                        message: err.to_string(),
+                    }),
+                }
+            } else {
+                events.push(Event::SendMessage(msg));
+            }
         }
         events
     }
@@ -756,7 +769,7 @@ fn insert_killing_buff(buff: BuffKind, localized_strings: &Localization, templat
             tracing::error!("Player was killed by a positive buff!");
             localized_strings.get("hud.outcome.mysterious")
         },
-        BuffKind::Wet => {
+        BuffKind::Wet | BuffKind::Ensnared => {
             tracing::error!("Player was killed by a debuff that doesn't do damage!");
             localized_strings.get("hud.outcome.mysterious")
         },

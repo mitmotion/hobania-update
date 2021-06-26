@@ -15,9 +15,11 @@ use crate::{
     util::Dir,
 };
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use std::{
+    ops::{Add, Div},
+    time::Duration,
+};
 use vek::*;
-
 pub const MOVEMENT_THRESHOLD_VEL: f32 = 3.0;
 
 impl Body {
@@ -66,6 +68,10 @@ impl Body {
                 quadruped_medium::Species::Dreadhorn => 140.0,
                 quadruped_medium::Species::Moose => 130.0,
                 quadruped_medium::Species::Snowleopard => 160.0,
+                quadruped_medium::Species::Mammoth => 180.0,
+                quadruped_medium::Species::Ngoubou => 170.0,
+                quadruped_medium::Species::Llama => 120.0,
+                quadruped_medium::Species::Alpaca => 110.0,
             },
             Body::BipedLarge(body) => match body.species {
                 biped_large::Species::Slysaurok => 100.0,
@@ -73,6 +79,9 @@ impl Body {
                 biped_large::Species::Mightysaurok => 100.0,
                 biped_large::Species::Mindflayer => 90.0,
                 biped_large::Species::Minotaur => 60.0,
+                biped_large::Species::Huskbrute => 130.0,
+                biped_large::Species::Cultistwarlord => 110.0,
+                biped_large::Species::Cultistwarlock => 90.0,
                 _ => 80.0,
             },
             Body::BirdMedium(_) => 80.0,
@@ -92,7 +101,7 @@ impl Body {
                 quadruped_low::Species::Alligator => 110.0,
                 quadruped_low::Species::Salamander => 85.0,
                 quadruped_low::Species::Monitor => 160.0,
-                quadruped_low::Species::Asp => 130.0,
+                quadruped_low::Species::Asp => 110.0,
                 quadruped_low::Species::Tortoise => 60.0,
                 quadruped_low::Species::Rocksnapper => 70.0,
                 quadruped_low::Species::Pangolin => 120.0,
@@ -100,7 +109,7 @@ impl Body {
                 quadruped_low::Species::Sandshark => 160.0,
                 quadruped_low::Species::Hakulaq => 140.0,
                 quadruped_low::Species::Lavadrake => 100.0,
-                quadruped_low::Species::Basilisk => 120.0,
+                quadruped_low::Species::Basilisk => 90.0,
                 quadruped_low::Species::Deadwood => 140.0,
             },
             Body::Ship(_) => 0.0,
@@ -132,7 +141,10 @@ impl Body {
         match self {
             Body::Humanoid(_) => 3.5,
             Body::QuadrupedSmall(_) => 3.0,
-            Body::QuadrupedMedium(_) => 2.8,
+            Body::QuadrupedMedium(quadruped_medium) => match quadruped_medium.species {
+                quadruped_medium::Species::Mammoth => 2.2,
+                _ => 2.8,
+            },
             Body::BirdMedium(_) => 6.0,
             Body::FishMedium(_) => 6.0,
             Body::Dragon(_) => 1.0,
@@ -216,6 +228,10 @@ impl Body {
     }
 
     pub fn can_climb(&self) -> bool { matches!(self, Body::Humanoid(_)) }
+
+    /// Returns how well a body can move backwards while strafing (0.0 = not at
+    /// all, 1.0 = same as forward)
+    pub fn reverse_move_factor(&self) -> f32 { 0.45 }
 }
 
 /// Handles updating `Components` to move player based on state of `JoinData`
@@ -227,13 +243,14 @@ pub fn handle_move(data: &JoinData, update: &mut StateUpdate, efficiency: f32) {
 
     if input_is_pressed(data, InputKind::Fly)
         && submersion.map_or(true, |sub| sub < 1.0)
-        && (!data.physics.on_ground || data.body.jump_impulse().is_none())
+        && (data.physics.on_ground.is_none() || data.body.jump_impulse().is_none())
         && data.body.fly_thrust().is_some()
     {
         fly_move(data, update, efficiency);
-    } else if let Some(submersion) = (!data.physics.on_ground && data.body.swim_thrust().is_some())
-        .then_some(submersion)
-        .flatten()
+    } else if let Some(submersion) = (data.physics.on_ground.is_none()
+        && data.body.swim_thrust().is_some())
+    .then_some(submersion)
+    .flatten()
     {
         swim_move(data, update, efficiency, submersion);
     } else {
@@ -246,7 +263,7 @@ pub fn handle_move(data: &JoinData, update: &mut StateUpdate, efficiency: f32) {
 fn basic_move(data: &JoinData, update: &mut StateUpdate, efficiency: f32) {
     let efficiency = efficiency * data.stats.move_speed_modifier * data.stats.friction_modifier;
 
-    let accel = if data.physics.on_ground {
+    let accel = if data.physics.on_ground.is_some() {
         data.body.base_accel()
     } else {
         data.body.air_accel()
@@ -257,6 +274,26 @@ fn basic_move(data: &JoinData, update: &mut StateUpdate, efficiency: f32) {
         * accel
         * if data.body.can_strafe() {
             data.inputs.move_dir
+                * if is_strafing(data, update) {
+                    Lerp::lerp(
+                        Vec2::from(update.ori)
+                            .try_normalized()
+                            .unwrap_or_else(Vec2::zero)
+                            .dot(
+                                data.inputs
+                                    .move_dir
+                                    .try_normalized()
+                                    .unwrap_or_else(Vec2::zero),
+                            )
+                            .add(1.0)
+                            .div(2.0)
+                            .max(0.0),
+                        1.0,
+                        data.body.reverse_move_factor(),
+                    )
+                } else {
+                    1.0
+                }
         } else {
             let fw = Vec2::from(update.ori);
             fw * data.inputs.move_dir.dot(fw).max(0.0)
@@ -268,7 +305,7 @@ pub fn handle_forced_movement(data: &JoinData, update: &mut StateUpdate, movemen
     match movement {
         ForcedMovement::Forward { strength } => {
             let strength = strength * data.stats.move_speed_modifier * data.stats.friction_modifier;
-            if let Some(accel) = data.physics.on_ground.then_some(data.body.base_accel()) {
+            if let Some(accel) = data.physics.on_ground.map(|_| data.body.base_accel()) {
                 update.vel.0 += Vec2::broadcast(data.dt.0)
                     * accel
                     * (data.inputs.move_dir + Vec2::from(update.ori))
@@ -307,8 +344,7 @@ pub fn handle_forced_movement(data: &JoinData, update: &mut StateUpdate, movemen
 }
 
 pub fn handle_orientation(data: &JoinData, update: &mut StateUpdate, efficiency: f32) {
-    let strafe_aim = update.character.is_aimed() && data.body.can_strafe();
-    if let Some(dir) = (strafe_aim || update.character.is_attack())
+    if let Some(dir) = (is_strafing(data, update) || update.character.is_attack())
         .then(|| data.inputs.look_dir.to_horizontal().unwrap_or_default())
         .or_else(|| Dir::from_unnormalized(data.inputs.move_dir.into()))
     {
@@ -474,25 +510,25 @@ pub fn attempt_wield(data: &JoinData, update: &mut StateUpdate) {
 
 /// Checks that player can `Sit` and updates `CharacterState` if so
 pub fn attempt_sit(data: &JoinData, update: &mut StateUpdate) {
-    if data.physics.on_ground {
+    if data.physics.on_ground.is_some() {
         update.character = CharacterState::Sit;
     }
 }
 
 pub fn attempt_dance(data: &JoinData, update: &mut StateUpdate) {
-    if data.physics.on_ground && data.body.is_humanoid() {
+    if data.physics.on_ground.is_some() && data.body.is_humanoid() {
         update.character = CharacterState::Dance;
     }
 }
 
 pub fn attempt_talk(data: &JoinData, update: &mut StateUpdate) {
-    if data.physics.on_ground {
+    if data.physics.on_ground.is_some() {
         update.character = CharacterState::Talk;
     }
 }
 
 pub fn attempt_sneak(data: &JoinData, update: &mut StateUpdate) {
-    if data.physics.on_ground && data.body.is_humanoid() {
+    if data.physics.on_ground.is_some() && data.body.is_humanoid() {
         update.character = CharacterState::Sneak;
     }
 }
@@ -501,7 +537,7 @@ pub fn attempt_sneak(data: &JoinData, update: &mut StateUpdate) {
 pub fn handle_climb(data: &JoinData, update: &mut StateUpdate) -> bool {
     if data.inputs.climb.is_some()
         && data.physics.on_wall.is_some()
-        && !data.physics.on_ground
+        && data.physics.on_ground.is_none()
         && !data
             .physics
             .in_liquid()
@@ -560,13 +596,13 @@ pub fn attempt_glide_wield(data: &JoinData, update: &mut StateUpdate) {
 
 /// Checks that player can jump and sends jump event if so
 pub fn handle_jump(data: &JoinData, update: &mut StateUpdate, strength: f32) -> bool {
-    (input_is_pressed(data, InputKind::Jump) && data.physics.on_ground)
+    (input_is_pressed(data, InputKind::Jump) && data.physics.on_ground.is_some())
         .then(|| data.body.jump_impulse())
         .flatten()
         .map(|impulse| {
             update.local_events.push_front(LocalEvent::Jump(
                 data.entity,
-                strength * impulse / data.mass.0,
+                strength * impulse / data.mass.0 * data.stats.move_speed_modifier,
             ));
         })
         .is_some()
@@ -707,6 +743,12 @@ pub fn handle_dodge_input(data: &JoinData, update: &mut StateUpdate) {
             }
         }
     }
+}
+
+pub fn is_strafing(data: &JoinData, update: &StateUpdate) -> bool {
+    // TODO: Don't always check `character.is_aimed()`, allow the frontend to
+    // control whether the player strafes during an aimed `CharacterState`.
+    (update.character.is_aimed() || update.should_strafe) && data.body.can_strafe()
 }
 
 pub fn unwrap_tool_data<'a>(data: &'a JoinData, equip_slot: EquipSlot) -> Option<&'a Tool> {

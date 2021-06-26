@@ -9,6 +9,7 @@ use crate::{
     },
     outcome::Outcome,
     rtsim::RtSimEntity,
+    terrain::SpriteKind,
     trade::{TradeAction, TradeId},
     uid::Uid,
     util::Dir,
@@ -117,7 +118,7 @@ pub enum ServerEvent {
         pos: comp::Pos,
         stats: comp::Stats,
         skill_set: comp::SkillSet,
-        health: comp::Health,
+        health: Option<comp::Health>,
         poise: comp::Poise,
         loadout: comp::inventory::loadout::Loadout,
         body: comp::Body,
@@ -127,6 +128,7 @@ pub enum ServerEvent {
         home_chunk: Option<comp::HomeChunk>,
         drop_item: Option<Item>,
         rtsim_entity: Option<RtSimEntity>,
+        projectile: Option<comp::Projectile>,
     },
     CreateShip {
         pos: comp::Pos,
@@ -139,7 +141,7 @@ pub enum ServerEvent {
     ClientDisconnect(EcsEntity, DisconnectReason),
     ClientDisconnectWithoutPersistence(EcsEntity),
     ChunkRequest(EcsEntity, Vec2<i32>),
-    ChatCmd(EcsEntity, String),
+    Command(EcsEntity, String, Vec<String>),
     /// Send a chat message to the player from an npc or other player
     Chat(comp::UnresolvedChatMsg),
     Aura {
@@ -164,6 +166,7 @@ pub enum ServerEvent {
     },
     // Attempt to mine a block, turning it into an item
     MineBlock {
+        entity: EcsEntity,
         pos: Vec3<i32>,
         tool: Option<comp::tool::ToolKind>,
     },
@@ -178,6 +181,10 @@ pub enum ServerEvent {
     },
     Sound {
         sound: Sound,
+    },
+    CreateSprite {
+        pos: Vec3<i32>,
+        sprite: SpriteKind,
     },
 }
 

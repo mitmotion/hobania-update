@@ -13,8 +13,8 @@ use entity_manipulation::{
 use group_manip::handle_group;
 use information::handle_site_info;
 use interaction::{
-    handle_lantern, handle_mine_block, handle_mount, handle_npc_interaction, handle_possess,
-    handle_sound, handle_unmount,
+    handle_create_sprite, handle_lantern, handle_mine_block, handle_mount, handle_npc_interaction,
+    handle_possess, handle_sound, handle_unmount,
 };
 use inventory_manip::handle_inventory;
 use invite::{handle_invite, handle_invite_response};
@@ -51,7 +51,7 @@ impl Server {
         let mut frontend_events = Vec::new();
 
         let mut requested_chunks = Vec::new();
-        let mut chat_commands = Vec::new();
+        let mut commands = Vec::new();
         let mut chat_messages = Vec::new();
 
         let events = self
@@ -147,6 +147,7 @@ impl Server {
                     home_chunk,
                     drop_item,
                     rtsim_entity,
+                    projectile,
                 } => handle_create_npc(
                     self,
                     pos,
@@ -162,6 +163,7 @@ impl Server {
                     drop_item,
                     home_chunk,
                     rtsim_entity,
+                    projectile,
                 ),
                 ServerEvent::CreateShip {
                     pos,
@@ -186,8 +188,8 @@ impl Server {
                 ServerEvent::ChunkRequest(entity, key) => {
                     requested_chunks.push((entity, key));
                 },
-                ServerEvent::ChatCmd(entity, cmd) => {
-                    chat_commands.push((entity, cmd));
+                ServerEvent::Command(entity, name, args) => {
+                    commands.push((entity, name, args));
                 },
                 ServerEvent::Chat(msg) => {
                     chat_messages.push(msg);
@@ -207,7 +209,9 @@ impl Server {
                     handle_combo_change(&self, entity, change)
                 },
                 ServerEvent::RequestSiteInfo { entity, id } => handle_site_info(&self, entity, id),
-                ServerEvent::MineBlock { pos, tool } => handle_mine_block(self, pos, tool),
+                ServerEvent::MineBlock { entity, pos, tool } => {
+                    handle_mine_block(self, entity, pos, tool)
+                },
                 ServerEvent::TeleportTo {
                     entity,
                     target,
@@ -217,6 +221,9 @@ impl Server {
                     self.state.create_safezone(range, pos).build();
                 },
                 ServerEvent::Sound { sound } => handle_sound(self, &sound),
+                ServerEvent::CreateSprite { pos, sprite } => {
+                    handle_create_sprite(self, pos, sprite)
+                },
             }
         }
 
@@ -225,8 +232,8 @@ impl Server {
             self.generate_chunk(entity, key);
         }
 
-        for (entity, cmd) in chat_commands {
-            self.process_chat_cmd(entity, cmd);
+        for (entity, name, args) in commands {
+            self.process_command(entity, name, args);
         }
 
         for msg in chat_messages {

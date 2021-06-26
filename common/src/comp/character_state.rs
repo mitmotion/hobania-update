@@ -2,7 +2,7 @@ use crate::{
     combat::Attack,
     comp::{tool::ToolKind, Density, Energy, InputAttr, InputKind, Ori, Pos, Vel},
     event::{LocalEvent, ServerEvent},
-    states::{behavior::JoinData, *},
+    states::{behavior::JoinData, utils::StageSection, *},
 };
 use serde::{Deserialize, Serialize};
 use specs::{Component, DerefFlaggedStorage, VecStorage};
@@ -19,6 +19,7 @@ pub struct StateUpdate {
     pub density: Density,
     pub energy: Energy,
     pub swap_equipped_weapons: bool,
+    pub should_strafe: bool,
     pub queued_inputs: BTreeMap<InputKind, InputAttr>,
     pub removed_inputs: Vec<InputKind>,
     pub local_events: VecDeque<LocalEvent>,
@@ -34,6 +35,7 @@ impl From<&JoinData<'_>> for StateUpdate {
             density: *data.density,
             energy: *data.energy,
             swap_equipped_weapons: false,
+            should_strafe: data.inputs.strafing,
             character: data.character.clone(),
             queued_inputs: BTreeMap::new(),
             removed_inputs: Vec::new(),
@@ -101,6 +103,8 @@ pub enum CharacterState {
     BasicSummon(basic_summon::Data),
     /// Inserts a buff on the caster
     SelfBuff(self_buff::Data),
+    /// Creates sprites around the caster
+    SpriteSummon(sprite_summon::Data),
 }
 
 impl CharacterState {
@@ -123,6 +127,9 @@ impl CharacterState {
                 | CharacterState::BasicAura(_)
                 | CharacterState::HealingBeam(_)
                 | CharacterState::SelfBuff(_)
+                | CharacterState::Blink(_)
+                | CharacterState::BasicSummon(_)
+                | CharacterState::SpriteSummon(_)
         )
     }
 
@@ -147,6 +154,9 @@ impl CharacterState {
                 | CharacterState::BasicAura(_)
                 | CharacterState::HealingBeam(_)
                 | CharacterState::SelfBuff(_)
+                | CharacterState::Blink(_)
+                | CharacterState::BasicSummon(_)
+                | CharacterState::SpriteSummon(_)
         )
     }
 
@@ -195,6 +205,15 @@ impl CharacterState {
     }
 
     pub fn is_stunned(&self) -> bool { matches!(self, CharacterState::Stunned(_)) }
+
+    pub fn is_forced_movement(&self) -> bool {
+        matches!(self,
+            CharacterState::ComboMelee(s) if s.stage_section == StageSection::Swing)
+            || matches!(self, CharacterState::DashMelee(s) if s.stage_section == StageSection::Charge)
+            || matches!(self, CharacterState::LeapMelee(s) if s.stage_section == StageSection::Movement)
+            || matches!(self, CharacterState::SpinMelee(s) if s.stage_section == StageSection::Swing)
+            || matches!(self, CharacterState::Roll(s) if s.stage_section == StageSection::Movement)
+    }
 
     /// Compares for shallow equality (does not check internal struct equality)
     pub fn same_variant(&self, other: &Self) -> bool {

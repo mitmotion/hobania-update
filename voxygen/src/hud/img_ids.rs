@@ -78,6 +78,9 @@ image_ids! {
         hammer: "voxygen.element.weapons.hammer",
         bow: "voxygen.element.weapons.bow",
         staff: "voxygen.element.weapons.staff",
+        mining: "voxygen.element.weapons.mining",
+        pickaxe: "voxygen.element.skills.pickaxe",
+        pickaxe_ico: "voxygen.element.weapons.pickaxe",
         lock: "voxygen.element.ui.diary.buttons.lock",
         wpn_icon_border_skills: "voxygen.element.ui.diary.buttons.border_skills",
         wpn_icon_border: "voxygen.element.ui.generic.buttons.border",
@@ -302,6 +305,10 @@ image_ids! {
         utility_radius_skill: "voxygen.element.skills.skilltree.utility_radius",
         utility_speed_skill: "voxygen.element.skills.skilltree.utility_speed",
         utility_duration_skill: "voxygen.element.skills.skilltree.utility_duration",
+
+        pickaxe_speed_skill: "voxygen.element.skills.pickaxe_speed",
+        pickaxe_oregain_skill: "voxygen.element.skills.pickaxe_oregain",
+        pickaxe_gemgain_skill: "voxygen.element.skills.pickaxe_gemgain",
 
         // Skillbar
         level_up: "voxygen.element.ui.skillbar.level_up",
@@ -588,6 +595,8 @@ image_ids! {
         debuff_burning_0: "voxygen.element.de_buffs.debuff_burning_0",
         debuff_crippled_0: "voxygen.element.de_buffs.debuff_cripple_0",
         debuff_frozen_0: "voxygen.element.de_buffs.debuff_frozen_0",
+        debuff_wet_0: "voxygen.element.de_buffs.debuff_wet_0",
+        debuff_ensnared_0: "voxygen.element.de_buffs.debuff_ensnared_0",
 
         // Animation Frames
         // Buff Frame

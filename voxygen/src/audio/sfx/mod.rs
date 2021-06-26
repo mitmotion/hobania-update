@@ -91,11 +91,12 @@ use client::Client;
 use common::{
     assets::{self, AssetExt, AssetHandle},
     comp::{
-        beam,
+        beam, biped_large, biped_small, humanoid,
         item::{ItemKind, ToolKind},
         object,
         poise::PoiseState,
-        Body, CharacterAbilityType, InventoryUpdateEvent,
+        quadruped_low, quadruped_medium, quadruped_small, Body, CharacterAbilityType,
+        InventoryUpdateEvent, UtteranceKind,
     },
     outcome::Outcome,
     terrain::{BlockKind, TerrainChunk},
@@ -105,7 +106,7 @@ use event_mapper::SfxEventMapper;
 use hashbrown::HashMap;
 use rand::prelude::*;
 use serde::Deserialize;
-use tracing::warn;
+use tracing::{debug, warn};
 use vek::*;
 
 /// We watch the states of nearby entities in order to emit SFX at their
@@ -182,6 +183,90 @@ pub enum SfxEvent {
     FlameThrower,
     PoiseChange(PoiseState),
     GroundSlam,
+    Utterance(UtteranceKind, VoiceKind),
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Hash, Eq)]
+pub enum VoiceKind {
+    HumanFemale,
+    HumanMale,
+    BipedLarge,
+    Wendigo,
+    Reptile,
+    Bird,
+    Critter,
+    Sheep,
+    Pig,
+    Cow,
+    Canine,
+    Lion,
+    Mindflayer,
+    Marlin,
+    Maneater,
+    Adlet,
+    Antelope,
+    Alligator,
+    Saurok,
+    Cat,
+    Goat,
+}
+
+fn body_to_voice(body: &Body) -> Option<VoiceKind> {
+    Some(match body {
+        Body::Humanoid(body) => match &body.body_type {
+            humanoid::BodyType::Female => VoiceKind::HumanFemale,
+            humanoid::BodyType::Male => VoiceKind::HumanMale,
+        },
+        Body::QuadrupedLow(body) => match body.species {
+            quadruped_low::Species::Maneater => VoiceKind::Maneater,
+            quadruped_low::Species::Alligator => VoiceKind::Alligator,
+            _ => return None,
+        },
+        Body::QuadrupedSmall(body) => match body.species {
+            quadruped_small::Species::Sheep => VoiceKind::Sheep,
+            quadruped_small::Species::Pig | quadruped_small::Species::Boar => VoiceKind::Pig,
+            quadruped_small::Species::Cat => VoiceKind::Cat,
+            quadruped_small::Species::Goat => VoiceKind::Goat,
+            _ => VoiceKind::Critter,
+        },
+        Body::QuadrupedMedium(body) => match body.species {
+            quadruped_medium::Species::Saber
+            | quadruped_medium::Species::Tiger
+            | quadruped_medium::Species::Lion
+            | quadruped_medium::Species::Frostfang
+            | quadruped_medium::Species::Snowleopard => VoiceKind::Lion,
+            quadruped_medium::Species::Wolf
+            | quadruped_medium::Species::Roshwalr
+            | quadruped_medium::Species::Tarasque
+            | quadruped_medium::Species::Darkhound
+            | quadruped_medium::Species::Bonerattler
+            | quadruped_medium::Species::Grolgar => VoiceKind::Canine,
+            quadruped_medium::Species::Cattle
+            | quadruped_medium::Species::Catoblepas
+            | quadruped_medium::Species::Highland
+            | quadruped_medium::Species::Yak
+            | quadruped_medium::Species::Moose
+            | quadruped_medium::Species::Dreadhorn => VoiceKind::Cow,
+            quadruped_medium::Species::Antelope => VoiceKind::Antelope,
+            _ => return None,
+        },
+        Body::BirdMedium(_) | Body::BirdLarge(_) => VoiceKind::Bird,
+        Body::BipedSmall(body) => match body.species {
+            biped_small::Species::Adlet => VoiceKind::Adlet,
+            _ => return None,
+        },
+        Body::BipedLarge(body) => match body.species {
+            biped_large::Species::Wendigo => VoiceKind::Wendigo,
+            biped_large::Species::Occultsaurok
+            | biped_large::Species::Mightysaurok
+            | biped_large::Species::Slysaurok => VoiceKind::Saurok,
+            biped_large::Species::Mindflayer => VoiceKind::Mindflayer,
+            _ => VoiceKind::BipedLarge,
+        },
+        Body::Theropod(_) | Body::Dragon(_) => VoiceKind::Reptile,
+        Body::FishSmall(_) | Body::FishMedium(_) => VoiceKind::Marlin,
+        _ => return None,
+    })
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Hash, Eq)]
@@ -329,7 +414,7 @@ impl SfxMgr {
             },
             Outcome::GroundSlam { pos, .. } => {
                 let sfx_trigger_item = triggers.get_key_value(&SfxEvent::GroundSlam);
-                audio.emit_sfx(sfx_trigger_item, *pos, Some(1.0), false);
+                audio.emit_sfx(sfx_trigger_item, *pos, Some(2.0), false);
             },
             Outcome::ProjectileShot { pos, body, .. } => {
                 match body {
@@ -418,15 +503,15 @@ impl SfxMgr {
             },
             Outcome::Damage { pos, .. } => {
                 let sfx_trigger_item = triggers.get_key_value(&SfxEvent::Damage);
-                audio.emit_sfx(sfx_trigger_item, *pos, None, false);
+                audio.emit_sfx(sfx_trigger_item, *pos, Some(1.5), false);
             },
             Outcome::Block { pos, parry, .. } => {
                 if *parry {
                     let sfx_trigger_item = triggers.get_key_value(&SfxEvent::Parry);
-                    audio.emit_sfx(sfx_trigger_item, *pos, Some(2.0), false);
+                    audio.emit_sfx(sfx_trigger_item, *pos, Some(1.5), false);
                 } else {
                     let sfx_trigger_item = triggers.get_key_value(&SfxEvent::Block);
-                    audio.emit_sfx(sfx_trigger_item, *pos, Some(2.0), false);
+                    audio.emit_sfx(sfx_trigger_item, *pos, Some(1.5), false);
                 }
             },
             Outcome::PoiseChange { pos, state, .. } => match state {
@@ -434,23 +519,37 @@ impl SfxMgr {
                 PoiseState::Interrupted => {
                     let sfx_trigger_item =
                         triggers.get_key_value(&SfxEvent::PoiseChange(PoiseState::Interrupted));
-                    audio.emit_sfx(sfx_trigger_item, *pos, None, false);
+                    audio.emit_sfx(sfx_trigger_item, *pos, Some(1.5), false);
                 },
                 PoiseState::Stunned => {
                     let sfx_trigger_item =
                         triggers.get_key_value(&SfxEvent::PoiseChange(PoiseState::Stunned));
-                    audio.emit_sfx(sfx_trigger_item, *pos, None, false);
+                    audio.emit_sfx(sfx_trigger_item, *pos, Some(1.5), false);
                 },
                 PoiseState::Dazed => {
                     let sfx_trigger_item =
                         triggers.get_key_value(&SfxEvent::PoiseChange(PoiseState::Dazed));
-                    audio.emit_sfx(sfx_trigger_item, *pos, None, false);
+                    audio.emit_sfx(sfx_trigger_item, *pos, Some(1.5), false);
                 },
                 PoiseState::KnockedDown => {
                     let sfx_trigger_item =
                         triggers.get_key_value(&SfxEvent::PoiseChange(PoiseState::KnockedDown));
-                    audio.emit_sfx(sfx_trigger_item, *pos, None, false);
+                    audio.emit_sfx(sfx_trigger_item, *pos, Some(1.5), false);
                 },
+            },
+            Outcome::Utterance { pos, kind, body } => {
+                if let Some(voice) = body_to_voice(body) {
+                    let sfx_trigger_item =
+                        triggers.get_key_value(&SfxEvent::Utterance(*kind, voice));
+                    if let Some(sfx_trigger_item) = sfx_trigger_item {
+                        audio.emit_sfx(Some(sfx_trigger_item), *pos, Some(1.5), false);
+                    } else {
+                        debug!(
+                            "No utterance sound effect exists for ({:?}, {:?})",
+                            kind, voice
+                        );
+                    }
+                }
             },
             Outcome::ExpChange { .. }
             | Outcome::ComboChange { .. }

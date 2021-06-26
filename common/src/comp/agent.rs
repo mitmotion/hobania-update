@@ -1,5 +1,5 @@
 use crate::{
-    comp::{humanoid, quadruped_low, quadruped_medium, quadruped_small, ship, Body},
+    comp::{humanoid, quadruped_low, quadruped_medium, quadruped_small, ship, Body, UtteranceKind},
     path::Chaser,
     rtsim::RtSimController,
     trade::{PendingTrade, ReducedInventory, SiteId, SitePrices, TradeId, TradeResult},
@@ -30,6 +30,12 @@ pub enum Alignment {
     Owned(Uid),
     /// Passive objects like training dummies
     Passive,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum Mark {
+    Merchant,
+    Guard,
 }
 
 impl Alignment {
@@ -90,7 +96,7 @@ bitflags::bitflags! {
 
 /// # Behavior Component
 /// This component allow an Entity to register one or more behavior tags.
-/// These tags act as flags of what an Entity can do, or what it is doing.  
+/// These tags act as flags of what an Entity can do, or what it is doing.
 /// Behaviors Tags can be added and removed as the Entity lives, to update its
 /// state when needed
 #[derive(Default, Copy, Clone, Debug)]
@@ -111,7 +117,7 @@ impl From<BehaviorCapability> for Behavior {
 }
 
 impl Behavior {
-    /// Builder function  
+    /// Builder function
     /// Set capabilities if Option is Some
     pub fn maybe_with_capabilities(
         mut self,
@@ -212,6 +218,8 @@ impl<'a> From<&'a Body> for Psyche {
                     quadruped_medium::Species::Darkhound => 0.9,
                     quadruped_medium::Species::Dreadhorn => 0.8,
                     quadruped_medium::Species::Snowleopard => 0.7,
+                    quadruped_medium::Species::Llama => 0.6,
+                    quadruped_medium::Species::Alpaca => 0.6,
                     _ => 0.5,
                 },
                 Body::QuadrupedLow(quadruped_low) => match quadruped_low.species {
@@ -255,6 +263,7 @@ pub enum AgentEvent {
         )>,
     ),
     ServerSound(Sound),
+    Hurt,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -291,6 +300,7 @@ pub enum SoundKind {
     Explosion,
     Beam,
     Shockwave,
+    Utterance(UtteranceKind, Body),
 }
 
 #[derive(Clone, Debug)]

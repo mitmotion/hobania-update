@@ -34,6 +34,7 @@ pub struct Colors {
     pub cave_roof: (u8, u8, u8),
     pub dirt: (u8, u8, u8),
     pub scaffold: (u8, u8, u8),
+    pub lava: (u8, u8, u8),
     pub vein: (u8, u8, u8),
 }
 
@@ -210,12 +211,14 @@ pub fn apply_caves_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             //make pits
             for z in cave_base - pit_depth..cave_base {
                 if pit_condition && (cave_roof - cave_base) > 10 {
+                    let kind = if z < (cave_base - pit_depth) + (3 * pit_depth / 4) {
+                        BlockKind::Lava
+                    } else {
+                        BlockKind::Air
+                    };
                     canvas.set(
                         Vec3::new(wpos2d.x, wpos2d.y, z),
-                        Block::new(
-                            BlockKind::Air,
-                            noisy_color(info.index().colors.layer.scaffold.into(), 8),
-                        ),
+                        Block::new(kind, noisy_color(info.index().colors.layer.lava.into(), 8)),
                     );
                 }
             }
@@ -328,7 +331,7 @@ pub fn apply_caves_to(canvas: &mut Canvas, rng: &mut impl Rng) {
 
             // Scatter things in caves
             if cave_depth > 40.0 && cave_depth < 80.0 {
-                if rng.gen::<f32>() < 0.2 * (cave_x.max(0.5).powf(4.0)) && !vein_condition {
+                if rng.gen::<f32>() < 0.14 * (cave_x.max(0.5).powf(4.0)) && !vein_condition {
                     let kind =
                         *Lottery::<SpriteKind>::load_expect("common.cave_scatter.shallow_floor")
                             .read()
@@ -349,7 +352,7 @@ pub fn apply_caves_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                     );
                 }
             } else if cave_depth < 200.0 && cave_depth > 80.0 {
-                if rng.gen::<f32>() < 0.12 * (cave_x.max(0.5).powf(4.0)) && !vein_condition {
+                if rng.gen::<f32>() < 0.065 * (cave_x.max(0.5).powf(4.0)) && !vein_condition {
                     let kind =
                         *Lottery::<SpriteKind>::load_expect("common.cave_scatter.deep_floor")
                             .read()
@@ -370,7 +373,7 @@ pub fn apply_caves_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                     );
                 }
             } else {
-                if rng.gen::<f32>() < 0.12 * (cave_x.max(0.5).powf(4.0))
+                if rng.gen::<f32>() < 0.08 * (cave_x.max(0.5).powf(4.0))
                     && cave_depth > 40.0
                     && !vein_condition
                 {
@@ -439,62 +442,70 @@ pub fn apply_caves_supplement<'a>(
                 let cave_depth = (col_sample.alt - cave.alt).max(0.0); //slightly different from earlier cave depth?
 
                 // Scatter things in caves
-                if RandomField::new(index.seed).chance(wpos2d.into(), 0.0018)
-                    && cave_base < surface_z as i32 - 40
-                {
-                    let is_hostile: bool;
-                    let entity = EntityInfo::at(Vec3::new(
-                        wpos2d.x as f32,
-                        wpos2d.y as f32,
-                        cave_base as f32,
-                    ))
-                    .with_body(if cave_depth < 70.0 {
-                        is_hostile = false;
-                        let species = match dynamic_rng.gen_range(0..4) {
-                            0 => comp::quadruped_small::Species::Truffler,
-                            1 => comp::quadruped_small::Species::Dodarock,
-                            2 => comp::quadruped_small::Species::Holladon,
-                            _ => comp::quadruped_small::Species::Batfox,
-                        };
-                        comp::quadruped_small::Body::random_with(dynamic_rng, &species).into()
-                    } else if cave_depth < 120.0 {
-                        is_hostile = true;
-                        let species = match dynamic_rng.gen_range(0..3) {
-                            0 => comp::quadruped_low::Species::Rocksnapper,
-                            1 => comp::quadruped_low::Species::Salamander,
-                            _ => comp::quadruped_low::Species::Asp,
-                        };
-                        comp::quadruped_low::Body::random_with(dynamic_rng, &species).into()
-                    } else if cave_depth < 200.0 {
-                        is_hostile = true;
-                        let species = match dynamic_rng.gen_range(0..3) {
-                            0 => comp::quadruped_low::Species::Rocksnapper,
-                            1 => comp::quadruped_low::Species::Lavadrake,
-                            _ => comp::quadruped_low::Species::Basilisk,
-                        };
-                        comp::quadruped_low::Body::random_with(dynamic_rng, &species).into()
-                    } else {
-                        is_hostile = true;
-                        let species = match dynamic_rng.gen_range(0..5) {
-                            0 => comp::biped_large::Species::Ogre,
-                            1 => comp::biped_large::Species::Cyclops,
-                            2 => comp::biped_large::Species::Wendigo,
-                            3 => match dynamic_rng.gen_range(0..2) {
-                                0 => comp::biped_large::Species::Blueoni,
-                                _ => comp::biped_large::Species::Redoni,
-                            },
-                            _ => comp::biped_large::Species::Troll,
-                        };
-                        comp::biped_large::Body::random_with(dynamic_rng, &species).into()
+                if let Some(z) = (-4..8).map(|z| cave_base + z).find(|z| {
+                    (0..2).all(|z_offs| {
+                        vol.get(offs.with_z(z + z_offs))
+                            .map_or(true, |b| b.is_fluid())
                     })
-                    .with_alignment(if is_hostile {
-                        comp::Alignment::Enemy
-                    } else {
-                        comp::Alignment::Wild
-                    })
-                    .with_automatic_name();
+                }) {
+                    if RandomField::new(index.seed).chance(wpos2d.into(), 0.0014)
+                        && cave_base < surface_z as i32 - 40
+                    {
+                        let is_hostile: bool;
+                        let entity =
+                            EntityInfo::at(Vec3::new(wpos2d.x as f32, wpos2d.y as f32, z as f32))
+                                .with_body(if cave_depth < 70.0 {
+                                    is_hostile = false;
+                                    let species = match dynamic_rng.gen_range(0..4) {
+                                        0 => comp::quadruped_small::Species::Truffler,
+                                        1 => comp::quadruped_small::Species::Dodarock,
+                                        2 => comp::quadruped_small::Species::Holladon,
+                                        _ => comp::quadruped_small::Species::Batfox,
+                                    };
+                                    comp::quadruped_small::Body::random_with(dynamic_rng, &species)
+                                        .into()
+                                } else if cave_depth < 120.0 {
+                                    is_hostile = true;
+                                    let species = match dynamic_rng.gen_range(0..3) {
+                                        0 => comp::quadruped_low::Species::Rocksnapper,
+                                        1 => comp::quadruped_low::Species::Salamander,
+                                        _ => comp::quadruped_low::Species::Asp,
+                                    };
+                                    comp::quadruped_low::Body::random_with(dynamic_rng, &species)
+                                        .into()
+                                } else if cave_depth < 190.0 {
+                                    is_hostile = true;
+                                    let species = match dynamic_rng.gen_range(0..3) {
+                                        0 => comp::quadruped_low::Species::Rocksnapper,
+                                        1 => comp::quadruped_low::Species::Lavadrake,
+                                        _ => comp::quadruped_low::Species::Basilisk,
+                                    };
+                                    comp::quadruped_low::Body::random_with(dynamic_rng, &species)
+                                        .into()
+                                } else {
+                                    is_hostile = true;
+                                    let species = match dynamic_rng.gen_range(0..5) {
+                                        0 => comp::biped_large::Species::Ogre,
+                                        1 => comp::biped_large::Species::Cyclops,
+                                        2 => comp::biped_large::Species::Wendigo,
+                                        3 => match dynamic_rng.gen_range(0..2) {
+                                            0 => comp::biped_large::Species::Blueoni,
+                                            _ => comp::biped_large::Species::Redoni,
+                                        },
+                                        _ => comp::biped_large::Species::Cavetroll,
+                                    };
+                                    comp::biped_large::Body::random_with(dynamic_rng, &species)
+                                        .into()
+                                })
+                                .with_alignment(if is_hostile {
+                                    comp::Alignment::Enemy
+                                } else {
+                                    comp::Alignment::Wild
+                                })
+                                .with_automatic_name();
 
-                    supplement.add_entity(entity);
+                        supplement.add_entity(entity);
+                    }
                 }
             }
         }

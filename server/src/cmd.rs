@@ -43,6 +43,7 @@ use hashbrown::{HashMap, HashSet};
 use humantime::Duration as HumanDuration;
 use rand::Rng;
 use specs::{storage::StorageEntry, Builder, Entity as EcsEntity, Join, WorldExt};
+use std::str::FromStr;
 use vek::*;
 use wiring::{Circuit, Wire, WiringAction, WiringActionEffect, WiringElement};
 use world::util::Sampler;
@@ -52,11 +53,15 @@ use scan_fmt::{scan_fmt, scan_fmt_some};
 use tracing::{error, info, warn};
 
 pub trait ChatCommandExt {
-    fn execute(&self, server: &mut Server, entity: EcsEntity, args: String);
+    fn execute(&self, server: &mut Server, entity: EcsEntity, args: Vec<String>);
 }
 impl ChatCommandExt for ChatCommand {
     #[allow(clippy::needless_return)] // TODO: Pending review in #587
-    fn execute(&self, server: &mut Server, entity: EcsEntity, args: String) {
+    fn execute(&self, server: &mut Server, entity: EcsEntity, args: Vec<String>) {
+        // TODO: Pass arguments to commands as Vec<String>, not String, to support
+        // proper parsing.
+        let args = args.join(" ");
+
         if let Err(err) = do_command(server, entity, entity, args, self) {
             server.notify_client(
                 entity,
@@ -101,6 +106,7 @@ fn do_command(
             cmd.keyword()
         ));
     }
+
     let handler: CommandHandler = match cmd {
         ChatCommand::Adminify => handle_adminify,
         ChatCommand::Airship => handle_spawn_airship,
@@ -510,7 +516,7 @@ fn handle_make_block(
     action: &ChatCommand,
 ) -> CmdResult<()> {
     if let Some(block_name) = scan_fmt_some!(&args, &action.arg_fmt(), String) {
-        if let Ok(bk) = BlockKind::try_from(block_name.as_str()) {
+        if let Ok(bk) = BlockKind::from_str(block_name.as_str()) {
             let pos = position(server, target, "target")?;
             server.state.set_block(
                 pos.0.map(|e| e.floor() as i32),
@@ -1005,7 +1011,7 @@ fn handle_spawn(
                 );
 
                 let body = body();
-                let loadout = LoadoutBuilder::build_loadout(body, None, None, None).build();
+                let loadout = LoadoutBuilder::from_default(&body).build();
                 let inventory = Inventory::new_with_loadout(loadout);
 
                 let mut entity_base = server
@@ -1014,7 +1020,7 @@ fn handle_spawn(
                         pos,
                         comp::Stats::new(get_npc_name(id, npc::BodyType::from_body(body))),
                         comp::SkillSet::default(),
-                        comp::Health::new(body, 1),
+                        Some(comp::Health::new(body, 1)),
                         comp::Poise::new(body),
                         inventory,
                         body,
@@ -1116,7 +1122,7 @@ fn handle_spawn_training_dummy(
             pos,
             stats,
             skill_set,
-            health,
+            Some(health),
             poise,
             Inventory::new_empty(),
             body,
@@ -1615,6 +1621,8 @@ fn handle_kit(
                                     comp::InventoryUpdate::new(comp::InventoryUpdateEvent::Debug),
                                 ),
                             );
+                        } else {
+                            warn!("Unknown item: {}", &item_id);
                         }
                     }
                     Ok(())
@@ -2608,6 +2616,7 @@ fn parse_skill_tree(skill_tree: &str) -> CmdResult<comp::skills::SkillGroupKind>
         "bow" => Ok(SkillGroupKind::Weapon(ToolKind::Bow)),
         "staff" => Ok(SkillGroupKind::Weapon(ToolKind::Staff)),
         "sceptre" => Ok(SkillGroupKind::Weapon(ToolKind::Sceptre)),
+        "mining" => Ok(SkillGroupKind::Weapon(ToolKind::Pick)),
         _ => Err(format!("{} is not a skill group!", skill_tree)),
     }
 }

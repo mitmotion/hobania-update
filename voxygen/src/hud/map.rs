@@ -194,6 +194,7 @@ impl<'a> Widget for Map<'a> {
 
     #[allow(clippy::useless_format)] // TODO: Pending review in #587
     fn update(self, args: widget::UpdateArgs<Self>) -> Self::Event {
+        common_base::prof_span!("Map::update");
         let widget::UpdateArgs { state, ui, .. } = args;
         let zoom = self.global_state.settings.interface.map_zoom * 0.8;
         let show_difficulty = self.global_state.settings.interface.map_show_difficulty;
@@ -327,7 +328,9 @@ impl<'a> Widget for Map<'a> {
             .sum();
         // Drag represents offset of view from the player_pos in chunk coords
         let drag_new = drag + dragged / map_size / zoom * max_zoom;
-        events.push(Event::SettingsChange(MapDrag(drag_new)));
+        if drag_new != drag {
+            events.push(Event::SettingsChange(MapDrag(drag_new)));
+        }
 
         let rect_src = position::Rect::from_xy_dim(
             [
@@ -392,10 +395,12 @@ impl<'a> Widget for Map<'a> {
             .scrolls()
             .map(|scroll| scroll.y)
             .sum();
-        let new_zoom_lvl = (self.global_state.settings.interface.map_zoom
-            * (scrolled * 0.05 * -1.0).exp2())
-        .clamped(1.25, max_zoom / 64.0);
-        events.push(Event::SettingsChange(MapZoom(new_zoom_lvl as f64)));
+        if scrolled != 0.0 {
+            let new_zoom_lvl = (self.global_state.settings.interface.map_zoom
+                * (scrolled * 0.05 * -1.0).exp2())
+            .clamped(1.25, max_zoom / 64.0);
+            events.push(Event::SettingsChange(MapZoom(new_zoom_lvl as f64)));
+        }
         // Icon settings
         // Alignment
         Rectangle::fill_with([150.0, 200.0], color::TRANSPARENT)

@@ -96,6 +96,18 @@ pub enum GroupManip {
     AssignLeader(Uid),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum UtteranceKind {
+    Calm,
+    Angry,
+    Surprised,
+    Hurt,
+    Greeting,
+    /* Death,
+     * TODO: Wait for more post-death features (i.e. animiations) before implementing death
+     * sounds */
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ControlEvent {
     //ToggleLantern,
@@ -111,6 +123,7 @@ pub enum ControlEvent {
     GroupManip(GroupManip),
     RemoveBuff(BuffKind),
     Respawn,
+    Utterance(UtteranceKind),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -186,6 +199,10 @@ pub struct ControllerInputs {
                       * limits) */
     pub look_dir: Dir,
     pub select_pos: Option<Vec3<f32>>,
+    /// Attempt to enable strafing.
+    /// Currently, setting this to false will *not* disable strafing during a
+    /// wielding character state.
+    pub strafing: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -198,6 +215,20 @@ pub struct Controller {
 }
 
 impl ControllerInputs {
+    /// Sanitize inputs to avoid clients sending bad data.
+    pub fn sanitize(&mut self) {
+        self.move_dir = if self.move_dir.map(|e| e.is_finite()).reduce_and() {
+            self.move_dir / self.move_dir.magnitude().max(1.0)
+        } else {
+            Vec2::zero()
+        };
+        self.move_z = if self.move_z.is_finite() {
+            self.move_z.clamped(-1.0, 1.0)
+        } else {
+            0.0
+        };
+    }
+
     /// Updates Controller inputs with new version received from the client
     pub fn update_with_new(&mut self, new: Self) {
         self.climb = new.climb;

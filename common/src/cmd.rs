@@ -127,7 +127,7 @@ lazy_static! {
         .iter()
         .map(|s| s.to_string())
         .collect();
-    static ref SKILL_TREES: Vec<String> = vec!["general", "sword", "axe", "hammer", "bow", "staff", "sceptre"]
+    static ref SKILL_TREES: Vec<String> = vec!["general", "sword", "axe", "hammer", "bow", "staff", "sceptre", "mining"]
         .iter()
         .map(|s| s.to_string())
         .collect();
@@ -197,6 +197,7 @@ lazy_static! {
             BuffKind::Crippled => "crippled",
             BuffKind::Frozen => "frozen",
             BuffKind::Wet => "wet",
+            BuffKind::Ensnared => "ensnared",
         };
         let mut buff_parser = HashMap::new();
         BuffKind::iter().for_each(|kind| {buff_parser.insert(string_from_buff(kind).to_string(), kind);});
@@ -217,9 +218,8 @@ lazy_static! {
         buff_pack
     };
 
-    static ref BLOCK_KINDS: Vec<String> = terrain::block::BLOCK_KINDS
-        .keys()
-        .cloned()
+    static ref BLOCK_KINDS: Vec<String> = terrain::block::BlockKind::iter()
+        .map(|bk| bk.to_string())
         .collect();
 
     static ref SPRITE_KINDS: Vec<String> = terrain::sprite::SPRITE_KINDS
@@ -239,7 +239,7 @@ lazy_static! {
                 if path.is_dir(){
                     list_items(&path, &base, &mut items)?;
                 } else if let Ok(path) = path.strip_prefix(base) {
-                    let path = path.to_string_lossy().trim_end_matches(".ron").replace('/', ".");
+                    let path = path.to_string_lossy().trim_end_matches(".ron").replace('/', ".").replace('\\', ".");
                     items.push(path);
                 }
             }
@@ -295,7 +295,11 @@ impl ChatCommand {
                 "Spawns an airship",
                 Some(Admin),
             ),
-            ChatCommand::Alias => cmd(vec![Any("name", Required)], "Change your alias", None),
+            ChatCommand::Alias => cmd(
+                vec![Any("name", Required)],
+                "Change your alias",
+                Some(Moderator),
+            ),
             ChatCommand::ApplyBuff => cmd(
                 vec![
                     Enum("buff", BUFFS.clone(), Required),

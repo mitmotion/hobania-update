@@ -437,6 +437,7 @@ impl<'a> Widget for MiniMap<'a> {
     fn style(&self) -> Self::Style { () }
 
     fn update(self, args: widget::UpdateArgs<Self>) -> Self::Event {
+        common_base::prof_span!("Minimap::update");
         let mut events = Vec::new();
 
         let widget::UpdateArgs { state, ui, .. } = args;
@@ -514,6 +515,7 @@ impl<'a> Widget for MiniMap<'a> {
                 // Set the image dimensions here, rather than recomputing each time.
                 zoom = min_zoom.max(zoom / ZOOM_FACTOR);
                 // set_image_dims(zoom);
+                events.push(Event::SettingsChange(MinimapZoom(zoom)));
             }
             if Button::image(self.imgs.mmap_plus)
                 .w_h(18.0 * SCALE, 18.0 * SCALE)
@@ -528,6 +530,7 @@ impl<'a> Widget for MiniMap<'a> {
             {
                 zoom = min_zoom.max(zoom * ZOOM_FACTOR);
                 // set_image_dims(zoom);
+                events.push(Event::SettingsChange(MinimapZoom(zoom)));
             }
 
             // Always northfacing button
@@ -554,8 +557,6 @@ impl<'a> Widget for MiniMap<'a> {
             {
                 events.push(Event::SettingsChange(MinimapFaceNorth(!is_facing_north)));
             }
-
-            events.push(Event::SettingsChange(MinimapZoom(zoom)));
 
             // Coordinates
             let player_pos = self

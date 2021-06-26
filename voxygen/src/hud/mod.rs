@@ -88,7 +88,7 @@ use common::{
     util::srgba_to_linear,
     vol::RectRasterableVol,
 };
-use common_base::span;
+use common_base::{prof_span, span};
 use common_net::{
     msg::{world_msg::SiteId, Notification, PresenceKind},
     sync::WorldSyncExt,
@@ -98,7 +98,7 @@ use conrod_core::{
     widget::{self, Button, Image, Text},
     widget_ids, Color, Colorable, Labelable, Positionable, Sizeable, Widget,
 };
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 use rand::Rng;
 use specs::{Entity as EcsEntity, Join, WorldExt};
 use std::{
@@ -211,6 +211,7 @@ widget_ids! {
         player_rank_up_icon,
         sct_exp_bgs[],
         sct_exps[],
+        sct_exp_icons[],
         sct_lvl_bg,
         sct_lvl,
         hurt_bg,
@@ -238,6 +239,7 @@ widget_ids! {
         num_lights,
         num_figures,
         num_particles,
+        graphics_backend,
         gpu_timings[],
 
         // Game Version
@@ -324,6 +326,7 @@ pub struct ExpFloater {
     pub exp_change: i32,
     pub timer: f32,
     pub rand_offset: (f32, f32),
+    pub xp_pools: HashSet<SkillGroupKind>,
 }
 
 pub struct SkillPointGain {
@@ -372,6 +375,7 @@ pub struct HudInfo {
 #[derive(Clone)]
 pub enum Event {
     SendMessage(String),
+    SendCommand(String, Vec<String>),
 
     CharacterSelection,
     UseSlot {
@@ -973,6 +977,8 @@ impl Hud {
         let key_layout = &global_state.window.key_layout;
 
         if self.show.ingame {
+            prof_span!("ingame elements");
+
             let ecs = client.state().ecs();
             let pos = ecs.read_storage::<comp::Pos>();
             let stats = ecs.read_storage::<comp::Stats>();
@@ -1252,7 +1258,11 @@ impl Hud {
                             &mut self.ids.player_scts,
                             &mut ui_widgets.widget_id_generator(),
                         );
-                        // Increase font size based on fraction of maximum health
+                        /*let player_sct_icon_id = player_sct_id_walker.next(
+                            &mut self.ids.player_scts,
+                            &mut ui_widgets.widget_id_generator(),
+                        );*/
+                        // Increase font size based on fraction of maximum Experience
                         // "flashes" by having a larger size in the first 100ms
                         let font_size_xp =
                             30 + ((floater.exp_change as f32 / 300.0).min(1.0) * 50.0) as u32;
@@ -1266,6 +1276,7 @@ impl Hud {
                         };
 
                         if floater.exp_change > 0 {
+                            let xp_pool = &floater.xp_pools;
                             // Don't show 0 Exp
                             Text::new(&format!("{} Exp", floater.exp_change.max(1)))
                                 .font_size(font_size_xp)
@@ -1280,12 +1291,25 @@ impl Hud {
                             Text::new(&format!("{} Exp", floater.exp_change.max(1)))
                                 .font_size(font_size_xp)
                                 .font_id(self.fonts.cyri.conrod_id)
-                                .color(Color::Rgba(0.59, 0.41, 0.67, fade))
+                                .color(
+                                    if xp_pool.contains(&SkillGroupKind::Weapon(ToolKind::Pick)) {
+                                        Color::Rgba(0.18, 0.32, 0.9, fade)
+                                    } else {
+                                        Color::Rgba(0.59, 0.41, 0.67, fade)
+                                    },
+                                )
                                 .x_y(
                                     ui_widgets.win_w * (0.5 * floater.rand_offset.0 as f64 - 0.25),
                                     ui_widgets.win_h * (0.15 * floater.rand_offset.1 as f64) + y,
                                 )
                                 .set(player_sct_id, ui_widgets);
+                            // Exp Source Image (TODO: fix widget id crash)
+                            /*if xp_pool.contains(&SkillGroupKind::Weapon(ToolKind::Pick)) {
+                                Image::new(self.imgs.pickaxe_ico)
+                                    .w_h(font_size_xp as f64, font_size_xp as f64)
+                                    .left_from(player_sct_id, 5.0)
+                                    .set(player_sct_icon_id, ui_widgets);
+                            }*/
                         }
                     }
                 }
@@ -1353,6 +1377,7 @@ impl Hud {
                             Weapon(ToolKind::Sceptre) => &i18n.get("common.weapons.sceptre"),
                             Weapon(ToolKind::Bow) => &i18n.get("common.weapons.bow"),
                             Weapon(ToolKind::Staff) => &i18n.get("common.weapons.staff"),
+                            Weapon(ToolKind::Pick) => &i18n.get("common.tool.mining"),
                             _ => "Unknown",
                         };
                         Text::new(skill)
@@ -1377,6 +1402,7 @@ impl Hud {
                             Weapon(ToolKind::Sceptre) => self.imgs.sceptre,
                             Weapon(ToolKind::Bow) => self.imgs.bow,
                             Weapon(ToolKind::Staff) => self.imgs.staff,
+                            Weapon(ToolKind::Pick) => self.imgs.mining,
                             _ => self.imgs.swords_crossed,
                         })
                         .w_h(20.0, 20.0)
@@ -1888,63 +1914,65 @@ impl Hud {
 
         // Temporary Example Quest
         let arrow_ani = (self.pulse * 4.0/* speed factor */).cos() * 0.5 + 0.8; //Animation timer
+        let show_intro = self.show.intro; // borrow check doesn't understand closures
         if let Some(toggle_cursor_key) = global_state
             .settings
             .controls
             .get_binding(GameInput::ToggleCursor)
+            .filter(|_| !show_intro)
         {
-            if !self.show.intro {
-                match global_state.settings.interface.intro_show {
-                    Intro::Show => {
-                        if Button::image(self.imgs.button)
-                            .w_h(150.0, 40.0)
-                            .hover_image(self.imgs.button_hover)
-                            .press_image(self.imgs.button_press)
-                            .bottom_left_with_margins_on(ui_widgets.window, 200.0, 120.0)
-                            .label(&i18n.get("hud.tutorial_btn"))
-                            .label_font_id(self.fonts.cyri.conrod_id)
-                            .label_font_size(self.fonts.cyri.scale(18))
-                            .label_color(TEXT_COLOR)
-                            .label_y(conrod_core::position::Relative::Scalar(2.0))
-                            .image_color(ENEMY_HP_COLOR)
-                            .set(self.ids.intro_button, ui_widgets)
-                            .was_clicked()
-                        {
-                            self.show.intro = true;
-                            self.show.want_grab = true;
-                        }
-                        Image::new(self.imgs.sp_indicator_arrow)
-                            .w_h(20.0, 11.0)
-                            .mid_top_with_margin_on(self.ids.intro_button, -20.0 + arrow_ani as f64)
-                            .color(Some(QUALITY_LEGENDARY))
-                            .set(self.ids.tut_arrow, ui_widgets);
-                        Text::new(&i18n.get("hud.tutorial_click_here").replace(
-                            "{key}",
-                            toggle_cursor_key.display_string(key_layout).as_str(),
-                        ))
-                        .mid_top_with_margin_on(self.ids.tut_arrow, -18.0)
-                        .font_id(self.fonts.cyri.conrod_id)
-                        .font_size(self.fonts.cyri.scale(14))
-                        .color(BLACK)
-                        .set(self.ids.tut_arrow_txt_bg, ui_widgets);
-                        Text::new(&i18n.get("hud.tutorial_click_here").replace(
-                            "{key}",
-                            toggle_cursor_key.display_string(key_layout).as_str(),
-                        ))
-                        .bottom_right_with_margins_on(self.ids.tut_arrow_txt_bg, 1.0, 1.0)
-                        .font_id(self.fonts.cyri.conrod_id)
-                        .font_size(self.fonts.cyri.scale(14))
-                        .color(QUALITY_LEGENDARY)
-                        .set(self.ids.tut_arrow_txt, ui_widgets);
-                    },
-                    Intro::Never => {
-                        self.show.intro = false;
-                    },
-                }
+            prof_span!("temporary example quest");
+            match global_state.settings.interface.intro_show {
+                Intro::Show => {
+                    if Button::image(self.imgs.button)
+                        .w_h(150.0, 40.0)
+                        .hover_image(self.imgs.button_hover)
+                        .press_image(self.imgs.button_press)
+                        .bottom_left_with_margins_on(ui_widgets.window, 200.0, 120.0)
+                        .label(&i18n.get("hud.tutorial_btn"))
+                        .label_font_id(self.fonts.cyri.conrod_id)
+                        .label_font_size(self.fonts.cyri.scale(18))
+                        .label_color(TEXT_COLOR)
+                        .label_y(conrod_core::position::Relative::Scalar(2.0))
+                        .image_color(ENEMY_HP_COLOR)
+                        .set(self.ids.intro_button, ui_widgets)
+                        .was_clicked()
+                    {
+                        self.show.intro = true;
+                        self.show.want_grab = true;
+                    }
+                    Image::new(self.imgs.sp_indicator_arrow)
+                        .w_h(20.0, 11.0)
+                        .mid_top_with_margin_on(self.ids.intro_button, -20.0 + arrow_ani as f64)
+                        .color(Some(QUALITY_LEGENDARY))
+                        .set(self.ids.tut_arrow, ui_widgets);
+                    Text::new(&i18n.get("hud.tutorial_click_here").replace(
+                        "{key}",
+                        toggle_cursor_key.display_string(key_layout).as_str(),
+                    ))
+                    .mid_top_with_margin_on(self.ids.tut_arrow, -18.0)
+                    .font_id(self.fonts.cyri.conrod_id)
+                    .font_size(self.fonts.cyri.scale(14))
+                    .color(BLACK)
+                    .set(self.ids.tut_arrow_txt_bg, ui_widgets);
+                    Text::new(&i18n.get("hud.tutorial_click_here").replace(
+                        "{key}",
+                        toggle_cursor_key.display_string(key_layout).as_str(),
+                    ))
+                    .bottom_right_with_margins_on(self.ids.tut_arrow_txt_bg, 1.0, 1.0)
+                    .font_id(self.fonts.cyri.conrod_id)
+                    .font_size(self.fonts.cyri.scale(14))
+                    .color(QUALITY_LEGENDARY)
+                    .set(self.ids.tut_arrow_txt, ui_widgets);
+                },
+                Intro::Never => {
+                    self.show.intro = false;
+                },
             }
         }
         // TODO: Add event/stat based tutorial system
         if self.show.intro && !self.show.esc_menu {
+            prof_span!("intro show");
             match global_state.settings.interface.intro_show {
                 Intro::Show => {
                     if self.show.intro {
@@ -2038,6 +2066,7 @@ impl Hud {
 
         // Display debug window.
         if let Some(debug_info) = debug_info {
+            prof_span!("debug info");
             // Alpha Version
             Text::new(&version)
                 .top_left_with_margins_on(ui_widgets.window, 5.0, 5.0)
@@ -2189,6 +2218,17 @@ impl Hud {
             .font_size(self.fonts.cyri.scale(14))
             .set(self.ids.num_particles, ui_widgets);
 
+            // Graphics backend
+            Text::new(&format!(
+                "Graphics backend: {}",
+                global_state.window.renderer().graphics_backend(),
+            ))
+            .color(TEXT_COLOR)
+            .down_from(self.ids.num_particles, 5.0)
+            .font_id(self.fonts.cyri.conrod_id)
+            .font_size(self.fonts.cyri.scale(14))
+            .set(self.ids.graphics_backend, ui_widgets);
+
             // GPU timing for different pipelines
             let gpu_timings = global_state.window.renderer().timings();
             if !gpu_timings.is_empty() {
@@ -2246,6 +2286,7 @@ impl Hud {
                 .set(self.ids.debug_info, ui_widgets);
             }
         } else {
+            prof_span!("help window");
             // Help Window
             if let Some(help_key) = global_state.settings.controls.get_binding(GameInput::Help) {
                 Text::new(
@@ -2665,40 +2706,45 @@ impl Hud {
             .retain(|m| !matches!(m.chat_type, comp::ChatType::Npc(_, _)));
 
         // Chat box
-        for event in Chat::new(
-            &mut self.new_messages,
-            &client,
-            global_state,
-            self.pulse,
-            &self.imgs,
-            &self.fonts,
-            i18n,
-        )
-        .and_then(self.force_chat_input.take(), |c, input| c.input(input))
-        .and_then(self.tab_complete.take(), |c, input| {
-            c.prepare_tab_completion(input)
-        })
-        .and_then(self.force_chat_cursor.take(), |c, pos| c.cursor_pos(pos))
-        .set(self.ids.chat, ui_widgets)
-        {
-            match event {
-                chat::Event::TabCompletionStart(input) => {
-                    self.tab_complete = Some(input);
-                },
-                chat::Event::SendMessage(message) => {
-                    events.push(Event::SendMessage(message));
-                },
-                chat::Event::Focus(focus_id) => {
-                    self.to_focus = Some(Some(focus_id));
-                },
-                chat::Event::ChangeChatTab(tab) => {
-                    events.push(Event::SettingsChange(ChatChange::ChangeChatTab(tab).into()));
-                },
-                chat::Event::ShowChatTabSettings(tab) => {
-                    self.show.chat_tab_settings_index = Some(tab);
-                    self.show.settings_tab = SettingsTab::Chat;
-                    self.show.settings(true);
-                },
+        if global_state.settings.interface.toggle_chat {
+            for event in Chat::new(
+                &mut self.new_messages,
+                &client,
+                global_state,
+                self.pulse,
+                &self.imgs,
+                &self.fonts,
+                i18n,
+            )
+            .and_then(self.force_chat_input.take(), |c, input| c.input(input))
+            .and_then(self.tab_complete.take(), |c, input| {
+                c.prepare_tab_completion(input)
+            })
+            .and_then(self.force_chat_cursor.take(), |c, pos| c.cursor_pos(pos))
+            .set(self.ids.chat, ui_widgets)
+            {
+                match event {
+                    chat::Event::TabCompletionStart(input) => {
+                        self.tab_complete = Some(input);
+                    },
+                    chat::Event::SendMessage(message) => {
+                        events.push(Event::SendMessage(message));
+                    },
+                    chat::Event::SendCommand(name, args) => {
+                        events.push(Event::SendCommand(name, args));
+                    },
+                    chat::Event::Focus(focus_id) => {
+                        self.to_focus = Some(Some(focus_id));
+                    },
+                    chat::Event::ChangeChatTab(tab) => {
+                        events.push(Event::SettingsChange(ChatChange::ChangeChatTab(tab).into()));
+                    },
+                    chat::Event::ShowChatTabSettings(tab) => {
+                        self.show.chat_tab_settings_index = Some(tab);
+                        self.show.settings_tab = SettingsTab::Chat;
+                        self.show.settings(true);
+                    },
+                }
             }
         }
 
@@ -3372,10 +3418,12 @@ impl Hud {
                     .clamped(1.25, max_zoom / 64.0);
 
                 global_state.settings.interface.map_zoom = new_zoom_lvl;
+                global_state.settings.save_to_file_warn();
             } else if global_state.settings.interface.minimap_show {
                 let new_zoom_lvl = global_state.settings.interface.minimap_zoom * factor;
 
                 global_state.settings.interface.minimap_zoom = new_zoom_lvl;
+                global_state.settings.save_to_file_warn();
             }
 
             show.map && global_state.settings.interface.minimap_show
@@ -3657,12 +3705,15 @@ impl Hud {
 
     pub fn handle_outcome(&mut self, outcome: &Outcome) {
         match outcome {
-            Outcome::ExpChange { uid, exp } => self.floaters.exp_floaters.push(ExpFloater {
-                owner: *uid,
-                exp_change: *exp,
-                timer: 4.0,
-                rand_offset: rand::thread_rng().gen::<(f32, f32)>(),
-            }),
+            Outcome::ExpChange { uid, exp, xp_pools } => {
+                self.floaters.exp_floaters.push(ExpFloater {
+                    owner: *uid,
+                    exp_change: *exp,
+                    timer: 4.0,
+                    rand_offset: rand::thread_rng().gen::<(f32, f32)>(),
+                    xp_pools: xp_pools.clone(),
+                })
+            },
             Outcome::SkillPointGain {
                 uid,
                 skill_tree,
@@ -3770,8 +3821,8 @@ pub fn get_buff_image(buff: BuffKind, imgs: &Imgs) -> conrod_core::image::Id {
         BuffKind::Burning { .. } => imgs.debuff_burning_0,
         BuffKind::Crippled { .. } => imgs.debuff_crippled_0,
         BuffKind::Frozen { .. } => imgs.debuff_frozen_0,
-        // TODO: Get icon for this before merging. Anyone doing code review open a comment here.
-        BuffKind::Wet { .. } => imgs.debuff_burning_0,
+        BuffKind::Wet { .. } => imgs.debuff_wet_0,
+        BuffKind::Ensnared { .. } => imgs.debuff_ensnared_0,
     }
 }
 
@@ -3794,6 +3845,7 @@ pub fn get_buff_title(buff: BuffKind, localized_strings: &Localization) -> &str 
         BuffKind::Crippled { .. } => localized_strings.get("buff.title.crippled"),
         BuffKind::Frozen { .. } => localized_strings.get("buff.title.frozen"),
         BuffKind::Wet { .. } => localized_strings.get("buff.title.wet"),
+        BuffKind::Ensnared { .. } => localized_strings.get("buff.title.ensnared"),
     }
 }
 
@@ -3828,6 +3880,7 @@ pub fn get_buff_desc(buff: BuffKind, data: BuffData, localized_strings: &Localiz
         BuffKind::Crippled { .. } => Cow::Borrowed(localized_strings.get("buff.desc.crippled")),
         BuffKind::Frozen { .. } => Cow::Borrowed(localized_strings.get("buff.desc.frozen")),
         BuffKind::Wet { .. } => Cow::Borrowed(localized_strings.get("buff.desc.wet")),
+        BuffKind::Ensnared { .. } => Cow::Borrowed(localized_strings.get("buff.desc.ensnared")),
     }
 }
 

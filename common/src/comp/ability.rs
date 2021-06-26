@@ -10,6 +10,7 @@ use crate::{
         utils::{AbilityInfo, StageSection},
         *,
     },
+    terrain::SpriteKind,
 };
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -247,6 +248,7 @@ pub enum CharacterAbility {
         energy_regen: f32,
         energy_drain: f32,
         orientation_behavior: basic_beam::OrientationBehavior,
+        ori_rate: f32,
         specifier: beam::FrontendSpecifier,
     },
     BasicAura {
@@ -280,7 +282,9 @@ pub enum CharacterAbility {
         cast_duration: f32,
         recover_duration: f32,
         summon_amount: u32,
+        summon_distance: (f32, f32),
         summon_info: basic_summon::SummonInfo,
+        duration: Option<Duration>,
     },
     SelfBuff {
         buildup_duration: f32,
@@ -290,6 +294,14 @@ pub enum CharacterAbility {
         buff_strength: f32,
         buff_duration: Option<f32>,
         energy_cost: f32,
+    },
+    SpriteSummon {
+        buildup_duration: f32,
+        cast_duration: f32,
+        recover_duration: f32,
+        sprite: SpriteKind,
+        summon_distance: (f32, f32),
+        sparseness: f64,
     },
 }
 
@@ -326,7 +338,7 @@ impl CharacterAbility {
     pub fn requirements_paid(&self, data: &JoinData, update: &mut StateUpdate) -> bool {
         match self {
             CharacterAbility::Roll { energy_cost, .. } => {
-                data.physics.on_ground
+                data.physics.on_ground.is_some()
                     && data.vel.0.xy().magnitude_squared() > 0.5
                     && update
                         .energy
@@ -362,7 +374,8 @@ impl CharacterAbility {
             | CharacterAbility::Boost { .. }
             | CharacterAbility::BasicBeam { .. }
             | CharacterAbility::Blink { .. }
-            | CharacterAbility::BasicSummon { .. } => true,
+            | CharacterAbility::BasicSummon { .. }
+            | CharacterAbility::SpriteSummon { .. } => true,
         }
     }
 
@@ -624,6 +637,17 @@ impl CharacterAbility {
                 *cast_duration /= speed;
                 *recover_duration /= speed;
             },
+            SpriteSummon {
+                ref mut buildup_duration,
+                ref mut cast_duration,
+                ref mut recover_duration,
+                ..
+            } => {
+                // TODO: Figure out how/if power should affect this
+                *buildup_duration /= speed;
+                *cast_duration /= speed;
+                *recover_duration /= speed;
+            },
         }
         self
     }
@@ -652,7 +676,11 @@ impl CharacterAbility {
                     0
                 }
             },
-            Boost { .. } | ComboMelee { .. } | Blink { .. } | BasicSummon { .. } => 0,
+            Boost { .. }
+            | ComboMelee { .. }
+            | Blink { .. }
+            | BasicSummon { .. }
+            | SpriteSummon { .. } => 0,
         }
     }
 
@@ -1174,6 +1202,23 @@ impl CharacterAbility {
                     _ => {},
                 }
             },
+            Some(ToolKind::Pick) => {
+                use skills::MiningSkill::*;
+                if let BasicMelee {
+                    ref mut buildup_duration,
+                    ref mut swing_duration,
+                    ref mut recover_duration,
+                    ..
+                } = self
+                {
+                    if let Ok(Some(level)) = skillset.skill_level(Pick(Speed)) {
+                        let speed = 1.1_f32.powi(level.into());
+                        *buildup_duration /= speed;
+                        *swing_duration /= speed;
+                        *recover_duration /= speed;
+                    }
+                }
+            },
             None => {
                 if let CharacterAbility::Roll {
                     ref mut energy_cost,
@@ -1383,6 +1428,7 @@ impl From<(&CharacterAbility, AbilityInfo)> for CharacterState {
                     ori_modifier: *ori_modifier as f32,
                     ability_info,
                 },
+                exhausted: false,
                 stage: 1,
                 timer: Duration::default(),
                 stage_section: StageSection::Buildup,
@@ -1631,6 +1677,7 @@ impl From<(&CharacterAbility, AbilityInfo)> for CharacterState {
                 energy_regen,
                 energy_drain,
                 orientation_behavior,
+                ori_rate,
                 specifier,
             } => CharacterState::BasicBeam(basic_beam::Data {
                 static_data: basic_beam::StaticData {
@@ -1646,6 +1693,7 @@ impl From<(&CharacterAbility, AbilityInfo)> for CharacterState {
                     energy_drain: *energy_drain,
                     ability_info,
                     orientation_behavior: *orientation_behavior,
+                    ori_rate: *ori_rate,
                     specifier: *specifier,
                 },
                 timer: Duration::default(),
@@ -1719,15 +1767,19 @@ impl From<(&CharacterAbility, AbilityInfo)> for CharacterState {
                 cast_duration,
                 recover_duration,
                 summon_amount,
+                summon_distance,
                 summon_info,
+                duration,
             } => CharacterState::BasicSummon(basic_summon::Data {
                 static_data: basic_summon::StaticData {
                     buildup_duration: Duration::from_secs_f32(*buildup_duration),
                     cast_duration: Duration::from_secs_f32(*cast_duration),
                     recover_duration: Duration::from_secs_f32(*recover_duration),
                     summon_amount: *summon_amount,
+                    summon_distance: *summon_distance,
                     summon_info: *summon_info,
                     ability_info,
+                    duration: *duration,
                 },
                 summon_count: 0,
                 timer: Duration::default(),
@@ -1753,6 +1805,27 @@ impl From<(&CharacterAbility, AbilityInfo)> for CharacterState {
                 },
                 timer: Duration::default(),
                 stage_section: StageSection::Buildup,
+            }),
+            CharacterAbility::SpriteSummon {
+                buildup_duration,
+                cast_duration,
+                recover_duration,
+                sprite,
+                summon_distance,
+                sparseness,
+            } => CharacterState::SpriteSummon(sprite_summon::Data {
+                static_data: sprite_summon::StaticData {
+                    buildup_duration: Duration::from_secs_f32(*buildup_duration),
+                    cast_duration: Duration::from_secs_f32(*cast_duration),
+                    recover_duration: Duration::from_secs_f32(*recover_duration),
+                    sprite: *sprite,
+                    summon_distance: *summon_distance,
+                    sparseness: *sparseness,
+                    ability_info,
+                },
+                timer: Duration::default(),
+                stage_section: StageSection::Buildup,
+                achieved_radius: summon_distance.0.floor() as i32 - 1,
             }),
         }
     }

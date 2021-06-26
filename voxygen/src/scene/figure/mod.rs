@@ -88,11 +88,12 @@ pub struct FigureModelEntry<const N: usize> {
 }
 
 impl<const N: usize> FigureModelEntry<N> {
-    pub fn lod_model(&self, lod: usize) -> SubModel<TerrainVertex> {
+    pub fn lod_model(&self, lod: usize) -> Option<SubModel<TerrainVertex>> {
         // Note: Range doesn't impl Copy even for trivially Cloneable things
         self.model
             .opaque
-            .submodel(self.lod_vertex_ranges[lod].clone())
+            .as_ref()
+            .map(|m| m.submodel(self.lod_vertex_ranges[lod].clone()))
     }
 }
 
@@ -799,14 +800,23 @@ impl FigureMgr {
                     }
 
                     let target_base = match (
-                        physics.on_ground,
+                        physics.on_ground.is_some(),
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
                     ) {
                         // Standing
                         (true, false, false) => anim::character::StandAnimation::update_skeleton(
                             &CharacterSkeleton::new(holding_lantern),
-                            (active_tool_kind, second_tool_kind, hands, time, rel_avg_vel),
+                            (
+                                active_tool_kind,
+                                second_tool_kind,
+                                hands,
+                                // TODO: Update to use the quaternion.
+                                ori * anim::vek::Vec3::<f32>::unit_y(),
+                                state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
+                                time,
+                                rel_avg_vel,
+                            ),
                             state.state_time,
                             &mut state_animation_rate,
                             skeleton_attr,
@@ -1586,7 +1596,7 @@ impl FigureMgr {
                     }
 
                     let target_base = match (
-                        physics.on_ground,
+                        physics.on_ground.is_some(),
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
                     ) {
@@ -1788,7 +1798,7 @@ impl FigureMgr {
                     }
 
                     let target_base = match (
-                        physics.on_ground,
+                        physics.on_ground.is_some(),
                         rel_vel.magnitude_squared() > 0.25, // Moving
                         physics.in_liquid().is_some(),      // In water
                     ) {
@@ -2115,7 +2125,7 @@ impl FigureMgr {
                     }
 
                     let target_base = match (
-                        physics.on_ground,
+                        physics.on_ground.is_some(),
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
                     ) {
@@ -2474,7 +2484,7 @@ impl FigureMgr {
                     }
 
                     let target_base = match (
-                        physics.on_ground,
+                        physics.on_ground.is_some(),
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
                     ) {
@@ -2584,7 +2594,7 @@ impl FigureMgr {
                     }
 
                     let target_base = match (
-                        physics.on_ground,
+                        physics.on_ground.is_some(),
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
                     ) {
@@ -2673,7 +2683,7 @@ impl FigureMgr {
                     }
 
                     let target_base = match (
-                        physics.on_ground,
+                        physics.on_ground.is_some(),
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
                     ) {
@@ -3018,7 +3028,7 @@ impl FigureMgr {
                     }
 
                     let target_base = match (
-                        physics.on_ground,
+                        physics.on_ground.is_some(),
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
                     ) {
@@ -3113,7 +3123,7 @@ impl FigureMgr {
                     }
 
                     let target_base = match (
-                        physics.on_ground,
+                        physics.on_ground.is_some(),
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
                     ) {
@@ -3299,7 +3309,7 @@ impl FigureMgr {
                     }
 
                     let target_base = match (
-                        physics.on_ground,
+                        physics.on_ground.is_some(),
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
                     ) {
@@ -3386,7 +3396,7 @@ impl FigureMgr {
                                     Some(s.stage_section),
                                     state.state_time,
                                     look_dir,
-                                    physics.on_ground,
+                                    physics.on_ground.is_some(),
                                 ),
                                 stage_progress,
                                 &mut state_animation_rate,
@@ -3424,7 +3434,7 @@ impl FigureMgr {
                                     Some(s.stage_section),
                                     ori * anim::vek::Vec3::<f32>::unit_y(),
                                     state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
-                                    physics.on_ground,
+                                    physics.on_ground.is_some(),
                                 ),
                                 stage_progress,
                                 &mut state_animation_rate,
@@ -3451,7 +3461,7 @@ impl FigureMgr {
                                     Some(s.stage_section),
                                     state.state_time,
                                     look_dir,
-                                    physics.on_ground,
+                                    physics.on_ground.is_some(),
                                 ),
                                 stage_progress,
                                 &mut state_animation_rate,
@@ -3474,7 +3484,71 @@ impl FigureMgr {
                             };
                             anim::bird_large::ShockwaveAnimation::update_skeleton(
                                 &target_base,
-                                (Some(s.stage_section), physics.on_ground),
+                                (Some(s.stage_section), physics.on_ground.is_some()),
+                                stage_progress,
+                                &mut state_animation_rate,
+                                skeleton_attr,
+                            )
+                        },
+                        CharacterState::BasicSummon(s) => {
+                            let stage_time = s.timer.as_secs_f32();
+                            let stage_progress = match s.stage_section {
+                                StageSection::Buildup => {
+                                    stage_time / s.static_data.buildup_duration.as_secs_f32()
+                                },
+
+                                StageSection::Cast => {
+                                    stage_time / s.static_data.cast_duration.as_secs_f32()
+                                },
+                                StageSection::Recover => {
+                                    stage_time / s.static_data.recover_duration.as_secs_f32()
+                                },
+                                _ => 0.0,
+                            };
+
+                            anim::bird_large::SummonAnimation::update_skeleton(
+                                &target_base,
+                                (
+                                    time,
+                                    Some(s.stage_section),
+                                    state.state_time,
+                                    look_dir,
+                                    physics.on_ground.is_some(),
+                                ),
+                                stage_progress,
+                                &mut state_animation_rate,
+                                skeleton_attr,
+                            )
+                        },
+                        CharacterState::DashMelee(s) => {
+                            let stage_time = s.timer.as_secs_f32();
+                            let stage_progress = match s.stage_section {
+                                StageSection::Buildup => {
+                                    stage_time / s.static_data.buildup_duration.as_secs_f32()
+                                },
+                                StageSection::Charge => {
+                                    stage_time / s.static_data.charge_duration.as_secs_f32()
+                                },
+                                StageSection::Swing => {
+                                    stage_time / s.static_data.swing_duration.as_secs_f32()
+                                },
+                                StageSection::Recover => {
+                                    stage_time / s.static_data.recover_duration.as_secs_f32()
+                                },
+                                _ => 0.0,
+                            };
+                            anim::bird_large::DashAnimation::update_skeleton(
+                                &target_base,
+                                (
+                                    rel_vel,
+                                    // TODO: Update to use the quaternion.
+                                    ori * anim::vek::Vec3::<f32>::unit_y(),
+                                    state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
+                                    state.acc_vel,
+                                    Some(s.stage_section),
+                                    time,
+                                    state.state_time,
+                                ),
                                 stage_progress,
                                 &mut state_animation_rate,
                                 skeleton_attr,
@@ -3563,7 +3637,7 @@ impl FigureMgr {
                     }
 
                     let target_base = match (
-                        physics.on_ground,
+                        physics.on_ground.is_some(),
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
                     ) {
@@ -3652,7 +3726,7 @@ impl FigureMgr {
                     }
 
                     let target_base = match (
-                        physics.on_ground,
+                        physics.on_ground.is_some(),
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
                     ) {
@@ -4200,6 +4274,34 @@ impl FigureMgr {
                                 skeleton_attr,
                             )
                         },
+                        CharacterState::SpriteSummon(s) => {
+                            let stage_time = s.timer.as_secs_f32();
+                            let stage_progress = match s.stage_section {
+                                StageSection::Buildup => {
+                                    stage_time / s.static_data.buildup_duration.as_secs_f32()
+                                },
+                                StageSection::Cast => {
+                                    stage_time / s.static_data.cast_duration.as_secs_f32()
+                                },
+                                StageSection::Recover => {
+                                    stage_time / s.static_data.recover_duration.as_secs_f32()
+                                },
+                                _ => 0.0,
+                            };
+                            anim::biped_large::SpriteSummonAnimation::update_skeleton(
+                                &target_base,
+                                (
+                                    (active_tool_kind, active_tool_spec),
+                                    (second_tool_kind, second_tool_spec),
+                                    time,
+                                    rel_vel.magnitude(),
+                                    Some(s.stage_section),
+                                ),
+                                stage_progress,
+                                &mut state_animation_rate,
+                                skeleton_attr,
+                            )
+                        },
                         // TODO!
                         _ => target_base,
                     };
@@ -4253,7 +4355,7 @@ impl FigureMgr {
                     }
 
                     let target_base = match (
-                        physics.on_ground,
+                        physics.on_ground.is_some(),
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
                     ) {
@@ -4507,7 +4609,7 @@ impl FigureMgr {
                     }
 
                     let target_base = match (
-                        physics.on_ground,
+                        physics.on_ground.is_some(),
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
                     ) {
@@ -4636,7 +4738,7 @@ impl FigureMgr {
                     }
 
                     let target_base = match (
-                        physics.on_ground,
+                        physics.on_ground.is_some(),
                         rel_vel.magnitude_squared() > MOVING_THRESHOLD_SQR, // Moving
                         physics.in_liquid().is_some(),                      // In water
                     ) {
@@ -5163,7 +5265,7 @@ impl FigureMgr {
                 model_entry.lod_model(0)
             };
 
-            Some((bound, model, col_lights_.texture(model_entry)))
+            Some((bound, model?, col_lights_.texture(model_entry)))
         } else {
             // trace!("Body has no saved figure");
             None
@@ -5221,9 +5323,7 @@ impl FigureColLights {
         let col_lights = renderer.figure_bind_col_light(col_lights);
         let model_len = u32::try_from(opaque.vertices().len())
             .expect("The model size for this figure does not fit in a u32!");
-        let model = renderer
-            .create_model(&opaque)
-            .expect("The model contains no vertices!");
+        let model = renderer.create_model(&opaque);
 
         vertex_ranges.iter().for_each(|range| {
             assert!(

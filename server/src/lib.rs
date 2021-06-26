@@ -300,7 +300,7 @@ impl Server {
         let map = world.get_map_data(index.as_index_ref(), &state.thread_pool());
 
         #[cfg(not(feature = "worldgen"))]
-        let (world, index) = World::generate(settings.world_seed, &state.thread_pool());
+        let (world, index) = World::generate(settings.world_seed);
         #[cfg(not(feature = "worldgen"))]
         let map = WorldMapMsg {
             dimensions_lg: Vec2::zero(),
@@ -310,6 +310,7 @@ impl Server {
             sea_level: 0.0,
             alt: Grid::new(Vec2::new(1, 1), 1),
             sites: Vec::new(),
+            pois: Vec::new(),
         };
 
         #[cfg(feature = "worldgen")]
@@ -982,16 +983,9 @@ impl Server {
         );
     }
 
-    fn process_chat_cmd(&mut self, entity: EcsEntity, cmd: String) {
-        // Separate string into keyword and arguments.
-        let sep = cmd.find(' ');
-        let (kwd, args) = match sep {
-            Some(i) => (cmd[..i].to_string(), cmd[(i + 1)..].to_string()),
-            None => (cmd, "".to_string()),
-        };
-
+    fn process_command(&mut self, entity: EcsEntity, name: String, args: Vec<String>) {
         // Find the command object and run its handler.
-        if let Ok(command) = kwd.parse::<ChatCommand>() {
+        if let Ok(command) = name.parse::<ChatCommand>() {
             command.execute(self, entity, args);
         } else {
             #[cfg(feature = "plugins")]
@@ -1019,8 +1013,8 @@ impl Server {
                 let rs = plugin_manager.execute_event(
                     &ecs_world,
                     &plugin_api::event::ChatCommandEvent {
-                        command: kwd.clone(),
-                        command_args: args.split(' ').map(|x| x.to_owned()).collect(),
+                        command: name.clone(),
+                        command_args: args.clone(),
                         player: plugin_api::event::Player { id: uid },
                     },
                 );
@@ -1034,7 +1028,7 @@ impl Server {
                                     format!(
                                         "Unknown command '/{}'.\nType '/help' for available \
                                          commands",
-                                        kwd
+                                        name
                                     ),
                                 ),
                             );
@@ -1058,7 +1052,7 @@ impl Server {
                                             comp::ChatType::CommandError,
                                             format!(
                                                 "Error occurred while executing command '/{}'.\n{}",
-                                                kwd, e
+                                                name, e
                                             ),
                                         ),
                                     );
@@ -1067,7 +1061,7 @@ impl Server {
                         }
                     },
                     Err(e) => {
-                        error!(?e, "Can't execute command {} {}", kwd, args);
+                        error!(?e, "Can't execute command {} {:?}", name, args);
                         self.notify_client(
                             entity,
                             ServerGeneral::server_msg(
@@ -1075,7 +1069,7 @@ impl Server {
                                 format!(
                                     "Internal error while executing '/{}'.\nContact the server \
                                      administrator",
-                                    kwd
+                                    name
                                 ),
                             ),
                         );

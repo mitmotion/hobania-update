@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added a skill tree for mining, which gains xp from mining ores and gems.
+- Added debug line info to release builds, enhancing the usefulness of panic backtraces
+- NPCs and animals can now make sounds in response to certain events
+- Players can press H to greet others
+- Ability to toggle chat visibility
+- Added gem rings with various stat improvements.
+### Changed
+
+- Entity-entity pushback is no longer applied in forced movement states like rolling and leaping.
+- Updated audio library (rodio 0.13 -> 0.14).
+- Improve entity-terrain physics performance by reducing the number of voxel lookups.
+- Clay Golem uses shockwave only after specific fraction of health and other difficulty adjustments.
+- Made strafing slightly slower
+- Food now has limited regeneration strength but longer duration.
+- Harvester boss now has new abilities and AI
+
+### Removed
+
+- Enemies no more spawn in dungeon boss room
+
+### Fixed
+
+- Crafting Stations aren't exploadable anymore
+- Cases where no audio output could be produced before.
+- Significantly improved the performance of playing sound effects
+
+## [0.10.0] - 2021-06-12
+
+### Added
+
 - New Skills for Climbing: Climbing Speed and Climbing Cost
 - Pickaxes (can be used to collect gems and mine weak rock)
 - You can now jump out of rolls for a slight jump boost
@@ -727,7 +757,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _0.1.0 was part of the legacy engine_
 
-[unreleased]: https://gitlab.com/veloren/veloren/compare?from=v0.9.0&to=master
+[unreleased]: https://gitlab.com/veloren/veloren/compare?from=v0.10.0&to=master
+[0.9.0]: https://gitlab.com/veloren/veloren/compare?from=v0.9.0&to=v0.10.0
 [0.9.0]: https://gitlab.com/veloren/veloren/compare?from=v0.8.0&to=v0.9.0
 [0.8.0]: https://gitlab.com/veloren/veloren/compare?from=v0.7.0&to=v0.8.0
 [0.7.0]: https://gitlab.com/veloren/veloren/compare?from=v0.6.0&to=v0.7.0

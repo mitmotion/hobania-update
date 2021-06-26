@@ -65,6 +65,10 @@
         "voxel.weapon.sceptre.wood-nature",
         (-1.0, 0.0, 0.0), (-90.0, 55.0, 0.0), 1.0,
     ),
+    Tool("example_pick"): VoxTrans(
+        "voxel.weapon.tool.pickaxe_green-0",
+        (0.0, 0.0, 0.0), (-135.0, 90.0, 0.0), 1.0,
+    ),
     Tool("example_dagger"): VoxTrans(
         "voxel.weapon.dagger.dagger_basic-0",
         (0.0, 0.0, 0.0), (90.0, 90.0, 0.0), 1.0,
@@ -1544,56 +1548,6 @@
         "voxel.armor.bonerattler.shoulder",
         (0.0, 0.0, 0.0), (-90.0, 130.0, 0.0), 1.2,
     ),
-    //Warlord Set
-    Armor(Chest("Warlord")): VoxTrans(
-        "voxel.armor.warlord.chest",
-        (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.2,
-    ),
-    Armor(Pants("Warlord")): VoxTrans(
-        "voxel.armor.warlord.pants",
-        (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.2,
-    ),
-    Armor(Belt("Warlord")): VoxTrans(
-        "voxel.armor.warlord.belt",
-        (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.4,
-    ),
-    Armor(Foot("Warlord")): VoxTrans(
-        "voxel.armor.warlord.foot",
-        (0.0, 0.0, 0.0), (-95.0, 140.0, 0.0), 1.1,
-    ),
-    Armor(Hand("Warlord")): VoxTrans(
-        "voxel.armor.warlord.hand",
-        (0.0, -1.0, 0.0), (-90.0, 135.0, 0.0), 1.0,
-    ),
-    Armor(Shoulder("Warlord")): VoxTrans(
-        "voxel.armor.warlord.shoulder",
-        (0.0, 0.0, 0.0), (-90.0, 130.0, 0.0), 1.2,
-    ),
-    //Warlock Set
-    Armor(Chest("Warlock")): VoxTrans(
-        "voxel.armor.warlock.chest",
-        (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.2,
-    ),
-    Armor(Pants("Warlock")): VoxTrans(
-        "voxel.armor.warlock.pants",
-        (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.2,
-    ),
-    Armor(Belt("Warlock")): VoxTrans(
-        "voxel.armor.warlock.belt",
-        (0.0, 0.0, 0.0), (-90.0, 180.0, 0.0), 1.4,
-    ),
-    Armor(Foot("Warlock")): VoxTrans(
-        "voxel.armor.warlock.foot",
-        (0.0, 0.0, 0.0), (-95.0, 140.0, 0.0), 1.1,
-    ),
-    Armor(Hand("Warlock")): VoxTrans(
-        "voxel.armor.warlock.hand",
-        (0.0, -1.0, 0.0), (-90.0, 135.0, 0.0), 1.0,
-    ),
-    Armor(Shoulder("Warlock")): VoxTrans(
-        "voxel.armor.warlock.shoulder",
-        (0.0, 0.0, 0.0), (-90.0, 130.0, 0.0), 1.2,
-    ),
     //Rawhide Set
     Armor(Chest("Rawhide")): VoxTrans(
         "voxel.armor.hide.rawhide.chest",
@@ -2179,28 +2133,43 @@
         "voxel.armor.misc.back.backpack",
         (0.0, 0.0, 0.0), (-90.0, 0.0, 0.0), 1.0,
     ),
-    Armor(Back("Warlord")): VoxTrans(
-        "voxel.armor.warlord.back",
-        (0.0, 0.0, 0.0), (-90.0, 0.0, 0.0), 1.0,
-    ),
-    Armor(Back("Warlock")): VoxTrans(
-        "voxel.armor.warlock.back",
-        (0.0, 0.0, 0.0), (-90.0, 0.0, 0.0), 1.0,
-    ),
     // Rings
     Armor(Ring("Scratched")): VoxTrans(
         "voxel.armor.misc.ring.scratched",
-        (0.0, 0.0, 0.0), (30.0, 0.0, 0.0), 0.9,
+        (0.0, 0.0, 0.0), (45.0, 15.0, 0.0), 0.9,
     ),
     Armor(Ring("Gold")): VoxTrans(
         "voxel.armor.misc.ring.gold",
-        (0.0, 0.0, 0.0), (30.0, 0.0, 0.0), 0.9,
+        (0.0, 0.0, 0.0), (45.0, 15.0, 0.0), 0.9,
+    ),
+    Armor(Ring("Topaz")): VoxTrans(
+        "voxel.armor.misc.ring.topaz",
+        (0.0, 0.0, 0.0), (45.0, 15.0, 0.0), 0.9,
+    ),
+    Armor(Ring("Amethyst")): VoxTrans(
+        "voxel.armor.misc.ring.amethyst",
+        (0.0, 0.0, 0.0), (45.0, 15.0, 0.0), 0.9,
+    ),
+    Armor(Ring("Sapphire")): VoxTrans(
+        "voxel.armor.misc.ring.sapphire",
+        (0.0, 0.0, 0.0), (45.0, 15.0, 0.0), 0.9,
+    ),
+    Armor(Ring("Emerald")): VoxTrans(
+        "voxel.armor.misc.ring.emerald",
+        (0.0, 0.0, 0.0), (45.0, 15.0, 0.0), 0.9,
+    ),
+    Armor(Ring("Ruby")): VoxTrans(
+        "voxel.armor.misc.ring.ruby",
+        (0.0, 0.0, 0.0), (45.0, 15.0, 0.0), 0.9,
+    ),
+    Armor(Ring("Diamond")): VoxTrans(
+        "voxel.armor.misc.ring.diamond",
+        (0.0, 0.0, 0.0), (45.0, 20.0, 0.0), 0.9,
     ),
     Armor(Ring("Skull")): VoxTrans(
         "voxel.armor.misc.ring.skull",
-        (0.0, 0.0, 0.0), (30.0, 0.0, 0.0), 0.9,
+        (0.0, 0.0, 0.0), (45.0, 15.0, 0.0), 0.9,
     ),
-
     // Necks
     Armor(Neck("Plain0")): Png(
         "element.items.neck-0",
@@ -2271,6 +2240,10 @@
     ),
     Consumable("Coconut"): Png(
         "element.items.item_coconut",
+    ),
+    Consumable("CactusColada"): VoxTrans(
+        "voxel.object.cactus_drink",
+        (-1.0, 1.0, 0.0), (-50.0, 30.0, 20.0), 0.8,
     ),
     Consumable("PotionMed"): VoxTrans(
         "voxel.object.potion_red",
@@ -2447,6 +2420,10 @@
     Ingredient("Stones"): VoxTrans(
         "voxel.sprite.rocks.rock-0",
         (0.0, 0.0, 0.0), (-50.0, 40.0, 20.0), 0.8,
+    ),
+    Ingredient("Cactus"): VoxTrans(
+        "voxel.sprite.cacti.flat_cactus_med",
+        (0.0, 0.0, 0.0), (-50.0, 40.0, 20.0), 0.9,
     ),
     Ingredient("Seashells"): VoxTrans(
         "voxel.sprite.seashells.shell-0",

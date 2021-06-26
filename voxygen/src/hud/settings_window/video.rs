@@ -164,9 +164,8 @@ impl<'a> Widget for Video<'a> {
             .window
             .window()
             .current_monitor()
-            .unwrap()
-            .video_modes()
-            .collect();
+            .map(|monitor| monitor.video_modes().collect())
+            .unwrap_or_default();
 
         State {
             ids: Ids::new(id_gen),
@@ -178,6 +177,7 @@ impl<'a> Widget for Video<'a> {
     fn style(&self) -> Self::Style { () }
 
     fn update(self, args: widget::UpdateArgs<Self>) -> Self::Event {
+        common_base::prof_span!("Video::update");
         let widget::UpdateArgs { state, ui, .. } = args;
 
         let mut events = Vec::new();

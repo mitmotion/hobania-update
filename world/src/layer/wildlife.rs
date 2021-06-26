@@ -119,15 +119,26 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
         Entry {
             make_entity: |pos, rng| {
                 EntityInfo::at(pos)
-                    .with_body(
-                        biped_large::Body::random_with(rng, &biped_large::Species::Wendigo).into(),
-                    )
+                    .with_body(match rng.gen_range(0..3) {
+                        0 => biped_large::Body::random_with(rng, &biped_large::Species::Wendigo)
+                            .into(),
+                        1 => quadruped_medium::Body::random_with(
+                            rng,
+                            &quadruped_medium::Species::Mammoth,
+                        )
+                        .into(),
+                        _ => biped_large::Body::random_with(
+                            rng,
+                            &biped_large::Species::Mountaintroll,
+                        )
+                        .into(),
+                    })
                     .with_alignment(Alignment::Enemy)
             },
             group_size: 1..2,
             is_underwater: false,
             day_period: vec![Night, Morning, Noon, Evening],
-            get_density: |c, _col| close(c.temp, CONFIG.snow_temp, 0.15) * BASE_DENSITY * 0.1,
+            get_density: |c, _col| close(c.temp, CONFIG.snow_temp, 0.15) * BASE_DENSITY * 0.15,
         },
         // Tundra rock solitary ennemies
         Entry {
@@ -189,7 +200,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
         Entry {
             make_entity: |pos, rng| {
                 EntityInfo::at(pos)
-                    .with_body(match rng.gen_range(0..3) {
+                    .with_body(match rng.gen_range(0..5) {
                         0 => quadruped_medium::Body::random_with(
                             rng,
                             &quadruped_medium::Species::Mouflon,
@@ -198,6 +209,16 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
                         1 => quadruped_medium::Body::random_with(
                             rng,
                             &quadruped_medium::Species::Yak,
+                        )
+                        .into(),
+                        2 => quadruped_medium::Body::random_with(
+                            rng,
+                            &quadruped_medium::Species::Llama,
+                        )
+                        .into(),
+                        3 => quadruped_medium::Body::random_with(
+                            rng,
+                            &quadruped_medium::Species::Alpaca,
                         )
                         .into(),
                         _ => quadruped_medium::Body::random_with(
@@ -296,7 +317,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
         Entry {
             make_entity: |pos, rng| {
                 EntityInfo::at(pos)
-                    .with_body(match rng.gen_range(0..12) {
+                    .with_body(match rng.gen_range(0..14) {
                         0 => quadruped_medium::Body::random_with(
                             rng,
                             &quadruped_medium::Species::Deer,
@@ -348,6 +369,16 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
                             quadruped_small::Body::random_with(rng, &quadruped_small::Species::Goat)
                                 .into()
                         },
+                        11 => quadruped_medium::Body::random_with(
+                            rng,
+                            &quadruped_medium::Species::Llama,
+                        )
+                        .into(),
+                        12 => quadruped_medium::Body::random_with(
+                            rng,
+                            &quadruped_medium::Species::Alpaca,
+                        )
+                        .into(),
                         _ => bird_medium::Body::random_with(rng, &bird_medium::Species::Chicken)
                             .into(),
                     })
@@ -454,9 +485,8 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
                         0 => {
                             biped_large::Body::random_with(rng, &biped_large::Species::Ogre).into()
                         },
-                        1 => {
-                            biped_large::Body::random_with(rng, &biped_large::Species::Troll).into()
-                        },
+                        1 => biped_large::Body::random_with(rng, &biped_large::Species::Swamptroll)
+                            .into(),
                         _ => biped_large::Body::random_with(rng, &biped_large::Species::Cyclops)
                             .into(),
                     })
@@ -624,7 +654,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
         Entry {
             make_entity: |pos, rng| {
                 EntityInfo::at(pos)
-                    .with_body(match rng.gen_range(0..4) {
+                    .with_body(match rng.gen_range(0..5) {
                         0 => theropod::Body::random_with(rng, &theropod::Species::Odonto).into(),
                         1 => {
                             biped_large::Body::random_with(rng, &biped_large::Species::Mightysaurok)
@@ -634,6 +664,8 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
                             biped_large::Body::random_with(rng, &biped_large::Species::Occultsaurok)
                                 .into()
                         },
+                        3 => bird_large::Body::random_with(rng, &bird_large::Species::Cockatrice)
+                            .into(),
                         _ => biped_large::Body::random_with(rng, &biped_large::Species::Slysaurok)
                             .into(),
                     })
@@ -653,12 +685,11 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
         Entry {
             make_entity: |pos, rng| {
                 EntityInfo::at(pos)
-                    .with_body(match rng.gen_range(0..4) {
+                    .with_body(match rng.gen_range(0..3) {
                         0 => bird_medium::Body::random_with(rng, &bird_medium::Species::Parrot)
                             .into(),
-                        1 => bird_large::Body::random_with(rng, &bird_large::Species::Cockatrice)
-                            .into(),
-                        2 => quadruped_small::Body::random_with(
+
+                        1 => quadruped_small::Body::random_with(
                             rng,
                             &quadruped_small::Species::Quokka,
                         )
@@ -816,7 +847,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
         Entry {
             make_entity: |pos, rng| {
                 EntityInfo::at(pos)
-                    .with_body(match rng.gen_range(0..3) {
+                    .with_body(match rng.gen_range(0..4) {
                         0 => quadruped_medium::Body::random_with(
                             rng,
                             &quadruped_medium::Species::Bonerattler,
@@ -825,6 +856,11 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
                         1 => {
                             theropod::Body::random_with(rng, &theropod::Species::Sandraptor).into()
                         },
+                        2 => quadruped_medium::Body::random_with(
+                            rng,
+                            &quadruped_medium::Species::Ngoubou,
+                        )
+                        .into(),
                         _ => quadruped_low::Body::random_with(
                             rng,
                             &quadruped_low::Species::Sandshark,
@@ -910,7 +946,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
                 close(c.temp, CONFIG.desert_temp + 0.2, 0.3)
                     * close(c.humidity, CONFIG.desert_hum, 0.5)
                     * BASE_DENSITY
-                    * 0.01
+                    * 0.005
             },
         },
         // Desert solitary wild
@@ -1063,37 +1099,37 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
                 },
             );
 
+            let alt = col_sample.alt as i32;
+
             if let Some((make_entity, group_size)) = entity_group {
-                let alt = col_sample.alt as i32;
-                // Find the intersection between ground and air, if there is one near the
-                // surface
-                if let Some(solid_end) = (-4..8)
-                    .find(|z| {
-                        vol.get(Vec3::new(offs.x, offs.y, alt + z))
-                            .map(|b| b.is_solid())
-                            .unwrap_or(false)
-                    })
-                    .and_then(|solid_start| {
-                        (1..8).map(|z| solid_start + z).find(|z| {
-                            vol.get(Vec3::new(offs.x, offs.y, alt + z))
+                let group_size = dynamic_rng.gen_range(group_size.start..group_size.end);
+                let entity = make_entity(
+                    (wpos2d.map(|e| e as f32) + 0.5).with_z(alt as f32),
+                    dynamic_rng,
+                );
+                for e in 0..group_size {
+                    // Choose a nearby position
+                    let offs_wpos2d = (Vec2::new(
+                        (e as f32 / group_size as f32 * 2.0 * f32::consts::PI).sin(),
+                        (e as f32 / group_size as f32 * 2.0 * f32::consts::PI).cos(),
+                    ) * (5.0 + dynamic_rng.gen::<f32>().powf(0.5) * 5.0))
+                        .map(|e| e as i32);
+                    // Clamp position to chunk
+                    let offs_wpos2d = (offs + offs_wpos2d)
+                        .clamped(Vec2::zero(), vol.size_xy().map(|e| e as i32) - 1)
+                        - offs;
+
+                    // Find the intersection between ground and air, if there is one near the
+                    // surface
+                    if let Some(solid_end) = (-8..8).find(|z| {
+                        (0..2).all(|z2| {
+                            vol.get(Vec3::new(offs.x, offs.y, alt) + offs_wpos2d.with_z(z + z2))
                                 .map(|b| !b.is_solid())
                                 .unwrap_or(true)
                         })
-                    })
-                {
-                    let group_size = dynamic_rng.gen_range(group_size.start..group_size.end);
-                    let entity = make_entity(
-                        Vec3::new(wpos2d.x, wpos2d.y, alt + solid_end).map(|e| e as f32),
-                        dynamic_rng,
-                    );
-                    for e in 0..group_size {
+                    }) {
                         let mut entity = entity.clone();
-                        entity.pos = entity.pos.map(|e| e + dynamic_rng.gen::<f32>())
-                            + Vec3::new(
-                                (e as f32 / group_size as f32 * 2.0 * f32::consts::PI).sin(),
-                                (e as f32 / group_size as f32 * 2.0 * f32::consts::PI).cos(),
-                                0.0,
-                            ) * (5.0 + dynamic_rng.gen::<f32>().powf(0.5) * 5.0);
+                        entity.pos += offs_wpos2d.with_z(solid_end).map(|e| e as f32);
                         supplement.add_entity(entity.with_automatic_name());
                     }
                 }

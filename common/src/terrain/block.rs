@@ -1,12 +1,13 @@
 use super::SpriteKind;
-use crate::{comp::tool::ToolKind, make_case_elim};
-use enum_iterator::IntoEnumIterator;
-use hashbrown::HashMap;
-use lazy_static::lazy_static;
+use crate::{
+    comp::{fluid_dynamics::LiquidKind, tool::ToolKind},
+    make_case_elim,
+};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use serde::{Deserialize, Serialize};
-use std::{convert::TryFrom, fmt, ops::Deref};
+use std::ops::Deref;
+use strum_macros::{EnumIter, EnumString, ToString};
 use vek::*;
 
 make_case_elim!(
@@ -20,8 +21,10 @@ make_case_elim!(
         PartialEq,
         Serialize,
         Deserialize,
-        IntoEnumIterator,
         FromPrimitive,
+        EnumString,
+        EnumIter,
+        ToString,
     )]
     #[repr(u8)]
     pub enum BlockKind {
@@ -33,6 +36,8 @@ make_case_elim!(
         // being *very* fast).
         Rock = 0x10,
         WeakRock = 0x11, // Explodable
+        Lava = 0x12,
+        GlowingRock = 0x13,
         // 0x12 <= x < 0x20 is reserved for future rocks
         Grass = 0x20, // Note: *not* the same as grass sprites
         Snow = 0x21,
@@ -63,6 +68,15 @@ impl BlockKind {
     #[inline]
     pub const fn is_liquid(&self) -> bool { self.is_fluid() && !self.is_air() }
 
+    #[inline]
+    pub const fn liquid_kind(&self) -> Option<LiquidKind> {
+        Some(match self {
+            BlockKind::Water => LiquidKind::Water,
+            BlockKind::Lava => LiquidKind::Lava,
+            _ => return None,
+        })
+    }
+
     /// Determine whether the block is filled (i.e: fully solid). Right now,
     /// this is the opposite of being a fluid.
     #[inline]
@@ -72,22 +86,6 @@ impl BlockKind {
     /// fields.
     #[inline]
     pub const fn has_color(&self) -> bool { self.is_filled() }
-}
-
-impl fmt::Display for BlockKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{:?}", self) }
-}
-
-lazy_static! {
-    pub static ref BLOCK_KINDS: HashMap<String, BlockKind> = BlockKind::into_enum_iter()
-        .map(|bk| (bk.to_string(), bk))
-        .collect();
-}
-
-impl<'a> TryFrom<&'a str> for BlockKind {
-    type Error = ();
-
-    fn try_from(s: &'a str) -> Result<Self, Self::Error> { BLOCK_KINDS.get(s).copied().ok_or(()) }
 }
 
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
@@ -168,6 +166,9 @@ impl Block {
 
     #[inline]
     pub fn get_glow(&self) -> Option<u8> {
+        if matches!(self.kind, BlockKind::Lava | BlockKind::GlowingRock) {
+            return Some(24);
+        }
         match self.get_sprite()? {
             SpriteKind::StreetLamp | SpriteKind::StreetLampTall => Some(24),
             SpriteKind::Ember => Some(20),
@@ -217,7 +218,7 @@ impl Block {
     pub fn is_solid(&self) -> bool {
         self.get_sprite()
             .map(|s| s.solid_height().is_some())
-            .unwrap_or(true)
+            .unwrap_or(!matches!(self.kind, BlockKind::Lava))
     }
 
     /// Can this block be exploded? If so, what 'power' is required to do so?
@@ -225,15 +226,25 @@ impl Block {
     /// arbitrary and only important when compared to one-another.
     #[inline]
     pub fn explode_power(&self) -> Option<f32> {
+        // Explodable means that the terrain sprite will get removed anyway,
+        // so all is good for empty fluids.
         match self.kind() {
             BlockKind::Leaves => Some(0.25),
             BlockKind::Grass => Some(0.5),
             BlockKind::WeakRock => Some(0.75),
             BlockKind::Snow => Some(0.1),
-            // Explodable means that the terrain sprite will get removed anyway, so all is good for
-            // empty fluids.
-            // TODO: Handle the case of terrain sprites we don't want to have explode
-            _ => self.get_sprite().map(|_| 0.25),
+            BlockKind::Lava => None,
+            _ => self.get_sprite().and_then(|sprite| match sprite {
+                SpriteKind::Anvil
+                | SpriteKind::Cauldron
+                | SpriteKind::CookingPot
+                | SpriteKind::CraftingBench
+                | SpriteKind::Forge
+                | SpriteKind::Loom
+                | SpriteKind::SpinningWheel
+                | SpriteKind::TanningRack => None,
+                _ => Some(0.25),
+            }),
         }
     }
 

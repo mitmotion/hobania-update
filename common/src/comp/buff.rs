@@ -1,5 +1,5 @@
-#[cfg(not(target_arch = "wasm32"))]
 use crate::uid::Uid;
+use core::{cmp::Ordering, time::Duration};
 #[cfg(not(target_arch = "wasm32"))]
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
@@ -7,8 +7,6 @@ use serde::{Deserialize, Serialize};
 use specs::{Component, DerefFlaggedStorage};
 #[cfg(not(target_arch = "wasm32"))]
 use specs_idvs::IdvStorage;
-#[cfg(not(target_arch = "wasm32"))]
-use std::{cmp::Ordering, time::Duration};
 use strum_macros::EnumIter;
 
 /// De/buff Kind.
@@ -71,6 +69,10 @@ pub enum BuffKind {
     /// Strength scales the friction you ignore non-linearly. 0.5 is 50% ground
     /// friction, 1.0 is 33% ground friction.
     Wet,
+    /// Makes you move slower.
+    /// Strength scales the movement speed debuff non-linearly. 0.5 is 50%
+    /// speed, 1.0 is 33% speed.
+    Ensnared,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -93,6 +95,7 @@ impl BuffKind {
             BuffKind::Frenzied => true,
             BuffKind::Frozen => false,
             BuffKind::Wet => false,
+            BuffKind::Ensnared => false,
         }
     }
 
@@ -101,7 +104,6 @@ impl BuffKind {
 }
 
 // Struct used to store data relevant to a buff
-#[cfg(not(target_arch = "wasm32"))]
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BuffData {
     pub strength: f32,
@@ -116,7 +118,6 @@ impl BuffData {
 /// De/buff category ID.
 /// Similar to `BuffKind`, but to mark a category (for more generic usage, like
 /// positive/negative buffs).
-#[cfg(not(target_arch = "wasm32"))]
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum BuffCategory {
     Natural,
@@ -127,7 +128,6 @@ pub enum BuffCategory {
     FromAura(bool), // bool used to check if buff recently set by aura
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ModifierKind {
     Additive,
@@ -135,7 +135,6 @@ pub enum ModifierKind {
 }
 
 /// Data indicating and configuring behaviour of a de/buff.
-#[cfg(not(target_arch = "wasm32"))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum BuffEffect {
     /// Periodically damages or heals entity
@@ -175,7 +174,6 @@ pub enum BuffEffect {
 ///
 /// To provide more classification info when needed,
 /// buff can be in one or more buff category.
-#[cfg(not(target_arch = "wasm32"))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Buff {
     pub kind: BuffKind,
@@ -188,7 +186,6 @@ pub struct Buff {
 
 /// Information about whether buff addition or removal was requested.
 /// This to implement "on_add" and "on_remove" hooks for constant buffs.
-#[cfg(not(target_arch = "wasm32"))]
 #[derive(Clone, Debug)]
 pub enum BuffChange {
     /// Adds this buff.
@@ -327,6 +324,10 @@ impl Buff {
                 vec![BuffEffect::GroundFriction(1.0 - nn_scaling(data.strength))],
                 data.duration,
             ),
+            BuffKind::Ensnared => (
+                vec![BuffEffect::MovementSpeed(1.0 - nn_scaling(data.strength))],
+                data.duration,
+            ),
         };
         Buff {
             kind,
@@ -371,7 +372,6 @@ impl PartialEq for Buff {
 }
 
 /// Source of the de/buff
-#[cfg(not(target_arch = "wasm32"))]
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub enum BuffSource {
     /// Applied by a character
@@ -485,7 +485,6 @@ impl Buffs {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 pub type BuffId = u64;
 
 #[cfg(not(target_arch = "wasm32"))]

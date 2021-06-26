@@ -1,7 +1,7 @@
 use common::{
     comp::{
         body::ship::figuredata::{VoxelCollider, VOXEL_COLLIDER_MANIFEST},
-        fluid_dynamics::{Fluid, Wings},
+        fluid_dynamics::{Fluid, LiquidKind, Wings},
         BeamSegment, Body, CharacterState, Collider, Density, Mass, Mounting, Ori, PhysicsState,
         Pos, PosVelDefer, PreviousPhysCache, Projectile, Scale, Shockwave, Stats, Sticky, Vel,
     },
@@ -319,7 +319,8 @@ impl<'a> PhysicsData<'a> {
                     char_state_maybe,
                 )| {
                     let is_sticky = sticky.is_some();
-                    let is_mid_air = physics.on_wall.is_none() && physics.on_ground;
+                    // Code reviewers: remind me to check why on_ground was true instead of false here?
+                    let is_mid_air = physics.on_wall.is_none() && physics.on_ground.is_some();
                     let mut entity_entity_collision_checks = 0;
                     let mut entity_entity_collisions = 0;
 
@@ -425,16 +426,21 @@ impl<'a> PhysicsData<'a> {
                                             entity_entity_collisions += 1;
                                         }
 
-                                        // Don't apply repulsive force to projectiles or if
-                                        // we're
-                                        // colliding
-                                        // with a terrain-like entity, or if we are a
-                                        // terrain-like
-                                        // entity
+                                        // Don't apply e2e pushback to entities that are in a forced movement state
+                                        // (e.g. roll, leapmelee). This allows leaps to work properly (since you won't
+                                        // get pushed away before delivering the hit), and allows rolling through an
+                                        // enemy when trapped (e.g. with minotaur). This allows using e2e pushback to
+                                        // gain speed by jumping out of a roll while in the middle of a collider, this
+                                        // is an intentional combat mechanic.
+                                        let forced_movement = matches!(char_state_maybe, Some(cs) if cs.is_forced_movement());
+
+                                        // Don't apply repulsive force to projectiles or if we're colliding with a
+                                        // terrain-like entity, or if we are a terrain-like entity
                                         //
                                         // Don't apply force when entity is a sticky which is on the
                                         // ground (or on the wall)
-                                        if !(is_sticky && !is_mid_air)
+                                        if !forced_movement &&
+                                            !(is_sticky && !is_mid_air)
                                             && diff.magnitude_squared() > 0.0
                                             && !is_projectile
                                             && !matches!(
@@ -748,7 +754,7 @@ impl<'a> PhysicsData<'a> {
                     // velocities or entirely broken position snapping.
                     let mut tgt_pos = pos.0 + pos_delta;
 
-                    let was_on_ground = physics_state.on_ground;
+                    let was_on_ground = physics_state.on_ground.is_some();
                     let block_snap =
                         body.map_or(false, |b| !matches!(b, Body::Object(_) | Body::Ship(_)));
                     let climbing =
@@ -874,7 +880,7 @@ impl<'a> PhysicsData<'a> {
                                     > block_rpos.xy().map(|e| e.abs()).reduce_partial_max()
                                 {
                                     if block_rpos.z > 0.0 {
-                                        physics_state.on_ground = true;
+                                        physics_state.on_ground = block.copied();
                                     } else {
                                         physics_state.on_ceiling = true;
                                     }
@@ -900,13 +906,15 @@ impl<'a> PhysicsData<'a> {
                                 .terrain
                                 .get(pos.0.map(|e| e.floor() as i32))
                                 .ok()
-                                .and_then(|vox| vox.is_liquid().then_some(1.0))
-                                .map(|depth| Fluid::Water {
-                                    depth,
-                                    vel: Vel::zero(),
+                                .and_then(|vox| {
+                                    vox.liquid_kind().map(|kind| Fluid::Liquid {
+                                        kind,
+                                        depth: 1.0,
+                                        vel: Vel::zero(),
+                                    })
                                 })
                                 .or_else(|| match physics_state.in_fluid {
-                                    Some(Fluid::Water { .. }) | None => Some(Fluid::Air {
+                                    Some(Fluid::Liquid { .. }) | None => Some(Fluid::Air {
                                         elevation: pos.0.z,
                                         vel: Vel::default(),
                                     }),
@@ -1061,10 +1069,11 @@ impl<'a> PhysicsData<'a> {
                                     // union in the state updates, so that the state isn't just
                                     // based on the most
                                     // recent terrain that collision was attempted with
-                                    if physics_state_delta.on_ground {
+                                    if physics_state_delta.on_ground.is_some() {
                                         physics_state.ground_vel = vel_other;
                                     }
-                                    physics_state.on_ground |= physics_state_delta.on_ground;
+                                    physics_state.on_ground =
+                                        physics_state.on_ground.or(physics_state_delta.on_ground);
                                     physics_state.on_ceiling |= physics_state_delta.on_ceiling;
                                     physics_state.on_wall = physics_state.on_wall.or_else(|| {
                                         physics_state_delta
@@ -1278,11 +1287,22 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
         near_iter.filter_map(move |(i, j, k)| {
             let block_pos = pos.map(|e| e.floor() as i32) + Vec3::new(i, j, k);
 
+            // `near_iter` could be a few blocks too large due to being integer aligned and
+            // rounding up, so skip points outside of the tighter bounds before looking them
+            // up in the terrain (which incurs a hashmap cost for volgrids)
+            let player_aabb = Aabb {
+                min: pos + Vec3::new(-radius, -radius, z_range.start),
+                max: pos + Vec3::new(radius, radius, z_range.end),
+            };
+            let block_approx = Aabb {
+                min: block_pos.as_(),
+                max: block_pos.as_() + Vec3::new(1.0, 1.0, Block::MAX_HEIGHT),
+            };
+            if !player_aabb.collides_with_aabb(block_approx) {
+                return None;
+            }
+
             if let Some(block) = terrain.get(block_pos).ok().copied().filter(hit) {
-                let player_aabb = Aabb {
-                    min: pos + Vec3::new(-radius, -radius, z_range.start),
-                    max: pos + Vec3::new(radius, radius, z_range.end),
-                };
                 let block_aabb = Aabb {
                     min: block_pos.map(|e| e as f32),
                     max: block_pos.map(|e| e as f32) + Vec3::new(1.0, 1.0, height(&block)),
@@ -1321,10 +1341,10 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
         .is_some()
     }
 
-    physics_state.on_ground = false;
+    physics_state.on_ground = None;
     physics_state.on_ceiling = false;
 
-    let mut on_ground = false;
+    let mut on_ground = None;
     let mut on_ceiling = false;
     let mut attempts = 0; // Don't loop infinitely here
 
@@ -1342,7 +1362,7 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
         const MAX_ATTEMPTS: usize = 16;
 
         // While the player is colliding with the terrain...
-        while let Some((_block_pos, block_aabb, block_height)) =
+        while let Some((_block_pos, block_aabb, block_height, block)) =
             (attempts < MAX_ATTEMPTS).then(|| {
                 // Calculate the player's AABB
                 let player_aabb = Aabb {
@@ -1373,12 +1393,13 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
                                 max: block_pos.map(|e| e as f32) + Vec3::new(1.0, 1.0, block.solid_height()),
                             },
                             block.solid_height(),
+                            block,
                         )
                     })
                     // Determine whether the block's AABB collides with the player's AABB
-                    .filter(|(_, block_aabb, _)| block_aabb.collides_with_aabb(player_aabb))
+                    .filter(|(_, block_aabb, _, _)| block_aabb.collides_with_aabb(player_aabb))
                     // Find the maximum of the minimum collision axes (this bit is weird, trust me that it works)
-                    .min_by_key(|(_, block_aabb, _)| {
+                    .min_by_key(|(_, block_aabb, _, _)| {
                         ordered_float::OrderedFloat((block_aabb.center() - player_aabb.center() - Vec3::unit_z() * 0.5)
                             .map(f32::abs)
                             .sum())
@@ -1410,7 +1431,7 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
             if resolve_dir.z > 0.0
             /* && vel.0.z <= 0.0 */
             {
-                on_ground = true;
+                on_ground = Some(block).copied();
 
                 if !was_on_ground {
                     land_on_ground(entity, *vel);
@@ -1448,7 +1469,7 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
                 if (vel.0 * resolve_dir).xy().magnitude_squared() < 1.0f32.powi(2) {
                     pos.0 -= resolve_dir.normalized() * 0.05;
                 }
-                on_ground = true;
+                on_ground = Some(block).copied();
                 break;
             } else {
                 // Correct the velocity
@@ -1479,8 +1500,8 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
         physics_state.on_ceiling = true;
     }
 
-    if on_ground {
-        physics_state.on_ground = true;
+    if on_ground.is_some() {
+        physics_state.on_ground = on_ground;
     // If the space below us is free, then "snap" to the ground
     } else if collision_with(
         pos.0 - Vec3::unit_z() * 1.1,
@@ -1501,7 +1522,7 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
             .unwrap_or(0.0);
         vel.0.z = 0.0;
         pos.0.z = (pos.0.z - 0.1).floor() + snap_height;
-        physics_state.on_ground = true;
+        physics_state.on_ground = on_ground;
     }
 
     let player_aabb = Aabb {
@@ -1525,24 +1546,27 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
     });
 
     // Find liquid immersion and wall collision all in one round of iteration
-    let mut max_liquid_z = None::<f32>;
+    let mut liquid = None::<(LiquidKind, f32)>;
     let mut wall_dir_collisions = [false; 4];
     near_iter.for_each(|(i, j, k)| {
         let block_pos = player_voxel_pos + Vec3::new(i, j, k);
 
         if let Some(block) = terrain.get(block_pos).ok().copied() {
             // Check for liquid blocks
-            if block.is_liquid() {
+            if let Some(block_liquid) = block.liquid_kind() {
                 let liquid_aabb = Aabb {
                     min: block_pos.map(|e| e as f32),
                     // The liquid part of a liquid block always extends 1 block high.
                     max: block_pos.map(|e| e as f32) + Vec3::one(),
                 };
                 if player_aabb.collides_with_aabb(liquid_aabb) {
-                    max_liquid_z = Some(match max_liquid_z {
-                        Some(z) => z.max(liquid_aabb.max.z),
-                        None => liquid_aabb.max.z,
-                    });
+                    liquid = match liquid {
+                        Some((kind, max_liquid_z)) => Some((
+                            kind.merge(block_liquid),
+                            max_liquid_z.max(liquid_aabb.max.z),
+                        )),
+                        None => Some((block_liquid, liquid_aabb.max.z)),
+                    };
                 }
             }
             // Check for walls
@@ -1573,28 +1597,29 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
     }
     physics_state.on_wall = on_wall;
     let fric_mod = read.stats.get(entity).map_or(1.0, |s| s.friction_modifier);
-    if physics_state.on_ground || (physics_state.on_wall.is_some() && climbing) {
+    if physics_state.on_ground.is_some() || (physics_state.on_wall.is_some() && climbing) {
         vel.0 *= (1.0 - FRIC_GROUND.min(1.0) * fric_mod).powf(dt.0 * 60.0);
         physics_state.ground_vel = ground_vel;
     }
 
-    physics_state.in_fluid = max_liquid_z
-        .map(|max_z| max_z - pos.0.z) // NOTE: assumes min_z == 0.0
-        .map(|depth| {
-            physics_state
+    physics_state.in_fluid = liquid
+        .map(|(kind, max_z)| (kind, max_z - pos.0.z)) // NOTE: assumes min_z == 0.0
+        .map(|(kind, depth)| {
+            (kind, physics_state
                 .in_liquid()
                 // This is suboptimal because it doesn't check for true depth,
                 // so it can cause problems for situations like swimming down
                 // a river and spawning or teleporting in(/to) water
                 .map(|old_depth| (old_depth + old_pos.z - pos.0.z).max(depth))
-                .unwrap_or(depth)
+                .unwrap_or(depth))
         })
-        .map(|depth| Fluid::Water {
+        .map(|(kind, depth)| Fluid::Liquid {
+            kind,
             depth,
             vel: Vel::zero(),
         })
         .or_else(|| match physics_state.in_fluid {
-            Some(Fluid::Water { .. }) | None => Some(Fluid::Air {
+            Some(Fluid::Liquid { .. }) | None => Some(Fluid::Air {
                 elevation: pos.0.z,
                 vel: Vel::default(),
             }),

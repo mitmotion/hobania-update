@@ -37,19 +37,24 @@ make_case_elim!(
         Ogre = 0,
         Cyclops = 1,
         Wendigo = 2,
-        Troll = 3,
-        Dullahan = 4,
-        Werewolf = 5,
-        Occultsaurok = 6,
-        Mightysaurok = 7,
-        Slysaurok = 8,
-        Mindflayer = 9,
-        Minotaur = 10,
-        Tidalwarrior = 11,
-        Yeti = 12,
-        Harvester = 13,
-        Blueoni = 14,
-        Redoni = 15,
+        Cavetroll = 3,
+        Mountaintroll = 4,
+        Swamptroll = 5,
+        Dullahan = 6,
+        Werewolf = 7,
+        Occultsaurok = 8,
+        Mightysaurok = 9,
+        Slysaurok = 10,
+        Mindflayer = 11,
+        Minotaur = 12,
+        Tidalwarrior = 13,
+        Yeti = 14,
+        Harvester = 15,
+        Blueoni = 16,
+        Redoni = 17,
+        Cultistwarlord = 18,
+        Cultistwarlock = 19,
+        Huskbrute = 20,
     }
 );
 
@@ -61,7 +66,9 @@ pub struct AllSpecies<SpeciesMeta> {
     pub ogre: SpeciesMeta,
     pub cyclops: SpeciesMeta,
     pub wendigo: SpeciesMeta,
-    pub troll: SpeciesMeta,
+    pub troll_cave: SpeciesMeta,
+    pub troll_mountain: SpeciesMeta,
+    pub troll_swamp: SpeciesMeta,
     pub dullahan: SpeciesMeta,
     pub werewolf: SpeciesMeta,
     pub saurok_occult: SpeciesMeta,
@@ -74,6 +81,9 @@ pub struct AllSpecies<SpeciesMeta> {
     pub harvester: SpeciesMeta,
     pub oni_blue: SpeciesMeta,
     pub oni_red: SpeciesMeta,
+    pub cultist_warlord: SpeciesMeta,
+    pub cultist_warlock: SpeciesMeta,
+    pub husk_brute: SpeciesMeta,
 }
 
 impl<'a, SpeciesMeta> core::ops::Index<&'a Species> for AllSpecies<SpeciesMeta> {
@@ -85,7 +95,9 @@ impl<'a, SpeciesMeta> core::ops::Index<&'a Species> for AllSpecies<SpeciesMeta> 
             Species::Ogre => &self.ogre,
             Species::Cyclops => &self.cyclops,
             Species::Wendigo => &self.wendigo,
-            Species::Troll => &self.troll,
+            Species::Cavetroll => &self.troll_cave,
+            Species::Mountaintroll => &self.troll_mountain,
+            Species::Swamptroll => &self.troll_swamp,
             Species::Dullahan => &self.dullahan,
             Species::Werewolf => &self.werewolf,
             Species::Occultsaurok => &self.saurok_occult,
@@ -98,15 +110,20 @@ impl<'a, SpeciesMeta> core::ops::Index<&'a Species> for AllSpecies<SpeciesMeta> 
             Species::Harvester => &self.harvester,
             Species::Blueoni => &self.oni_blue,
             Species::Redoni => &self.oni_red,
+            Species::Cultistwarlord => &self.cultist_warlord,
+            Species::Cultistwarlock => &self.cultist_warlock,
+            Species::Huskbrute => &self.husk_brute,
         }
     }
 }
 
-pub const ALL_SPECIES: [Species; 16] = [
+pub const ALL_SPECIES: [Species; 21] = [
     Species::Ogre,
     Species::Cyclops,
     Species::Wendigo,
-    Species::Troll,
+    Species::Cavetroll,
+    Species::Mountaintroll,
+    Species::Swamptroll,
     Species::Dullahan,
     Species::Werewolf,
     Species::Occultsaurok,
@@ -119,6 +136,9 @@ pub const ALL_SPECIES: [Species; 16] = [
     Species::Harvester,
     Species::Blueoni,
     Species::Redoni,
+    Species::Cultistwarlord,
+    Species::Cultistwarlock,
+    Species::Huskbrute,
 ];
 
 impl<'a, SpeciesMeta: 'a> IntoIterator for &'a AllSpecies<SpeciesMeta> {

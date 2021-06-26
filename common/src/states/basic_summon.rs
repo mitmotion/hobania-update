@@ -1,19 +1,23 @@
 use crate::{
     comp::{
         self,
-        inventory::loadout_builder::{LoadoutBuilder, LoadoutConfig},
-        Behavior, BehaviorCapability, CharacterState, StateUpdate,
+        inventory::loadout_builder::{self, LoadoutBuilder},
+        Behavior, BehaviorCapability, CharacterState, Projectile, StateUpdate,
     },
     event::{LocalEvent, ServerEvent},
     outcome::Outcome,
-    skillset_builder::{SkillSetBuilder, SkillSetConfig},
+    skillset_builder::{self, SkillSetBuilder},
     states::{
         behavior::{CharacterBehavior, JoinData},
         utils::*,
     },
+    terrain::Block,
+    vol::ReadVol,
 };
+use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use std::{f32::consts::PI, time::Duration};
+use vek::*;
 
 /// Separated out to condense update portions of character state
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -26,10 +30,14 @@ pub struct StaticData {
     pub recover_duration: Duration,
     /// How many creatures the state should summon
     pub summon_amount: u32,
+    /// Range of the summons relative to the summonner
+    pub summon_distance: (f32, f32),
     /// Information about the summoned creature
     pub summon_info: SummonInfo,
     /// Miscellaneous information about the ability
     pub ability_info: AbilityInfo,
+    /// Duration of the summoned entity
+    pub duration: Option<Duration>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -74,31 +82,95 @@ impl CharacterBehavior for Data {
                         > self.static_data.cast_duration * self.summon_count
                             / self.static_data.summon_amount
                     {
-                        let body = self.static_data.summon_info.body;
-
-                        let loadout = LoadoutBuilder::build_loadout(
+                        let SummonInfo {
                             body,
-                            None,
-                            self.static_data.summon_info.loadout_config,
-                            None,
-                        )
-                        .build();
+                            loadout_config,
+                            skillset_config,
+                            ..
+                        } = self.static_data.summon_info;
+
+                        let loadout = {
+                            let loadout_builder =
+                                LoadoutBuilder::new().with_default_maintool(&body);
+                            // If preset is none, use default equipment
+                            if let Some(preset) = loadout_config {
+                                loadout_builder.with_preset(preset).build()
+                            } else {
+                                loadout_builder.with_default_equipment(&body).build()
+                            }
+                        };
+
+                        let skill_set = {
+                            let skillset_builder = SkillSetBuilder::default();
+                            if let Some(preset) = skillset_config {
+                                skillset_builder.with_preset(preset).build()
+                            } else {
+                                skillset_builder.build()
+                            }
+                        };
+
                         let stats = comp::Stats::new("Summon".to_string());
-                        let skill_set = SkillSetBuilder::build_skillset(
-                            &None,
-                            self.static_data.summon_info.skillset_config,
-                        )
-                        .build();
+
+                        let health_scaling = self
+                            .static_data
+                            .summon_info
+                            .health_scaling
+                            .map(|health_scaling| comp::Health::new(body, health_scaling));
+
+                        // Ray cast to check where summon should happen
+                        let summon_frac =
+                            self.summon_count as f32 / self.static_data.summon_amount as f32;
+
+                        let length = rand::thread_rng().gen_range(
+                            self.static_data.summon_distance.0..=self.static_data.summon_distance.1,
+                        );
+
+                        // Summon in a clockwise fashion
+                        let ray_vector = Vec3::new(
+                            (summon_frac * 2.0 * PI).sin() * length,
+                            (summon_frac * 2.0 * PI).cos() * length,
+                            data.body.eye_height(),
+                        );
+
+                        // Check for collision on the xy plane
+                        let obstacle_xy = data
+                            .terrain
+                            .ray(data.pos.0, data.pos.0 + length * ray_vector)
+                            .until(Block::is_solid)
+                            .cast()
+                            .0;
+
+                        let collision_vector = Vec3::new(
+                            data.pos.0.x + (summon_frac * 2.0 * PI).sin() * obstacle_xy,
+                            data.pos.0.y + (summon_frac * 2.0 * PI).cos() * obstacle_xy,
+                            data.pos.0.z + data.body.eye_height(),
+                        );
+
+                        // Check for collision in z up to 50 blocks
+                        let obstacle_z = data
+                            .terrain
+                            .ray(collision_vector, collision_vector - Vec3::unit_z() * 50.0)
+                            .until(Block::is_solid)
+                            .cast()
+                            .0;
+
+                        // If a duration is specified, create a projectile componenent for the npc
+                        let projectile = self.static_data.duration.map(|duration| Projectile {
+                            hit_solid: Vec::new(),
+                            hit_entity: Vec::new(),
+                            time_left: duration,
+                            owner: Some(*data.uid),
+                            ignore_group: true,
+                            is_sticky: false,
+                            is_point: false,
+                        });
 
                         // Send server event to create npc
                         update.server_events.push_front(ServerEvent::CreateNpc {
-                            pos: *data.pos,
+                            pos: comp::Pos(collision_vector - Vec3::unit_z() * obstacle_z),
                             stats,
                             skill_set,
-                            health: comp::Health::new(
-                                body,
-                                self.static_data.summon_info.health_scaling,
-                            ),
+                            health: health_scaling,
                             poise: comp::Poise::new(body),
                             loadout,
                             body,
@@ -117,6 +189,7 @@ impl CharacterBehavior for Data {
                             home_chunk: None,
                             drop_item: None,
                             rtsim_entity: None,
+                            projectile,
                         });
 
                         // Send local event used for frontend shenanigans
@@ -174,7 +247,8 @@ impl CharacterBehavior for Data {
 pub struct SummonInfo {
     body: comp::Body,
     scale: Option<comp::Scale>,
-    health_scaling: u16,
-    loadout_config: Option<LoadoutConfig>,
-    skillset_config: Option<SkillSetConfig>,
+    health_scaling: Option<u16>,
+    // TODO: use assets for specifying skills and loadout?
+    loadout_config: Option<loadout_builder::Preset>,
+    skillset_config: Option<skillset_builder::Preset>,
 }

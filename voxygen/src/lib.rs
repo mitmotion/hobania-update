@@ -62,7 +62,7 @@ pub struct GlobalState {
     pub singleplayer: Option<Singleplayer>,
     // TODO: redo this so that the watcher doesn't have to exist for reloading to occur
     pub i18n: LocalizationHandle,
-    pub clipboard: Option<iced_winit::Clipboard>,
+    pub clipboard: iced_winit::Clipboard,
     // NOTE: This can be removed from GlobalState if client state behavior is refactored to not
     // enter the game before confirmation of successful character load
     /// An error returned by Client that needs to be displayed by the UI
@@ -80,6 +80,7 @@ impl GlobalState {
     pub fn maintain(&mut self, dt: std::time::Duration) {
         span!(_guard, "maintain", "GlobalState::maintain");
         self.audio.maintain(dt);
+        self.window.renderer().maintain()
     }
 
     #[cfg(feature = "singleplayer")]

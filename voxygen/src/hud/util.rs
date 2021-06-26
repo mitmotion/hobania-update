@@ -116,13 +116,13 @@ pub fn consumable_desc(effects: &[Effect], i18n: &Localization) -> String {
             let buff_desc = match buff.kind {
                 BuffKind::Saturation | BuffKind::Regeneration | BuffKind::Potion => i18n
                     .get("buff.stat.health")
-                    .replace("{str_total}", &str_total.to_string()),
+                    .replace("{str_total}", &*format!("{:.1}", &str_total)),
                 BuffKind::IncreaseMaxEnergy => i18n
                     .get("buff.stat.increase_max_stamina")
-                    .replace("{strength}", &strength.to_string()),
+                    .replace("{strength}", &*format!("{:.1}", &strength)),
                 BuffKind::IncreaseMaxHealth => i18n
                     .get("buff.stat.increase_max_health")
-                    .replace("{strength}", &strength.to_string()),
+                    .replace("{strength}", &*format!("{:.1}", &strength)),
                 BuffKind::Invulnerability => i18n.get("buff.stat.invulnerability").to_string(),
                 BuffKind::Bleeding
                 | BuffKind::Burning
@@ -132,7 +132,8 @@ pub fn consumable_desc(effects: &[Effect], i18n: &Localization) -> String {
                 | BuffKind::Crippled
                 | BuffKind::Frenzied
                 | BuffKind::Frozen
-                | BuffKind::Wet => continue,
+                | BuffKind::Wet
+                | BuffKind::Ensnared => continue,
             };
 
             write!(&mut description, "{}", buff_desc).unwrap();
@@ -156,7 +157,8 @@ pub fn consumable_desc(effects: &[Effect], i18n: &Localization) -> String {
                     | BuffKind::Crippled
                     | BuffKind::Frenzied
                     | BuffKind::Frozen
-                    | BuffKind::Wet => continue,
+                    | BuffKind::Wet
+                    | BuffKind::Ensnared => continue,
                 }
             } else if let BuffKind::Saturation | BuffKind::Regeneration = buff.kind {
                 i18n.get("buff.text.every_second").to_string()

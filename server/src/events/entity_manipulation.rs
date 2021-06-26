@@ -1,7 +1,7 @@
 use crate::{
     client::Client,
     comp::{
-        agent::{Sound, SoundKind},
+        agent::{Agent, AgentEvent, Sound, SoundKind},
         biped_large, bird_large, quadruped_low, quadruped_medium, quadruped_small,
         skills::SkillGroupKind,
         theropod, PhysicsState,
@@ -59,6 +59,13 @@ pub fn handle_damage(server: &Server, entity: EcsEntity, change: HealthChange) {
     let ecs = &server.state.ecs();
     if let Some(mut health) = ecs.write_storage::<Health>().get_mut(entity) {
         health.change_by(change);
+    }
+    // This if statement filters out anything under 5 damage, for DOT ticks
+    // TODO: Find a better way to separate direct damage from DOT here
+    if change.amount < -50 {
+        if let Some(agent) = ecs.write_storage::<Agent>().get_mut(entity) {
+            agent.inbox.push_front(AgentEvent::Hurt);
+        }
     }
 }
 
@@ -361,8 +368,8 @@ pub fn handle_destroy(server: &mut Server, entity: EcsEntity, cause: HealthSourc
                         quadruped_small::Species::Truffler | quadruped_small::Species::Fungome => {
                             "common.loot_tables.creature.quad_small.mushroom"
                         },
-                        quadruped_small::Species::Sheep => {
-                            "common.loot_tables.creature.quad_small.sheep"
+                        quadruped_small::Species::Sheep | quadruped_small::Species::Goat => {
+                            "common.loot_tables.creature.quad_small.wool"
                         },
                         quadruped_small::Species::Skunk
                         | quadruped_small::Species::Quokka
@@ -400,8 +407,7 @@ pub fn handle_destroy(server: &mut Server, entity: EcsEntity, cause: HealthSourc
                     quadruped_medium::Species::Dreadhorn => {
                         "common.loot_tables.creature.quad_medium.dreadhorn"
                     },
-                    quadruped_medium::Species::Mouflon
-                    | quadruped_medium::Species::Camel
+                    quadruped_medium::Species::Camel
                     | quadruped_medium::Species::Deer
                     | quadruped_medium::Species::Hirdrasil
                     | quadruped_medium::Species::Horse
@@ -414,6 +420,17 @@ pub fn handle_destroy(server: &mut Server, entity: EcsEntity, cause: HealthSourc
                     | quadruped_medium::Species::Yak => {
                         "common.loot_tables.creature.quad_medium.gentle"
                     },
+                    quadruped_medium::Species::Mouflon
+                    | quadruped_medium::Species::Llama
+                    | quadruped_medium::Species::Alpaca => {
+                        "common.loot_tables.creature.quad_medium.wool"
+                    },
+                    quadruped_medium::Species::Ngoubou => {
+                        "common.loot_tables.creature.quad_medium.horned"
+                    },
+                    quadruped_medium::Species::Mammoth => {
+                        "common.loot_tables.creature.quad_medium.mammoth"
+                    },
                     _ => "common.loot_tables.creature.quad_medium.fanged",
                 },
                 Some(common::comp::Body::BirdMedium(_)) => {
@@ -423,6 +440,7 @@ pub fn handle_destroy(server: &mut Server, entity: EcsEntity, cause: HealthSourc
                     bird_large::Species::Cockatrice => {
                         "common.loot_tables.creature.bird_large.cockatrice"
                     },
+                    bird_large::Species::Roc => "common.loot_tables.creature.bird_large.roc",
                     _ => "common.loot_tables.creature.bird_large.phoenix",
                 },
                 Some(common::comp::Body::FishMedium(_)) => "common.loot_tables.creature.fish",
@@ -431,7 +449,11 @@ pub fn handle_destroy(server: &mut Server, entity: EcsEntity, cause: HealthSourc
                     biped_large::Species::Wendigo => {
                         "common.loot_tables.creature.biped_large.wendigo"
                     },
-                    biped_large::Species::Troll => "common.loot_tables.creature.biped_large.troll",
+                    biped_large::Species::Cavetroll
+                    | biped_large::Species::Mountaintroll
+                    | biped_large::Species::Swamptroll => {
+                        "common.loot_tables.creature.biped_large.troll"
+                    },
                     biped_large::Species::Occultsaurok
                     | biped_large::Species::Mightysaurok
                     | biped_large::Species::Slysaurok => {
@@ -472,6 +494,9 @@ pub fn handle_destroy(server: &mut Server, entity: EcsEntity, cause: HealthSourc
                         },
                         quadruped_low::Species::Basilisk => {
                             "common.loot_tables.creature.quad_low.basilisk"
+                        },
+                        quadruped_low::Species::Salamander => {
+                            "common.loot_tables.creature.quad_low.salamander"
                         },
                         _ => "common.loot_tables.creature.quad_low.generic",
                     }
@@ -689,7 +714,7 @@ pub fn handle_explosion(server: &Server, pos: Vec3<f32>, explosion: Explosion, o
 
         // Compare both checks, take whichever gives weaker effect, sets minimum of 0 so
         // that explosions reach a max strength on edge of entity
-        ((horiz_dist.max(vert_distance).max(0.0) / radius).min(1.0) - 1.0).powi(2)
+        ((horiz_dist.max(vert_distance).max(0.0) / radius).min(1.0) - 1.0).abs()
     }
 
     for effect in explosion.effects {
@@ -992,13 +1017,12 @@ fn handle_exp_gain(
     // Closure to add xp pool corresponding to weapon type equipped in a particular
     // EquipSlot
     let mut add_tool_from_slot = |equip_slot| {
-        let tool_kind = inventory.equipped(equip_slot).and_then(|i| {
-            if let ItemKind::Tool(tool) = &i.kind() {
-                Some(tool.kind)
-            } else {
-                None
-            }
-        });
+        let tool_kind = inventory
+            .equipped(equip_slot)
+            .and_then(|i| match &i.kind() {
+                ItemKind::Tool(tool) if tool.kind.gains_combat_xp() => Some(tool.kind),
+                _ => None,
+            });
         if let Some(weapon) = tool_kind {
             // Only adds to xp pools if entity has that skill group available
             if skill_set.contains_skill_group(SkillGroupKind::Weapon(weapon)) {
@@ -1012,12 +1036,13 @@ fn handle_exp_gain(
     add_tool_from_slot(EquipSlot::InactiveMainhand);
     add_tool_from_slot(EquipSlot::InactiveOffhand);
     let num_pools = xp_pools.len() as f32;
-    for pool in xp_pools {
-        skill_set.change_experience(pool, (exp_reward / num_pools).ceil() as i32);
+    for pool in xp_pools.iter() {
+        skill_set.change_experience(*pool, (exp_reward / num_pools).ceil() as i32);
     }
     outcomes.push(Outcome::ExpChange {
         uid: *uid,
         exp: exp_reward as i32,
+        xp_pools,
     });
 }
 

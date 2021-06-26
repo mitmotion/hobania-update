@@ -3,7 +3,7 @@ authors = ["Joshua Barretto <joshua.s.barretto@gmail.com>", "Imbris <imbrisf@gma
 default-run = "veloren-voxygen"
 edition = "2018"
 name = "veloren-voxygen"
-version = "0.9.0"
+version = "0.10.0"
 # Cargo thinks it should build the voxygen binary even when a specific bench is specified for building
 # Uncomment below and comment out default-run if you want to avoid this
 # autobins = false
@@ -25,10 +25,15 @@ buildInputs = ["xorg.libxcb"]
 hot-anim = ["anim/use-dyn-lib"]
 singleplayer = ["server"]
 simd = ["vek/platform_intrinsics"]
-tracy = ["profiling", "profiling/profile-with-tracy", "common/tracy", "common-ecs/tracy", "common-frontend/tracy", "common-net/tracy", "common-systems/tracy", "common-state/tracy", "client/tracy"]
+tracy = ["profiling", "profiling/profile-with-tracy", "common-frontend/tracy"]
 plugins = ["client/plugins"]
 
-default = ["singleplayer", "native-dialog", "plugins", "simd"]
+# We don't ship egui with published release builds so a separate feature is required that excludes it.
+# This feature has been added ahead of the egui merge to allow time for Flatpak, AUR and Nix to be updated
+# to ensure there isn't any period of time where we're shipping the egui-ui feature enabled by default.
+# This comment will be updated after MR 2253 merges.
+default-publish = ["singleplayer", "native-dialog", "plugins", "simd"]
+default = ["default-publish"]
 
 [dependencies]
 client = {package = "veloren-client", path = "../client"}
@@ -44,7 +49,7 @@ anim = {package = "veloren-voxygen-anim", path = "anim"}
 i18n = {package = "veloren-i18n", path = "i18n"}
 
 # Graphics
-winit = {version = "0.24.0", features = ["serde"]}
+winit = {version = "0.25.0", features = ["serde"]}
 wgpu = { version = "=0.8.0", features = ["trace", "cross"] }
 wgpu-profiler = { git = "https://github.com/Imberflur/wgpu-profiler", tag = "wgpu-0.8" }
 bytemuck = { version="1.4", features=["derive"] }
@@ -54,11 +59,11 @@ shaderc = "0.6.2"
 conrod_core = {git = "https://gitlab.com/veloren/conrod.git", branch="copypasta_0.7"}
 conrod_winit = {git = "https://gitlab.com/veloren/conrod.git", branch="copypasta_0.7"}
 euc = "0.5.0"
-iced = {package = "iced_native", git = "https://github.com/hecrj/iced", rev = "8d882d787e6b7fd7c2435f42f82933e2ed904edf"}
-iced_winit = {git = "https://github.com/hecrj/iced", rev = "8d882d787e6b7fd7c2435f42f82933e2ed904edf"}
+iced = {package = "iced_native", git = "https://github.com/Imberflur/iced", tag = "winit-0.25"}
+iced_winit = {git = "https://github.com/Imberflur/iced", tag = "winit-0.25"}
 window_clipboard = "0.2"
 glyph_brush = "0.7.0"
-keyboard-keynames = { git = "https://gitlab.com/Frinksy/keyboard-keynames.git", rev = "a97ae509cdb9dc70cf1bf0af762d2d1d3a0d6e0c" }
+keyboard-keynames = { git = "https://gitlab.com/Frinksy/keyboard-keynames.git", rev = "9ae8f89014d0b0c5b61d0e821c5aeb6140c5c0dc" }
 
 # ECS
 specs = {git = "https://github.com/amethyst/specs.git", rev = "f985bec5d456f7b0dd8aae99848f9473c2cd9d46"}
@@ -78,6 +83,7 @@ backtrace = "0.3.40"
 bincode = "1.3.1"
 chrono = { version = "0.4.9", features = ["serde"] }
 cpal = "0.13"
+comma = "0.1"
 copy_dir = "0.1.2"
 crossbeam-utils = "0.8.1"
 crossbeam-channel = "0.5"
@@ -95,7 +101,7 @@ num = "0.4"
 ordered-float = { version = "2.0.1", default-features = false }
 rand = "0.8"
 rayon = "1.5"
-rodio = {version = "0.13", default-features = false, features = ["vorbis"]}
+rodio = {version = "0.14", default-features = false, features = ["vorbis"]}
 ron = {version = "0.6", default-features = false}
 serde = {version = "1.0", features = [ "rc", "derive" ]}
 strum = "0.20"

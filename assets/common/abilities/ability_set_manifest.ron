@@ -34,11 +34,15 @@
         secondary: "common.abilities.custom.husk.triplestrike",
         abilities: [],
     ),
+    Custom("Husk Brute"): (
+        primary: "common.abilities.custom.husk_brute.singlestrike",
+        secondary: "common.abilities.custom.husk_brute.chargedmelee",
+        abilities: [],
+    ),
     Tool(Spear): (
         primary: "common.abilities.spear.doublestrike",
         secondary: "common.abilities.spear.dash",
         abilities: [],
-
     ),
     Custom("Hammer Simple"): (
         primary: "common.abilities.hammersimple.doublestrike",
@@ -53,8 +57,7 @@
     Custom("Sword Simple"): (
         primary: "common.abilities.swordsimple.doublestrike",
         secondary: "common.abilities.swordsimple.dash",
-        abilities: [
-        ],
+        abilities: [],
     ),
     Custom("Staff Simple"): (
         primary: "common.abilities.staffsimple.firebomb",
@@ -149,13 +152,20 @@
         abilities: [],
     ),
     Custom("Basilisk"): (
-        primary: "common.abilities.custom.basilisk.singlestrike",
+        primary: "common.abilities.custom.basilisk.petrify",
         secondary: "common.abilities.custom.basilisk.triplestrike",
+        abilities: [
+            (None, "common.abilities.custom.basilisk.dash"),
+        ],
+    ),
+    Custom("Asp"): (
+        primary: "common.abilities.custom.asp.singlestrike",
+        secondary: "common.abilities.custom.asp.firebomb",
         abilities: [],
     ),
-    Custom("Quad Low Ranged"): (
-        primary: "common.abilities.custom.quadlowranged.singlestrike",
-        secondary: "common.abilities.custom.quadlowranged.firebomb",
+    Custom("Maneater"): (
+        primary: "common.abilities.custom.maneater.singlestrike",
+        secondary: "common.abilities.custom.maneater.poisonball",
         abilities: [],
     ),
     Custom("Quad Low Breathe"): (
@@ -250,6 +260,14 @@
             (None, "common.abilities.custom.yeti.snowball"),
         ],
     ),
+    Custom("Harvester"): (
+        primary: "common.abilities.custom.harvester.scythe",
+        secondary: "common.abilities.custom.harvester.firebreath",
+        abilities: [
+            (None, "common.abilities.custom.harvester.ensnaringvines"),
+            (None, "common.abilities.custom.harvester.explodingpumpkin"),
+        ],
+    ),
     Custom("Bird Large Breathe"): (
         primary: "common.abilities.custom.birdlargebreathe.firebomb",
         secondary: "common.abilities.custom.birdlargebreathe.triplestrike",
@@ -263,6 +281,18 @@
         abilities: [
             (None, "common.abilities.custom.birdlargefire.fireshockwave"),
         ],
+    ),
+    Custom("Bird Large Basic"): (
+        primary: "common.abilities.custom.birdlargebasic.triplestrike",
+        secondary: "common.abilities.custom.birdlargebasic.summontornadoes",
+        abilities: [
+            (None, "common.abilities.custom.birdlargebasic.dash"),
+        ],
+    ),
+    Custom("Tornado"): (
+        primary: "common.abilities.custom.tornado.spin",
+        secondary: "common.abilities.empty.basic",
+        abilities: [],
     ),
     Tool(Debug): (
         primary: "common.abilities.debug.forwardboost",

@@ -15,7 +15,7 @@ use common::{
         inventory::slot::{EquipSlot, Slot},
         invite::InviteKind,
         item::{tool::ToolKind, ItemDef, ItemDesc},
-        ChatMsg, ChatType, InputKind, InventoryUpdateEvent, Pos, Vel,
+        ChatMsg, ChatType, InputKind, InventoryUpdateEvent, Pos, UtteranceKind, Vel,
     },
     consts::{MAX_MOUNT_RANGE, MAX_PICKUP_RANGE},
     outcome::Outcome,
@@ -27,7 +27,7 @@ use common::{
     },
     vol::ReadVol,
 };
-use common_base::span;
+use common_base::{prof_span, span};
 use common_net::{
     msg::{server::InviteAnswer, PresenceKind},
     sync::WorldSyncExt,
@@ -311,8 +311,8 @@ impl PlayState for SessionState {
                 .read_storage::<comp::CharacterState>()
                 .get(player_entity)
             {
-                if cr.charge_frac() > 0.25 {
-                    fov_scaling -= 3.0 * cr.charge_frac() / 4.0;
+                if cr.charge_frac() > 0.5 {
+                    fov_scaling -= 3.0 * cr.charge_frac() / 5.0;
                 }
                 let max_dist = if let Some(dist) = self.saved_zoom_dist {
                     dist
@@ -523,6 +523,11 @@ impl PlayState for SessionState {
                                 if state {
                                     self.stop_auto_walk();
                                     self.client.borrow_mut().toggle_dance();
+                                }
+                            },
+                            GameInput::Greet => {
+                                if state {
+                                    self.client.borrow_mut().utter(UtteranceKind::Greeting);
                                 }
                             },
                             GameInput::Sneak => {
@@ -841,6 +846,10 @@ impl PlayState for SessionState {
                         Dir::from_unnormalized(cam_dir + aim_dir_offset).unwrap();
                 }
             }
+            self.inputs.strafing = matches!(
+                self.scene.camera().get_mode(),
+                camera::CameraMode::FirstPerson
+            );
 
             // Get the current state of movement related inputs
             let input_vec = self.key_state.dir_vec();
@@ -1026,6 +1035,9 @@ impl PlayState for SessionState {
                     HudEvent::SendMessage(msg) => {
                         // TODO: Handle result
                         self.client.borrow_mut().send_chat(msg);
+                    },
+                    HudEvent::SendCommand(name, args) => {
+                        self.client.borrow_mut().send_command(name, args);
                     },
                     HudEvent::CharacterSelection => {
                         self.client.borrow_mut().request_remove_character()
@@ -1436,16 +1448,22 @@ impl PlayState for SessionState {
         }
 
         // Clouds
-        if let Some(mut second_pass) = drawer.second_pass() {
-            second_pass.draw_clouds();
+        {
+            prof_span!("clouds");
+            if let Some(mut second_pass) = drawer.second_pass() {
+                second_pass.draw_clouds();
+            }
         }
         // PostProcess and UI
-        let mut third_pass = drawer.third_pass();
-        third_pass.draw_postprocess();
-        // Draw the UI to the screen
-        if let Some(mut ui_drawer) = third_pass.draw_ui() {
-            self.hud.render(&mut ui_drawer);
-        }; // Note: this semicolon is needed for the third_pass borrow to be dropped before it's lifetime ends
+        {
+            prof_span!("post-process and ui");
+            let mut third_pass = drawer.third_pass();
+            third_pass.draw_postprocess();
+            // Draw the UI to the screen
+            if let Some(mut ui_drawer) = third_pass.draw_ui() {
+                self.hud.render(&mut ui_drawer);
+            }; // Note: this semicolon is needed for the third_pass borrow to be dropped before it's lifetime ends
+        }
     }
 }
 

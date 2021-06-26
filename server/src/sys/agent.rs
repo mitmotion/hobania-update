@@ -21,7 +21,7 @@ use common::{
         Agent, Alignment, BehaviorCapability, BehaviorState, Body, CharacterAbility,
         CharacterState, ControlAction, ControlEvent, Controller, Energy, Health, HealthChange,
         InputKind, Inventory, InventoryAction, LightEmitter, MountState, Ori, PhysicsState, Pos,
-        Scale, SkillSet, Stats, UnresolvedChatMsg, Vel,
+        Scale, SkillSet, Stats, UnresolvedChatMsg, UtteranceKind, Vel,
     },
     consts::GRAVITY,
     effect::{BuffEffect, Effect},
@@ -116,10 +116,13 @@ pub enum Tactic {
     Mindflayer,
     BirdLargeBreathe,
     BirdLargeFire,
+    BirdLargeBasic,
     Minotaur,
     ClayGolem,
     TidalWarrior,
     Yeti,
+    Tornado,
+    Harvester,
 }
 
 #[derive(SystemData)]
@@ -278,7 +281,7 @@ impl<'a> System<'a> for Sys {
                     let is_gliding = matches!(
                         read_data.char_states.get(entity),
                         Some(CharacterState::GlideWield) | Some(CharacterState::Glide(_))
-                    ) && !physics_state.on_ground;
+                    ) && physics_state.on_ground.is_none();
 
                     if let Some(pid) = agent.position_pid_controller.as_mut() {
                         pid.add_measurement(read_data.time.0, pos.0);
@@ -293,7 +296,7 @@ impl<'a> System<'a> for Sys {
                     let traversal_config = TraversalConfig {
                         node_tolerance,
                         slow_factor,
-                        on_ground: physics_state.on_ground,
+                        on_ground: physics_state.on_ground.is_some(),
                         in_liquid: physics_state.in_liquid().is_some(),
                         min_tgt_dist: 1.0,
                         can_climb: body.map(|b| b.can_climb()).unwrap_or(false),
@@ -363,7 +366,7 @@ impl<'a> System<'a> for Sys {
                     // inputs.
 
                     // If falling fast and can glide, save yourself!
-                    if data.glider_equipped && !data.physics_state.on_ground {
+                    if data.glider_equipped && data.physics_state.on_ground.is_none() {
                         // toggle glider when vertical velocity is above some threshold (here ~
                         // glider fall vertical speed)
                         data.glider_fall(agent, controller, &read_data);
@@ -407,6 +410,14 @@ impl<'a> System<'a> for Sys {
                                                     .uid_allocator
                                                     .retrieve_entity_internal(by.id())
                                                 {
+                                                    if agent.target.is_none() {
+                                                        controller.push_event(
+                                                            ControlEvent::Utterance(
+                                                                UtteranceKind::Angry,
+                                                            ),
+                                                        );
+                                                    }
+
                                                     agent.target = Some(Target {
                                                         target: attacker,
                                                         hostile: true,
@@ -509,6 +520,12 @@ impl<'a> System<'a> for Sys {
                                                     &mut event_emitter,
                                                 );
                                             } else {
+                                                if agent.target.is_none() {
+                                                    controller.push_event(ControlEvent::Utterance(
+                                                        UtteranceKind::Angry,
+                                                    ));
+                                                }
+
                                                 agent.target = Some(Target {
                                                     target: attacker,
                                                     hostile: true,
@@ -617,11 +634,27 @@ impl<'a> AgentData<'a> {
         }
         // Interact if incoming messages
         if !agent.inbox.is_empty() {
-            if !matches!(agent.inbox.front(), Some(AgentEvent::ServerSound(_))) {
+            if matches!(
+                agent.inbox.front(),
+                Some(AgentEvent::ServerSound(_)) | Some(AgentEvent::Hurt)
+            ) {
+                let sound = agent.inbox.pop_front();
+                match sound {
+                    Some(AgentEvent::ServerSound(sound)) => {
+                        agent.sounds_heard.push(sound);
+                        agent.awareness += sound.vol;
+                    },
+                    Some(AgentEvent::Hurt) => {
+                        // Hurt utterances at random upon receiving damage
+                        if thread_rng().gen::<f32>() < 0.4 {
+                            controller.push_event(ControlEvent::Utterance(UtteranceKind::Hurt));
+                        }
+                    },
+                    //Note: this should be unreachable
+                    Some(_) | None => return,
+                }
+            } else {
                 agent.action_state.timer = 0.1;
-            } else if let Some(AgentEvent::ServerSound(sound)) = agent.inbox.pop_front() {
-                agent.sounds_heard.push(sound);
-                agent.awareness += sound.vol;
             }
         }
         if agent.action_state.timer > 0.0 {
@@ -658,6 +691,13 @@ impl<'a> AgentData<'a> {
         if self.damage < HEALING_ITEM_THRESHOLD && self.heal_self(agent, controller) {
             agent.action_state.timer = 0.01;
             return;
+        }
+
+        if let Some(AgentEvent::Hurt) = agent.inbox.pop_front() {
+            // Hurt utterances at random upon receiving damage
+            if thread_rng().gen::<f32>() < 0.4 {
+                controller.push_event(ControlEvent::Utterance(UtteranceKind::Hurt));
+            }
         }
 
         if let Some(Target {
@@ -943,6 +983,10 @@ impl<'a> AgentData<'a> {
                 controller.actions.push(ControlAction::Unwield);
             }
 
+            if thread_rng().gen::<f32>() < 0.0015 {
+                controller.push_event(ControlEvent::Utterance(UtteranceKind::Calm));
+            }
+
             // Sit
             if thread_rng().gen::<f32>() < 0.0035 {
                 controller.actions.push(ControlAction::Sit);
@@ -988,6 +1032,8 @@ impl<'a> AgentData<'a> {
                         if self.look_toward(controller, read_data, &target) {
                             controller.actions.push(ControlAction::Stand);
                             controller.actions.push(ControlAction::Talk);
+                            controller.push_event(ControlEvent::Utterance(UtteranceKind::Greeting));
+
                             match subject {
                                 Subject::Regular => {
                                     if let (
@@ -1546,6 +1592,10 @@ impl<'a> AgentData<'a> {
             .min_by_key(|(_, e_pos, _, _, _, _, _)| (e_pos.0.distance_squared(self.pos.0) * 100.0) as i32) // TODO choose target by more than just distance
             .map(|(e, _, _, _, _, _, _)| e);
 
+        if agent.target.is_none() && target.is_some() {
+            controller.push_event(ControlEvent::Utterance(UtteranceKind::Angry));
+        }
+
         agent.target = target.map(|target| Target {
             target,
             hostile: true,
@@ -1587,13 +1637,15 @@ impl<'a> AgentData<'a> {
                             },
                             "Quad Med Jump" => Tactic::QuadMedJump,
                             "Quad Med Charge" => Tactic::CircleCharge {
-                                radius: 12,
+                                radius: 6,
                                 circle_time: 1,
                             },
                             "Quad Med Basic" => Tactic::QuadMedBasic,
-                            "Quad Low Ranged" => Tactic::QuadLowRanged,
-                            "Quad Low Breathe" | "Quad Low Beam" => Tactic::QuadLowBeam,
-                            "Quad Low Tail" => Tactic::TailSlap,
+                            "Asp" | "Maneater" => Tactic::QuadLowRanged,
+                            "Quad Low Breathe" | "Quad Low Beam" | "Basilisk" => {
+                                Tactic::QuadLowBeam
+                            },
+                            "Quad Low Tail" | "Husk Brute" => Tactic::TailSlap,
                             "Quad Low Quick" => Tactic::QuadLowQuick,
                             "Quad Low Basic" => Tactic::QuadLowBasic,
                             "Theropod Basic" | "Theropod Bird" => Tactic::Theropod,
@@ -1605,12 +1657,14 @@ impl<'a> AgentData<'a> {
                             "Haniwa Sentry" => Tactic::RotatingTurret,
                             "Bird Large Breathe" => Tactic::BirdLargeBreathe,
                             "Bird Large Fire" => Tactic::BirdLargeFire,
+                            "Bird Large Basic" => Tactic::BirdLargeBasic,
                             "Mindflayer" => Tactic::Mindflayer,
                             "Minotaur" => Tactic::Minotaur,
                             "Clay Golem" => Tactic::ClayGolem,
                             "Tidal Warrior" => Tactic::TidalWarrior,
                             "Tidal Totem" => Tactic::RadialTurret,
                             "Yeti" => Tactic::Yeti,
+                            "Harvester" => Tactic::Harvester,
                             _ => Tactic::Melee,
                         },
                         AbilitySpec::Tool(tool_kind) => tool_tactic(*tool_kind),
@@ -1703,6 +1757,18 @@ impl<'a> AgentData<'a> {
                 const SNOWBALL_SPEED: f32 = 60.0;
                 aim_projectile(
                     SNOWBALL_SPEED,
+                    Vec3::new(self.pos.0.x, self.pos.0.y, self.pos.0.z + eye_offset),
+                    Vec3::new(
+                        tgt_data.pos.0.x,
+                        tgt_data.pos.0.y,
+                        tgt_data.pos.0.z + tgt_eye_offset,
+                    ),
+                )
+            },
+            Tactic::Harvester if matches!(self.char_state, CharacterState::BasicRanged(_)) => {
+                const PUMPKIN_SPEED: f32 = 30.0;
+                aim_projectile(
+                    PUMPKIN_SPEED,
                     Vec3::new(self.pos.0.x, self.pos.0.y, self.pos.0.z + eye_offset),
                     Vec3::new(
                         tgt_data.pos.0.x,
@@ -1833,6 +1899,7 @@ impl<'a> AgentData<'a> {
                 &tgt_data,
                 &read_data,
             ),
+            Tactic::Tornado => self.handle_tornado_attack(controller),
             Tactic::Mindflayer => self.handle_mindflayer_attack(
                 agent,
                 controller,
@@ -1849,6 +1916,13 @@ impl<'a> AgentData<'a> {
             ),
             // Mostly identical to BirdLargeFire but tweaked for flamethrower instead of shockwave
             Tactic::BirdLargeBreathe => self.handle_birdlarge_breathe_attack(
+                agent,
+                controller,
+                &attack_data,
+                &tgt_data,
+                &read_data,
+            ),
+            Tactic::BirdLargeBasic => self.handle_birdlarge_basic_attack(
                 agent,
                 controller,
                 &attack_data,
@@ -1881,6 +1955,9 @@ impl<'a> AgentData<'a> {
             ),
             Tactic::Yeti => {
                 self.handle_yeti_attack(agent, controller, &attack_data, &tgt_data, &read_data)
+            },
+            Tactic::Harvester => {
+                self.handle_harvester_attack(agent, controller, &attack_data, &tgt_data, &read_data)
             },
         }
     }
@@ -2906,6 +2983,12 @@ impl<'a> AgentData<'a> {
         }
     }
 
+    fn handle_tornado_attack(&self, controller: &mut Controller) {
+        controller
+            .actions
+            .push(ControlAction::basic_input(InputKind::Primary));
+    }
+
     fn handle_mindflayer_attack(
         &self,
         agent: &mut Agent,
@@ -3261,6 +3344,76 @@ impl<'a> AgentData<'a> {
         }
     }
 
+    fn handle_birdlarge_basic_attack(
+        &self,
+        agent: &mut Agent,
+        controller: &mut Controller,
+        attack_data: &AttackData,
+        tgt_data: &TargetData,
+        read_data: &ReadData,
+    ) {
+        const BIRD_ATTACK_RANGE: f32 = 4.0;
+        const BIRD_CHARGE_DISTANCE: f32 = 15.0;
+        let bird_attack_distance = self.body.map_or(0.0, |b| b.radius()) + BIRD_ATTACK_RANGE;
+        // Increase action timer
+        agent.action_state.timer += read_data.dt.0;
+        // If higher than 2 blocks
+        if !read_data
+            .terrain
+            .ray(self.pos.0, self.pos.0 - (Vec3::unit_z() * 2.0))
+            .until(Block::is_solid)
+            .cast()
+            .1
+            .map_or(true, |b| b.is_some())
+        {
+            // Fly to target and land
+            controller
+                .actions
+                .push(ControlAction::basic_input(InputKind::Fly));
+            let move_dir = tgt_data.pos.0 - self.pos.0;
+            controller.inputs.move_dir =
+                move_dir.xy().try_normalized().unwrap_or_else(Vec2::zero) * 2.0;
+            controller.inputs.move_z = move_dir.z - 0.5;
+        } else if agent.action_state.timer > 8.0 {
+            // If action timer higher than 8, make bird summon tornadoes
+            controller
+                .actions
+                .push(ControlAction::basic_input(InputKind::Secondary));
+            if matches!(self.char_state, CharacterState::BasicSummon(c) if matches!(c.stage_section, StageSection::Recover))
+            {
+                // Reset timer
+                agent.action_state.timer = 0.0;
+            }
+        } else if matches!(self.char_state, CharacterState::DashMelee(c) if !matches!(c.stage_section, StageSection::Recover))
+        {
+            // If already in dash, keep dashing if not in recover
+            controller
+                .actions
+                .push(ControlAction::basic_input(InputKind::Ability(0)));
+        } else if matches!(self.char_state, CharacterState::ComboMelee(c) if matches!(c.stage_section, StageSection::Recover))
+        {
+            // If already in combo keep comboing if not in recover
+            controller
+                .actions
+                .push(ControlAction::basic_input(InputKind::Primary));
+        } else if attack_data.dist_sqrd > BIRD_CHARGE_DISTANCE.powi(2) {
+            // Charges at target if they are far enough away
+            if attack_data.angle < 60.0 {
+                controller
+                    .actions
+                    .push(ControlAction::basic_input(InputKind::Ability(0)));
+            }
+        } else if attack_data.dist_sqrd < bird_attack_distance.powi(2) {
+            // Combo melee target
+            controller
+                .actions
+                .push(ControlAction::basic_input(InputKind::Primary));
+            agent.action_state.condition = true;
+        }
+        // Make bird move towards target
+        self.path_toward_target(agent, controller, tgt_data, read_data, true, None);
+    }
+
     fn handle_minotaur_attack(
         &self,
         agent: &mut Agent,
@@ -3341,6 +3494,9 @@ impl<'a> AgentData<'a> {
         const GOLEM_LONG_RANGE: f32 = 50.0;
         const GOLEM_TARGET_SPEED: f32 = 8.0;
         let golem_melee_range = self.body.map_or(0.0, |b| b.radius()) + GOLEM_MELEE_RANGE;
+        // Fraction of health, used for activation of shockwave
+        // If golem don't have health for some reason, assume it's full
+        let health_fraction = self.health.map_or(1.0, |h| h.fraction());
         // Magnitude squared of cross product of target velocity with golem orientation
         let target_speed_cross_sqd = agent
             .target
@@ -3366,7 +3522,7 @@ impl<'a> AgentData<'a> {
                 }
             }
         } else if attack_data.dist_sqrd < GOLEM_LASER_RANGE.powi(2) {
-            if matches!(self.char_state, CharacterState::BasicBeam(c) if c.timer < Duration::from_secs(10))
+            if matches!(self.char_state, CharacterState::BasicBeam(c) if c.timer < Duration::from_secs(5))
                 || target_speed_cross_sqd < GOLEM_TARGET_SPEED.powi(2)
                     && can_see_tgt(
                         &*read_data.terrain,
@@ -3376,13 +3532,14 @@ impl<'a> AgentData<'a> {
                     )
                     && attack_data.angle < 45.0
             {
-                // If target in range threshold and haven't been lasering for more than 10
+                // If target in range threshold and haven't been lasering for more than 5
                 // seconds already or if target is moving slow-ish, laser them
                 controller
                     .actions
                     .push(ControlAction::basic_input(InputKind::Secondary));
-            } else {
-                // Else target moving too fast for laser, shockwave time
+            } else if health_fraction < 0.7 {
+                // Else target moving too fast for laser, shockwave time.
+                // But only if damaged enough
                 controller
                     .actions
                     .push(ControlAction::basic_input(InputKind::Ability(0)));
@@ -3400,8 +3557,9 @@ impl<'a> AgentData<'a> {
                 controller
                     .actions
                     .push(ControlAction::basic_input(InputKind::Ability(1)));
-            } else {
-                // Else target moving too fast for laser, shockwave time
+            } else if health_fraction < 0.7 {
+                // Else target moving too fast for laser, shockwave time.
+                // But only if damaged enough
                 controller
                     .actions
                     .push(ControlAction::basic_input(InputKind::Ability(0)));
@@ -3548,6 +3706,78 @@ impl<'a> AgentData<'a> {
                 .push(ControlAction::basic_input(InputKind::Ability(1)));
         }
 
+        // Always attempt to path towards target
+        self.path_toward_target(agent, controller, tgt_data, read_data, false, None);
+    }
+
+    fn handle_harvester_attack(
+        &self,
+        agent: &mut Agent,
+        controller: &mut Controller,
+        attack_data: &AttackData,
+        tgt_data: &TargetData,
+        read_data: &ReadData,
+    ) {
+        const VINE_CREATION_THRESHOLD: f32 = 0.50;
+        const FIRE_BREATH_RANGE: f32 = 20.0;
+        const MAX_PUMPKIN_RANGE: f32 = 50.0;
+        let health_fraction = self.health.map_or(0.5, |h| h.fraction());
+
+        if health_fraction < VINE_CREATION_THRESHOLD && !agent.action_state.condition {
+            // Summon vines when reach threshold of health
+            controller
+                .actions
+                .push(ControlAction::basic_input(InputKind::Ability(0)));
+
+            if matches!(self.char_state, CharacterState::SpriteSummon(c) if matches!(c.stage_section, StageSection::Recover))
+            {
+                agent.action_state.condition = true;
+            }
+        } else if attack_data.dist_sqrd < FIRE_BREATH_RANGE.powi(2) {
+            if matches!(self.char_state, CharacterState::BasicBeam(c) if c.timer < Duration::from_secs(5))
+                && can_see_tgt(
+                    &*read_data.terrain,
+                    self.pos,
+                    tgt_data.pos,
+                    attack_data.dist_sqrd,
+                )
+            {
+                // Keep breathing fire if close enough, can see target, and have not been
+                // breathing for more than 5 seconds
+                controller
+                    .actions
+                    .push(ControlAction::basic_input(InputKind::Secondary));
+            } else if attack_data.in_min_range() && attack_data.angle < 60.0 {
+                // Scythe them if they're in range and angle
+                controller
+                    .actions
+                    .push(ControlAction::basic_input(InputKind::Primary));
+            } else if attack_data.angle < 30.0
+                && can_see_tgt(
+                    &*read_data.terrain,
+                    self.pos,
+                    tgt_data.pos,
+                    attack_data.dist_sqrd,
+                )
+            {
+                // Start breathing fire at them if close enough, in angle, and can see target
+                controller
+                    .actions
+                    .push(ControlAction::basic_input(InputKind::Secondary));
+            }
+        } else if attack_data.dist_sqrd < MAX_PUMPKIN_RANGE.powi(2)
+            && can_see_tgt(
+                &*read_data.terrain,
+                self.pos,
+                tgt_data.pos,
+                attack_data.dist_sqrd,
+            )
+        {
+            // Throw a pumpkin at them if close enough and can see them
+            controller
+                .actions
+                .push(ControlAction::basic_input(InputKind::Ability(1)));
+        }
         // Always attempt to path towards target
         self.path_toward_target(agent, controller, tgt_data, read_data, false, None);
     }
