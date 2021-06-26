@@ -25,7 +25,7 @@ use conrod_core::{
     color,
     position::{Place, Relative},
     widget::{self, Button, Image, Rectangle, Scrollbar, Text},
-    widget_ids, Color, Colorable, Labelable, Positionable, Sizeable, Widget, WidgetCommon,
+    widget_ids, Color, Colorable, Labelable, Positionable, Sizeable, UiCell, Widget, WidgetCommon,
 };
 use specs::{saveload::MarkerAllocator, WorldExt};
 
@@ -263,18 +263,26 @@ impl<'a> Widget for Group<'a> {
             {
                 self.show.group_menu = !self.show.group_menu;
             };
-            Text::new(&group_name)
-                .up_from(state.ids.group_button, 5.0)
-                .font_size(14)
-                .font_id(self.fonts.cyri.conrod_id)
-                .color(BLACK)
-                .set(state.ids.title_bg, ui);
-            Text::new(&group_name)
-                .bottom_right_with_margins_on(state.ids.title_bg, 1.0, 1.0)
-                .font_size(14)
-                .font_id(self.fonts.cyri.conrod_id)
-                .color(TEXT_COLOR)
-                .set(state.ids.title, ui);
+            self.create_text_with_margin(
+                ui,
+                TextEnum::UpFrom,
+                BLACK,
+                state.ids.title_bg,
+                &group_name,
+                14,
+                0.0,
+                state.ids.group_button,
+            );
+            self.create_text_with_margin(
+                ui,
+                TextEnum::BottomRightWithMarginsOn,
+                TEXT_COLOR,
+                state.ids.title,
+                &group_name,
+                14,
+                0.0,
+                state.ids.title_bg,
+            );
             // Member panels
             let group_size = group_members.len();
             if state.ids.member_panels_bg.len() < group_size {
@@ -421,12 +429,16 @@ impl<'a> Widget for Group<'a> {
                     }
                     if health.is_dead {
                         // Death Text
-                        Text::new(&self.localized_strings.get("hud.group.dead"))
-                            .mid_top_with_margin_on(state.ids.member_panels_bg[i], 1.0)
-                            .font_size(20)
-                            .font_id(self.fonts.cyri.conrod_id)
-                            .color(KILL_COLOR)
-                            .set(state.ids.dead_txt[i], ui);
+                        self.create_text_with_margin(
+                            ui,
+                            TextEnum::MidTopWithMarginOn,
+                            KILL_COLOR,
+                            state.ids.dead_txt[i],
+                            self.localized_strings.get("hud.group.dead"),
+                            20,
+                            1.0,
+                            state.ids.member_panels_bg[i],
+                        );
                     } else {
                         // Health Text
                         let txt = format!(
@@ -448,12 +460,16 @@ impl<'a> Widget for Group<'a> {
                             10000..=99999 => 5.0,
                             _ => 5.5,
                         };
-                        Text::new(&txt)
-                            .mid_top_with_margin_on(state.ids.member_panels_bg[i], txt_offset)
-                            .font_size(font_size)
-                            .font_id(self.fonts.cyri.conrod_id)
-                            .color(Color::Rgba(1.0, 1.0, 1.0, 0.5))
-                            .set(state.ids.health_txt[i], ui);
+                        self.create_text_with_margin(
+                            ui,
+                            TextEnum::MidTopWithMarginOn,
+                            Color::Rgba(1.0, 1.0, 1.0, 0.5),
+                            state.ids.health_txt[i],
+                            &txt,
+                            font_size,
+                            txt_offset,
+                            state.ids.member_panels_bg[i],
+                        );
                     };
 
                     // Panel Frame
@@ -583,12 +599,16 @@ impl<'a> Widget for Group<'a> {
                             });
                     } else {
                         // Values N.A.
-                        Text::new(&stats.name.to_string())
-                            .top_left_with_margins_on(state.ids.member_panels_frame[i], -22.0, 0.0)
-                            .font_size(20)
-                            .font_id(self.fonts.cyri.conrod_id)
-                            .color(GROUP_COLOR)
-                            .set(state.ids.member_panels_txt[i], ui);
+                        self.create_text_with_margin(
+                            ui,
+                            TextEnum::TopLeftWithMarginsOn,
+                            GROUP_COLOR,
+                            state.ids.member_panels_txt[i],
+                            &stats.name.to_string(),
+                            20,
+                            0.0,
+                            state.ids.member_panels_frame[i],
+                        );
                         let back = if i == 0 {
                             Image::new(self.imgs.member_bg)
                                 .top_left_with_margins_on(ui.window, offset, 20.0)
@@ -606,12 +626,16 @@ impl<'a> Widget for Group<'a> {
                             .color(Some(UI_HIGHLIGHT_0))
                             .set(state.ids.member_panels_frame[i], ui);
                         // Panel Text
-                        Text::new(&self.localized_strings.get("hud.group.out_of_range"))
-                            .mid_top_with_margin_on(state.ids.member_panels_bg[i], 3.0)
-                            .font_size(16)
-                            .font_id(self.fonts.cyri.conrod_id)
-                            .color(TEXT_COLOR)
-                            .set(state.ids.dead_txt[i], ui);
+                        self.create_text_with_margin(
+                            ui,
+                            TextEnum::MidTopWithMarginOn,
+                            TEXT_COLOR,
+                            state.ids.dead_txt[i],
+                            self.localized_strings.get("hud.group.out_of_range"),
+                            16,
+                            3.0,
+                            state.ids.member_panels_frame[i],
+                        );
                     }
                 }
             }
@@ -854,5 +878,44 @@ impl<'a> Widget for Group<'a> {
         }
 
         events
+    }
+}
+
+enum TextEnum {
+    UpFrom,
+    BottomRightWithMarginsOn,
+    MidTopWithMarginOn,
+    TopLeftWithMarginsOn,
+}
+
+impl<'a> Group<'a> {
+    fn create_text_with_margin(
+        &self,
+        ui: &mut UiCell,
+        text_enum: TextEnum,
+        color: Color,
+        id: conrod_core::widget::id::Id,
+        string: &str,
+        font_size: u32,
+        margin: f64,
+        other: conrod_core::widget::id::Id,
+    ) {
+        let mut text = Text::new(string);
+
+        match text_enum {
+            TextEnum::UpFrom => text = text.up_from(other, 5.0),
+            TextEnum::BottomRightWithMarginsOn => {
+                text = text.bottom_right_with_margins_on(other, 1.0, 1.0)
+            },
+            TextEnum::MidTopWithMarginOn => text = text.mid_top_with_margin_on(other, margin),
+            TextEnum::TopLeftWithMarginsOn => {
+                text = text.top_left_with_margins_on(other, -22.0, 0.0)
+            },
+        };
+
+        text.font_size(font_size)
+            .font_id(self.fonts.cyri.conrod_id)
+            .color(color)
+            .set(id, ui);
     }
 }
