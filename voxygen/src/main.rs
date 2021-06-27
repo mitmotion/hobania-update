@@ -14,10 +14,9 @@ use veloren_voxygen::{
     GlobalState,
 };
 
-use common::{
-    assets::{self},
-    clock::Clock,
-};
+#[cfg(feature = "hot-reloading")]
+use common::assets;
+use common::clock::Clock;
 use std::panic;
 use tracing::{error, info, warn};
 
@@ -143,6 +142,7 @@ fn main() {
         default_hook(panic_info);
     }));
 
+    #[cfg(feature = "hot-reloading")]
     assets::start_hot_reloading();
 
     // Initialise watcher for animation hotreloading
