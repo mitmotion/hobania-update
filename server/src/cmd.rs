@@ -573,7 +573,7 @@ fn handle_make_rgb(
     action: &ChatCommand,
 ) -> CmdResult<()> {
     if let (Some(block_name), Some(r), Some(g), Some(b)) = scan_fmt_some!(&args, &action.arg_fmt(), String, u8, u8, u8) {
-        if let Ok(bk) = BlockKind::try_from(block_name.as_str()) {
+        if let Ok(bk) = BlockKind::from_str(block_name.as_str()) {
             let pos = position(server, target, "target")?;
             let pos = pos.0.map(|e| e.floor() as i32);
             let new_block = Block::new(bk, Rgb::new(r, g, b));
