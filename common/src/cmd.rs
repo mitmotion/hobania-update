@@ -481,18 +481,18 @@ impl ChatCommand {
             ChatCommand::MakePalette => cmd(
                 vec![],
                 "Make a colourful palette at your location",
-                None,
+                Some(Moderator),
             ),
             ChatCommand::Motd => cmd(vec![Message(Optional)], "View the server description", None),
             ChatCommand::Object => cmd(
                 vec![Enum("object", OBJECTS.clone(), Required)],
                 "Spawn an object",
-                Some(Admin),
+                None,
             ),
             ChatCommand::PermitBuild => cmd(
                 vec![Any("area_name", Required)],
                 "Grants player a bounded box they can build in",
-                Some(Admin),
+                None,
             ),
             ChatCommand::Players => cmd(vec![], "Lists players currently online", None),
             ChatCommand::RemoveLights => cmd(
