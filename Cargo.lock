@@ -1948,7 +1948,7 @@ dependencies = [
  "khronos-egl",
  "libloading 0.7.0",
  "log",
- "naga",
+ "naga 0.4.0",
  "parking_lot 0.11.1",
  "raw-window-handle",
  "spirv_cross",
@@ -1972,7 +1972,7 @@ dependencies = [
  "gfx-hal",
  "log",
  "metal",
- "naga",
+ "naga 0.4.0",
  "objc",
  "parking_lot 0.11.1",
  "profiling",
@@ -1995,7 +1995,7 @@ dependencies = [
  "inplace_it",
  "libloading 0.7.0",
  "log",
- "naga",
+ "naga 0.4.0",
  "objc",
  "parking_lot 0.11.1",
  "raw-window-handle",
@@ -2010,7 +2010,7 @@ version = "0.8.0"
 source = "git+https://github.com/gfx-rs/gfx?rev=27a1dae3796d33d23812f2bb8c7e3b5aea18b521#27a1dae3796d33d23812f2bb8c7e3b5aea18b521"
 dependencies = [
  "bitflags",
- "naga",
+ "naga 0.4.0",
  "raw-window-handle",
  "thiserror",
 ]
@@ -2104,6 +2104,16 @@ dependencies = [
  "slotmap 0.4.0",
  "wasm-bindgen",
  "web-sys",
+]
+
+[[package]]
+name = "glsl-include"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "daa2afb1631e7ab4543e0dde0e3fc68bb49c58fee89c07f30a26553b1f684ab6"
+dependencies = [
+ "lazy_static",
+ "regex",
 ]
 
 [[package]]
@@ -3081,6 +3091,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "naga"
+version = "0.5.0"
+source = "git+https://github.com/gfx-rs/naga.git?rev=607206f9a5cc33a8b1e7cec84663be6390e3be7f#607206f9a5cc33a8b1e7cec84663be6390e3be7f"
+dependencies = [
+ "bit-set",
+ "bitflags",
+ "codespan-reporting",
+ "fxhash",
+ "log",
+ "num-traits",
+ "pp-rs",
+ "spirv_headers",
+ "thiserror",
+]
+
+[[package]]
 name = "native-dialog"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3843,6 +3869,15 @@ version = "0.1.0"
 source = "git+https://github.com/xMAC94x/portpicker-rs?rev=df6b37872f3586ac3b21d08b56c8ec7cd92fb172#df6b37872f3586ac3b21d08b56c8ec7cd92fb172"
 dependencies = [
  "rand 0.8.3",
+]
+
+[[package]]
+name = "pp-rs"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb458bb7f6e250e6eb79d5026badc10a3ebb8f9a15d1fff0f13d17c71f4d6dee"
+dependencies = [
+ "unicode-xid 0.2.2",
 ]
 
 [[package]]
@@ -4745,26 +4780,6 @@ name = "sha1"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2579985fda508104f7587689507983eadd6a6e84dd35d6d115361f530916fa0d"
-
-[[package]]
-name = "shaderc"
-version = "0.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50b8aeaae10b9bda5cba66736a7e265f67698e912e1cc6a4678acba286e22be9"
-dependencies = [
- "libc",
- "shaderc-sys",
-]
-
-[[package]]
-name = "shaderc-sys"
-version = "0.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b12d7c62d6732884c9dfab587503fa3a795b108df152415a89da23812d4737e"
-dependencies = [
- "cmake",
- "libc",
-]
 
 [[package]]
 name = "sharded-slab"
@@ -6043,6 +6058,7 @@ dependencies = [
  "bincode",
  "bytemuck",
  "chrono",
+ "codespan-reporting",
  "comma",
  "conrod_core",
  "conrod_winit",
@@ -6059,6 +6075,7 @@ dependencies = [
  "euc",
  "futures-executor",
  "gilrs",
+ "glsl-include",
  "glyph_brush",
  "guillotiere",
  "hashbrown 0.11.2",
@@ -6068,6 +6085,7 @@ dependencies = [
  "itertools 0.10.0",
  "keyboard-keynames",
  "lazy_static",
+ "naga 0.5.0",
  "native-dialog",
  "num 0.4.0",
  "num_cpus",
@@ -6078,7 +6096,6 @@ dependencies = [
  "rodio",
  "ron",
  "serde",
- "shaderc",
  "specs",
  "specs-idvs",
  "strum",
@@ -6680,7 +6697,7 @@ dependencies = [
  "arrayvec",
  "js-sys",
  "log",
- "naga",
+ "naga 0.4.0",
  "parking_lot 0.11.1",
  "raw-window-handle",
  "serde",
@@ -6712,7 +6729,7 @@ dependencies = [
  "gpu-alloc",
  "gpu-descriptor",
  "log",
- "naga",
+ "naga 0.4.0",
  "parking_lot 0.11.1",
  "profiling",
  "raw-window-handle",
