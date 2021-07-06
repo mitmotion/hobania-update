@@ -1372,18 +1372,6 @@ impl<'a> AgentData<'a> {
     ) {
         agent.action_state.timer = 0.0;
 
-        // Search area
-        // TODO: REMOVE THIS BEFORE MERGE
-        //if let Some(agent_stats) = read_data.stats.get(*self.entity) {
-        //    let is_village_guard = agent_stats.name == *"Guard".to_string();
-        //    if is_village_guard {
-        //        self.chat_general(
-        //            "I am a guard, searching for target".to_string(),
-        //            event_emitter,
-        //        );
-        //    }
-        //}
-
         let target = self.cached_spatial_grid.0
             .in_circle_aabr(self.pos.0.xy(), SEARCH_DIST)
             .filter_map(|entity| {
@@ -1462,15 +1450,6 @@ impl<'a> AgentData<'a> {
             })
             // Can we even see them?
             .filter(|(_e, e_pos)| {
-                // TODO: REMOVE THIS BEFORE MERGE
-                //if let Some(agent_stats) = read_data.stats.get(*self.entity) {
-                //    let is_village_guard = agent_stats.name == *"Guard".to_string();
-                //    if is_village_guard {
-                //        println!("looking at: {:?} at {:?}", _e, e_pos);
-                //        println!("can we see them: {:?}", read_data.terrain.ray(self.pos.0 + Vec3::unit_z(), e_pos.0 + Vec3::unit_z()).until(Block::is_opaque).cast().0 >= e_pos.0.distance(self.pos.0));
-                //    }
-                //}
-
                 read_data.terrain
                 .ray(self.pos.0 + Vec3::unit_z(), e_pos.0 + Vec3::unit_z())
                 .until(Block::is_opaque)
@@ -1489,15 +1468,6 @@ impl<'a> AgentData<'a> {
             hostile: true,
             selected_at: read_data.time.0,
         });
-
-        // TODO: REMOVE THIS BEFORE MERGE
-        if let Some(agent_stats) = read_data.stats.get(*self.entity) {
-            let is_village_guard = agent_stats.name == *"Guard".to_string();
-            if is_village_guard {
-                let msg = "I'm a guard".to_string();
-                self.chat_general(msg, event_emitter);
-            }
-        }
     }
 
     fn attack(
