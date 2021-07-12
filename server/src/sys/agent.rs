@@ -657,14 +657,14 @@ impl<'a> AgentData<'a> {
                 } else {
                     // If the hostile entity is dead or has an invulnerability buff (eg, those
                     // applied in safezones), return to idle
-                    if should_stop_attacking(target, &read_data) {
+                    if should_stop_attacking(target, read_data) {
                         if agent.behavior.can(BehaviorCapability::SPEAK) {
                             let msg = "npc.speech.villager_enemy_killed".to_string();
                             event_emitter
                                 .emit(ServerEvent::Chat(UnresolvedChatMsg::npc(*self.uid, msg)));
                         }
                         agent.target = None;
-                        self.idle(agent, controller, &read_data);
+                        self.idle(agent, controller, read_data);
                     // Choose a new target every 10 seconds, but only for
                     // enemies
                     // TODO: This should be more principled. Consider factoring
@@ -1400,7 +1400,7 @@ impl<'a> AgentData<'a> {
         })
         .filter_map(|(e, e_pos, e_health, e_stats, e_inventory, e_alignment, _char_state)| {
                 // Hostile entities
-                try_owner_alignment(self.alignment, &read_data).and_then(|a| try_owner_alignment(e_alignment, &read_data).map(|b| a.hostile_towards(*b))).unwrap_or(false).then(|| (e, e_pos))
+                try_owner_alignment(self.alignment, read_data).and_then(|a| try_owner_alignment(e_alignment, read_data).map(|b| a.hostile_towards(*b))).unwrap_or(false).then(|| (e, e_pos))
                 .or({
                     // I'm a guard and a villager is in distress
                     let other_is_npc = matches!(e_alignment, Some(Alignment::Npc));
@@ -3820,7 +3820,7 @@ impl<'a> AgentData<'a> {
                         self.follow(agent, controller, &read_data.terrain, &sound_pos);
                     } else {
                         // TODO: Change this to a search action instead of idle
-                        self.idle(agent, controller, &read_data);
+                        self.idle(agent, controller, read_data);
                     }
                 } else if is_village_guard {
                     self.follow(agent, controller, &read_data.terrain, &sound_pos);
@@ -3859,14 +3859,14 @@ impl<'a> AgentData<'a> {
                         agent.target = build_target(attacker, true, read_data.time.0);
 
                         if let Some(tgt_pos) = read_data.positions.get(attacker) {
-                            if should_stop_attacking(attacker, &read_data) {
+                            if should_stop_attacking(attacker, read_data) {
                                 agent.target = build_target(target, false, read_data.time.0);
 
-                                self.idle(agent, controller, &read_data);
+                                self.idle(agent, controller, read_data);
                             } else {
                                 let target_data = build_target_data(target, tgt_pos, read_data);
 
-                                self.attack(agent, controller, &target_data, &read_data);
+                                self.attack(agent, controller, &target_data, read_data);
                             }
                         }
                     }
