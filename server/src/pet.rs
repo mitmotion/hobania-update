@@ -49,7 +49,10 @@ fn tame_pet_internal(ecs: &specs::World, pet_entity: Entity, owner: Entity, pet:
         .write_storage()
         .insert(pet_entity, pet.unwrap_or_default());
 
-    if let Some(agent) = ecs.write_storage::<Agent>().get_mut(pet_entity) {
+    if let Some(agent) = ecs
+        .write_storage::<Agent>()
+        .get_mut_or_default(pet_entity)
+    {
         agent.set_no_flee();
     }
 
