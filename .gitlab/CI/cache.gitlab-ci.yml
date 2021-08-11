@@ -1,0 +1,79 @@
+#### TODO: needs to be adjusted
+
+.prune-cache:
+  tags:
+    - cache #FIXME: ADJUST TO veloren-docker
+  extends: .master-or-release
+  stage: check
+  cache:
+    policy: push
+    paths:
+      - cache
+  script:
+    - rm -rf cache/*
+  rules:
+    - when: manual
+      allow_failure: true
+
+prune-cache-all:
+  extends:
+    - .prune-cache
+    - .master-or-release
+  cache:
+    key: "veloren"
+
+prune-cache-coverage:
+  extends:
+    - .prune-cache
+    - .master-or-release
+  cache:
+    key: "veloren-coverage"
+
+prune-cache-benchmark:
+  extends:
+    - .prune-cache
+    - .master-or-release
+  cache:
+    key: "veloren-benchmark"
+
+.use-cache-all:
+  extends: .persist-cache #FIXME: REMOVE
+  tags:
+    - cache #FIXME: REMOVE
+  cache:
+    key: "veloren"
+    #policy: pull #FIXME: UNCOMMENT
+    paths:
+      - cache
+
+.use-cache-coverage:
+  extends: .persist-cache #FIXME: REMOVE
+  tags:
+    - cache #FIXME: REMOVE
+  cache:
+    key: "veloren-coverage" # specific cache to prevent conflict with tarpaulin
+    #policy: pull #FIXME: UNCOMMENT
+    paths:
+      - cache
+
+.use-cache-benchmark:
+  extends: .persist-cache #FIXME: REMOVE
+  tags:
+    - cache #FIXME: REMOVE
+  cache:
+    key: "veloren-benchmark"
+    #policy: pull #FIXME: UNCOMMENT
+    paths:
+      - cache
+
+# TODO: Evaluate release Caching
+
+.persist-cache:
+  tags:
+    - cache #FIXME: REMOVE
+  after_script:
+    - rm -rf cache && mkdir -p cache/$TARGET_SUBFOLDER/{deps,build,.fingerprint}
+    - find target/$TARGET_SUBFOLDER -iname "*veloren*" -type d | while read line ; do export name=$(echo $line | sed "s/.*$TARGET_SUBFOLDER\///g") ; mkdir -p "cache/$TARGET_SUBFOLDER/$name" ; done < "${1:-/dev/stdin}" || echo "Some folder might already exist."
+    - find target/$TARGET_SUBFOLDER -iname "*veloren*" -type f -not -path "*.cargo-lock" | while read line ; do export name=$(echo $line | sed "s/.*$TARGET_SUBFOLDER\///g") ; cp "$CI_PROJECT_DIR/$line" "cache/$TARGET_SUBFOLDER/$name" ; done < "${1:-/dev/stdin}" || echo "Some file might already exist."
+  cache:
+    policy: pull-push

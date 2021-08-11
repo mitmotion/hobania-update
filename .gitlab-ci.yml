@@ -13,6 +13,11 @@ variables:
   # https://docs.gitlab.com/ee/ci/yaml/#shallow-cloning
   GIT_DEPTH: 3
   GIT_CLEAN_FLAGS: -f
+  CACHE_FOLDER: cache-all
+  TARGET_SUBFOLDER: debug
+  LINK_LIB_ARGS: -sf # Arguments for linking dependencies. Set as a variable as some job (eg: tarpaulin) might need to force it.
+  CACHE_FALLBACK_KEY: "veloren" # the cache of master will be used if no branch cache can be found
+  FF_USE_FASTZIP: "true" # Enable Fastzip, a multi threaded performant zip extractor / compressor.
   CACHE_IMAGE_TAG: 5d0b61ad
 
 default:
@@ -35,6 +40,14 @@ before_script:
   - cargo --version
   - source ./.gitlab/scripts/env.sh
   - rm -rf target || echo "it seems that sometimes OLD data is left over"
+  - ln -s /dockercache/$CACHE_FOLDER target
+  - echo "Cache folder => $CACHE_FOLDER, Target subfolder => $TARGET_SUBFOLDER"
+  - find "cache/$TARGET_SUBFOLDER" -iname "*veloren*" -type d | while read line ; do export name=$(echo $line | sed "s/.*$TARGET_SUBFOLDER\///g") ; mkdir -p "target/$TARGET_SUBFOLDER/$name" ; done < "${1:-/dev/stdin}" || echo "Some file might already exist."
+  - find "cache/$TARGET_SUBFOLDER" -iname "*veloren*" -type f | while read line ; do export name=$(echo $line | sed "s/.*$TARGET_SUBFOLDER\///g") ; cp "$line" "target/$TARGET_SUBFOLDER/$name" ; done < "${1:-/dev/stdin}" || echo "Some file might already exist."
+
+cache:
+  key: "veloren" # Cache is managed on a Master basis. Each branch use the master cache. Only the master branches can push
+  policy: pull # Disable cache creation and upload on every branch.
 
 # 8866215 is the user that is used to sync data to the collaboration repos
 workflow:
@@ -47,6 +60,7 @@ workflow:
 include:
   - local: .gitlab/CI/recompile.yml
   - local: .gitlab/CI/release.yml
+  - local: .gitlab/CI/cache.gitlab-ci.yml
   - local: .gitlab/CI/check.gitlab-ci.yml
   - local: .gitlab/CI/build.gitlab-ci.yml
   - local: .gitlab/CI/publish.gitlab-ci.yml

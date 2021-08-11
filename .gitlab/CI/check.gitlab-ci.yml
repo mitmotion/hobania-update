@@ -1,5 +1,5 @@
 # cargo clippy is a superset of cargo check, so we don't check manually
-code-quality:
+.tcode-quality:
   extends: .recompile-branch
   stage: check
   image: registry.gitlab.com/veloren/veloren-docker-ci/cache/quality:${CACHE_IMAGE_TAG}
@@ -8,12 +8,24 @@ code-quality:
     - cat ./.gitlab/scripts/code-quality.sh
     - source ./.gitlab/scripts/code-quality.sh
 
-security:
+.tsecurity:
   extends: .recompile-branch
   stage: check
   image: registry.gitlab.com/veloren/veloren-docker-ci/cache/quality:${CACHE_IMAGE_TAG}
   allow_failure: true
+  cache: {} # Disabling cache as it is not needed in order to reduce time
   script:
     - ln -s /dockercache/target target
     - cat ./.gitlab/scripts/security.sh
     - source ./.gitlab/scripts/security.sh
+
+code-quality:
+  extends:
+    - .recompile-branch
+    - .tcode-quality
+
+code-quality-pcache:
+  extends:
+    - .release
+    - .persist-cache
+    - .tcode-quality

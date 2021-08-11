@@ -1,5 +1,5 @@
-unittests:
-  extends: .recompile-branch
+.tunittests:
+  extends: .use-cache-quality
   stage: build
   image: registry.gitlab.com/veloren/veloren-docker-ci/cache/quality:${CACHE_IMAGE_TAG}
   variables:
@@ -11,8 +11,8 @@ unittests:
   retry:
     max: 2
 
-translation:
-  extends: .release
+.ttranslation:
+  extends: .use-cache-quality
   stage: build
   image: registry.gitlab.com/veloren/veloren-docker-ci/cache/quality:${CACHE_IMAGE_TAG}
   script:
@@ -30,9 +30,11 @@ translation:
   retry:
     max: 2
 
-benchmarks:
-  extends: .release
+.tbenchmarks:
+  extends: .use-cache-benchmark
   stage: build
+  variables:
+    TARGET_SUBFOLDER: release
   image: registry.gitlab.com/veloren/veloren-docker-ci/cache/bench:${CACHE_IMAGE_TAG}
   tags:
     - veloren-benchmark
@@ -54,9 +56,11 @@ benchmarks:
 
 # Coverage is needed on master for the README.md badge to work
 # tmp remove simd as it doesnt work with tarpaulin: https://github.com/rust-lang/rust/issues/77529
-coverage:
-  extends: .release
+.tcoverage:
+  extends: .use-cache-coverage
   stage: build
+  variables:
+    CACHE_FOLDER: cache-tarpaulin
   image: registry.gitlab.com/veloren/veloren-docker-ci/cache/tarpaulin:${CACHE_IMAGE_TAG}
   script:
     - ln -s /dockercache/target target
@@ -65,8 +69,39 @@ coverage:
   retry:
     max: 2
 
+unittests:
+  extends:
+    - .recompile-branch
+    - .tunittests
+
+unittests-pcache:
+  extends:
+    - .release
+    - .persist-cache
+    - .tunittests
+
+translation-pcache:
+  extends:
+    - .release
+    - .persist-cache
+    - .ttranslation
+
+benchmarks-pcache:
+  extends:
+    - .release
+    - .persist-cache
+    - .tbenchmarks
+
+coverage-pcache:
+  extends:
+    - .release
+    - .persist-cache
+    - .tcoverage
+
 #linux, windows, macos builds here as template
 .tlinux:
+  variables:
+    CACHE_FOLDER: cache-release-linux
   image: registry.gitlab.com/veloren/veloren-docker-ci/cache/release-linux:${CACHE_IMAGE_TAG}
   script:
     - ln -s /dockercache/target target
@@ -83,6 +118,8 @@ coverage:
     expire_in: 1 week
 
 .twindows:
+  variables:
+    CACHE_FOLDER: cache-release-windows
   image: registry.gitlab.com/veloren/veloren-docker-ci/cache/release-windows:${CACHE_IMAGE_TAG}
   script:
     - ln -s /dockercache/target target
@@ -106,6 +143,8 @@ coverage:
 
 .tmacos:
   tags: ["veloren-macos"]
+  variables:
+    CACHE_FOLDER: cache-release-macos
   before_script:
     - source $HOME/.cargo/env
     - cargo --version
