@@ -43,6 +43,8 @@ pub struct StaticData {
     pub swing_duration: Duration,
     /// How long the state has until exiting
     pub recover_duration: Duration,
+    /// How fast can you turn during charge
+    pub ori_modifier: f32,
     /// Whether the state can be interrupted by other abilities
     pub is_interruptible: bool,
     /// Adds an effect onto the main damage of the attack
@@ -107,13 +109,14 @@ impl CharacterBehavior for Data {
                         / self.static_data.charge_duration.as_secs_f32())
                     .min(1.0);
 
-                    handle_orientation(data, &mut update, 0.6);
+                    handle_orientation(data, &mut update, self.static_data.ori_modifier);
                     handle_forced_movement(data, &mut update, ForcedMovement::Forward {
                         strength: self.static_data.forward_speed * charge_frac.sqrt(),
                     });
 
-                    // This logic basically just decides if a charge should end, and prevents the
-                    // character state spamming attacks while checking if it has hit something
+                    // This logic basically just decides if a charge should end,
+                    // and prevents the character state spamming attacks
+                    // while checking if it has hit something.
                     if !self.exhausted {
                         // Hit attempt
                         let poise = AttackEffect::new(
@@ -215,7 +218,7 @@ impl CharacterBehavior for Data {
                             // Stop charging now and go to swing stage section
                             update.character = CharacterState::DashMelee(Data {
                                 timer: Duration::default(),
-                                stage_section: StageSection::Swing,
+                                stage_section: StageSection::Action,
                                 exhausted: false,
                                 ..*self
                             });
@@ -238,13 +241,13 @@ impl CharacterBehavior for Data {
                     // Transitions to swing section of stage
                     update.character = CharacterState::DashMelee(Data {
                         timer: Duration::default(),
-                        stage_section: StageSection::Swing,
+                        stage_section: StageSection::Action,
                         exhausted: false,
                         ..*self
                     });
                 }
             },
-            StageSection::Swing => {
+            StageSection::Action => {
                 if self.static_data.charge_through && !self.exhausted {
                     // If can charge through and not exhausted, do one more melee attack
 

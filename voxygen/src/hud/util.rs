@@ -11,9 +11,8 @@ use common::{
     effect::Effect,
     trade::{Good, SitePrices},
 };
+use i18n::Localization;
 use std::{borrow::Cow, fmt::Write};
-
-use crate::i18n::Localization;
 
 pub fn price_desc(
     prices: &Option<SitePrices>,
@@ -149,7 +148,7 @@ pub fn consumable_desc(effects: &[Effect], i18n: &Localization) -> Vec<String> {
                     .get("buff.stat.health")
                     .replace("{str_total}", &str_total.to_string()),
                 BuffKind::IncreaseMaxEnergy => i18n
-                    .get("buff.stat.increase_max_stamina")
+                    .get("buff.stat.increase_max_energy")
                     .replace("{strength}", &strength.to_string()),
                 BuffKind::IncreaseMaxHealth => i18n
                     .get("buff.stat.increase_max_health")

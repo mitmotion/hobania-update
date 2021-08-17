@@ -2,9 +2,15 @@
 #![feature(bool_to_option)]
 #![recursion_limit = "2048"]
 
+// Allow profiling allocations with Tracy
+#[cfg_attr(feature = "tracy-memory", global_allocator)]
+#[cfg(feature = "tracy-memory")]
+static GLOBAL: common_base::tracy_client::ProfiledAllocator<std::alloc::System> =
+    common_base::tracy_client::ProfiledAllocator::new(std::alloc::System, 128);
+
+use i18n::{self, LocalizationHandle};
 use veloren_voxygen::{
     audio::AudioFrontend,
-    i18n::{self, LocalizationHandle},
     profile::Profile,
     run,
     scene::terrain::SpriteRenderContext,
@@ -92,7 +98,7 @@ fn main() {
             https://www.gitlab.com/veloren/veloren/issues/new\n\
             \n\
             If you're on the Veloren community Discord server, we'd be \
-            grateful if you could also post a message in the #support channel.
+            grateful if you could also post a message in the #bugs-and-support channel.
             \n\
             > What should I include?\n\
             \n\
@@ -111,9 +117,7 @@ fn main() {
             Panic Payload: {:?}\n\
             PanicInfo: {}\n\
             Game version: {} [{}]",
-            logs_dir
-                .join("voxygen.log.<date>")
-                .display(),
+            logs_dir.join("voxygen.log.<date>").display(),
             reason,
             panic_info,
             common::util::GIT_HASH.to_string(),
@@ -161,6 +165,29 @@ fn main() {
         default_hook(panic_info);
     }));
 
+    // Setup tokio runtime
+    use common::consts::MIN_RECOMMENDED_TOKIO_THREADS;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    use tokio::runtime::Builder;
+
+    // TODO: evaluate std::thread::available_concurrency as a num_cpus replacement
+    let cores = num_cpus::get();
+    let tokio_runtime = Arc::new(
+        Builder::new_multi_thread()
+            .enable_all()
+            .worker_threads((cores / 4).max(MIN_RECOMMENDED_TOKIO_THREADS))
+            .thread_name_fn(|| {
+                static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
+                let id = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);
+                format!("tokio-voxygen-{}", id)
+            })
+            .build()
+            .unwrap(),
+    );
+
     #[cfg(feature = "hot-reloading")]
     assets::start_hot_reloading();
 
@@ -205,7 +232,30 @@ fn main() {
     i18n.set_english_fallback(settings.language.use_english_fallback);
 
     // Create window
-    let (mut window, event_loop) = Window::new(&settings).expect("Failed to create window!");
+    use veloren_voxygen::{error::Error, render::RenderError};
+    let (mut window, event_loop) = match Window::new(&settings, &tokio_runtime) {
+        Ok(ok) => ok,
+        // Custom panic message when a graphics backend could not be found
+        Err(Error::RenderError(RenderError::CouldNotFindAdapter)) => {
+            #[cfg(target_os = "windows")]
+            const POTENTIAL_FIX: &str =
+                " Updating the graphics drivers on this system may resolve this issue.";
+            #[cfg(target_os = "macos")]
+            const POTENTIAL_FIX: &str = "";
+            #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+            const POTENTIAL_FIX: &str =
+                " Installing or updating vulkan drivers may resolve this issue.";
+
+            panic!(
+                "Failed to select a rendering backend! No compatible backends were found. We \
+                 currently support vulkan, metal, dx12, and dx11.{} If the issue persists, please \
+                 include the operating system and GPU details in your bug report to help us \
+                 identify the cause.",
+                POTENTIAL_FIX
+            );
+        },
+        Err(error) => panic!("Failed to create window!: {:?}", error),
+    };
 
     let clipboard = iced_winit::Clipboard::connect(window.window());
 
@@ -220,6 +270,7 @@ fn main() {
         audio,
         profile,
         window,
+        tokio_runtime,
         #[cfg(feature = "egui-ui")]
         egui_state,
         lazy_init,

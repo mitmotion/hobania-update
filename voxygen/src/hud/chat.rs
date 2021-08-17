@@ -2,7 +2,7 @@ use super::{
     img_ids::Imgs, ChatTab, ERROR_COLOR, FACTION_COLOR, GROUP_COLOR, INFO_COLOR, KILL_COLOR,
     OFFLINE_COLOR, ONLINE_COLOR, REGION_COLOR, SAY_COLOR, TELL_COLOR, TEXT_COLOR, WORLD_COLOR,
 };
-use crate::{i18n::Localization, settings::chat::MAX_CHAT_TABS, ui::fonts::Fonts, GlobalState};
+use crate::{settings::chat::MAX_CHAT_TABS, ui::fonts::Fonts, GlobalState};
 use client::{cmd, Client};
 use common::comp::{
     chat::{KillSource, KillType},
@@ -22,6 +22,7 @@ use conrod_core::{
     widget_ids, Color, Colorable, Labelable, Positionable, Sizeable, Ui, UiCell, Widget,
     WidgetCommon,
 };
+use i18n::Localization;
 use std::collections::{HashSet, VecDeque};
 
 widget_ids! {
@@ -374,7 +375,7 @@ impl<'a> Widget for Chat<'a> {
                 _ => 0.0,
             };
             Rectangle::fill([CHAT_BOX_WIDTH, y])
-                .rgba(0.0, 0.0, 0.0, chat_settings.chat_transp + 0.1)
+                .rgba(0.0, 0.0, 0.0, chat_settings.chat_opacity + 0.1)
                 .bottom_left_with_margins_on(ui.window, 10.0, 10.0)
                 .w(CHAT_BOX_WIDTH)
                 .set(state.ids.chat_input_bg, ui);
@@ -392,7 +393,7 @@ impl<'a> Widget for Chat<'a> {
 
         // Message box
         Rectangle::fill([CHAT_BOX_WIDTH, CHAT_BOX_HEIGHT])
-            .rgba(0.0, 0.0, 0.0, chat_settings.chat_transp)
+            .rgba(0.0, 0.0, 0.0, chat_settings.chat_opacity)
             .and(|r| {
                 if input_focused {
                     r.up_from(state.ids.chat_input_bg, 0.0)
@@ -517,10 +518,10 @@ impl<'a> Widget for Chat<'a> {
             .filter(|t| t <= &1.5)
         {
             let alpha = 1.0 - (time_since_hover / 1.5).powi(4);
-            let shading = color::rgba(1.0, 0.82, 0.27, (chat_settings.chat_transp + 0.1) * alpha);
+            let shading = color::rgba(1.0, 0.82, 0.27, (chat_settings.chat_opacity + 0.1) * alpha);
 
             Rectangle::fill([CHAT_BOX_WIDTH, CHAT_TAB_HEIGHT])
-                .rgba(0.0, 0.0, 0.0, (chat_settings.chat_transp + 0.1) * alpha)
+                .rgba(0.0, 0.0, 0.0, (chat_settings.chat_opacity + 0.1) * alpha)
                 .up_from(state.ids.message_box_bg, 0.0)
                 .set(state.ids.chat_tab_align, ui);
             if ui

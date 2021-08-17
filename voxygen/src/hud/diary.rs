@@ -3,16 +3,14 @@ use super::{
     item_imgs::{animate_by_pulse, ItemImgs, ItemKey::Tool},
     Show, CRITICAL_HP_COLOR, HP_COLOR, TEXT_COLOR, UI_HIGHLIGHT_0, UI_MAIN, XP_COLOR,
 };
-use crate::{
-    i18n::Localization,
-    ui::{fonts::Fonts, ImageFrame, Tooltip, TooltipManager, Tooltipable},
-};
+use crate::ui::{fonts::Fonts, ImageFrame, Tooltip, TooltipManager, Tooltipable};
 use conrod_core::{
     color,
     image::Id,
     widget::{self, button, Button, Image, Rectangle, Text},
     widget_ids, Color, Colorable, Labelable, Positionable, Sizeable, UiCell, Widget, WidgetCommon,
 };
+use i18n::Localization;
 
 use client::{self, Client};
 use common::comp::{
@@ -741,9 +739,9 @@ impl<'a> Widget for Diary<'a> {
                 );
                 self.create_unlock_skill_button(
                     Skill::General(EnergyIncrease),
-                    self.imgs.stamina_plus_skill,
+                    self.imgs.energy_plus_skill,
                     state.skills_top_l[1],
-                    "inc_stam",
+                    "inc_energy",
                     state.skill_general_stat_1,
                     ui,
                     &mut events,
@@ -826,7 +824,7 @@ impl<'a> Widget for Diary<'a> {
                     Skill::Roll(RollSkill::Cost),
                     self.imgs.utility_cost_skill,
                     state.skills_bot_l[1],
-                    "roll_stamina",
+                    "roll_energy",
                     state.skill_general_roll_1,
                     ui,
                     &mut events,
@@ -1701,7 +1699,7 @@ impl<'a> Widget for Diary<'a> {
                     Skill::Staff(BRegen),
                     self.imgs.magic_energy_regen_skill,
                     state.skills_top_l[2],
-                    "st_stamina_regen",
+                    "st_energy_regen",
                     state.skill_staff_basic_2,
                     ui,
                     &mut events,

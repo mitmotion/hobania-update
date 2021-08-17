@@ -2718,7 +2718,7 @@ dependencies = [
 [[package]]
 name = "keyboard-keynames"
 version = "0.1.0"
-source = "git+https://gitlab.com/Frinksy/keyboard-keynames.git?rev=9ae8f89014d0b0c5b61d0e821c5aeb6140c5c0dc#9ae8f89014d0b0c5b61d0e821c5aeb6140c5c0dc"
+source = "git+https://gitlab.com/Frinksy/keyboard-keynames.git?rev=721c8b301f8003332d0cc767ab2649fdd330e842#721c8b301f8003332d0cc767ab2649fdd330e842"
 dependencies = [
  "libc",
  "memmap",
@@ -2726,7 +2726,7 @@ dependencies = [
  "winapi 0.3.9",
  "winit",
  "xcb",
- "xkbcommon-sys 0.7.5 (git+https://github.com/Frinksy/rust-xkbcommon-sys.git?rev=d5d69e05a81f7ee8d2f65a824ae692610ed7cb14)",
+ "xkbcommon-sys 0.7.6",
 ]
 
 [[package]]
@@ -3063,7 +3063,7 @@ dependencies = [
  "winapi 0.3.9",
  "x11-dl",
  "xkb",
- "xkbcommon-sys 0.7.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xkbcommon-sys 0.7.5",
 ]
 
 [[package]]
@@ -4832,28 +4832,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serial_test"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0bccbcf40c8938196944a3da0e133e031a33f4d6b72db3bda3cc556e361905d"
-dependencies = [
- "lazy_static",
- "parking_lot 0.11.1",
- "serial_test_derive",
-]
-
-[[package]]
-name = "serial_test_derive"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2acd6defeddb41eb60bb468f8825d0cfd0c2a76bc03bfd235b6a1dc4f6a1ad5"
-dependencies = [
- "proc-macro2 1.0.27",
- "quote 1.0.9",
- "syn 1.0.73",
-]
-
-[[package]]
 name = "sha1"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5920,7 +5898,6 @@ dependencies = [
  "lazy_static",
  "ron",
  "serde",
- "serial_test",
  "tracing",
  "walkdir 2.3.2",
 ]
@@ -6018,20 +5995,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "veloren-i18n"
-version = "0.10.0"
-dependencies = [
- "clap",
- "deunicode",
- "git2",
- "hashbrown 0.11.2",
- "ron",
- "serde",
- "tracing",
- "veloren-common-assets",
-]
-
-[[package]]
 name = "veloren-network"
 version = "0.3.0"
 dependencies = [
@@ -6112,6 +6075,7 @@ version = "0.10.0"
 dependencies = [
  "atomicwrites",
  "authc",
+ "bincode",
  "chrono",
  "crossbeam-channel",
  "futures-util",
@@ -6198,7 +6162,6 @@ dependencies = [
  "egui_winit_platform",
  "enum-iterator",
  "euc",
- "futures-executor",
  "gilrs",
  "glyph_brush",
  "guillotiere",
@@ -6238,10 +6201,10 @@ dependencies = [
  "veloren-common-net",
  "veloren-common-state",
  "veloren-common-systems",
- "veloren-i18n",
  "veloren-server",
  "veloren-voxygen-anim",
  "veloren-voxygen-egui",
+ "veloren-voxygen-i18n",
  "veloren-world",
  "wgpu",
  "wgpu-profiler",
@@ -6298,6 +6261,20 @@ name = "veloren-voxygen-egui-dyn"
 version = "0.9.0"
 dependencies = [
  "veloren-voxygen-egui",
+]
+
+[[package]]
+name = "veloren-voxygen-i18n"
+version = "0.10.0"
+dependencies = [
+ "clap",
+ "deunicode",
+ "git2",
+ "hashbrown 0.11.2",
+ "ron",
+ "serde",
+ "tracing",
+ "veloren-common-assets",
 ]
 
 [[package]]
@@ -7087,7 +7064,7 @@ checksum = "aec02bc5de902aa579f3d2f2c522edaf40fa42963cbaffe645b058ddcc68fdb2"
 dependencies = [
  "bitflags",
  "libc",
- "xkbcommon-sys 0.7.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xkbcommon-sys 0.7.5",
 ]
 
 [[package]]
@@ -7103,8 +7080,8 @@ dependencies = [
 
 [[package]]
 name = "xkbcommon-sys"
-version = "0.7.5"
-source = "git+https://github.com/Frinksy/rust-xkbcommon-sys.git?rev=d5d69e05a81f7ee8d2f65a824ae692610ed7cb14#d5d69e05a81f7ee8d2f65a824ae692610ed7cb14"
+version = "0.7.6"
+source = "git+https://github.com/Frinksy/rust-xkbcommon-sys.git?rev=8f615dd6cd90a4ab77c45627830dde49b592b9b5#8f615dd6cd90a4ab77c45627830dde49b592b9b5"
 dependencies = [
  "libc",
  "pkg-config",

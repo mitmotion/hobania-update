@@ -1,6 +1,7 @@
 use crate::{
     assets,
-    comp::{self, buff::BuffKind, AdminRole as Role, Skill},
+    comp::{self, buff::BuffKind, inventory::item::try_all_item_defs, AdminRole as Role, Skill},
+    generation::try_all_entity_configs,
     npc, terrain,
 };
 use assets::AssetExt;
@@ -9,7 +10,6 @@ use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{self, Display},
-    path::Path,
     str::FromStr,
 };
 use strum::IntoEnumIterator;
@@ -77,6 +77,7 @@ pub enum ChatCommand {
     Lantern,
     Light,
     MakeBlock,
+    MakeNpc,
     MakeSprite,
     Motd,
     Object,
@@ -121,6 +122,9 @@ impl assets::Asset for SkillPresetManifest {
 
     const EXTENSION: &'static str = "ron";
 }
+
+pub const KIT_MANIFEST_PATH: &str = "server.manifests.kits";
+pub const PRESET_MANIFEST_PATH: &str = "server.manifests.presets";
 
 lazy_static! {
     static ref ALIGNMENTS: Vec<String> = vec!["wild", "enemy", "npc", "pet"]
@@ -230,30 +234,27 @@ lazy_static! {
     static ref ROLES: Vec<String> = ["admin", "moderator"].iter().copied().map(Into::into).collect();
 
     /// List of item specifiers. Useful for tab completing
-    static ref ITEM_SPECS: Vec<String> = {
-        let path = assets::ASSETS_PATH.join("common").join("items");
-        let mut items = vec![];
-        fn list_items (path: &Path, base: &Path, mut items: &mut Vec<String>) -> std::io::Result<()>{
-            for entry in std::fs::read_dir(path)? {
-                let path = entry?.path();
-                if path.is_dir(){
-                    list_items(&path, base, &mut items)?;
-                } else if let Ok(path) = path.strip_prefix(base) {
-                    let path = path.to_string_lossy().trim_end_matches(".ron").replace('/', ".").replace('\\', ".");
-                    items.push(path);
-                }
-            }
-            Ok(())
-        }
-        if list_items(&path, &assets::ASSETS_PATH, &mut items).is_err() {
-            warn!("There was a problem listing item assets");
-        }
+    pub static ref ITEM_SPECS: Vec<String> = {
+        let mut items = try_all_item_defs()
+            .unwrap_or_else(|e| {
+                warn!(?e, "Failed to load item specifiers");
+                Vec::new()
+            });
         items.sort();
         items
     };
 
+    /// List of all entity configs. Useful for tab completing
+    static ref ENTITY_CONFIGS: Vec<String> = {
+        try_all_entity_configs()
+            .unwrap_or_else(|e| {
+                warn!(?e, "Failed to load entity configs");
+                Vec::new()
+            })
+    };
+
     static ref KITS: Vec<String> = {
-        if let Ok(kits) = KitManifest::load("server.manifests.kits") {
+        if let Ok(kits) = KitManifest::load(KIT_MANIFEST_PATH) {
             kits.read().0.keys().cloned().collect()
         } else {
             Vec::new()
@@ -261,7 +262,7 @@ lazy_static! {
     };
 
     static ref PRESETS: HashMap<String, Vec<(Skill, u8)>> = {
-        if let Ok(presets) = SkillPresetManifest::load("server.manifests.presets") {
+        if let Ok(presets) = SkillPresetManifest::load(PRESET_MANIFEST_PATH) {
             presets.read().0.clone()
         } else {
             warn!("Error while loading presets");
@@ -462,8 +463,21 @@ impl ChatCommand {
                 Some(Admin),
             ),
             ChatCommand::MakeBlock => cmd(
-                vec![Enum("block", BLOCK_KINDS.clone(), Required)],
-                "Make a block at your location",
+                vec![
+                    Enum("block", BLOCK_KINDS.clone(), Required),
+                    Integer("r", 255, Optional),
+                    Integer("g", 255, Optional),
+                    Integer("b", 255, Optional),
+                ],
+                "Make a block at your location with a color",
+                Some(Admin),
+            ),
+            ChatCommand::MakeNpc => cmd(
+                vec![
+                    Enum("entity_config", ENTITY_CONFIGS.clone(), Required),
+                    Integer("num", 1, Optional),
+                ],
+                "Spawn entity from config near you",
                 Some(Admin),
             ),
             ChatCommand::MakeSprite => cmd(
@@ -526,8 +540,8 @@ impl ChatCommand {
                 "Set the server description",
                 Some(Admin),
             ),
-            // Uses Message because site names can contain spaces, which would be assumed to be
-            // separators otherwise
+            // Uses Message because site names can contain spaces,
+            // which would be assumed to be separators otherwise
             ChatCommand::Site => cmd(
                 vec![Message(Required)],
                 "Teleport to a site",
@@ -639,6 +653,7 @@ impl ChatCommand {
             ChatCommand::Lantern => "lantern",
             ChatCommand::Light => "light",
             ChatCommand::MakeBlock => "make_block",
+            ChatCommand::MakeNpc => "make_npc",
             ChatCommand::MakeSprite => "make_sprite",
             ChatCommand::Motd => "motd",
             ChatCommand::Object => "object",
@@ -793,7 +808,6 @@ pub enum ArgumentSpec {
 }
 
 impl ArgumentSpec {
-    #[allow(clippy::nonstandard_macro_braces)] //tmp as of false positive !?
     pub fn usage_string(&self) -> String {
         match self {
             ArgumentSpec::PlayerName(req) => {
@@ -841,9 +855,9 @@ impl ArgumentSpec {
             ArgumentSpec::SubCommand => "<[/]command> [args...]".to_string(),
             ArgumentSpec::Enum(label, _, req) => {
                 if &Requirement::Required == req {
-                    format! {"<{}>", label}
+                    format!("<{}>", label)
                 } else {
-                    format! {"[{}]", label}
+                    format!("[{}]", label)
                 }
             },
             ArgumentSpec::Boolean(label, _, req) => {
@@ -860,9 +874,18 @@ impl ArgumentSpec {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::comp::Item;
 
     #[test]
-    fn test_loading_skill_presets() {
-        SkillPresetManifest::load_expect("server.manifests.presets");
+    fn test_loading_skill_presets() { SkillPresetManifest::load_expect(PRESET_MANIFEST_PATH); }
+
+    #[test]
+    fn test_load_kits() {
+        let kits = KitManifest::load_expect(KIT_MANIFEST_PATH).read();
+        for kit in kits.0.values() {
+            for (item_id, _) in kit.iter() {
+                std::mem::drop(Item::new_from_asset_expect(item_id));
+            }
+        }
     }
 }

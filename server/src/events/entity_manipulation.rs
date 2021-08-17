@@ -34,6 +34,7 @@ use common_net::{msg::ServerGeneral, sync::WorldSyncExt};
 use common_state::BlockChange;
 use comp::chat::GenericChatMsg;
 use hashbrown::HashSet;
+use rand::Rng;
 use specs::{join::Join, saveload::MarkerAllocator, Entity as EcsEntity, WorldExt};
 use tracing::error;
 use vek::{Vec2, Vec3};
@@ -738,6 +739,8 @@ pub fn handle_explosion(server: &Server, pos: Vec3<f32>, explosion: Explosion, o
         ((horiz_dist.max(vert_distance).max(0.0) / radius).min(1.0) - 1.0).abs()
     }
 
+    // TODO: Faster RNG?
+    let mut rng = rand::thread_rng();
     for effect in explosion.effects {
         match effect {
             RadiusEffect::TerrainDestruction(power) => {
@@ -748,17 +751,16 @@ pub fn handle_explosion(server: &Server, pos: Vec3<f32>, explosion: Explosion, o
                 let color_range = power * 2.7;
                 for _ in 0..RAYS {
                     let dir = Vec3::new(
-                        rand::random::<f32>() - 0.5,
-                        rand::random::<f32>() - 0.5,
-                        rand::random::<f32>() - 0.5,
+                        rng.gen::<f32>() - 0.5,
+                        rng.gen::<f32>() - 0.5,
+                        rng.gen::<f32>() - 0.5,
                     )
                     .normalized();
 
                     let _ = ecs
                         .read_resource::<TerrainGrid>()
                         .ray(pos, pos + dir * color_range)
-                        // TODO: Faster RNG
-                        .until(|_| rand::random::<f32>() < 0.05)
+                        .until(|_| rng.gen::<f32>() < 0.05)
                         .for_each(|_: &Block, pos| touched_blocks.push(pos))
                         .cast();
                 }
@@ -790,21 +792,31 @@ pub fn handle_explosion(server: &Server, pos: Vec3<f32>, explosion: Explosion, o
                 // Destroy terrain
                 for _ in 0..RAYS {
                     let dir = Vec3::new(
-                        rand::random::<f32>() - 0.5,
-                        rand::random::<f32>() - 0.5,
-                        rand::random::<f32>() - 0.15,
+                        rng.gen::<f32>() - 0.5,
+                        rng.gen::<f32>() - 0.5,
+                        rng.gen::<f32>() - 0.15,
                     )
                     .normalized();
 
                     let mut ray_energy = power;
 
                     let terrain = ecs.read_resource::<TerrainGrid>();
+                    let from = pos;
+                    let to = pos + dir * power;
                     let _ = terrain
-                        .ray(pos, pos + dir * power)
-                        // TODO: Faster RNG
+                        .ray(from, to)
                         .until(|block: &Block| {
-                            let stop = block.is_liquid() || block.explode_power().is_none() || ray_energy <= 0.0;
-                            ray_energy -= block.explode_power().unwrap_or(0.0) + rand::random::<f32>() * 0.1;
+                            // Stop if:
+                            // 1) Block is liquid
+                            // 2) Consumed all energy
+                            // 3) Can't explode block (for example we hit stone wall)
+                            let stop = block.is_liquid()
+                                || block.explode_power().is_none()
+                                || ray_energy <= 0.0;
+
+                            ray_energy -=
+                                block.explode_power().unwrap_or(0.0) + rng.gen::<f32>() * 0.1;
+
                             stop
                         })
                         .for_each(|block: &Block, pos| {
@@ -819,6 +831,7 @@ pub fn handle_explosion(server: &Server, pos: Vec3<f32>, explosion: Explosion, o
                 let energies = &ecs.read_storage::<comp::Energy>();
                 let combos = &ecs.read_storage::<comp::Combo>();
                 let inventories = &ecs.read_storage::<comp::Inventory>();
+                let players = &ecs.read_storage::<comp::Player>();
                 for (
                     entity_b,
                     pos_b,
@@ -887,12 +900,23 @@ pub fn handle_explosion(server: &Server, pos: Vec3<f32>, explosion: Explosion, o
                             char_state: char_state_b_maybe,
                         };
 
-                        attack.apply_attack(
+                        let may_harm = combat::may_harm(
+                            owner_entity.and_then(|owner| players.get(owner)),
+                            players.get(entity_b),
+                        );
+                        let attack_options = combat::AttackOptions {
+                            // cool guyz maybe don't look at explosions
+                            // but they still got hurt, it's not Hollywood
+                            target_dodging: false,
+                            may_harm,
                             target_group,
+                        };
+
+                        attack.apply_attack(
                             attacker_info,
                             target_info,
                             dir,
-                            false,
+                            attack_options,
                             strength,
                             combat::AttackSource::Explosion,
                             |e| server_eventbus.emit_now(e),
@@ -902,6 +926,7 @@ pub fn handle_explosion(server: &Server, pos: Vec3<f32>, explosion: Explosion, o
                 }
             },
             RadiusEffect::Entity(mut effect) => {
+                let players = &ecs.read_storage::<comp::Player>();
                 for (entity_b, pos_b, body_b_maybe) in (
                     &ecs.entities(),
                     &ecs.read_storage::<comp::Pos>(),
@@ -916,14 +941,35 @@ pub fn handle_explosion(server: &Server, pos: Vec3<f32>, explosion: Explosion, o
                         1.0 - distance_squared / explosion.radius.powi(2)
                     };
 
+                    // Player check only accounts for PvP/PvE flag.
+                    //
+                    // But bombs are intented to do
+                    // friendly fire.
+                    //
+                    // What exactly friendly fire is subject to discussion.
+                    // As we probably want to minimize possibility of being dick
+                    // even to your group members, the only exception is when
+                    // you want to harm yourself.
+                    //
+                    // This can be changed later.
+                    let may_harm = || {
+                        owner_entity.map_or(false, |attacker| {
+                            let attacker_player = players.get(attacker);
+                            let target_player = players.get(entity_b);
+                            combat::may_harm(attacker_player, target_player) || attacker == entity_b
+                        })
+                    };
                     if strength > 0.0 {
                         let is_alive = ecs
                             .read_storage::<comp::Health>()
                             .get(entity_b)
                             .map_or(true, |h| !h.is_dead);
+
                         if is_alive {
                             effect.modify_strength(strength);
-                            server.state().apply_effect(entity_b, effect.clone(), owner);
+                            if !effect.is_harm() || may_harm() {
+                                server.state().apply_effect(entity_b, effect.clone(), owner);
+                            }
                         }
                     }
                 }

@@ -1,11 +1,12 @@
 //! # Implementing new commands.
-//! To implement a new command, add an instance of `ChatCommand` to
-//! `CHAT_COMMANDS` and provide a handler function.
+//! To implement a new command provide a handler function
+//! in [do_command].
 
 use crate::{
     settings::{
         Ban, BanAction, BanInfo, EditableSetting, SettingError, WhitelistInfo, WhitelistRecord,
     },
+    sys::terrain::NpcData,
     wiring::{Logic, OutputFormula},
     Server, SpawnPoint, StateExt,
 };
@@ -14,7 +15,9 @@ use authc::Uuid;
 use chrono::{NaiveTime, Timelike, Utc};
 use common::{
     assets,
-    cmd::{ChatCommand, BUFF_PACK, BUFF_PARSER},
+    cmd::{
+        ChatCommand, BUFF_PACK, BUFF_PARSER, ITEM_SPECS, KIT_MANIFEST_PATH, PRESET_MANIFEST_PATH,
+    },
     comp::{
         self,
         aura::{Aura, AuraKind, AuraTarget},
@@ -26,6 +29,7 @@ use common::{
     depot,
     effect::Effect,
     event::{EventBus, ServerEvent},
+    generation::EntityInfo,
     npc::{self, get_npc_name},
     resources::{PlayerPhysicsSettings, TimeOfDay},
     terrain::{Block, BlockKind, SpriteKind, TerrainChunkSize},
@@ -66,6 +70,7 @@ impl ChatCommandExt for ChatCommand {
 }
 
 type CmdResult<T> = Result<T, String>;
+
 /// Handler function called when the command is executed.
 /// # Arguments
 /// * `&mut Server` - the `Server` instance executing the command.
@@ -138,6 +143,7 @@ fn do_command(
         ChatCommand::Lantern => handle_lantern,
         ChatCommand::Light => handle_light,
         ChatCommand::MakeBlock => handle_make_block,
+        ChatCommand::MakeNpc => handle_make_npc,
         ChatCommand::MakeSprite => handle_make_sprite,
         ChatCommand::Motd => handle_motd,
         ChatCommand::Object => handle_object,
@@ -521,13 +527,21 @@ fn handle_make_block(
     args: Vec<String>,
     action: &ChatCommand,
 ) -> CmdResult<()> {
-    if let Some(block_name) = parse_args!(args, String) {
+    if let (Some(block_name), r, g, b) = parse_args!(args, String, u8, u8, u8) {
         if let Ok(bk) = BlockKind::from_str(block_name.as_str()) {
             let pos = position(server, target, "target")?;
-            server.state.set_block(
-                pos.0.map(|e| e.floor() as i32),
-                Block::new(bk, Rgb::broadcast(255)),
-            );
+            let new_block = Block::new(bk, Rgb::new(r, g, b).map(|e| e.unwrap_or(255)));
+            let pos = pos.0.map(|e| e.floor() as i32);
+            server.state.set_block(pos, new_block);
+            #[cfg(feature = "persistent_world")]
+            if let Some(terrain_persistence) = server
+                .state
+                .ecs()
+                .try_fetch_mut::<crate::TerrainPersistence>()
+                .as_mut()
+            {
+                terrain_persistence.set_block(pos, new_block);
+            }
             Ok(())
         } else {
             Err(format!("Invalid block kind: {}", block_name))
@@ -535,6 +549,93 @@ fn handle_make_block(
     } else {
         Err(action.help_string())
     }
+}
+
+fn handle_make_npc(
+    server: &mut Server,
+    client: EcsEntity,
+    target: EcsEntity,
+    args: Vec<String>,
+    action: &ChatCommand,
+) -> CmdResult<()> {
+    let (entity_config, number) = parse_args!(args, String, i8);
+
+    let entity_config = entity_config.ok_or_else(|| action.help_string())?;
+    let number = match number {
+        Some(i8::MIN..=0) => {
+            return Err("Number of entities should be at least 1".to_owned());
+        },
+        Some(50..=i8::MAX) => {
+            return Err("Number of entities should be less than 50".to_owned());
+        },
+        Some(number) => number,
+        None => 1,
+    };
+
+    let rng = &mut rand::thread_rng();
+    for _ in 0..number {
+        let comp::Pos(pos) = position(server, target, "target")?;
+        let entity_info = EntityInfo::at(pos).with_asset_expect(&entity_config);
+        match NpcData::from_entity_info(entity_info, rng) {
+            NpcData::Waypoint(_) => {
+                return Err("Waypoint spawning is not implemented".to_owned());
+            },
+            NpcData::Data {
+                loadout,
+                pos,
+                stats,
+                skill_set,
+                poise,
+                health,
+                body,
+                agent,
+                alignment,
+                scale,
+                drop_item,
+            } => {
+                let inventory = Inventory::new_with_loadout(loadout);
+
+                let mut entity_builder = server
+                    .state
+                    .create_npc(pos, stats, skill_set, health, poise, inventory, body)
+                    .with(alignment)
+                    .with(scale)
+                    .with(comp::Vel(Vec3::new(0.0, 0.0, 0.0)))
+                    .with(comp::MountState::Unmounted);
+
+                if let Some(agent) = agent {
+                    entity_builder = entity_builder.with(agent);
+                }
+
+                if let Some(drop_item) = drop_item {
+                    entity_builder = entity_builder.with(comp::ItemDrop(drop_item));
+                }
+
+                // Some would say it's a hack, some would say it's incomplete
+                // simulation. But this is what we do to avoid PvP between npc.
+                use comp::Alignment;
+                let npc_group = match alignment {
+                    Alignment::Enemy => Some(comp::group::ENEMY),
+                    Alignment::Npc | Alignment::Tame => Some(comp::group::NPC),
+                    Alignment::Wild | Alignment::Passive | Alignment::Owned(_) => None,
+                };
+                if let Some(group) = npc_group {
+                    entity_builder = entity_builder.with(group);
+                }
+                entity_builder.build();
+            },
+        };
+    }
+
+    server.notify_client(
+        client,
+        ServerGeneral::server_msg(
+            ChatType::CommandInfo,
+            format!("Spawned {} entities from config: {}", number, entity_config),
+        ),
+    );
+
+    Ok(())
 }
 
 fn handle_make_sprite(
@@ -555,6 +656,15 @@ fn handle_make_sprite(
                 .unwrap_or_else(|| Block::air(SpriteKind::Empty))
                 .with_sprite(sk);
             server.state.set_block(pos, new_block);
+            #[cfg(feature = "persistent_world")]
+            if let Some(terrain_persistence) = server
+                .state
+                .ecs()
+                .try_fetch_mut::<crate::TerrainPersistence>()
+                .as_mut()
+            {
+                terrain_persistence.set_block(pos, new_block);
+            }
             Ok(())
         } else {
             Err(format!("Invalid sprite kind: {}", sprite_name))
@@ -1005,11 +1115,12 @@ fn handle_spawn(
 
             let ai = opt_ai.unwrap_or(true);
             let pos = position(server, target, "target")?;
-            let agent = if let comp::Alignment::Owned(_) | comp::Alignment::Npc = alignment {
-                comp::Agent::default()
-            } else {
-                comp::Agent::default().with_patrol_origin(pos.0)
-            };
+            let mut agent = comp::Agent::from_body(&body());
+
+            // If unowned, the agent should stay in a particular place
+            if !matches!(alignment, comp::Alignment::Owned(_)) {
+                agent = agent.with_patrol_origin(pos.0);
+            }
 
             for _ in 0..amount {
                 let vel = Vec3::new(
@@ -1160,7 +1271,7 @@ fn handle_spawn_airship(
     if let Some(pos) = destination {
         let (kp, ki, kd) = comp::agent::pid_coefficients(&comp::Body::Ship(ship));
         fn pure_z(sp: Vec3<f32>, pv: Vec3<f32>) -> f32 { (sp - pv).z }
-        let agent = comp::Agent::default()
+        let agent = comp::Agent::from_body(&comp::Body::Ship(ship))
             .with_destination(pos)
             .with_position_pid_controller(comp::PidController::new(kp, ki, kd, pos, 0.0, pure_z));
         builder = builder.with(agent);
@@ -1389,12 +1500,23 @@ fn handle_build(
         .write_storage::<comp::CanBuild>()
         .get_mut(target)
     {
-        let toggle_string = if can_build.enabled { "off" } else { "on" };
-        let chat_msg = ServerGeneral::server_msg(
-            ChatType::CommandInfo,
-            format!("Toggled {:?} build mode!", toggle_string),
-        );
         can_build.enabled ^= true;
+
+        let toggle_string = if can_build.enabled { "on" } else { "off" };
+        let msg = format!(
+            "Toggled build mode {}.{}",
+            toggle_string,
+            if !can_build.enabled {
+                ""
+            } else if server.settings().experimental_terrain_persistence {
+                " Experimental terrain persistence is enabled. The server will attempt to persist \
+                 changes, but this is not guaranteed."
+            } else {
+                " Changes will not be persisted when a chunk unloads."
+            },
+        );
+
+        let chat_msg = ServerGeneral::server_msg(ChatType::CommandInfo, msg);
         if client != target {
             server.notify_client(target, chat_msg.clone());
         }
@@ -1567,49 +1689,112 @@ fn handle_kill_npcs(
 
 fn handle_kit(
     server: &mut Server,
-    _client: EcsEntity,
+    client: EcsEntity,
     target: EcsEntity,
     args: Vec<String>,
     action: &ChatCommand,
 ) -> CmdResult<()> {
-    if let Some(name) = parse_args!(args, String) {
-        if let Ok(kits) = common::cmd::KitManifest::load("server.manifests.kits") {
-            let kits = kits.read();
-            if let Some(kit) = kits.0.get(&name) {
-                if let (Some(mut target_inventory), mut target_inv_update) = (
-                    server
-                        .state()
-                        .ecs()
-                        .write_storage::<comp::Inventory>()
-                        .get_mut(target),
-                    server.state.ecs().write_storage::<comp::InventoryUpdate>(),
-                ) {
-                    for (item_id, quantity) in kit.iter() {
-                        if let Ok(mut item) = comp::Item::new_from_asset(item_id) {
-                            let _ = item.set_amount(*quantity);
-                            let (_, _) = (
-                                target_inventory.push(item),
-                                target_inv_update.insert(
-                                    target,
-                                    comp::InventoryUpdate::new(comp::InventoryUpdateEvent::Debug),
-                                ),
-                            );
-                        } else {
-                            warn!("Unknown item: {}", &item_id);
-                        }
-                    }
-                    Ok(())
-                } else {
-                    Err("Could not get inventory".to_string())
-                }
-            } else {
-                Err(format!("Kit '{}' not found", name))
+    use common::cmd::KitManifest;
+
+    let notify = |server: &mut Server, kit_name: &str| {
+        server.notify_client(
+            client,
+            ServerGeneral::server_msg(ChatType::CommandInfo, format!("Gave kit: {}", kit_name)),
+        );
+    };
+    let name = parse_args!(args, String).ok_or_else(|| action.help_string())?;
+
+    match name.as_str() {
+        "all" => {
+            // TODO: we will probably want to handle modular items here too
+            let items = &ITEM_SPECS;
+            let res = push_kit(
+                items.iter().map(|item_id| (item_id.as_str(), 1)),
+                items.len(),
+                server,
+                target,
+            );
+            if res.is_ok() {
+                notify(server, "all");
             }
-        } else {
-            Err("Could not load manifest file 'server.manifests.kits'".to_string())
+            res
+        },
+        kit_name => {
+            let kits = KitManifest::load(KIT_MANIFEST_PATH)
+                .map(|kits| kits.read())
+                .map_err(|_| format!("Could not load manifest file {}", KIT_MANIFEST_PATH))?;
+
+            let kit = kits
+                .0
+                .get(kit_name)
+                .ok_or(format!("Kit '{}' not found", kit_name))?;
+
+            let res = push_kit(
+                kit.iter()
+                    .map(|&(ref item_id, quantity)| (item_id.as_str(), quantity)),
+                kit.len(),
+                server,
+                target,
+            );
+            if res.is_ok() {
+                notify(server, kit_name);
+            }
+            res
+        },
+    }
+}
+
+fn push_kit<'a, I>(kit: I, count: usize, server: &mut Server, target: EcsEntity) -> CmdResult<()>
+where
+    I: Iterator<Item = (&'a str, u32)>,
+{
+    if let (Some(mut target_inventory), mut target_inv_update) = (
+        server
+            .state()
+            .ecs()
+            .write_storage::<comp::Inventory>()
+            .get_mut(target),
+        server.state.ecs().write_storage::<comp::InventoryUpdate>(),
+    ) {
+        // TODO: implement atomic `insert_all_or_nothing` on Inventory
+        if target_inventory.free_slots() < count {
+            return Err("Inventory doesn't have enough slots".to_owned());
         }
+        for (item_id, quantity) in kit {
+            let mut item = comp::Item::new_from_asset(item_id)
+                .map_err(|_| format!("Unknown item: {}", item_id))?;
+            let mut res = Ok(());
+
+            // Either push stack or push one by one.
+            if item.is_stackable() {
+                // FIXME: in theory, this can fail,
+                // but we don't have stack sizes yet.
+                let _ = item.set_amount(quantity);
+                res = target_inventory.push(item);
+                let _ = target_inv_update.insert(
+                    target,
+                    comp::InventoryUpdate::new(comp::InventoryUpdateEvent::Debug),
+                );
+            } else {
+                let ability_map = server.state.ecs().read_resource::<AbilityMap>();
+                let msm = server.state.ecs().read_resource::<MaterialStatManifest>();
+                for _ in 0..quantity {
+                    res = target_inventory.push(item.duplicate(&ability_map, &msm));
+                    let _ = target_inv_update.insert(
+                        target,
+                        comp::InventoryUpdate::new(comp::InventoryUpdateEvent::Debug),
+                    );
+                }
+            }
+            // I think it's possible to pick-up item during this loop
+            // and fail into case where you had space but now you don't?
+            if res.is_err() {
+                return Err("Can't fit item to inventory".to_owned());
+            }
+        }
+        Ok(())
     } else {
-        Err(action.help_string())
+        Err("Could not get inventory".to_string())
     }
 }
 
@@ -3057,7 +3242,7 @@ fn handle_skill_preset(
 fn clear_skillset(skill_set: &mut comp::SkillSet) { *skill_set = comp::SkillSet::default(); }
 
 fn set_skills(skill_set: &mut comp::SkillSet, preset: &str) -> CmdResult<()> {
-    let presets = match common::cmd::SkillPresetManifest::load("server.manifests.presets") {
+    let presets = match common::cmd::SkillPresetManifest::load(PRESET_MANIFEST_PATH) {
         Ok(presets) => presets.read().0.clone(),
         Err(err) => {
             warn!("Error in preset: {}", err);

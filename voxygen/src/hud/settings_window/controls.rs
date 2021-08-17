@@ -3,7 +3,6 @@ use super::{RESET_BUTTONS_HEIGHT, RESET_BUTTONS_WIDTH};
 use crate::{
     game_input::GameInput,
     hud::{img_ids::Imgs, ERROR_COLOR, TEXT_BIND_CONFLICT_COLOR, TEXT_COLOR},
-    i18n::Localization,
     session::settings_change::{Control as ControlChange, Control::*},
     ui::fonts::Fonts,
     GlobalState,
@@ -14,6 +13,7 @@ use conrod_core::{
     widget::{self, Button, Rectangle, Scrollbar, Text},
     widget_ids, Borderable, Colorable, Labelable, Positionable, Sizeable, Widget, WidgetCommon,
 };
+use i18n::Localization;
 use strum::IntoEnumIterator;
 
 widget_ids! {
@@ -123,12 +123,19 @@ impl<'a> Widget for Controls<'a> {
             let (key_string, key_color) =
                 if self.global_state.window.remapping_keybindings == Some(game_input) {
                     (
-                        String::from(self.localized_strings.get("hud.settings.awaitingkey")),
+                        self.localized_strings
+                            .get("hud.settings.awaitingkey")
+                            .to_owned(),
                         TEXT_COLOR,
                     )
                 } else if let Some(key) = controls.get_binding(game_input) {
                     (
-                        key.display_string(key_layout),
+                        format!(
+                            "{} {}",
+                            key.display_string(key_layout),
+                            key.display_shortened(key_layout)
+                                .map_or("".to_owned(), |short| format!("({})", short))
+                        ),
                         if controls.has_conflicting_bindings(key) {
                             TEXT_BIND_CONFLICT_COLOR
                         } else {
@@ -137,7 +144,9 @@ impl<'a> Widget for Controls<'a> {
                     )
                 } else {
                     (
-                        String::from(self.localized_strings.get("hud.settings.unbound")),
+                        self.localized_strings
+                            .get("hud.settings.unbound")
+                            .to_owned(),
                         ERROR_COLOR,
                     )
                 };

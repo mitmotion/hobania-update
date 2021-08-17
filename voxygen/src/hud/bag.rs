@@ -7,7 +7,6 @@ use super::{
 };
 use crate::{
     game_input::GameInput,
-    i18n::Localization,
     ui::{
         fonts::Fonts,
         slot::{ContentSize, SlotMaker},
@@ -31,6 +30,7 @@ use conrod_core::{
     widget::{self, Button, Image, Rectangle, Scrollbar, State as ConrodState, Text},
     widget_ids, Color, Colorable, Positionable, Scalar, Sizeable, UiCell, Widget, WidgetCommon,
 };
+use i18n::Localization;
 
 use crate::hud::slots::SlotKind;
 use specs::Entity as EcsEntity;
@@ -56,7 +56,9 @@ widget_ids! {
         inventory_title,
         inventory_title_bg,
         scrollbar_bg,
+        second_phase_scrollbar_bg,
         scrollbar_slots,
+        left_scrollbar_slots,
     }
 }
 
@@ -131,26 +133,55 @@ impl<'a> InventoryScroller<'a> {
     }
 
     fn background(&mut self, ui: &mut UiCell<'_>) {
+        let bg_id = if !self.on_right {
+            self.imgs.inv_bg_bag
+        } else {
+            self.imgs.player_inv_bg_bag
+        };
+
+        let img_id = if !self.on_right {
+            self.imgs.inv_frame_bag
+        } else {
+            self.imgs.player_inv_frame_bag
+        };
+
         let mut bg = Image::new(if self.show_stats {
             self.imgs.inv_bg_stats
         } else if self.show_bag_inv {
-            self.imgs.inv_bg_bag
+            bg_id
         } else {
             self.imgs.inv_bg_armor
         })
-        .w_h(424.0, 708.0);
+        .w_h(
+            424.0,
+            if self.show_bag_inv && !self.on_right {
+                548.0
+            } else {
+                708.0
+            },
+        );
+
         if self.on_right {
-            bg = bg.bottom_right_with_margins_on(ui.window, 60.0, 5.0);
+            bg = bg.bottom_right_with_margins_on(ui.window, 70.0, 5.0);
         } else {
-            bg = bg.bottom_left_with_margins_on(ui.window, 60.0, 5.0);
+            bg = bg.bottom_left_with_margins_on(ui.window, 230.0, 5.0);
         }
+
         bg.color(Some(UI_MAIN)).set(self.bg_ids.bg, ui);
+
         Image::new(if self.show_bag_inv {
-            self.imgs.inv_frame_bag
+            img_id
         } else {
             self.imgs.inv_frame
         })
-        .w_h(424.0, 708.0)
+        .w_h(
+            424.0,
+            if self.show_bag_inv && !self.on_right {
+                548.0
+            } else {
+                708.0
+            },
+        )
         .middle_of(self.bg_ids.bg)
         .color(Some(UI_HIGHLIGHT_0))
         .set(self.bg_ids.bg_frame, ui);
@@ -187,6 +218,7 @@ impl<'a> InventoryScroller<'a> {
         ui: &mut UiCell<'_>,
     ) {
         let space_max = self.inventory.slots().count();
+
         // Slots Scrollbar
         if space_max > 45 && !self.show_bag_inv {
             // Scrollbar-BG
@@ -202,7 +234,7 @@ impl<'a> InventoryScroller<'a> {
                 .color(UI_MAIN)
                 .middle_of(state.ids.scrollbar_bg)
                 .set(state.ids.scrollbar_slots, ui);
-        } else if space_max > 135 {
+        } else if space_max > 135 && self.on_right {
             // Scrollbar-BG
             Image::new(self.imgs.scrollbar_bg_big)
                 .w_h(9.0, 592.0)
@@ -217,14 +249,45 @@ impl<'a> InventoryScroller<'a> {
                 .middle_of(state.ids.scrollbar_bg)
                 .set(state.ids.scrollbar_slots, ui);
         };
+
+        // This is just for the offeror inventory scrollbar
+        if space_max >= 108 && !self.on_right && self.show_bag_inv {
+            // Left bag scrollbar background
+            Image::new(self.imgs.second_phase_scrollbar_bg)
+                .w_h(9.0, 434.0)
+                .bottom_right_with_margins_on(self.bg_ids.bg_frame, 42.0, 3.0)
+                .color(Some(UI_HIGHLIGHT_0))
+                .set(state.ids.second_phase_scrollbar_bg, ui);
+            // Left bag scrollbar
+            Scrollbar::y_axis(state.ids.inv_alignment)
+                .thickness(5.0)
+                .h(384.0)
+                .color(UI_MAIN)
+                .middle_of(state.ids.second_phase_scrollbar_bg)
+                .set(state.ids.left_scrollbar_slots, ui);
+        }
+
+        let grid_width = if self.show_bag_inv && !self.on_right {
+            440.0 // This for the left bag
+        } else if self.show_bag_inv && self.on_right {
+            600.0 // This for the expanded right bag
+        } else {
+            200.0
+        };
+
         // Alignment for Grid
-        Rectangle::fill_with(
-            [362.0, if self.show_bag_inv { 600.0 } else { 200.0 }],
-            color::TRANSPARENT,
-        )
-        .bottom_left_with_margins_on(self.bg_ids.bg_frame, 29.0, 46.5)
-        .scroll_kids_vertically()
-        .set(state.ids.inv_alignment, ui);
+        Rectangle::fill_with([362.0, grid_width], color::TRANSPARENT)
+            .bottom_left_with_margins_on(
+                self.bg_ids.bg_frame,
+                29.0,
+                if self.show_bag_inv && !self.on_right {
+                    28.0
+                } else {
+                    46.5
+                },
+            )
+            .scroll_kids_vertically()
+            .set(state.ids.inv_alignment, ui);
 
         // Bag Slots
         // Create available inventory slot widgets
@@ -533,7 +596,7 @@ impl<'a> Bag<'a> {
 }
 const STATS: [&str; 5] = [
     "Health",
-    "Stamina",
+    "Energy",
     "Protection",
     "Combat Rating",
     "Stun Resilience",
@@ -809,7 +872,7 @@ impl<'a> Widget for Bag<'a> {
             for i in STATS.iter().copied().enumerate() {
                 let btn = Button::image(match i.1 {
                     "Health" => self.imgs.health_ico,
-                    "Stamina" => self.imgs.stamina_ico,
+                    "Energy" => self.imgs.energy_ico,
                     "Combat Rating" => self.imgs.combat_rating_ico,
                     "Protection" => self.imgs.protection_ico,
                     "Stun Resilience" => self.imgs.stun_res_ico,
@@ -828,7 +891,7 @@ impl<'a> Widget for Bag<'a> {
                         as i32
                 );
                 let health_txt = format!("{}", (self.health.maximum() as f32 / 10.0) as usize);
-                let stamina_txt = format!("{}", (self.energy.maximum() as f32 / 10.0) as usize);
+                let energy_txt = format!("{}", (self.energy.maximum() as f32 / 10.0) as usize);
                 let combat_rating_txt = format!("{}", (combat_rating * 10.0) as usize);
                 let stun_res_txt = format!(
                     "{}",
@@ -841,7 +904,7 @@ impl<'a> Widget for Bag<'a> {
                 };
                 let tooltip_head = match i.1 {
                     "Health" => i18n.get("hud.bag.health"),
-                    "Stamina" => i18n.get("hud.bag.stamina"),
+                    "Energy" => i18n.get("hud.bag.energy"),
                     "Combat Rating" => i18n.get("hud.bag.combat_rating"),
                     "Protection" => i18n.get("hud.bag.protection"),
                     "Stun Resilience" => i18n.get("hud.bag.stun_res"),
@@ -863,7 +926,7 @@ impl<'a> Widget for Bag<'a> {
                 .set(state.ids.stat_icons[i.0], ui);
                 Text::new(match i.1 {
                     "Health" => &health_txt,
-                    "Stamina" => &stamina_txt,
+                    "Energy" => &energy_txt,
                     "Combat Rating" => &combat_rating_txt,
                     "Protection" => &protection_txt,
                     "Stun Resilience" => &stun_res_txt,

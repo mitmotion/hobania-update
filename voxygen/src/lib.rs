@@ -4,6 +4,8 @@
 #![deny(clippy::clone_on_ref_ptr)]
 #![feature(
     array_map,
+    array_methods,
+    array_zip,
     bool_to_option,
     const_generics,
     drain_filter,
@@ -56,6 +58,9 @@ use common_base::span;
 use i18n::LocalizationHandle;
 use std::path::PathBuf;
 
+use std::sync::Arc;
+use tokio::runtime::Runtime;
+
 /// A type used to store state that is shared between all play states.
 pub struct GlobalState {
     pub userdata_dir: PathBuf,
@@ -63,6 +68,7 @@ pub struct GlobalState {
     pub settings: Settings,
     pub profile: Profile,
     pub window: Window,
+    pub tokio_runtime: Arc<Runtime>,
     #[cfg(feature = "egui-ui")]
     pub egui_state: EguiState,
     pub lazy_init: scene::terrain::SpriteRenderContextLazy,

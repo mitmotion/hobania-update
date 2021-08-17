@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     game_input::GameInput,
-    i18n::Localization,
+    hud::animation::animation_timer,
     ui::{fonts::Fonts, ImageFrame, Tooltip, TooltipManager, Tooltipable},
     window::KeyMouse,
     GlobalState,
@@ -12,9 +12,10 @@ use crate::{
 use client::Client;
 use common::comp::{SkillSet, Stats};
 use conrod_core::{
-    widget::{self, Button, Image, Text},
+    widget::{self, Button, Image, Text, UpdateArgs},
     widget_ids, Color, Colorable, Positionable, Sizeable, UiCell, Widget, WidgetCommon,
 };
+use i18n::Localization;
 widget_ids! {
     struct Ids {
         bag,
@@ -123,16 +124,10 @@ impl<'a> Widget for Buttons<'a> {
 
     fn style(&self) -> Self::Style {}
 
-    fn update(self, args: widget::UpdateArgs<Self>) -> Self::Event {
+    fn update(self, args: UpdateArgs<Self>) -> Self::Event {
         common_base::prof_span!("Buttons::update");
-        let widget::UpdateArgs { state, ui, .. } = args;
-        let invs = self.client.inventories();
-        let inventory = match invs.get(self.client.entity()) {
-            Some(inv) => inv,
-            None => return None,
-        };
+        let UpdateArgs { state, ui, .. } = args;
         let localized_strings = self.localized_strings;
-        let arrow_ani = (self.pulse * 4.0/* speed factor */).cos() * 0.5 + 0.8; //Animation timer
 
         let button_tooltip = Tooltip::new({
             // Edge images [t, b, r, l]
@@ -197,6 +192,11 @@ impl<'a> Widget for Buttons<'a> {
                 state.ids.bag_text,
             );
         }
+        let invs = self.client.inventories();
+        let inventory = match invs.get(self.client.entity()) {
+            Some(inv) => inv,
+            None => return None,
+        };
         if !self.show_bag {
             let space_used = inventory.populated_slots();
             let space_max = inventory.slots().count();
@@ -357,6 +357,7 @@ impl<'a> Widget for Buttons<'a> {
         }
         // Unspent SP indicator
         if unspent_sp {
+            let arrow_ani = animation_timer(self.pulse); //Animation timer
             Image::new(self.imgs.sp_indicator_arrow)
                 .w_h(20.0, 11.0)
                 .graphics_for(state.ids.spellbook_button)
@@ -425,9 +426,12 @@ impl<'a> Buttons<'a> {
         text: widget::Id,
     ) {
         let key_layout = &self.global_state.window.key_layout;
+        let key_desc = key_mouse
+            .display_shortened(key_layout)
+            .unwrap_or_else(|| key_mouse.display_string(key_layout));
 
         //Create shadow
-        Text::new(key_mouse.display_string(key_layout).as_str())
+        Text::new(&key_desc)
             .bottom_right_with_margins_on(button_identifier, 0.0, 0.0)
             .font_size(10)
             .font_id(self.fonts.cyri.conrod_id)
@@ -435,7 +439,7 @@ impl<'a> Buttons<'a> {
             .set(text_background, ui);
 
         //Create button
-        Text::new(key_mouse.display_string(key_layout).as_str())
+        Text::new(&key_desc)
             .bottom_right_with_margins_on(text_background, 1.0, 1.0)
             .font_size(10)
             .font_id(self.fonts.cyri.conrod_id)

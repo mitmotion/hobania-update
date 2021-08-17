@@ -23,6 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Quotes and escape codes can be used in command arguments
 - Toggle chat with a shortcut (default is F5)
 - Pets are now saved on logout 🐕 🦎 🐼
+- Dualwielded, one-handed swords as starting weapons (Will be replaced by daggers in the future!)
+- Healing sceptre crafting recipe
+- NPCs can now warn players before engaging in combat
+- Custom error message when a supported graphics backend can not be found
+- Add server setting with PvE/PvP switch
+- Can now tilt glider while only wielding it
+- Experimental terrain persistence (see server documentation)
+- Add GPU filtering using WGPU_ADAPTER environment variable
 
 ### Changed
 
@@ -40,11 +48,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mushroom Curry gives long-lasting Regeneration buff
 - Trades now consider if items can stack in full inventories.
 - The types of animals that can be tamed as pets are now limited to certain species, pending further balancing of pets
+- Made server-cli admin add/remove command use positional arguments again
+- Usage of "stamina" replaced with "energy"
+- Glider dimensions now depend on character height
+- Glider dimensions somewhat increased overall
+- Dungeon difficulty level starts at 1 instead of 0
 
 ### Removed
 
 - Enemies no longer spawn in dungeon boss room
 - Melee critical hit no longer applies after reduction by armour
+- Enemies no more spawn in dungeon boss room
+- Melee critical hit no more applies after reduction by armour
+- Removed Healing Sceptre as a starting weapon as it is considered an advanced weapon
 
 ### Fixed
 
@@ -55,6 +71,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Campfires now despawn when underwater
 - Players no longer spawn underground if their waypoint is underground
 - Map will now zoom around the cursor's position and drag correctly
+- No more jittering while running down slopes with the glider out
+- Axe normal attack rewards energy without skill points
+- Gliders no longer suffer from unreasonable amounts of induced drag
+- Camera is now clipping a lot less
 
 ## [0.10.0] - 2021-06-12
 

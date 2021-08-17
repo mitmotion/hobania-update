@@ -1,3 +1,4 @@
+mod animation;
 mod bag;
 mod buffs;
 mod buttons;
@@ -55,7 +56,6 @@ use crate::{
     ecs::{comp as vcomp, comp::HpFloaterList},
     game_input::GameInput,
     hud::{img_ids::ImgsRot, prompt_dialog::DialogOutcomeEvent},
-    i18n::Localization,
     render::UiDrawer,
     scene::camera::{self, Camera},
     session::{
@@ -74,7 +74,7 @@ use client::Client;
 use common::{
     combat,
     comp::{
-        self,
+        self, fluid_dynamics,
         inventory::trade_pricing::TradePricing,
         item::{tool::ToolKind, ItemDesc, MaterialStatManifest, Quality},
         skills::{Skill, SkillGroupKind},
@@ -86,7 +86,7 @@ use common::{
     terrain::{SpriteKind, TerrainChunk},
     trade::{ReducedInventory, TradeAction},
     uid::Uid,
-    util::srgba_to_linear,
+    util::{srgba_to_linear, Dir},
     vol::RectRasterableVol,
 };
 use common_base::{prof_span, span};
@@ -100,6 +100,7 @@ use conrod_core::{
     widget_ids, Color, Colorable, Labelable, Positionable, Sizeable, Widget,
 };
 use hashbrown::{HashMap, HashSet};
+use i18n::Localization;
 use rand::Rng;
 use specs::{Entity as EcsEntity, Join, WorldExt};
 use std::{
@@ -232,7 +233,10 @@ widget_ids! {
         ping,
         coordinates,
         velocity,
+        glide_ratio,
+        glide_aoe,
         orientation,
+        look_direction,
         loaded_distance,
         time,
         entity_count,
@@ -316,6 +320,88 @@ widget_ids! {
     }
 }
 
+/// Specifier to use with `Position::position`
+/// Read its documentation for more
+// TODO: extend as you need it
+#[derive(Clone, Copy)]
+pub enum PositionSpecifier {
+    MidBottomWithMarginOn(widget::Id, f64),
+    TopRightWithMarginsOn(widget::Id, f64, f64),
+    BottomRightWithMarginsOn(widget::Id, f64, f64),
+    BottomLeftWithMarginsOn(widget::Id, f64, f64),
+    RightFrom(widget::Id, f64),
+}
+
+/// Trait which enables you to declare widget position
+/// to use later on widget creation.
+/// It is implemented for all widgets which are implement Positionable,
+/// so you can easily change your code to use this method.
+///
+/// Consider this example:
+/// ```text
+///     let slot1 = slot_maker
+///         .fabricate(hotbar::Slot::One, [40.0; 2])
+///         .filled_slot(self.imgs.skillbar_slot)
+///         .bottom_left_with_margins_on(state.ids.frame, 0.0, 0.0);
+///     if condition {
+///         call_slot1(slot1);
+///     } else {
+///         call_slot2(slot1);
+///     }
+///     let slot2 = slot_maker
+///         .fabricate(hotbar::Slot::Two, [40.0; 2])
+///         .filled_slot(self.imgs.skillbar_slot)
+///         .right_from(state.ids.slot1, slot_offset);
+///     if condition {
+///         call_slot1(slot2);
+///     } else {
+///         call_slot2(slot2);
+///     }
+/// ```
+/// Despite being identical, you can't easily deduplicate code
+/// which uses slot1 and slot2 as they are calling methods to position itself.
+/// This can be solved if you declare position and use it later like so
+/// ```text
+/// let slots = [
+///     (hotbar::Slot::One, BottomLeftWithMarginsOn(state.ids.frame, 0.0, 0.0)),
+///     (hotbar::Slot::Two, RightFrom(state.ids.slot1, slot_offset)),
+/// ];
+/// for (slot, pos) in slots {
+///     let slot = slot_maker
+///         .fabricate(slot, [40.0; 2])
+///         .filled_slot(self.imgs.skillbar_slot)
+///         .position(pos);
+///     if condition {
+///         call_slot1(slot);
+///     } else {
+///         call_slot2(slot);
+///     }
+/// }
+/// ```
+pub trait Position {
+    fn position(self, request: PositionSpecifier) -> Self;
+}
+
+impl<W: Positionable> Position for W {
+    fn position(self, request: PositionSpecifier) -> Self {
+        match request {
+            PositionSpecifier::MidBottomWithMarginOn(other, margin) => {
+                self.mid_bottom_with_margin_on(other, margin)
+            },
+            PositionSpecifier::TopRightWithMarginsOn(other, top, right) => {
+                self.top_right_with_margins_on(other, top, right)
+            },
+            PositionSpecifier::BottomRightWithMarginsOn(other, bottom, right) => {
+                self.bottom_right_with_margins_on(other, bottom, right)
+            },
+            PositionSpecifier::BottomLeftWithMarginsOn(other, bottom, left) => {
+                self.bottom_left_with_margins_on(other, bottom, left)
+            },
+            PositionSpecifier::RightFrom(other, offset) => self.right_from(other, offset),
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct BuffInfo {
     kind: comp::BuffKind,
@@ -358,6 +444,9 @@ pub struct DebugInfo {
     pub coordinates: Option<comp::Pos>,
     pub velocity: Option<comp::Vel>,
     pub ori: Option<comp::Ori>,
+    pub character_state: Option<comp::CharacterState>,
+    pub look_dir: Dir,
+    pub in_fluid: Option<comp::Fluid>,
     pub num_chunks: u32,
     pub num_lights: u32,
     pub num_visible_chunks: u32,
@@ -1061,7 +1150,7 @@ impl Hud {
                         1.0,
                         1.0,
                         1.0,
-                        self.crosshair_opacity * global_state.settings.interface.crosshair_transp,
+                        self.crosshair_opacity * global_state.settings.interface.crosshair_opacity,
                     )))
                     .set(self.ids.crosshair_outer, ui_widgets);
                     Image::new(self.imgs.crosshair_inner)
@@ -1576,8 +1665,7 @@ impl Hud {
                     .set(overitem_id, ui_widgets);
                 } else if let Some(sprite) = block.get_sprite() {
                     overitem::Overitem::new(
-                        format!("{:?}", sprite).into(), /* TODO: A better way to generate text
-                                                         * for this */
+                        get_sprite_desc(sprite, i18n),
                         overitem::TEXT_COLOR,
                         pos.distance_squared(player_pos),
                         &self.fonts,
@@ -2067,6 +2155,8 @@ impl Hud {
         }
 
         // Display debug window.
+        // TODO:
+        // Make it use i18n keys.
         if let Some(debug_info) = debug_info {
             prof_span!("debug info");
             // Alpha Version
@@ -2109,15 +2199,31 @@ impl Hud {
                 .font_size(self.fonts.cyri.scale(14))
                 .set(self.ids.coordinates, ui_widgets);
             // Player's velocity
-            let velocity_text = match debug_info.velocity {
-                Some(velocity) => format!(
-                    "Velocity: ({:.1}, {:.1}, {:.1}) [{:.1} u/s]",
-                    velocity.0.x,
-                    velocity.0.y,
-                    velocity.0.z,
-                    velocity.0.magnitude()
-                ),
-                None => "Player has no Vel component".to_owned(),
+            let (velocity_text, glide_ratio_text) = match debug_info.velocity {
+                Some(velocity) => {
+                    let velocity = velocity.0;
+                    let velocity_text = format!(
+                        "Velocity: ({:.1}, {:.1}, {:.1}) [{:.1} u/s]",
+                        velocity.x,
+                        velocity.y,
+                        velocity.z,
+                        velocity.magnitude()
+                    );
+                    let horizontal_velocity = velocity.xy().magnitude();
+                    let dz = velocity.z;
+                    // don't divide by zero
+                    let glide_ratio_text = if dz.abs() > 0.0001 {
+                        format!("Glide Ratio: {:.1}", (-1.0) * (horizontal_velocity / dz))
+                    } else {
+                        "Glide Ratio: Altitude is constant".to_owned()
+                    };
+
+                    (velocity_text, glide_ratio_text)
+                },
+                None => {
+                    let err = "Player has no Vel component";
+                    (err.to_owned(), err.to_owned())
+                },
             };
             Text::new(&velocity_text)
                 .color(TEXT_COLOR)
@@ -2125,23 +2231,54 @@ impl Hud {
                 .font_id(self.fonts.cyri.conrod_id)
                 .font_size(self.fonts.cyri.scale(14))
                 .set(self.ids.velocity, ui_widgets);
+            Text::new(&glide_ratio_text)
+                .color(TEXT_COLOR)
+                .down_from(self.ids.velocity, 5.0)
+                .font_id(self.fonts.cyri.conrod_id)
+                .font_size(self.fonts.cyri.scale(14))
+                .set(self.ids.glide_ratio, ui_widgets);
+            let glide_angle_text = angle_of_attack_text(
+                debug_info.in_fluid,
+                debug_info.velocity,
+                debug_info.character_state.as_ref(),
+            );
+            Text::new(&glide_angle_text)
+                .color(TEXT_COLOR)
+                .down_from(self.ids.glide_ratio, 5.0)
+                .font_id(self.fonts.cyri.conrod_id)
+                .font_size(self.fonts.cyri.scale(14))
+                .set(self.ids.glide_aoe, ui_widgets);
             // Player's orientation vector
             let orientation_text = match debug_info.ori {
                 Some(ori) => {
-                    let look_dir = ori.look_dir();
+                    let orientation = ori.look_dir();
                     format!(
-                        "Orientation: ({:.1}, {:.1}, {:.1})",
-                        look_dir.x, look_dir.y, look_dir.z,
+                        "Orientation: ({:.2}, {:.2}, {:.2})",
+                        orientation.x, orientation.y, orientation.z,
                     )
                 },
                 None => "Player has no Ori component".to_owned(),
             };
             Text::new(&orientation_text)
                 .color(TEXT_COLOR)
-                .down_from(self.ids.velocity, 5.0)
+                .down_from(self.ids.glide_aoe, 5.0)
                 .font_id(self.fonts.cyri.conrod_id)
                 .font_size(self.fonts.cyri.scale(14))
                 .set(self.ids.orientation, ui_widgets);
+            let look_dir_text = {
+                let look_vec = debug_info.look_dir.to_vec();
+
+                format!(
+                    "Look Direction: ({:.2}, {:.2}, {:.2})",
+                    look_vec.x, look_vec.y, look_vec.z,
+                )
+            };
+            Text::new(&look_dir_text)
+                .color(TEXT_COLOR)
+                .down_from(self.ids.orientation, 5.0)
+                .font_id(self.fonts.cyri.conrod_id)
+                .font_size(self.fonts.cyri.scale(14))
+                .set(self.ids.look_direction, ui_widgets);
             // Loaded distance
             Text::new(&format!(
                 "View distance: {:.2} blocks ({:.2} chunks)",
@@ -2149,7 +2286,7 @@ impl Hud {
                 client.loaded_distance() / TerrainChunk::RECT_SIZE.x as f32,
             ))
             .color(TEXT_COLOR)
-            .down_from(self.ids.orientation, 5.0)
+            .down_from(self.ids.look_direction, 5.0)
             .font_id(self.fonts.cyri.conrod_id)
             .font_size(self.fonts.cyri.scale(14))
             .set(self.ids.loaded_distance, ui_widgets);
@@ -3573,6 +3710,12 @@ impl Hud {
                         self.show.debug = global_state.settings.interface.toggle_debug;
                         true
                     },
+                    #[cfg(feature = "egui-ui")]
+                    GameInput::ToggleEguiDebug if state => {
+                        global_state.settings.interface.toggle_egui_debug =
+                            !global_state.settings.interface.toggle_egui_debug;
+                        true
+                    },
                     GameInput::ToggleChat if state => {
                         global_state.settings.interface.toggle_chat =
                             !global_state.settings.interface.toggle_chat;
@@ -3861,7 +4004,7 @@ pub fn get_buff_title(buff: BuffKind, localized_strings: &Localization) -> &str 
         BuffKind::Potion { .. } => localized_strings.get("buff.title.potion"),
         BuffKind::CampfireHeal { .. } => localized_strings.get("buff.title.campfire_heal"),
         BuffKind::IncreaseMaxHealth { .. } => localized_strings.get("buff.title.IncreaseMaxHealth"),
-        BuffKind::IncreaseMaxEnergy { .. } => localized_strings.get("buff.title.staminaup"),
+        BuffKind::IncreaseMaxEnergy { .. } => localized_strings.get("buff.title.energyup"),
         BuffKind::Invulnerability => localized_strings.get("buff.title.invulnerability"),
         BuffKind::ProtectingWard => localized_strings.get("buff.title.protectingward"),
         BuffKind::Frenzied => localized_strings.get("buff.title.frenzied"),
@@ -3911,10 +4054,61 @@ pub fn get_buff_desc(buff: BuffKind, data: BuffData, localized_strings: &Localiz
     }
 }
 
+pub fn get_sprite_desc(sprite: SpriteKind, localized_strings: &Localization) -> Cow<str> {
+    let i18n_key = match sprite {
+        SpriteKind::Anvil => "hud.crafting.anvil",
+        SpriteKind::Cauldron => "hud.crafting.cauldron",
+        SpriteKind::CookingPot => "hud.crafting.cooking_pot",
+        SpriteKind::CraftingBench => "hud.crafting.crafting_bench",
+        SpriteKind::Forge => "hud.crafting.forge",
+        SpriteKind::Loom => "hud.crafting.loom",
+        SpriteKind::SpinningWheel => "hud.crafting.spinning_wheel",
+        SpriteKind::TanningRack => "hud.crafting.tanning_rack",
+        sprite => return Cow::Owned(format!("{:?}", sprite)),
+    };
+    Cow::Borrowed(localized_strings.get(i18n_key))
+}
+
 pub fn get_buff_time(buff: BuffInfo) -> String {
     if let Some(dur) = buff.dur {
         format!("{:.0}s", dur.as_secs_f32())
     } else {
         "".to_string()
+    }
+}
+
+pub fn angle_of_attack_text(
+    fluid: Option<comp::Fluid>,
+    velocity: Option<comp::Vel>,
+    character_state: Option<&comp::CharacterState>,
+) -> String {
+    use comp::CharacterState;
+
+    let glider_ori = if let Some(CharacterState::Glide(data)) = character_state {
+        data.ori
+    } else {
+        return "Angle of Attack: Not gliding".to_owned();
+    };
+
+    let fluid = if let Some(fluid) = fluid {
+        fluid
+    } else {
+        return "Angle of Attack: Not in fluid".to_owned();
+    };
+
+    let velocity = if let Some(velocity) = velocity {
+        velocity
+    } else {
+        return "Angle of Attack: Player has no vel component".to_owned();
+    };
+    let rel_flow = fluid.relative_flow(&velocity).0;
+    let v_sq = rel_flow.magnitude_squared();
+
+    if v_sq.abs() > 0.0001 {
+        let rel_flow_dir = Dir::new(rel_flow / v_sq.sqrt());
+        let aoe = fluid_dynamics::angle_of_attack(&glider_ori, &rel_flow_dir);
+        format!("Angle of Attack: {:.1}", aoe.to_degrees())
+    } else {
+        "Angle of Attack: Not moving".to_owned()
     }
 }

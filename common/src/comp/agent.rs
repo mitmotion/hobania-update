@@ -9,13 +9,14 @@ use serde::Deserialize;
 use specs::{Component, Entity as EcsEntity};
 use specs_idvs::IdvStorage;
 use std::{collections::VecDeque, fmt};
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 use vek::*;
 
 use super::dialogue::Subject;
 
-pub const DEFAULT_INTERACTION_TIME: f32 = 1.0;
+pub const DEFAULT_INTERACTION_TIME: f32 = 3.0;
 pub const TRADE_INTERACTION_TIME: f32 = 300.0;
-pub const MAX_LISTEN_DIST: f32 = 100.0;
 
 #[derive(Copy, Clone, Debug, PartialEq, Deserialize)]
 pub enum Alignment {
@@ -43,6 +44,8 @@ impl Alignment {
     // Always attacks
     pub fn hostile_towards(self, other: Alignment) -> bool {
         match (self, other) {
+            (Alignment::Passive, _) => false,
+            (_, Alignment::Passive) => false,
             (Alignment::Enemy, Alignment::Enemy) => false,
             (Alignment::Enemy, Alignment::Wild) => false,
             (Alignment::Wild, Alignment::Enemy) => false,
@@ -167,83 +170,105 @@ impl Behavior {
 
 #[derive(Clone, Debug, Default)]
 pub struct Psyche {
-    pub aggro: f32, // 0.0 = always flees, 1.0 = always attacks, 0.5 = flee at 50% health
+    /// The proportion of health below which entities will start fleeing.
+    /// 0.0 = never flees, 1.0 = always flees, 0.5 = flee at 50% health.
+    pub flee_health: f32,
+    /// The distance below which the agent will see enemies if it has line of
+    /// sight.
+    pub sight_dist: f32,
+    /// The distance below which the agent can hear enemies without seeing them.
+    pub listen_dist: f32,
+    /// The distance below which the agent will attack enemies. Should be lower
+    /// than `sight_dist`. `None` implied that the agent is always aggro
+    /// towards enemies that it is aware of.
+    pub aggro_dist: Option<f32>,
 }
 
 impl<'a> From<&'a Body> for Psyche {
     fn from(body: &'a Body) -> Self {
         Self {
-            aggro: match body {
+            flee_health: match body {
                 Body::Humanoid(humanoid) => match humanoid.species {
-                    humanoid::Species::Danari => 0.9,
-                    humanoid::Species::Dwarf => 0.8,
-                    humanoid::Species::Elf => 0.7,
-                    humanoid::Species::Human => 0.6,
-                    humanoid::Species::Orc => 0.9,
-                    humanoid::Species::Undead => 0.9,
+                    humanoid::Species::Danari => 0.1,
+                    humanoid::Species::Dwarf => 0.2,
+                    humanoid::Species::Elf => 0.3,
+                    humanoid::Species::Human => 0.4,
+                    humanoid::Species::Orc => 0.1,
+                    humanoid::Species::Undead => 0.1,
                 },
                 Body::QuadrupedSmall(quadruped_small) => match quadruped_small.species {
                     quadruped_small::Species::Pig => 0.5,
-                    quadruped_small::Species::Fox => 0.3,
+                    quadruped_small::Species::Fox => 0.7,
                     quadruped_small::Species::Sheep => 0.5,
-                    quadruped_small::Species::Boar => 0.8,
-                    quadruped_small::Species::Jackalope => 0.4,
-                    quadruped_small::Species::Skunk => 0.6,
-                    quadruped_small::Species::Cat => 0.2,
-                    quadruped_small::Species::Batfox => 0.6,
-                    quadruped_small::Species::Raccoon => 0.4,
-                    quadruped_small::Species::Quokka => 0.4,
-                    quadruped_small::Species::Dodarock => 0.9,
-                    quadruped_small::Species::Holladon => 1.0,
-                    quadruped_small::Species::Hyena => 0.4,
-                    quadruped_small::Species::Rabbit => 0.1,
-                    quadruped_small::Species::Truffler => 0.8,
-                    quadruped_small::Species::Frog => 0.4,
-                    quadruped_small::Species::Hare => 0.2,
+                    quadruped_small::Species::Boar => 0.2,
+                    quadruped_small::Species::Jackalope => 0.6,
+                    quadruped_small::Species::Skunk => 0.4,
+                    quadruped_small::Species::Cat => 0.8,
+                    quadruped_small::Species::Batfox => 0.4,
+                    quadruped_small::Species::Raccoon => 0.6,
+                    quadruped_small::Species::Quokka => 0.6,
+                    quadruped_small::Species::Dodarock => 0.1,
+                    quadruped_small::Species::Holladon => 0.0,
+                    quadruped_small::Species::Hyena => 0.6,
+                    quadruped_small::Species::Rabbit => 0.9,
+                    quadruped_small::Species::Truffler => 0.2,
+                    quadruped_small::Species::Frog => 0.6,
+                    quadruped_small::Species::Hare => 0.8,
                     quadruped_small::Species::Goat => 0.5,
-                    _ => 0.0,
+                    _ => 1.0,
                 },
                 Body::QuadrupedMedium(quadruped_medium) => match quadruped_medium.species {
-                    quadruped_medium::Species::Tuskram => 0.7,
-                    quadruped_medium::Species::Frostfang => 0.9,
-                    quadruped_medium::Species::Mouflon => 0.7,
-                    quadruped_medium::Species::Catoblepas => 0.8,
-                    quadruped_medium::Species::Deer => 0.6,
-                    quadruped_medium::Species::Hirdrasil => 0.7,
-                    quadruped_medium::Species::Donkey => 0.7,
-                    quadruped_medium::Species::Camel => 0.7,
-                    quadruped_medium::Species::Zebra => 0.7,
-                    quadruped_medium::Species::Antelope => 0.6,
-                    quadruped_medium::Species::Horse => 0.7,
-                    quadruped_medium::Species::Cattle => 0.7,
-                    quadruped_medium::Species::Darkhound => 0.9,
-                    quadruped_medium::Species::Dreadhorn => 0.8,
-                    quadruped_medium::Species::Snowleopard => 0.7,
-                    quadruped_medium::Species::Llama => 0.6,
-                    quadruped_medium::Species::Alpaca => 0.6,
+                    quadruped_medium::Species::Tuskram => 0.3,
+                    quadruped_medium::Species::Frostfang => 0.1,
+                    quadruped_medium::Species::Mouflon => 0.3,
+                    quadruped_medium::Species::Catoblepas => 0.2,
+                    quadruped_medium::Species::Deer => 0.4,
+                    quadruped_medium::Species::Hirdrasil => 0.3,
+                    quadruped_medium::Species::Donkey => 0.3,
+                    quadruped_medium::Species::Camel => 0.3,
+                    quadruped_medium::Species::Zebra => 0.3,
+                    quadruped_medium::Species::Antelope => 0.4,
+                    quadruped_medium::Species::Horse => 0.3,
+                    quadruped_medium::Species::Cattle => 0.3,
+                    quadruped_medium::Species::Darkhound => 0.1,
+                    quadruped_medium::Species::Dreadhorn => 0.2,
+                    quadruped_medium::Species::Snowleopard => 0.3,
+                    quadruped_medium::Species::Llama => 0.4,
+                    quadruped_medium::Species::Alpaca => 0.4,
                     _ => 0.5,
                 },
                 Body::QuadrupedLow(quadruped_low) => match quadruped_low.species {
-                    quadruped_low::Species::Salamander => 0.7,
-                    quadruped_low::Species::Monitor => 0.7,
-                    quadruped_low::Species::Asp => 0.9,
-                    quadruped_low::Species::Pangolin => 0.4,
-                    _ => 0.6,
+                    quadruped_low::Species::Salamander => 0.3,
+                    quadruped_low::Species::Monitor => 0.3,
+                    quadruped_low::Species::Asp => 0.1,
+                    quadruped_low::Species::Pangolin => 0.6,
+                    _ => 0.4,
                 },
                 Body::BipedSmall(_) => 0.5,
                 Body::BirdMedium(_) => 0.5,
-                Body::BirdLarge(_) => 0.9,
-                Body::FishMedium(_) => 0.15,
-                Body::FishSmall(_) => 0.0,
-                Body::BipedLarge(_) => 1.0,
-                Body::Object(_) => 1.0,
-                Body::Golem(_) => 1.0,
-                Body::Theropod(_) => 1.0,
-                Body::Dragon(_) => 1.0,
-                Body::Ship(_) => 1.0,
+                Body::BirdLarge(_) => 0.1,
+                Body::FishMedium(_) => 0.85,
+                Body::FishSmall(_) => 1.0,
+                Body::BipedLarge(_) => 0.0,
+                Body::Object(_) => 0.0,
+                Body::Golem(_) => 0.0,
+                Body::Theropod(_) => 0.0,
+                Body::Dragon(_) => 0.0,
+                Body::Ship(_) => 0.0,
+            },
+            sight_dist: 40.0,
+            listen_dist: 30.0,
+            aggro_dist: match body {
+                Body::Humanoid(_) => Some(20.0),
+                _ => None, // Always aggressive if detected
             },
         }
     }
+}
+
+impl Psyche {
+    /// The maximum distance that targets might be detected by this agent.
+    pub fn search_dist(&self) -> f32 { self.sight_dist.max(self.listen_dist) }
 }
 
 #[derive(Clone, Debug)]
@@ -309,12 +334,98 @@ pub enum SoundKind {
 #[derive(Clone, Copy, Debug)]
 pub struct Target {
     pub target: EcsEntity,
+    /// Whether the target is hostile
     pub hostile: bool,
+    /// The time at which the target was selected
     pub selected_at: f64,
+    /// Whether the target has come close enough to trigger aggro.
+    pub aggro_on: bool,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, EnumIter)]
+pub enum TimerAction {
+    Interact,
+}
+
+/// A time used for managing agent-related timeouts. The timer is designed to
+/// keep track of the start of any number of previous actions. However,
+/// starting/progressing an action will end previous actions. Therefore, the
+/// timer should be used for actions that are mutually-exclusive.
+#[derive(Clone, Debug)]
+pub struct Timer {
+    action_starts: Vec<Option<f64>>,
+    last_action: Option<TimerAction>,
+}
+
+impl Default for Timer {
+    fn default() -> Self {
+        Self {
+            action_starts: TimerAction::iter().map(|_| None).collect(),
+            last_action: None,
+        }
+    }
+}
+
+impl Timer {
+    fn idx_for(action: TimerAction) -> usize {
+        TimerAction::iter()
+            .enumerate()
+            .find(|(_, a)| a == &action)
+            .unwrap()
+            .0 // Can't fail, EnumIter is exhaustive
+    }
+
+    /// Reset the timer for the given action, returning true if the timer was
+    /// not already reset.
+    pub fn reset(&mut self, action: TimerAction) -> bool {
+        std::mem::replace(&mut self.action_starts[Self::idx_for(action)], None).is_some()
+    }
+
+    /// Start the timer for the given action, even if it was already started.
+    pub fn start(&mut self, time: f64, action: TimerAction) {
+        self.action_starts[Self::idx_for(action)] = Some(time);
+        self.last_action = Some(action);
+    }
+
+    /// Continue timing the given action, starting it if it was not already
+    /// started.
+    pub fn progress(&mut self, time: f64, action: TimerAction) {
+        if self.last_action != Some(action) {
+            self.start(time, action);
+        }
+    }
+
+    /// Return the time that the given action was last performed at.
+    pub fn time_of_last(&self, action: TimerAction) -> Option<f64> {
+        self.action_starts[Self::idx_for(action)]
+    }
+
+    /// Return `true` if the time since the action was last started exceeds the
+    /// given timeout.
+    pub fn time_since_exceeds(&self, time: f64, action: TimerAction, timeout: f64) -> bool {
+        self.time_of_last(action)
+            .map_or(true, |last_time| (time - last_time).max(0.0) > timeout)
+    }
+
+    /// Return `true` while the time since the action was last started is less
+    /// than the given period. Once the time has elapsed, reset the timer.
+    pub fn timeout_elapsed(
+        &mut self,
+        time: f64,
+        action: TimerAction,
+        timeout: f64,
+    ) -> Option<bool> {
+        if self.time_since_exceeds(time, action, timeout) {
+            Some(self.reset(action))
+        } else {
+            self.progress(time, action);
+            None
+        }
+    }
 }
 
 #[allow(clippy::type_complexity)]
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Agent {
     pub rtsim_controller: RtSimController,
     pub patrol_origin: Option<Vec3<f32>>,
@@ -324,6 +435,7 @@ pub struct Agent {
     pub psyche: Psyche,
     pub inbox: VecDeque<AgentEvent>,
     pub action_state: ActionState,
+    pub timer: Timer,
     pub bearing: Vec2<f32>,
     pub sounds_heard: Vec<Sound>,
     pub awareness: f32,
@@ -339,13 +451,46 @@ pub struct ActionState {
 }
 
 impl Agent {
+    pub fn from_body(body: &Body) -> Self {
+        Agent {
+            rtsim_controller: RtSimController::default(),
+            patrol_origin: None,
+            target: None,
+            chaser: Chaser::default(),
+            behavior: Behavior::default(),
+            psyche: Psyche::from(body),
+            inbox: VecDeque::new(),
+            action_state: ActionState::default(),
+            timer: Timer::default(),
+            bearing: Vec2::zero(),
+            sounds_heard: Vec::new(),
+            awareness: 0.0,
+            position_pid_controller: None,
+        }
+    }
+
     pub fn with_patrol_origin(mut self, origin: Vec3<f32>) -> Self {
         self.patrol_origin = Some(origin);
         self
     }
 
+    pub fn with_behavior(mut self, behavior: Behavior) -> Self {
+        self.behavior = behavior;
+        self
+    }
+
+    pub fn with_no_flee(mut self, no_flee: bool) -> Self {
+        if no_flee {
+            self.set_no_flee();
+        }
+        self
+    }
+
+    pub fn set_no_flee(&mut self) { self.psyche.flee_health = 0.0; }
+
+    // TODO: Get rid of this method, it does weird things
     pub fn with_destination(mut self, pos: Vec3<f32>) -> Self {
-        self.psyche = Psyche { aggro: 1.0 };
+        self.psyche.flee_health = 0.0;
         self.rtsim_controller = RtSimController::with_destination(pos);
         self.behavior.allow(BehaviorCapability::SPEAK);
         self
@@ -358,24 +503,6 @@ impl Agent {
     ) -> Self {
         self.position_pid_controller = Some(pid);
         self
-    }
-
-    pub fn new(
-        patrol_origin: Option<Vec3<f32>>,
-        body: &Body,
-        behavior: Behavior,
-        no_flee: bool,
-    ) -> Self {
-        Agent {
-            patrol_origin,
-            psyche: if no_flee {
-                Psyche { aggro: 1.0 }
-            } else {
-                Psyche::from(body)
-            },
-            behavior,
-            ..Default::default()
-        }
     }
 }
 

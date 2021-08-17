@@ -1,9 +1,10 @@
 use crate::{
     controller::*,
+    error::Error,
     game_input::GameInput,
     render::Renderer,
     settings::{ControlSettings, Settings},
-    ui, Error,
+    ui,
 };
 use common_base::span;
 use crossbeam_channel as channel;
@@ -106,6 +107,7 @@ pub enum KeyMouse {
 }
 
 impl KeyMouse {
+    /// Returns key description (e.g Left Shift)
     pub fn display_string(&self, key_layout: &Option<KeyLayout>) -> String {
         use self::KeyMouse::*;
         use winit::event::{MouseButton, VirtualKeyCode::*};
@@ -225,6 +227,7 @@ impl KeyMouse {
             Key(MediaSelect) => "MediaSelect",
             Key(MediaStop) => "MediaStop",
             Key(Minus) => "-",
+            Key(Plus) => "+",
             Key(NumpadMultiply) => "Numpad *",
             Key(Mute) => "Mute",
             Key(MyComputer) => "My Computer",
@@ -322,7 +325,6 @@ impl KeyMouse {
             Key(Paste) => "Paste",
             Key(Cut) => "Cut",
             Key(Asterisk) => "*",
-            Key(Plus) => "+",
             Mouse(MouseButton::Left) => "Left Click",
             Mouse(MouseButton::Right) => "Right Click",
             Mouse(MouseButton::Middle) => "Middle Click",
@@ -339,7 +341,30 @@ impl KeyMouse {
             },
         };
 
-        String::from(key_string)
+        key_string.to_owned()
+    }
+
+    /// Returns shortened key name (e.g. Left Click -> LMB)
+    ///
+    /// Use it in case if space does really matter.
+    pub fn display_shortened(&self, _key_layout: &Option<KeyLayout>) -> Option<String> {
+        use self::KeyMouse::*;
+        use winit::event::{MouseButton, VirtualKeyCode::*};
+        let key_string = match self {
+            Mouse(MouseButton::Left) => "M1",
+            Mouse(MouseButton::Right) => "M2",
+            Mouse(MouseButton::Middle) => "M3",
+            Mouse(MouseButton::Other(button)) => {
+                // Additional mouse buttons after middle click start at 1
+                return Some(format!("M{}", button + 3));
+            },
+            Key(Back) => "Back",
+            Key(LShift) => "LShft",
+            Key(RShift) => "RShft",
+            _ => return None,
+        };
+
+        Some(key_string.to_owned())
     }
 }
 
@@ -373,7 +398,10 @@ pub struct Window {
 }
 
 impl Window {
-    pub fn new(settings: &Settings) -> Result<(Window, EventLoop), Error> {
+    pub fn new(
+        settings: &Settings,
+        runtime: &tokio::runtime::Runtime,
+    ) -> Result<(Window, EventLoop), Error> {
         let event_loop = EventLoop::new();
 
         let size = settings.graphics.window_size;
@@ -393,7 +421,7 @@ impl Window {
 
         let window = win_builder.build(&event_loop).unwrap();
 
-        let renderer = Renderer::new(&window, settings.graphics.render_mode.clone())?;
+        let renderer = Renderer::new(&window, settings.graphics.render_mode.clone(), runtime)?;
 
         let keypress_map = HashMap::new();
 
@@ -766,8 +794,7 @@ impl Window {
                 let physical = self.window.inner_size();
 
                 self.renderer
-                    .on_resize(Vec2::new(physical.width, physical.height))
-                    .unwrap();
+                    .on_resize(Vec2::new(physical.width, physical.height));
                 // TODO: update users of this event with the fact that it is now the physical
                 // size
                 let winit::dpi::PhysicalSize { width, height } = physical;

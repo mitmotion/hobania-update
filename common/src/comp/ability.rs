@@ -119,6 +119,7 @@ pub enum CharacterAbility {
         charge_duration: f32,
         swing_duration: f32,
         recover_duration: f32,
+        ori_modifier: f32,
         charge_through: bool,
         is_interruptible: bool,
         damage_kind: DamageKind,
@@ -251,7 +252,6 @@ pub enum CharacterAbility {
         damage_effect: Option<CombatEffect>,
         energy_regen: f32,
         energy_drain: f32,
-        orientation_behavior: basic_beam::OrientationBehavior,
         ori_rate: f32,
         specifier: beam::FrontendSpecifier,
     },
@@ -498,6 +498,7 @@ impl CharacterAbility {
                 charge_duration: _,
                 ref mut swing_duration,
                 ref mut recover_duration,
+                ori_modifier: _,
                 charge_through: _,
                 is_interruptible: _,
                 damage_kind: _,
@@ -745,7 +746,6 @@ impl CharacterAbility {
                 ref mut damage_effect,
                 energy_regen: _,
                 ref mut energy_drain,
-                orientation_behavior: _,
                 ori_rate: _,
                 specifier: _,
             } => {
@@ -1021,9 +1021,9 @@ impl CharacterAbility {
                                 0
                             };
                         *max_energy_gain = *max_energy_gain
-                            * ((energy_level + 1) * stage_data.len() as u16 - 1) as f32
+                            * ((energy_level + 1) * stage_data.len() as u16 - 1).max(1) as f32
                             / (Axe(DsRegen).max_level().unwrap() + 1) as f32
-                            * (stage_data.len() - 1) as f32;
+                            * (stage_data.len() - 1).max(1) as f32;
                         *scales_from_combo = skillset
                             .skill_level(Axe(DsDamage))
                             .unwrap_or(None)
@@ -1533,6 +1533,7 @@ impl From<(&CharacterAbility, AbilityInfo, &JoinData<'_>)> for CharacterState {
                 charge_duration,
                 swing_duration,
                 recover_duration,
+                ori_modifier,
                 charge_through,
                 is_interruptible,
                 damage_kind,
@@ -1554,6 +1555,7 @@ impl From<(&CharacterAbility, AbilityInfo, &JoinData<'_>)> for CharacterState {
                     charge_duration: Duration::from_secs_f32(*charge_duration),
                     swing_duration: Duration::from_secs_f32(*swing_duration),
                     recover_duration: Duration::from_secs_f32(*recover_duration),
+                    ori_modifier: *ori_modifier,
                     is_interruptible: *is_interruptible,
                     damage_effect: *damage_effect,
                     ability_info,
@@ -1878,7 +1880,6 @@ impl From<(&CharacterAbility, AbilityInfo, &JoinData<'_>)> for CharacterState {
                 damage_effect,
                 energy_regen,
                 energy_drain,
-                orientation_behavior,
                 ori_rate,
                 specifier,
             } => CharacterState::BasicBeam(basic_beam::Data {
@@ -1894,7 +1895,6 @@ impl From<(&CharacterAbility, AbilityInfo, &JoinData<'_>)> for CharacterState {
                     energy_regen: *energy_regen,
                     energy_drain: *energy_drain,
                     ability_info,
-                    orientation_behavior: *orientation_behavior,
                     ori_rate: *ori_rate,
                     specifier: *specifier,
                 },

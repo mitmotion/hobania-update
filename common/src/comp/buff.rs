@@ -29,7 +29,7 @@ pub enum BuffKind {
     /// Applied when sitting at a campfire
     /// Strength is fraction of health resotred per second
     CampfireHeal,
-    /// Raises maximum stamina
+    /// Raises maximum energy
     /// Strength should be 10x the effect to max energy
     IncreaseMaxEnergy,
     /// Raises maximum health
@@ -81,22 +81,22 @@ impl BuffKind {
     /// Checks if buff is buff or debuff
     pub fn is_buff(self) -> bool {
         match self {
-            BuffKind::Regeneration => true,
-            BuffKind::Saturation => true,
-            BuffKind::Bleeding => false,
-            BuffKind::Cursed => false,
-            BuffKind::Potion => true,
-            BuffKind::CampfireHeal => true,
-            BuffKind::IncreaseMaxEnergy => true,
-            BuffKind::IncreaseMaxHealth => true,
-            BuffKind::Invulnerability => true,
-            BuffKind::ProtectingWard => true,
-            BuffKind::Burning => false,
-            BuffKind::Crippled => false,
-            BuffKind::Frenzied => true,
-            BuffKind::Frozen => false,
-            BuffKind::Wet => false,
-            BuffKind::Ensnared => false,
+            BuffKind::Regeneration
+            | BuffKind::Saturation
+            | BuffKind::Potion
+            | BuffKind::CampfireHeal
+            | BuffKind::Frenzied
+            | BuffKind::IncreaseMaxEnergy
+            | BuffKind::IncreaseMaxHealth
+            | BuffKind::Invulnerability
+            | BuffKind::ProtectingWard => true,
+            BuffKind::Bleeding
+            | BuffKind::Cursed
+            | BuffKind::Burning
+            | BuffKind::Crippled
+            | BuffKind::Frozen
+            | BuffKind::Wet
+            | BuffKind::Ensnared => false,
         }
     }
 
@@ -146,7 +146,7 @@ pub enum BuffEffect {
     },
     /// Changes maximum health by a certain amount
     MaxHealthModifier { value: f32, kind: ModifierKind },
-    /// Changes maximum stamina by a certain amount
+    /// Changes maximum energy by a certain amount
     MaxEnergyModifier { value: f32, kind: ModifierKind },
     /// Reduces damage after armor is accounted for by this fraction
     DamageReduction(f32),

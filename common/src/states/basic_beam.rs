@@ -3,13 +3,17 @@ use crate::{
         Attack, AttackDamage, AttackEffect, CombatEffect, CombatRequirement, Damage, DamageKind,
         DamageSource, GroupTarget,
     },
-    comp::{beam, Body, CharacterState, EnergyChange, EnergySource, Ori, Pos, StateUpdate},
+    comp::{
+        beam, body::biped_large, Body, CharacterState, EnergyChange, EnergySource, Ori, Pos,
+        StateUpdate,
+    },
     event::ServerEvent,
     states::{
         behavior::{CharacterBehavior, JoinData},
         utils::*,
     },
     uid::Uid,
+    util::Dir,
 };
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -38,8 +42,6 @@ pub struct StaticData {
     pub energy_regen: f32,
     /// Energy drained per second
     pub energy_drain: f32,
-    /// Used to dictate how orientation functions in this state
-    pub orientation_behavior: OrientationBehavior,
     /// How fast enemy can rotate with beam
     pub ori_rate: f32,
     /// What key is used to press ability
@@ -64,9 +66,6 @@ impl CharacterBehavior for Data {
         let mut update = StateUpdate::from(data);
 
         let ori_rate = self.static_data.ori_rate;
-        if self.static_data.orientation_behavior == OrientationBehavior::Turret {
-            update.ori = Ori::from(data.inputs.look_dir);
-        }
 
         handle_orientation(data, &mut update, ori_rate);
         handle_move(data, &mut update, 0.4);
@@ -90,12 +89,12 @@ impl CharacterBehavior for Data {
                     // Build up
                     update.character = CharacterState::BasicBeam(Data {
                         timer: Duration::default(),
-                        stage_section: StageSection::Cast,
+                        stage_section: StageSection::Action,
                         ..*self
                     });
                 }
             },
-            StageSection::Cast => {
+            StageSection::Action => {
                 if input_is_pressed(data, self.static_data.ability_info.input)
                     && (self.static_data.energy_drain <= f32::EPSILON
                         || update.energy.current() > 0)
@@ -135,41 +134,42 @@ impl CharacterBehavior for Data {
                         owner: Some(*data.uid),
                         specifier: self.static_data.specifier,
                     };
+                    let beam_ori = {
+                        // We want Beam to use Ori of owner.
+                        // But we also want beam to use Z part of where owner looks.
+                        // This means that we need to merge this data to one Ori.
+                        //
+                        // This code just gets look_dir without Z part
+                        // and normalizes it. This is what `xy_dir is`.
+                        //
+                        // Then we find rotation between xy_dir and look_dir
+                        // which gives us quaternion how of what rotation we need
+                        // to do to get Z part we want.
+                        //
+                        // Then we construct Ori without Z part
+                        // and applying `pitch` to get needed orientation.
+                        let look_dir = data.inputs.look_dir;
+                        let xy_dir = Dir::from_unnormalized(Vec3::new(look_dir.x, look_dir.y, 0.0))
+                            .unwrap_or_else(Dir::default);
+                        let pitch = xy_dir.rotation_between(look_dir);
+
+                        Ori::from(Vec3::new(
+                            update.ori.look_vec().x,
+                            update.ori.look_vec().y,
+                            0.0,
+                        ))
+                        .prerotated(pitch)
+                    };
                     // Gets offsets
-                    let body_offsets_r = data.body.radius() + 1.0;
-                    let body_offsets_z = match data.body {
-                        Body::BirdLarge(_) => data.body.height() * 0.8,
-                        Body::Golem(_) => data.body.height() * 0.9 + data.inputs.look_dir.z * 3.0,
-                        _ => data.body.height() * 0.5,
-                    };
-                    let (body_offsets, ori) = match self.static_data.orientation_behavior {
-                        OrientationBehavior::Normal | OrientationBehavior::Turret => (
-                            Vec3::new(
-                                body_offsets_r * data.inputs.look_dir.x,
-                                body_offsets_r * data.inputs.look_dir.y,
-                                body_offsets_z,
-                            ),
-                            Ori::from(data.inputs.look_dir),
-                        ),
-                        OrientationBehavior::FromOri => (
-                            Vec3::new(
-                                body_offsets_r * update.ori.look_vec().x,
-                                body_offsets_r * update.ori.look_vec().y,
-                                body_offsets_z,
-                            ),
-                            Ori::from(Vec3::new(
-                                update.ori.look_vec().x,
-                                update.ori.look_vec().y,
-                                data.inputs.look_dir.z,
-                            )),
-                        ),
-                    };
+                    let body_offsets =
+                        beam_offsets(data.body, data.inputs.look_dir, update.ori.look_vec());
                     let pos = Pos(data.pos.0 + body_offsets);
+
                     // Create beam segment
                     update.server_events.push_front(ServerEvent::BeamSegment {
                         properties,
                         pos,
-                        ori,
+                        ori: beam_ori,
                     });
                     update.character = CharacterState::BasicBeam(Data {
                         timer: tick_attack_or_default(data, self.timer, None),
@@ -219,14 +219,24 @@ impl CharacterBehavior for Data {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub enum OrientationBehavior {
-    /// Uses look_dir as direction of beam
-    Normal,
-    /// Uses look_dir as direction of beam, sets orientation to same direction
-    /// as look_dir
-    Turret,
-    /// Uses orientation x and y and look_dir z as direction of beam (z from
-    /// look_dir as orientation will only go through 2d rotations naturally)
-    FromOri,
+fn height_offset(body: &Body, look_dir: Dir) -> f32 {
+    match body {
+        Body::BirdLarge(_) => body.height() * 0.8,
+        Body::Golem(_) => body.height() * 0.9 + look_dir.z * 3.0,
+        Body::BipedLarge(b) => match b.species {
+            biped_large::Species::Mindflayer => body.height() * 0.6,
+            _ => body.height() * 0.5,
+        },
+        _ => body.height() * 0.5,
+    }
+}
+
+pub fn beam_offsets(body: &Body, look_dir: Dir, ori: Vec3<f32>) -> Vec3<f32> {
+    let body_radius = body.radius();
+    let body_offsets_z = height_offset(body, look_dir);
+    Vec3::new(
+        body_radius * ori.x * 1.1,
+        body_radius * ori.y * 1.1,
+        body_offsets_z,
+    )
 }

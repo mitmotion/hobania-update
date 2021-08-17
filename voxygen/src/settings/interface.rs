@@ -10,6 +10,7 @@ use vek::*;
 #[serde(default)]
 pub struct InterfaceSettings {
     pub toggle_debug: bool,
+    pub toggle_egui_debug: bool,
     pub toggle_hitboxes: bool,
     pub toggle_chat: bool,
     pub sct: bool,
@@ -17,7 +18,7 @@ pub struct InterfaceSettings {
     pub sct_damage_batch: bool,
     pub speech_bubble_dark_mode: bool,
     pub speech_bubble_icon: bool,
-    pub crosshair_transp: f32,
+    pub crosshair_opacity: f32,
     pub crosshair_type: CrosshairType,
     pub intro_show: Intro,
     pub xp_bar: XpBar,
@@ -46,6 +47,7 @@ impl Default for InterfaceSettings {
     fn default() -> Self {
         Self {
             toggle_debug: false,
+            toggle_egui_debug: false,
             toggle_hitboxes: false,
             toggle_chat: true,
             sct: true,
@@ -53,7 +55,7 @@ impl Default for InterfaceSettings {
             sct_damage_batch: false,
             speech_bubble_dark_mode: false,
             speech_bubble_icon: true,
-            crosshair_transp: 0.6,
+            crosshair_opacity: 0.6,
             crosshair_type: CrosshairType::Round,
             intro_show: Intro::Show,
             xp_bar: XpBar::Always,

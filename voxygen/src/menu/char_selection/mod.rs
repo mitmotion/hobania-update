@@ -109,10 +109,15 @@ impl PlayState for CharSelectionState {
                     ui::Event::Logout => {
                         return PlayStateResult::Pop;
                     },
-                    ui::Event::AddCharacter { alias, tool, body } => {
+                    ui::Event::AddCharacter {
+                        alias,
+                        mainhand,
+                        offhand,
+                        body,
+                    } => {
                         self.client
                             .borrow_mut()
-                            .create_character(alias, Some(tool), body);
+                            .create_character(alias, mainhand, offhand, body);
                     },
                     ui::Event::DeleteCharacter(character_id) => {
                         self.client.borrow_mut().delete_character(character_id);
@@ -252,6 +257,8 @@ impl PlayState for CharSelectionState {
         if let Some(mut second_pass) = drawer.second_pass() {
             second_pass.draw_clouds();
         }
+        // Bloom (does nothing if bloom is disabled)
+        drawer.run_bloom_passes();
         // PostProcess and UI
         let mut third_pass = drawer.third_pass();
         third_pass.draw_postprocess();

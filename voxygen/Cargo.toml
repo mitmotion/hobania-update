@@ -28,6 +28,7 @@ hot-reloading = ["common/hot-reloading"]
 singleplayer = ["server"]
 simd = ["vek/platform_intrinsics"]
 tracy = ["profiling", "profiling/profile-with-tracy", "common-frontend/tracy", "client/tracy"]
+tracy-memory = ["tracy"] # enables heap profiling with tracy
 plugins = ["client/plugins"]
 egui-ui = ["voxygen-egui", "egui", "egui_wgpu_backend", "egui_winit_platform"]
 
@@ -46,7 +47,7 @@ common-systems = {package = "veloren-common-systems", path = "../common/systems"
 common-state = {package = "veloren-common-state", path = "../common/state"}
 
 anim = {package = "veloren-voxygen-anim", path = "anim"}
-i18n = {package = "veloren-i18n", path = "i18n"}
+i18n = {package = "veloren-voxygen-i18n", path = "i18n"}
 voxygen-egui = {package = "veloren-voxygen-egui", path = "egui", optional = true }
 
 # Graphics
@@ -64,7 +65,7 @@ iced = {package = "iced_native", git = "https://github.com/Imberflur/iced", tag 
 iced_winit = {git = "https://github.com/Imberflur/iced", tag = "winit-0.25"}
 window_clipboard = "0.2"
 glyph_brush = "0.7.0"
-keyboard-keynames = { git = "https://gitlab.com/Frinksy/keyboard-keynames.git", rev = "9ae8f89014d0b0c5b61d0e821c5aeb6140c5c0dc" }
+keyboard-keynames = { git = "https://gitlab.com/Frinksy/keyboard-keynames.git", rev = "721c8b301f8003332d0cc767ab2649fdd330e842" }
 
 # EGUI
 egui = {version = "0.12", optional = true }
@@ -82,7 +83,7 @@ vek = {version = "=0.14.1", features = ["serde"]}
 gilrs = {version = "0.8.0", features = ["serde-serialize"]}
 
 # Singleplayer
-server = {package = "veloren-server", path = "../server", optional = true}
+server = { package = "veloren-server", path = "../server", optional = true, default-features = false, features = ["worldgen"] }
 
 # Utility
 backtrace = "0.3.40"
@@ -97,7 +98,6 @@ crossbeam-channel = "0.5"
 directories-next = "2.0"
 dot_vox = "4.0"
 enum-iterator = "0.6"
-futures-executor = "0.3"
 guillotiere = "0.6"
 hashbrown = {version = "0.11", features = ["rayon", "serde", "nightly"]}
 image = {version = "0.23.12", default-features = false, features = ["ico", "png"]}

@@ -3,7 +3,7 @@ use common::{
     comp::{
         self,
         agent::{
-            AgentEvent, Sound, SoundKind, Target, DEFAULT_INTERACTION_TIME, MAX_LISTEN_DIST,
+            AgentEvent, Sound, SoundKind, Target, TimerAction, DEFAULT_INTERACTION_TIME,
             TRADE_INTERACTION_TIME,
         },
         buff::{BuffKind, Buffs},
@@ -28,7 +28,7 @@ use common::{
     path::TraversalConfig,
     resources::{DeltaTime, Time, TimeOfDay},
     rtsim::{Memory, MemoryItem, RtSimEntity, RtSimEvent},
-    states::utils::StageSection,
+    states::{basic_beam, utils::StageSection},
     terrain::{Block, TerrainGrid},
     time::DayPeriod,
     trade::{TradeAction, TradePhase, TradeResult},
@@ -169,7 +169,6 @@ const PARTIAL_PATH_DIST: f32 = 50.0;
 const SEPARATION_DIST: f32 = 10.0;
 const SEPARATION_BIAS: f32 = 0.8;
 const MAX_FLEE_DIST: f32 = 20.0;
-const SEARCH_DIST: f32 = 48.0;
 const SNEAK_COEFFICIENT: f32 = 0.25;
 const AVG_FOLLOW_DIST: f32 = 6.0;
 const RETARGETING_THRESHOLD_SECONDS: f64 = 10.0;
@@ -270,7 +269,7 @@ impl<'a> System<'a> for Sys {
                             )
                     };
 
-                    let event_emitter = event_bus.emitter();
+                    let mut event_emitter = event_bus.emitter();
 
                     if !matches!(char_state, CharacterState::LeapMelee(_)) {
                         // Default to looking in orientation direction
@@ -293,7 +292,7 @@ impl<'a> System<'a> for Sys {
 
                     let is_gliding = matches!(
                         read_data.char_states.get(entity),
-                        Some(CharacterState::GlideWield | CharacterState::Glide(_))
+                        Some(CharacterState::GlideWield(_) | CharacterState::Glide(_))
                     ) && physics_state.on_ground.is_none();
 
                     if let Some(pid) = agent.position_pid_controller.as_mut() {
@@ -381,44 +380,44 @@ impl<'a> System<'a> for Sys {
                     // are the only parts of this tree that should provide
                     // inputs.
 
-                    let idle = |agent: &mut Agent, controller, mut event_emitter| {
-                        data.idle_tree(agent, controller, &read_data, &mut event_emitter);
-                    };
-
-                    let relax = |agent: &mut Agent, controller, event_emitter| {
-                        agent.target = None;
-                        idle(agent, controller, event_emitter);
-                    };
-
-                    let react_as_pet =
-                        |agent: &mut Agent, target: EcsEntity, controller, event_emitter| {
-                            if let Some(tgt_pos) = read_data.positions.get(target) {
-                                let dist_sqrd = pos.0.distance_squared(tgt_pos.0);
-                                // If really far away drop everything and follow
-                                if dist_sqrd > (2.0 * MAX_FOLLOW_DIST).powi(2) {
-                                    agent.bearing = Vec2::zero();
-                                    data.follow(agent, controller, &read_data.terrain, tgt_pos);
-                                // Attack target's attacker
-                                } else if entity_was_attacked(target, &read_data) {
-                                    data.attack_target_attacker(agent, &read_data, controller);
-                                // Follow owner if too far away and not
-                                // fighting
-                                } else if dist_sqrd > MAX_FOLLOW_DIST.powi(2) {
-                                    data.follow(agent, controller, &read_data.terrain, tgt_pos);
-
-                                // Otherwise just idle
-                                } else {
-                                    idle(agent, controller, event_emitter);
-                                }
-                            }
+                    let idle =
+                        |agent: &mut Agent,
+                         controller: &mut Controller,
+                         event_emitter: &mut Emitter<ServerEvent>| {
+                            data.idle_tree(agent, controller, &read_data, event_emitter);
                         };
+
+                    let react_as_pet = |agent: &mut Agent,
+                                        target: EcsEntity,
+                                        controller: &mut Controller,
+                                        event_emitter| {
+                        if let Some(tgt_pos) = read_data.positions.get(target) {
+                            let dist_sqrd = pos.0.distance_squared(tgt_pos.0);
+                            // If really far away drop everything and follow
+                            if dist_sqrd > (2.0 * MAX_FOLLOW_DIST).powi(2) {
+                                agent.bearing = Vec2::zero();
+                                data.follow(agent, controller, &read_data.terrain, tgt_pos);
+                            // Attack target's attacker
+                            } else if entity_was_attacked(target, &read_data) {
+                                data.attack_target_attacker(agent, &read_data, controller);
+                            // Follow owner if too far away and not
+                            // fighting
+                            } else if dist_sqrd > MAX_FOLLOW_DIST.powi(2) {
+                                data.follow(agent, controller, &read_data.terrain, tgt_pos);
+
+                            // Otherwise just idle
+                            } else {
+                                idle(agent, controller, event_emitter);
+                            }
+                        }
+                    };
 
                     let react_to_target =
                         |agent: &mut Agent,
                          target: EcsEntity,
                          hostile: bool,
-                         controller,
-                         mut event_emitter| {
+                         controller: &mut Controller,
+                         event_emitter| {
                             if let Some(tgt_health) = read_data.healths.get(target) {
                                 // If target is dead, leave it
                                 if tgt_health.is_dead {
@@ -427,69 +426,27 @@ impl<'a> System<'a> for Sys {
                                     {
                                         rtsim_forget_enemy(&tgt_stats.name, agent);
                                     }
-                                    relax(agent, controller, event_emitter);
+                                    agent.target = None;
                                 // If the target is hostile
                                 // (either based on alignment or if
                                 // the target just attacked)
                                 } else if hostile {
-                                    data.hostile_tree(
-                                        agent,
-                                        controller,
-                                        &read_data,
-                                        &mut event_emitter,
-                                    );
+                                    data.hostile_tree(agent, controller, &read_data, event_emitter);
                                 // Target is something worth following
                                 // methinks
                                 } else if let Some(Alignment::Owned(uid)) = data.alignment {
                                     if read_data.uids.get(target) == Some(uid) {
                                         react_as_pet(agent, target, controller, event_emitter);
                                     } else {
-                                        relax(agent, controller, event_emitter);
+                                        agent.target = None;
+                                        idle(agent, controller, event_emitter);
                                     };
                                 } else {
                                     idle(agent, controller, event_emitter);
                                 }
                             } else {
-                                relax(agent, controller, event_emitter);
-                            }
-                        };
-
-                    let react_to_damage =
-                        |agent: &mut Agent, by: Uid, controller, event_emitter| {
-                            if let Some(attacker) =
-                                read_data.uid_allocator.retrieve_entity_internal(by.id())
-                            {
-                                // If the target is dead or in a safezone, remove the
-                                // target and idle.
-                                if should_stop_attacking(attacker, &read_data) {
-                                    relax(agent, controller, event_emitter);
-                                } else if let Some(tgt_pos) = read_data.positions.get(attacker) {
-                                    if agent.target.is_none() {
-                                        controller.push_event(ControlEvent::Utterance(
-                                            UtteranceKind::Angry,
-                                        ));
-                                    }
-
-                                    agent.target = Some(Target {
-                                        target: attacker,
-                                        hostile: true,
-                                        selected_at: read_data.time.0,
-                                    });
-                                    let target_data = TargetData {
-                                        pos: tgt_pos,
-                                        body: read_data.bodies.get(attacker),
-                                        scale: read_data.scales.get(attacker),
-                                    };
-                                    data.attack(agent, controller, &target_data, &read_data);
-                                    // Remember this encounter if an RtSim entity
-                                    if let Some(tgt_stats) =
-                                        data.rtsim_entity.and(read_data.stats.get(attacker))
-                                    {
-                                        rtsim_new_enemy(&tgt_stats.name, agent, &read_data);
-                                    }
-                                } else {
-                                    relax(agent, controller, event_emitter);
-                                }
+                                agent.target = None;
+                                idle(agent, controller, event_emitter);
                             }
                         };
 
@@ -507,25 +464,85 @@ impl<'a> System<'a> for Sys {
                         data.fly_upward(controller)
                     } else if is_falling_dangerous && data.glider_equipped {
                         data.glider_fall(controller);
-                    } else if let Some(target_info) = agent.target {
-                        let Target {
-                            target, hostile, ..
-                        } = target_info;
-                        react_to_target(agent, target, hostile, controller, event_emitter);
                     } else {
                         // Target an entity that's attacking us if the attack
                         // was recent and we have a health component
                         match health {
                             Some(health) if health.last_change.0 < DAMAGE_MEMORY_DURATION => {
                                 if let Some(by) = health.last_change.1.cause.damage_by() {
-                                    react_to_damage(agent, by, controller, event_emitter);
-                                } else {
-                                    relax(agent, controller, event_emitter);
+                                    if let Some(attacker) =
+                                        read_data.uid_allocator.retrieve_entity_internal(by.id())
+                                    {
+                                        // If the target is dead or in a safezone, remove the
+                                        // target and idle.
+                                        if should_stop_attacking(attacker, &read_data) {
+                                            agent.target = None;
+                                        } else if let Some(tgt_pos) =
+                                            read_data.positions.get(attacker)
+                                        {
+                                            if agent.target.is_none() {
+                                                controller.push_event(ControlEvent::Utterance(
+                                                    UtteranceKind::Angry,
+                                                ));
+                                            }
+
+                                            // Determine whether the new target should be a priority
+                                            // over the old one
+                                            // (i.e: because it's either close or because they
+                                            // attacked us)
+                                            let more_dangerous_than_old_target =
+                                                agent.target.map_or(true, |old_tgt| {
+                                                    if let Some(old_tgt_pos) =
+                                                        read_data.positions.get(old_tgt.target)
+                                                    {
+                                                        // Fuzzy factor that makes it harder for
+                                                        // players to cheese enemies by making them
+                                                        // quickly flip aggro between two players.
+                                                        // It
+                                                        // does this by only switching aggro if the
+                                                        // new target is closer to the enemy by a
+                                                        // specific proportional threshold.
+                                                        const FUZZY_DIST_COMPARISON: f32 = 0.8;
+                                                        // Only switch to new target if it is closer
+                                                        // than the old target
+                                                        tgt_pos.0.distance(pos.0)
+                                                            < old_tgt_pos.0.distance(pos.0)
+                                                                * FUZZY_DIST_COMPARISON
+                                                    } else {
+                                                        true
+                                                    }
+                                                });
+
+                                            // Select the attacker as the new target
+                                            if more_dangerous_than_old_target {
+                                                agent.target = Some(Target {
+                                                    target: attacker,
+                                                    hostile: true,
+                                                    selected_at: read_data.time.0,
+                                                    aggro_on: true,
+                                                });
+                                            }
+
+                                            // Remember this attack if we're an RtSim entity
+                                            if let Some(tgt_stats) =
+                                                data.rtsim_entity.and(read_data.stats.get(attacker))
+                                            {
+                                                rtsim_new_enemy(&tgt_stats.name, agent, &read_data);
+                                            }
+                                        }
+                                    }
                                 }
                             },
-                            _ => {
-                                idle(agent, controller, event_emitter);
-                            },
+                            _ => {},
+                        }
+
+                        if let Some(target_info) = agent.target {
+                            let Target {
+                                target, hostile, ..
+                            } = target_info;
+                            react_to_target(agent, target, hostile, controller, &mut event_emitter);
+                        } else {
+                            idle(agent, controller, &mut event_emitter);
                         }
                     }
 
@@ -572,7 +589,7 @@ impl<'a> AgentData<'a> {
         if agent.target.is_none() && thread_rng().gen_bool(0.1) {
             if let Some(Alignment::Owned(owner)) = self.alignment {
                 if let Some(owner) = get_entity_by_id(owner.id(), read_data) {
-                    agent.target = build_target(owner, false, read_data.time.0);
+                    agent.target = build_target(owner, false, read_data.time.0, false);
                 }
             }
         }
@@ -601,27 +618,43 @@ impl<'a> AgentData<'a> {
                 agent.action_state.timer = 0.1;
             }
         }
-        if agent.action_state.timer > 0.0 {
-            if agent.action_state.timer
-                < (if agent.behavior.is(BehaviorState::TRADING) {
-                    TRADE_INTERACTION_TIME
-                } else {
-                    DEFAULT_INTERACTION_TIME
-                })
-            {
-                self.interact(agent, controller, read_data, event_emitter);
-            } else {
-                agent.action_state.timer = 0.0;
-                agent.target = None;
-                controller.actions.push(ControlAction::Stand);
-                self.idle(agent, controller, read_data);
-            }
-        } else if thread_rng().gen::<f32>() < 0.1 {
-            self.choose_target(agent, controller, read_data, event_emitter);
-        } else if agent.awareness > AWARENESS_INVESTIGATE_THRESHOLD {
-            self.handle_elevated_awareness(agent, controller, read_data);
+
+        // If we receive a new interaction, start the interaction timer
+        if can_speak(agent) && self.recv_interaction(agent, controller, read_data, event_emitter) {
+            agent.timer.start(read_data.time.0, TimerAction::Interact);
+        }
+
+        let timeout = if agent.behavior.is(BehaviorState::TRADING) {
+            TRADE_INTERACTION_TIME
         } else {
-            self.idle(agent, controller, read_data);
+            DEFAULT_INTERACTION_TIME
+        };
+
+        match agent
+            .timer
+            .timeout_elapsed(read_data.time.0, TimerAction::Interact, timeout as f64)
+        {
+            None => {
+                // Look toward the interacting entity for a while
+                if let Some(Target { target, .. }) = &agent.target {
+                    self.look_toward(controller, read_data, *target);
+                    controller.actions.push(ControlAction::Talk);
+                }
+            },
+            Some(just_ended) => {
+                if just_ended {
+                    agent.target = None;
+                    controller.actions.push(ControlAction::Stand);
+                }
+
+                if thread_rng().gen::<f32>() < 0.1 {
+                    self.choose_target(agent, controller, read_data, event_emitter);
+                } else if agent.awareness > AWARENESS_INVESTIGATE_THRESHOLD {
+                    self.handle_elevated_awareness(agent, controller, read_data);
+                } else {
+                    self.idle(agent, controller, read_data);
+                }
+            },
         }
     }
 
@@ -647,19 +680,34 @@ impl<'a> AgentData<'a> {
         if let Some(Target {
             target,
             selected_at,
+            aggro_on,
             ..
-        }) = agent.target
+        }) = &mut agent.target
         {
+            let target = *target;
+            let selected_at = *selected_at;
+
             if let Some(tgt_pos) = read_data.positions.get(target) {
-                let dist_sqrd = self.pos.0.distance_squared(tgt_pos.0);
-                // Should the agent flee?
-                if 1.0 - agent.psyche.aggro > self.damage && self.flees {
+                let dist_sq = self.pos.0.distance_squared(tgt_pos.0);
+                let in_aggro_range = agent
+                    .psyche
+                    .aggro_dist
+                    .map_or(true, |ad| dist_sq < ad.powi(2));
+                // If, at any point, the target comes closer than the aggro distance, switch to
+                // aggro mode
+                if in_aggro_range {
+                    *aggro_on = true;
+                }
+                let aggro_on = *aggro_on;
+
+                if self.damage.min(1.0) < agent.psyche.flee_health && self.flees {
+                    // Should the agent flee?
                     if agent.action_state.timer == 0.0 && can_speak(agent) {
-                        let msg = "npc.speech.villager_under_attack".to_string();
-                        self.chat_general(msg, event_emitter);
+                        self.chat_general("npc.speech.villager_under_attack", event_emitter);
                         self.emit_villager_alarm(read_data.time.0, event_emitter);
                         agent.action_state.timer = 0.01;
-                    } else if agent.action_state.timer < FLEE_DURATION || dist_sqrd < MAX_FLEE_DIST
+                    } else if agent.action_state.timer < FLEE_DURATION
+                        || dist_sq < MAX_FLEE_DIST.powi(2)
                     {
                         self.flee(agent, controller, &read_data.terrain, tgt_pos);
                         agent.action_state.timer += read_data.dt.0;
@@ -668,32 +716,36 @@ impl<'a> AgentData<'a> {
                         agent.target = None;
                         self.idle(agent, controller, read_data);
                     }
-
-                // If not fleeing, attack the hostile entity!
+                } else if should_stop_attacking(target, read_data) {
+                    if can_speak(agent) {
+                        let msg = "npc.speech.villager_enemy_killed".to_string();
+                        event_emitter
+                            .emit(ServerEvent::Chat(UnresolvedChatMsg::npc(*self.uid, msg)));
+                    }
+                    agent.target = None;
+                    self.idle(agent, controller, read_data);
                 } else {
-                    // If the hostile entity is dead or has an invulnerability buff (eg, those
-                    // applied in safezones), return to idle
-                    if should_stop_attacking(target, read_data) {
-                        if can_speak(agent) {
-                            let msg = "npc.speech.villager_enemy_killed".to_string();
-                            event_emitter
-                                .emit(ServerEvent::Chat(UnresolvedChatMsg::npc(*self.uid, msg)));
-                        }
-                        agent.target = None;
-                        self.idle(agent, controller, read_data);
-                    // Choose a new target every 10 seconds, but only for
-                    // enemies
-                    // TODO: This should be more principled. Consider factoring
-                    // health, combat rating, wielded weapon, etc, into the
-                    // decision to change target.
-                    } else if read_data.time.0 - selected_at > RETARGETING_THRESHOLD_SECONDS
-                        && matches!(self.alignment, Some(Alignment::Enemy))
+                    // Potentially choose a new target
+                    if read_data.time.0 - selected_at > RETARGETING_THRESHOLD_SECONDS
+                        && !in_aggro_range
                     {
                         self.choose_target(agent, controller, read_data, event_emitter);
-                    } else {
-                        // TODO Add utility for attacking vs leaving target alone
+                    }
+
+                    if aggro_on {
                         let target_data = build_target_data(target, tgt_pos, read_data);
                         self.attack(agent, controller, &target_data, read_data);
+                    } else {
+                        // If we're not yet aggro-ed, strike a menacing pose
+                        if thread_rng().gen::<f32>() < read_data.dt.0 * 0.25 {
+                            self.chat_general_if_can_speak(
+                                agent,
+                                "npc.speech.menacing",
+                                event_emitter,
+                            );
+                            controller.push_event(ControlEvent::Utterance(UtteranceKind::Angry));
+                        }
+                        self.menacing(agent, controller, read_data, target, tgt_pos);
                     }
                 }
             }
@@ -941,13 +993,13 @@ impl<'a> AgentData<'a> {
         }
     }
 
-    fn interact(
+    fn recv_interaction(
         &self,
         agent: &mut Agent,
         controller: &mut Controller,
         read_data: &ReadData,
         event_emitter: &mut Emitter<'_, ServerEvent>,
-    ) {
+    ) -> bool {
         // TODO: Process group invites
         // TODO: Add Group AgentEvent
         // let accept = false;  // set back to "matches!(alignment, Alignment::Npc)"
@@ -969,9 +1021,9 @@ impl<'a> AgentData<'a> {
             Some(AgentEvent::Talk(by, subject)) => {
                 if can_speak(agent) {
                     if let Some(target) = get_entity_by_id(by.id(), read_data) {
-                        agent.target = build_target(target, false, read_data.time.0);
+                        agent.target = build_target(target, false, read_data.time.0, false);
 
-                        if self.look_toward(controller, read_data, &target) {
+                        if self.look_toward(controller, read_data, target) {
                             controller.actions.push(ControlAction::Stand);
                             controller.actions.push(ControlAction::Talk);
                             controller.push_event(ControlEvent::Utterance(UtteranceKind::Greeting));
@@ -1017,11 +1069,12 @@ impl<'a> AgentData<'a> {
                                             };
                                         self.chat_general(msg, event_emitter);
                                     } else if agent.behavior.can_trade() {
-                                        let msg = "npc.speech.merchant_advertisement".to_string();
-                                        self.chat_general(msg, event_emitter);
+                                        self.chat_general(
+                                            "npc.speech.merchant_advertisement",
+                                            event_emitter,
+                                        );
                                     } else {
-                                        let msg = "npc.speech.villager".to_string();
-                                        self.chat_general(msg, event_emitter);
+                                        self.chat_general("npc.speech.villager", event_emitter);
                                     }
                                 },
                                 Subject::Trade => {
@@ -1031,18 +1084,23 @@ impl<'a> AgentData<'a> {
                                                 by,
                                                 InviteKind::Trade,
                                             ));
-                                            let msg =
-                                                "npc.speech.merchant_advertisement".to_string();
-                                            self.chat_general(msg, event_emitter);
+                                            self.chat_general(
+                                                "npc.speech.merchant_advertisement",
+                                                event_emitter,
+                                            );
                                         } else {
-                                            let msg = "npc.speech.merchant_busy".to_string();
-                                            self.chat_general(msg, event_emitter);
+                                            self.chat_general(
+                                                "npc.speech.merchant_busy",
+                                                event_emitter,
+                                            );
                                         }
                                     } else {
                                         // TODO: maybe make some travellers willing to trade with
                                         // simpler goods like potions
-                                        let msg = "npc.speech.villager_decline_trade".to_string();
-                                        self.chat_general(msg, event_emitter);
+                                        self.chat_general(
+                                            "npc.speech.villager_decline_trade",
+                                            event_emitter,
+                                        );
                                     }
                                 },
                                 Subject::Mood => {
@@ -1156,7 +1214,7 @@ impl<'a> AgentData<'a> {
                         controller.actions.push(ControlAction::Stand);
                         controller.actions.push(ControlAction::Talk);
                         if let Some(target) = get_entity_by_id(with.id(), read_data) {
-                            agent.target = build_target(target, false, read_data.time.0);
+                            agent.target = build_target(target, false, read_data.time.0, false);
                         }
                         controller
                             .events
@@ -1167,22 +1225,28 @@ impl<'a> AgentData<'a> {
                         controller
                             .events
                             .push(ControlEvent::InviteResponse(InviteResponse::Decline));
-                        let msg = "npc.speech.merchant_busy".to_string();
-                        self.chat_general_if_can_speak(agent, msg, event_emitter);
+                        self.chat_general_if_can_speak(
+                            agent,
+                            "npc.speech.merchant_busy",
+                            event_emitter,
+                        );
                     }
                 } else {
                     // TODO: Provide a hint where to find the closest merchant?
                     controller
                         .events
                         .push(ControlEvent::InviteResponse(InviteResponse::Decline));
-                    let msg = "npc.speech.villager_decline_trade".to_string();
-                    self.chat_general_if_can_speak(agent, msg, event_emitter);
+                    self.chat_general_if_can_speak(
+                        agent,
+                        "npc.speech.villager_decline_trade",
+                        event_emitter,
+                    );
                 }
             },
             Some(AgentEvent::TradeAccepted(with)) => {
                 if !agent.behavior.is(BehaviorState::TRADING) {
                     if let Some(target) = get_entity_by_id(with.id(), read_data) {
-                        agent.target = build_target(target, false, read_data.time.0);
+                        agent.target = build_target(target, false, read_data.time.0, false);
                     }
                     agent.behavior.set(BehaviorState::TRADING);
                     agent.behavior.set(BehaviorState::TRADING_ISSUER);
@@ -1192,12 +1256,13 @@ impl<'a> AgentData<'a> {
                 if agent.behavior.is(BehaviorState::TRADING) {
                     match result {
                         TradeResult::Completed => {
-                            let msg = "npc.speech.merchant_trade_successful".to_string();
-                            self.chat_general(msg, event_emitter);
+                            self.chat_general(
+                                "npc.speech.merchant_trade_successful",
+                                event_emitter,
+                            );
                         },
                         _ => {
-                            let msg = "npc.speech.merchant_trade_declined".to_string();
-                            self.chat_general(msg, event_emitter);
+                            self.chat_general("npc.speech.merchant_trade_declined", event_emitter);
                         },
                     }
                     agent.behavior.unset(BehaviorState::TRADING);
@@ -1263,32 +1328,22 @@ impl<'a> AgentData<'a> {
                     }
                 }
             },
-            _ => {
-                if can_speak(agent) {
-                    // No new events, continue looking towards the last
-                    // interacting player for some time
-                    if let Some(Target { target, .. }) = &agent.target {
-                        self.look_toward(controller, read_data, target);
-                    } else {
-                        agent.action_state.timer = 0.0;
-                    }
-                }
-            },
+            Some(AgentEvent::ServerSound(_)) => {},
+            Some(AgentEvent::Hurt) => {},
+            None => return false,
         }
+        true
     }
 
     fn look_toward(
         &self,
         controller: &mut Controller,
         read_data: &ReadData,
-        target: &EcsEntity,
+        target: EcsEntity,
     ) -> bool {
-        if let Some(tgt_pos) = read_data.positions.get(*target) {
+        if let Some(tgt_pos) = read_data.positions.get(target) {
             let eye_offset = self.body.map_or(0.0, |b| b.eye_height());
-            let tgt_eye_offset = read_data
-                .bodies
-                .get(*target)
-                .map_or(0.0, |b| b.eye_height());
+            let tgt_eye_offset = read_data.bodies.get(target).map_or(0.0, |b| b.eye_height());
             if let Some(dir) = Dir::from_unnormalized(
                 Vec3::new(tgt_pos.0.x, tgt_pos.0.y, tgt_pos.0.z + tgt_eye_offset)
                     - Vec3::new(self.pos.0.x, self.pos.0.y, self.pos.0.z + eye_offset),
@@ -1298,6 +1353,24 @@ impl<'a> AgentData<'a> {
             true
         } else {
             false
+        }
+    }
+
+    fn menacing(
+        &self,
+        _agent: &mut Agent,
+        controller: &mut Controller,
+        read_data: &ReadData,
+        target: EcsEntity,
+        _tgt_pos: &Pos,
+    ) {
+        self.look_toward(controller, read_data, target);
+        controller.actions.push(ControlAction::Wield);
+
+        let max_move = 0.5;
+        let move_dir_mag = controller.inputs.move_dir.magnitude();
+        if move_dir_mag > max_move {
+            controller.inputs.move_dir = max_move * controller.inputs.move_dir / move_dir_mag;
         }
     }
 
@@ -1431,34 +1504,41 @@ impl<'a> AgentData<'a> {
                 })
         };
 
-        let in_search_area = |e_pos: &Pos, e_char_state: Option<&CharacterState>| {
-            let mut search_dist = SEARCH_DIST;
-            if e_char_state.map_or(false, CharacterState::is_stealthy) {
-                // TODO: make sneak more effective based on a stat like e_stats.fitness
-                search_dist *= SNEAK_COEFFICIENT;
-            };
+        let max_search_dist = agent.psyche.search_dist();
+        let max_sight_dist = agent.psyche.sight_dist;
+        let max_listen_dist = agent.psyche.listen_dist;
+        let in_sight_dist = |e_pos: &Pos, e_char_state: Option<&CharacterState>| {
+            let search_dist = max_sight_dist
+                * if e_char_state.map_or(false, CharacterState::is_stealthy) {
+                    // TODO: make sneak more effective based on a stat like e_stats.fitness
+                    SNEAK_COEFFICIENT
+                } else {
+                    1.0
+                };
             e_pos.0.distance_squared(self.pos.0) < search_dist.powi(2)
         };
 
-        let within_view = |e_pos: &Pos| {
+        let within_fov = |e_pos: &Pos| {
             (e_pos.0 - self.pos.0)
                 .try_normalized()
                 .map_or(true, |v| v.dot(*controller.inputs.look_dir) > 0.15)
         };
 
-        let in_listen_area = |e_pos: &Pos, e_char_state: Option<&CharacterState>| {
-            let mut listen_dist = MAX_LISTEN_DIST;
-            if e_char_state.map_or(false, CharacterState::is_stealthy) {
-                // TODO: make sneak more effective based on a stat like e_stats.fitness
-                listen_dist *= SNEAK_COEFFICIENT;
-            }
+        let in_listen_dist = |e_pos: &Pos, e_char_state: Option<&CharacterState>| {
+            let listen_dist = max_listen_dist
+                * if e_char_state.map_or(false, CharacterState::is_stealthy) {
+                    // TODO: make sneak more effective based on a stat like e_stats.fitness
+                    SNEAK_COEFFICIENT
+                } else {
+                    1.0
+                };
             // TODO implement proper sound system for agents
             e_pos.0.distance_squared(self.pos.0) < listen_dist.powi(2)
         };
 
         let within_reach = |e_pos: &Pos, e_char_state: Option<&CharacterState>| {
-            (in_search_area(e_pos, e_char_state) && within_view(e_pos))
-                || in_listen_area(e_pos, e_char_state)
+            (in_sight_dist(e_pos, e_char_state) && within_fov(e_pos))
+                || in_listen_dist(e_pos, e_char_state)
         };
 
         let owners_hostile = |e_alignment: Option<&Alignment>| {
@@ -1594,9 +1674,10 @@ impl<'a> AgentData<'a> {
         // TODO choose target by more than just distance
         let common::CachedSpatialGrid(grid) = self.cached_spatial_grid;
         let target = grid
-            .in_circle_aabr(self.pos.0.xy(), SEARCH_DIST)
+            .in_circle_aabr(self.pos.0.xy(), max_search_dist)
             .filter_map(worth_choosing)
             .filter_map(possible_target)
+            // TODO: This seems expensive. Cache this to avoid recomputing each tick
             .filter(|(_, e_pos)| can_see_them(e_pos))
             .min_by_key(|(_, e_pos)| (e_pos.0.distance_squared(self.pos.0) * 100.0) as i32)
             .map(|(e, _)| e);
@@ -1609,6 +1690,7 @@ impl<'a> AgentData<'a> {
             target,
             hostile: true,
             selected_at: read_data.time.0,
+            aggro_on: false,
         });
     }
 
@@ -1715,11 +1797,23 @@ impl<'a> AgentData<'a> {
                        0.0
                    };
 
-        // FIXME: Retrieve actual projectile speed!
+        // FIXME:
+        // 1) Retrieve actual projectile speed!
         // We have to assume projectiles are faster than base speed because there are
         // skills that increase it, and in most cases this will cause agents to
         // overshoot
+        //
+        // 2) We use eye_offset-s which isn't actually ideal.
+        // Some attacks (beam for example) may use different offsets,
+        // we should probably use offsets from corresponding states.
+        //
+        // 3) Should we even have this big switch?
+        // Not all attacks may want their direction overwritten.
+        // And this is quite hard to debug when you don't see it in actual
+        // attack handler.
         if let Some(dir) = match tactic {
+            // FIXME: this code make Staff flamethrower aim flamethrower
+            // like a projectile.
             Tactic::Bow
             | Tactic::FixedTurret
             | Tactic::QuadLowRanged
@@ -1809,13 +1903,25 @@ impl<'a> AgentData<'a> {
 
                 Dir::from_unnormalized(Vec3::new(delta_x, delta_y, -1.0))
             },
-            _ => Dir::from_unnormalized(
-                Vec3::new(
+            _ => {
+                let aim_from = match self.char_state {
+                    CharacterState::BasicBeam(_) => self.body.map_or(self.pos.0, |body| {
+                        self.pos.0
+                            + basic_beam::beam_offsets(
+                                body,
+                                controller.inputs.look_dir,
+                                self.ori.look_vec(),
+                            )
+                    }),
+                    _ => Vec3::new(self.pos.0.x, self.pos.0.y, self.pos.0.z + eye_offset),
+                };
+                let aim_to = Vec3::new(
                     tgt_data.pos.0.x,
                     tgt_data.pos.0.y,
                     tgt_data.pos.0.z + tgt_eye_offset,
-                ) - Vec3::new(self.pos.0.x, self.pos.0.y, self.pos.0.z + eye_offset),
-            ),
+                );
+                Dir::from_unnormalized(aim_to - aim_from)
+            },
         } {
             controller.inputs.look_dir = dir;
         }
@@ -2380,40 +2486,80 @@ impl<'a> AgentData<'a> {
         tgt_data: &TargetData,
         read_data: &ReadData,
     ) {
-        if self.body.map(|b| b.is_humanoid()).unwrap_or(false) && attack_data.in_min_range() {
+        let extract_ability = |ability: &CharacterAbility| {
+            ability
+                .clone()
+                .adjusted_by_skills(self.skill_set, Some(ToolKind::Staff))
+        };
+        let (flamethrower, shockwave) = self
+            .inventory
+            .equipped(EquipSlot::ActiveMainhand)
+            .map(|i| &i.item_config_expect().abilities)
+            .map(|a| {
+                (
+                    Some(a.secondary.clone()),
+                    a.abilities.get(0).map(|(_, s)| s),
+                )
+            })
+            .map_or(
+                (CharacterAbility::default(), CharacterAbility::default()),
+                |(s, a)| {
+                    (
+                        extract_ability(&s.unwrap_or_default()),
+                        extract_ability(a.unwrap_or(&CharacterAbility::default())),
+                    )
+                },
+            );
+        let flamethrower_range = match flamethrower {
+            CharacterAbility::BasicBeam { range, .. } => range,
+            _ => 20.0_f32,
+        };
+        let shockwave_cost = shockwave.get_energy_cost();
+        if self.body.map_or(false, |b| b.is_humanoid())
+            && attack_data.in_min_range()
+            && self.energy.current() > CharacterAbility::default_roll().get_energy_cost()
+            && !matches!(self.char_state, CharacterState::Shockwave(_))
+        {
+            // if a humanoid, have enough stamina, not in shockwave, and in melee range,
+            // emergency roll
             controller
                 .actions
                 .push(ControlAction::basic_input(InputKind::Roll));
-        } else if attack_data.dist_sqrd < (5.0 * attack_data.min_attack_dist).powi(2)
-            && attack_data.angle < 15.0
+        } else if matches!(self.char_state, CharacterState::Shockwave(_)) {
+            agent.action_state.condition = false;
+        } else if agent.action_state.condition
+            && matches!(self.char_state, CharacterState::Wielding)
         {
-            if agent.action_state.timer < 1.5 {
-                controller.inputs.move_dir = (tgt_data.pos.0 - self.pos.0)
-                    .xy()
-                    .rotated_z(0.47 * PI)
-                    .try_normalized()
-                    .unwrap_or_else(Vec2::unit_y);
-                agent.action_state.timer += read_data.dt.0;
-            } else if agent.action_state.timer < 3.0 {
-                controller.inputs.move_dir = (tgt_data.pos.0 - self.pos.0)
-                    .xy()
-                    .rotated_z(-0.47 * PI)
-                    .try_normalized()
-                    .unwrap_or_else(Vec2::unit_y);
-                agent.action_state.timer += read_data.dt.0;
-            } else {
-                agent.action_state.timer = 0.0;
-            }
+            controller
+                .actions
+                .push(ControlAction::basic_input(InputKind::Ability(0)));
+        } else if !matches!(self.char_state, CharacterState::Shockwave(c) if !matches!(c.stage_section, StageSection::Recover))
+        {
+            // only try to use another ability unless in shockwave or recover
+            let target_approaching_speed = -agent
+                .target
+                .as_ref()
+                .map(|t| t.target)
+                .and_then(|e| read_data.velocities.get(e))
+                .map_or(0.0, |v| v.0.dot(self.ori.look_vec()));
             if self
                 .skill_set
                 .has_skill(Skill::Staff(StaffSkill::UnlockShockwave))
-                && self.energy.current() > 800
-                && thread_rng().gen::<f32>() > 0.8
+                && target_approaching_speed > 12.0
+                && self.energy.current() > shockwave_cost
             {
-                controller
-                    .actions
-                    .push(ControlAction::basic_input(InputKind::Ability(0)));
-            } else if self.energy.current() > 10 {
+                // if enemy is closing distance quickly, use shockwave to knock back
+                if matches!(self.char_state, CharacterState::Wielding) {
+                    controller
+                        .actions
+                        .push(ControlAction::basic_input(InputKind::Ability(0)));
+                } else {
+                    agent.action_state.condition = true;
+                }
+            } else if self.energy.current()
+                > shockwave_cost + CharacterAbility::default_roll().get_energy_cost()
+                && attack_data.dist_sqrd < flamethrower_range.powi(2)
+            {
                 controller
                     .actions
                     .push(ControlAction::basic_input(InputKind::Secondary));
@@ -2422,7 +2568,26 @@ impl<'a> AgentData<'a> {
                     .actions
                     .push(ControlAction::basic_input(InputKind::Primary));
             }
+        }
+        // Logic to move. Intentionally kept separate from ability logic so duplicated
+        // work is less necessary.
+        if attack_data.dist_sqrd < (2.0 * attack_data.min_attack_dist).powi(2) {
+            // Attempt to move away from target if too close
+            if let Some((bearing, speed)) = agent.chaser.chase(
+                &*read_data.terrain,
+                self.pos.0,
+                self.vel.0,
+                tgt_data.pos.0,
+                TraversalConfig {
+                    min_tgt_dist: 1.25,
+                    ..self.traversal_config
+                },
+            ) {
+                controller.inputs.move_dir =
+                    -bearing.xy().try_normalized().unwrap_or_else(Vec2::zero) * speed;
+            }
         } else if attack_data.dist_sqrd < MAX_PATH_DIST.powi(2) {
+            // Else attempt to circle target if neither too close nor too far
             if let Some((bearing, speed)) = agent.chaser.chase(
                 &*read_data.terrain,
                 self.pos.0,
@@ -2438,7 +2603,7 @@ impl<'a> AgentData<'a> {
                     self.pos,
                     tgt_data.pos,
                     attack_data.dist_sqrd,
-                ) && attack_data.angle < 15.0
+                ) && attack_data.angle < 45.0
                 {
                     controller.inputs.move_dir = bearing
                         .xy()
@@ -2446,18 +2611,18 @@ impl<'a> AgentData<'a> {
                         .try_normalized()
                         .unwrap_or_else(Vec2::zero)
                         * speed;
-                    controller
-                        .actions
-                        .push(ControlAction::basic_input(InputKind::Primary));
                 } else {
+                    // Unless cannot see target, then move towards them
                     controller.inputs.move_dir =
                         bearing.xy().try_normalized().unwrap_or_else(Vec2::zero) * speed;
                     self.jump_if(controller, bearing.z > 1.5);
                     controller.inputs.move_z = bearing.z;
                 }
             }
-            if self.body.map(|b| b.is_humanoid()).unwrap_or(false)
+            // Sometimes try to roll
+            if self.body.map_or(false, |b| b.is_humanoid())
                 && attack_data.dist_sqrd < 16.0f32.powi(2)
+                && !matches!(self.char_state, CharacterState::Shockwave(_))
                 && thread_rng().gen::<f32>() < 0.02
             {
                 controller
@@ -2465,6 +2630,7 @@ impl<'a> AgentData<'a> {
                     .push(ControlAction::basic_input(InputKind::Roll));
             }
         } else {
+            // If too far, move towards target
             self.path_toward_target(agent, controller, tgt_data, read_data, false, false, None);
         }
     }
@@ -4017,11 +4183,13 @@ impl<'a> AgentData<'a> {
                 } else if is_village_guard {
                     self.follow(agent, controller, &read_data.terrain, &sound_pos);
                 } else if is_neutral {
-                    let aggro = agent.psyche.aggro;
+                    let flee_health = agent.psyche.flee_health;
                     let close_enough = dist_sqrd < 35.0_f32.powi(2);
                     let sound_was_loud = sound.vol >= 10.0;
 
-                    if close_enough && (aggro <= 0.5 || (aggro <= 0.7 && sound_was_loud)) {
+                    if close_enough
+                        && (flee_health <= 0.7 || (flee_health <= 0.5 && sound_was_loud))
+                    {
                         self.flee(agent, controller, &read_data.terrain, &sound_pos);
                     } else {
                         self.idle(agent, controller, read_data);
@@ -4048,11 +4216,11 @@ impl<'a> AgentData<'a> {
                             controller.push_event(ControlEvent::Utterance(UtteranceKind::Angry));
                         }
 
-                        agent.target = build_target(attacker, true, read_data.time.0);
+                        agent.target = build_target(attacker, true, read_data.time.0, true);
 
                         if let Some(tgt_pos) = read_data.positions.get(attacker) {
                             if should_stop_attacking(attacker, read_data) {
-                                agent.target = build_target(target, false, read_data.time.0);
+                                agent.target = build_target(target, false, read_data.time.0, false);
 
                                 self.idle(agent, controller, read_data);
                             } else {
@@ -4154,11 +4322,11 @@ impl<'a> AgentData<'a> {
     fn chat_general_if_can_speak(
         &self,
         agent: &Agent,
-        msg: String,
+        msg: impl ToString,
         event_emitter: &mut Emitter<'_, ServerEvent>,
     ) -> bool {
         if can_speak(agent) {
-            event_emitter.emit(ServerEvent::Chat(UnresolvedChatMsg::npc(*self.uid, msg)));
+            self.chat_general(msg, event_emitter);
             true
         } else {
             false
@@ -4177,8 +4345,11 @@ impl<'a> AgentData<'a> {
         }
     }
 
-    fn chat_general(&self, msg: String, event_emitter: &mut Emitter<'_, ServerEvent>) {
-        event_emitter.emit(ServerEvent::Chat(UnresolvedChatMsg::npc(*self.uid, msg)));
+    fn chat_general(&self, msg: impl ToString, event_emitter: &mut Emitter<'_, ServerEvent>) {
+        event_emitter.emit(ServerEvent::Chat(UnresolvedChatMsg::npc(
+            *self.uid,
+            msg.to_string(),
+        )));
     }
 
     fn emit_villager_alarm(&self, time: f64, event_emitter: &mut Emitter<'_, ServerEvent>) {
@@ -4304,11 +4475,12 @@ fn entity_was_attacked(entity: EcsEntity, read_data: &ReadData) -> bool {
     }
 }
 
-fn build_target(target: EcsEntity, is_hostile: bool, time: f64) -> Option<Target> {
+fn build_target(target: EcsEntity, is_hostile: bool, time: f64, aggro_on: bool) -> Option<Target> {
     Some(Target {
         target,
         hostile: is_hostile,
         selected_at: time,
+        aggro_on,
     })
 }
 

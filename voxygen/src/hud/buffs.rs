@@ -3,11 +3,11 @@ use super::{
     BUFF_COLOR, DEBUFF_COLOR, TEXT_COLOR,
 };
 use crate::{
-    hud::{self, BuffPosition},
-    i18n::Localization,
+    hud::{self, animation::animation_timer, BuffPosition},
     ui::{fonts::Fonts, ImageFrame, Tooltip, TooltipManager, Tooltipable},
     GlobalState,
 };
+use i18n::Localization;
 
 use common::comp::{BuffKind, Buffs, Energy, Health};
 use conrod_core::{
@@ -104,7 +104,7 @@ impl<'a> Widget for BuffsBar<'a> {
         let mut event = Vec::new();
         let localized_strings = self.localized_strings;
         let buffs = self.buffs;
-        let buff_ani = ((self.pulse * 4.0/* speed factor */).cos() * 0.5 + 0.8) + 0.5; //Animation timer
+        let buff_ani = animation_timer(self.pulse) + 0.5; //Animation timer
         let pulsating_col = Color::Rgba(1.0, 1.0, 1.0, buff_ani);
         let norm_col = Color::Rgba(1.0, 1.0, 1.0, 1.0);
         let buff_position = self.global_state.settings.interface.buff_position;
@@ -129,10 +129,10 @@ impl<'a> Widget for BuffsBar<'a> {
             let decayed_health = 1.0 - self.health.maximum() as f64 / self.health.base_max() as f64;
             let show_health =
                 self.health.current() != self.health.maximum() || decayed_health > 0.0;
-            let show_stamina = self.energy.current() != self.energy.maximum();
-            let offset = if show_stamina && show_health {
+            let show_energy = self.energy.current() != self.energy.maximum();
+            let offset = if show_energy && show_health {
                 140.0
-            } else if show_health || show_stamina {
+            } else if show_health || show_energy {
                 95.0
             } else {
                 55.0

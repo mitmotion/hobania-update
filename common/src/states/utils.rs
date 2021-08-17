@@ -184,7 +184,7 @@ impl Body {
             Body::FishMedium(_) => Some(50.0 * self.mass().0),
             Body::FishSmall(_) => Some(50.0 * self.mass().0),
             Body::Dragon(_) => Some(200.0 * self.mass().0),
-            Body::Humanoid(_) => Some(200.0 * self.mass().0),
+            Body::Humanoid(_) => Some(2500.0 * self.mass().0),
             Body::Theropod(body) => match body.species {
                 theropod::Species::Sandraptor
                 | theropod::Species::Snowraptor
@@ -349,18 +349,17 @@ pub fn handle_forced_movement(
 }
 
 pub fn handle_orientation(data: &JoinData<'_>, update: &mut StateUpdate, efficiency: f32) {
-    if let Some(dir) = (is_strafing(data, update) || update.character.is_attack())
+    let dir = (is_strafing(data, update) || update.character.is_attack())
         .then(|| data.inputs.look_dir.to_horizontal().unwrap_or_default())
         .or_else(|| Dir::from_unnormalized(data.inputs.move_dir.into()))
-    {
-        let rate = {
-            let angle = update.ori.look_dir().angle_between(*dir);
-            data.body.base_ori_rate() * efficiency * std::f32::consts::PI / angle
-        };
-        update.ori = update
-            .ori
-            .slerped_towards(dir.into(), (data.dt.0 * rate).min(1.0));
+        .unwrap_or_else(|| data.ori.to_horizontal().look_dir());
+    let rate = {
+        let angle = update.ori.look_dir().angle_between(*dir);
+        data.body.base_ori_rate() * efficiency * std::f32::consts::PI / angle
     };
+    update.ori = update
+        .ori
+        .slerped_towards(dir.into(), (data.dt.0 * rate).min(1.0));
 }
 
 /// Updates components to move player as if theyre swimming
@@ -376,7 +375,7 @@ fn swim_move(
         let mut water_accel = force / data.mass.0;
 
         if let Ok(Some(level)) = data.skill_set.skill_level(Skill::Swim(SwimSkill::Speed)) {
-            water_accel *= 1.4_f32.powi(level.into());
+            water_accel *= 1.25_f32.powi(level.into());
         }
 
         let dir = if data.body.can_strafe() {
@@ -639,7 +638,7 @@ pub fn attempt_glide_wield(data: &JoinData<'_>, update: &mut StateUpdate) {
             .unwrap_or(false)
         && data.body.is_humanoid()
     {
-        update.character = CharacterState::GlideWield;
+        update.character = CharacterState::GlideWield(glide_wield::Data::from(data));
     }
 }
 
@@ -921,12 +920,7 @@ pub enum StageSection {
     Recover,
     Charge,
     Movement,
-    // TODO: Consolidate these to `Action`
-    // Code reviewers: comment here to remind me to open beginner issue
-    Swing,
-    Shoot,
-    Cast,
-    Use,
+    Action,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]

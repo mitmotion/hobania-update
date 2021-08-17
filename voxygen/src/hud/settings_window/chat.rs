@@ -2,7 +2,6 @@ use super::{RESET_BUTTONS_HEIGHT, RESET_BUTTONS_WIDTH};
 
 use crate::{
     hud::{img_ids::Imgs, ChatTab, Show, TEXT_COLOR, TEXT_GRAY_COLOR, UI_HIGHLIGHT_0, UI_MAIN},
-    i18n::Localization,
     session::settings_change::{Chat as ChatChange, Chat::*},
     settings::chat::MAX_CHAT_TABS,
     ui::{fonts::Fonts, ImageSlider, ToggleButton},
@@ -14,6 +13,7 @@ use conrod_core::{
     widget::{self, Button, DropDownList, Image, Rectangle, Text, TextEdit},
     widget_ids, Colorable, Labelable, Positionable, Sizeable, Widget, WidgetCommon,
 };
+use i18n::Localization;
 use std::cmp::Ordering;
 
 widget_ids! {
@@ -150,7 +150,7 @@ impl<'a> Widget for Chat<'a> {
         // Chat Transp
         Text::new(
             self.localized_strings
-                .get("hud.settings.background_transparency"),
+                .get("hud.settings.background_opacity"),
         )
         .down_from(state.ids.general_txt, 20.0)
         .font_size(self.fonts.cyri.scale(14))
@@ -158,7 +158,7 @@ impl<'a> Widget for Chat<'a> {
         .color(TEXT_COLOR)
         .set(state.ids.transp_text, ui);
         if let Some(new_val) = ImageSlider::continuous(
-            chat_settings.chat_transp,
+            chat_settings.chat_opacity,
             0.0,
             0.9,
             self.imgs.slider_indicator,
