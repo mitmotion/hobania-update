@@ -48,7 +48,7 @@ impl VertexTrait for Vertex {
     const STRIDE: wgpu::BufferAddress = mem::size_of::<Self>() as wgpu::BufferAddress;
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, FromPrimitive)]
 pub enum ParticleMode {
     CampfireSmoke = 0,
     CampfireFire = 1,
@@ -123,6 +123,9 @@ pub struct Instance {
     // - a quad mesh, and 6 or more instances.
     // - a cube mesh, and 36 or more instances.
     inst_pos: [f32; 3],
+
+    // The color of the particle - not used by most particle modes
+    inst_col: [f32; 3],
 }
 
 impl Instance {
@@ -131,6 +134,7 @@ impl Instance {
         lifespan: f32,
         inst_mode: ParticleMode,
         inst_pos: Vec3<f32>,
+        inst_col: Vec3<f32>,
     ) -> Self {
         use rand::Rng;
         Self {
@@ -140,6 +144,7 @@ impl Instance {
             inst_mode: inst_mode as i32,
             inst_pos: inst_pos.into_array(),
             inst_dir: [0.0, 0.0, 0.0],
+            inst_col: inst_col.into_array(),
         }
     }
 
@@ -158,8 +163,11 @@ impl Instance {
             inst_mode: inst_mode as i32,
             inst_pos: inst_pos.into_array(),
             inst_dir: (inst_pos2 - inst_pos).into_array(),
+            inst_col: Vec3::zero().into_array(),
         }
     }
+
+    pub fn with_color(&mut self, color: Vec3<f32>) { self.inst_col = color.into_array(); }
 
     fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         const ATTRIBUTES: [wgpu::VertexAttribute; 6] = wgpu::vertex_attr_array![2 => Float32, 3 => Float32, 4 => Float32, 5 => Sint32, 6 => Float32x3, 7 => Float32x3];
@@ -172,7 +180,15 @@ impl Instance {
 }
 
 impl Default for Instance {
-    fn default() -> Self { Self::new(0.0, 0.0, ParticleMode::CampfireSmoke, Vec3::zero()) }
+    fn default() -> Self {
+        Self::new(
+            0.0,
+            0.0,
+            ParticleMode::CampfireSmoke,
+            Vec3::zero(),
+            Vec3::zero(),
+        )
+    }
 }
 
 pub struct ParticlePipeline {

@@ -14,8 +14,13 @@ use core::mem;
 use egui::{
     plot::{Plot, Value},
     widgets::plot::Curve,
-    CollapsingHeader, Color32, Grid, Label, ScrollArea, Slider, Ui, Window,
+    CollapsingHeader, Color32, Grid, Label, Pos2, Rect, ScrollArea, Sense, Slider, Stroke, Ui,
+    Vec2, Window,
 };
+use std::string::ToString;
+use strum::IntoEnumIterator;
+use strum_macros::{Display, EnumIter};
+use vek::Vec3;
 
 fn two_col_row(ui: &mut Ui, label: impl Into<Label>, content: impl Into<Label>) {
     ui.label(label);
@@ -23,8 +28,12 @@ fn two_col_row(ui: &mut Ui, label: impl Into<Label>, content: impl Into<Label>) 
     ui.end_row();
 }
 
-use crate::character_states::draw_char_state_group;
+use crate::{
+    character_states::draw_char_state_group,
+    EguiDebugShapeAction::{AddCylinder, RemoveShape, SetPosAndColor},
+};
 use common::comp::{aura::AuraKind::Buff, Body, Fluid};
+use egui::color_picker::{color_edit_button_srgba, Alpha};
 use egui_winit_platform::Platform;
 use std::time::Duration;
 #[cfg(feature = "use-dyn-lib")]
@@ -68,6 +77,9 @@ pub struct EguiInnerState {
     max_entity_distance: f32,
     selected_entity_cylinder_height: f32,
     frame_times: Vec<f32>,
+    particle_qty: u32,
+    pixels: Vec<bool>,
+    pixel_draw_color: Color32,
 }
 
 #[derive(Clone, Default)]
@@ -77,6 +89,7 @@ pub struct EguiWindows {
     egui_memory: bool,
     frame_time: bool,
     ecs_entities: bool,
+    particles: bool,
 }
 
 impl Default for EguiInnerState {
@@ -86,11 +99,14 @@ impl Default for EguiInnerState {
             max_entity_distance: 100000.0,
             selected_entity_cylinder_height: 10.0,
             frame_times: Vec::new(),
+            particle_qty: 1,
+            pixels: vec![false; 100],
+            pixel_draw_color: Color32::from_rgb(255, 0, 0),
         }
     }
 }
 
-pub enum DebugShapeAction {
+pub enum EguiDebugShapeAction {
     AddCylinder {
         radius: f32,
         height: f32,
@@ -103,9 +119,20 @@ pub enum DebugShapeAction {
     },
 }
 
+pub enum EguiAction {
+    DebugShape(EguiDebugShapeAction),
+    AddParticles {
+        lifespan: Duration,
+        mode: u32,
+        quantity: usize,
+        offset: Vec3<f32>,
+        color: Option<Vec3<f32>>,
+    },
+}
+
 #[derive(Default)]
 pub struct EguiActions {
-    pub actions: Vec<DebugShapeAction>,
+    pub actions: Vec<EguiAction>,
 }
 
 #[cfg(feature = "use-dyn-lib")]
@@ -216,6 +243,7 @@ pub fn maintain_egui_inner(
                 ui.vertical(|ui| {
                     ui.checkbox(&mut egui_windows.ecs_entities, "ECS Entities");
                     ui.checkbox(&mut egui_windows.frame_time, "Frame Time");
+                    ui.checkbox(&mut egui_windows.particles, "Particles");
                 });
             });
 
@@ -264,6 +292,189 @@ pub fn maintain_egui_inner(
                     .map(|(i, x)| Value::new(i as f64, *x)),
             ));
             ui.add(plot);
+        });
+
+    Window::new("Particles")
+        .open(&mut egui_windows.particles)
+        .default_width(500.0)
+        .default_height(200.0)
+        .show(ctx, |ui| {
+            const PARTICLE_SCALE: f32 = 1.0 / 11.0;
+
+            ui.vertical(|ui| {
+                ui.add(
+                    Slider::new(&mut egui_state.particle_qty, 1..=1000000)
+                        .logarithmic(true)
+                        .clamp_to_range(true)
+                        .text("Particles"),
+                );
+
+                if ui.button("Heart").clicked() {
+                    // egui_actions.actions.push(EguiAction::AddParticles {
+                    //     lifespan: Duration::from_secs(2),
+                    //     mode: ParticleMode::CampfireFire.into_uint(),
+                    //     quantity: (egui_state.particle_qty as usize),
+                    //     offset: Vec3::default(),
+                    //     color: Some(Vec3::new(2.0, 0.8, 2.0)),
+                    // });
+
+                    let offsets = vec![
+                        (0.0, 0.0),
+                        (-1.0, 1.0),
+                        (-2.0, 2.0),
+                        (-3.0, 3.0),
+                        (-4.0, 4.0),
+                        (-5.0, 5.0),
+                        (-5.0, 6.0),
+                        (-4.0, 7.0),
+                        (-3.0, 8.0),
+                        (-2.0, 8.0),
+                        (-1.0, 7.0),
+                        (0.0, 6.0),
+                        (1.0, 7.0),
+                        (2.0, 8.0),
+                        (3.0, 8.0),
+                        (4.0, 7.0),
+                        (5.0, 6.0),
+                        (5.0, 5.0),
+                        (4.0, 4.0),
+                        (3.0, 3.0),
+                        (2.0, 2.0),
+                        (1.0, 1.0),
+                    ];
+
+                    for offset in offsets.clone() {
+                        egui_actions.actions.push(EguiAction::AddParticles {
+                            lifespan: Duration::from_secs(4),
+                            mode: ParticleMode::CampfireFire.into_uint(),
+                            quantity: (egui_state.particle_qty as usize),
+                            offset: Vec3::new(0.0, offset.0, offset.1)
+                                * Vec3::new(0.0, 3.0 * PARTICLE_SCALE, 3.0 * PARTICLE_SCALE),
+                            color: Some(Vec3::new(2.0, 0.8, 2.0)),
+                        });
+                    }
+                }
+
+                ui.group(|ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        for particle_mode in ParticleMode::iter() {
+                            if ui.button(particle_mode.to_string()).clicked() {
+                                egui_actions.actions.push(EguiAction::AddParticles {
+                                    lifespan: Duration::from_secs(2),
+                                    mode: particle_mode.into_uint(),
+                                    quantity: (egui_state.particle_qty as usize),
+                                    offset: Vec3::default(),
+                                    color: None,
+                                });
+                            }
+                        }
+                    });
+                });
+
+                ui.group(|ui| {
+                    ui.vertical(|ui| {
+                        let (response, painter) =
+                            ui.allocate_painter(Vec2::new(500.0, 500.0), Sense::click());
+
+                        let rows = 10;
+                        let columns = 10;
+
+                        const CELL_SIZE: f32 = 50.0;
+                        for x in 0..=columns {
+                            for y in 0..=rows {
+                                let vert_start = Pos2::new(
+                                    response.rect.left() + x as f32 * CELL_SIZE,
+                                    response.rect.top(),
+                                );
+                                let vert_end = Pos2::new(
+                                    response.rect.left() + x as f32 * CELL_SIZE,
+                                    vert_start.y + rows as f32 * CELL_SIZE,
+                                );
+                                let hor_start = Pos2::new(
+                                    response.rect.left(),
+                                    response.rect.top() + y as f32 * CELL_SIZE,
+                                );
+                                let hor_end = Pos2::new(
+                                    hor_start.x + columns as f32 * CELL_SIZE,
+                                    response.rect.top() + y as f32 * CELL_SIZE,
+                                );
+                                painter.line_segment(
+                                    [vert_start, vert_end],
+                                    Stroke::new(2.0, Color32::GREEN),
+                                );
+                                painter.line_segment(
+                                    [hor_start, hor_end],
+                                    Stroke::new(2.0, Color32::GREEN),
+                                );
+                                if x < columns && y < rows && egui_state.pixels[(rows * y) + x] {
+                                    let rect_top_left = Pos2::new(
+                                        response.rect.left() + x as f32 * CELL_SIZE,
+                                        response.rect.top() + y as f32 * CELL_SIZE,
+                                    );
+                                    let rect_bottom_right = Pos2::new(
+                                        rect_top_left.x + CELL_SIZE,
+                                        rect_top_left.y + CELL_SIZE,
+                                    );
+                                    painter.rect_filled(
+                                        Rect::from([rect_top_left, rect_bottom_right]),
+                                        0.0,
+                                        Color32::GRAY,
+                                    );
+                                }
+                            }
+                        }
+
+                        if response.clicked() {
+                            if let Some(click_pos) = response.interact_pointer_pos() {
+                                // if click_pos.x < columns && click_pos
+                                let clicked_at = click_pos - response.rect.left_top();
+                                let x = clicked_at.x as usize / CELL_SIZE as usize;
+                                let y = clicked_at.y as usize / CELL_SIZE as usize;
+                                println!("Clicked: {},{}", x, y);
+                                println!("{}", (rows * y) + x);
+                                egui_state.pixels[(rows * y) + x] =
+                                    !egui_state.pixels[(rows * y) + x];
+                            }
+                        }
+
+                        if ui.button("test").clicked() {
+                            for (i, pixel) in egui_state.pixels.iter().rev().enumerate() {
+                                if !pixel {
+                                    continue;
+                                }
+
+                                let y = i / rows;
+                                let x = i % rows;
+
+                                egui_actions.actions.push(EguiAction::AddParticles {
+                                    lifespan: Duration::from_secs(4),
+                                    mode: ParticleMode::CampfireFire.into_uint(),
+                                    quantity: (egui_state.particle_qty as usize),
+                                    offset: Vec3::new(0.0, x as f32, y as f32)
+                                        * Vec3::new(
+                                            0.0,
+                                            3.0 * PARTICLE_SCALE,
+                                            3.0 * PARTICLE_SCALE,
+                                        ),
+                                    color: Some(Vec3::new(
+                                        (egui_state.pixel_draw_color.r() as f32 / 255.0) * 2.0,
+                                        (egui_state.pixel_draw_color.g() as f32 / 255.0) * 2.0,
+                                        (egui_state.pixel_draw_color.b() as f32 / 255.0) * 2.0,
+                                    )),
+                                });
+                            }
+                        };
+                        if ui.button("clear").clicked() {
+                            egui_state.pixels.fill_with(|| false);
+                        }
+                        let _color_response = color_edit_button_srgba(
+                            ui,
+                            &mut egui_state.pixel_draw_color,
+                            Alpha::Opaque,
+                        );
+                    });
+                });
+            });
         });
 
     if egui_windows.ecs_entities {
@@ -331,10 +542,12 @@ pub fn maintain_egui_inner(
                                         mem::take(&mut egui_state.selected_entity_info);
 
                                     if pos.is_some() {
-                                        egui_actions.actions.push(DebugShapeAction::AddCylinder {
-                                            radius: 1.0,
-                                            height: egui_state.selected_entity_cylinder_height,
-                                        });
+                                        egui_actions.actions.push(EguiAction::DebugShape(
+                                            AddCylinder {
+                                                radius: 1.0,
+                                                height: egui_state.selected_entity_cylinder_height,
+                                            },
+                                        ));
                                     }
                                     egui_state.selected_entity_info =
                                         Some(SelectedEntityInfo::new(entity.id()));
@@ -405,7 +618,7 @@ pub fn maintain_egui_inner(
         if let Some(debug_shape_id) = previous.debug_shape_id {
             egui_actions
                 .actions
-                .push(DebugShapeAction::RemoveShape(debug_shape_id));
+                .push(EguiAction::DebugShape(RemoveShape(debug_shape_id)));
         }
     };
 
@@ -416,11 +629,13 @@ pub fn maintain_egui_inner(
             {
                 egui_actions
                     .actions
-                    .push(DebugShapeAction::RemoveShape(debug_shape_id));
-                egui_actions.actions.push(DebugShapeAction::AddCylinder {
-                    radius: 1.0,
-                    height: selected_entity_cylinder_height,
-                });
+                    .push(EguiAction::DebugShape(RemoveShape(debug_shape_id)));
+                egui_actions
+                    .actions
+                    .push(EguiAction::DebugShape(AddCylinder {
+                        radius: 1.0,
+                        height: selected_entity_cylinder_height,
+                    }));
             }
         }
     };
@@ -479,11 +694,13 @@ fn selected_entity_window(
     {
         if let Some(pos) = pos {
             if let Some(shape_id) = selected_entity_info.debug_shape_id {
-                egui_actions.actions.push(DebugShapeAction::SetPosAndColor {
-                    id: shape_id,
-                    color: [1.0, 1.0, 0.0, 0.5],
-                    pos: [pos.0.x, pos.0.y, pos.0.z + 2.0, 0.0],
-                });
+                egui_actions
+                    .actions
+                    .push(EguiAction::DebugShape(SetPosAndColor {
+                        id: shape_id,
+                        color: [1.0, 1.0, 0.0, 0.5],
+                        pos: [pos.0.x, pos.0.y, pos.0.z + 2.0, 0.0],
+                    }));
             }
         };
 
@@ -694,4 +911,47 @@ fn poise_state_label(ui: &mut Ui, poise: &Poise) {
             ui.colored_label(Color32::BLUE, "Knocked Down");
         },
     };
+}
+
+#[derive(Copy, Clone, Display, EnumIter)]
+pub enum ParticleMode {
+    CampfireSmoke = 0,
+    CampfireFire = 1,
+    GunPowderSpark = 2,
+    Shrapnel = 3,
+    FireworkBlue = 4,
+    FireworkGreen = 5,
+    FireworkPurple = 6,
+    FireworkRed = 7,
+    FireworkWhite = 8,
+    FireworkYellow = 9,
+    Leaf = 10,
+    Firefly = 11,
+    Bee = 12,
+    GroundShockwave = 13,
+    EnergyHealing = 14,
+    EnergyNature = 15,
+    FlameThrower = 16,
+    FireShockwave = 17,
+    FireBowl = 18,
+    Snow = 19,
+    Explosion = 20,
+    Ice = 21,
+    LifestealBeam = 22,
+    CultistFlame = 23,
+    StaticSmoke = 24,
+    Blood = 25,
+    Enraged = 26,
+    BigShrapnel = 27,
+    Laser = 28,
+    Bubbles = 29,
+    Water = 30,
+    IceSpikes = 31,
+    Drip = 32,
+    Tornado = 33,
+    Death = 34,
+}
+
+impl ParticleMode {
+    pub fn into_uint(self) -> u32 { self as u32 }
 }

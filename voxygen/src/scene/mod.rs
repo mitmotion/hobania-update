@@ -325,6 +325,9 @@ impl Scene {
     /// Get a reference to the scene's particle manager.
     pub fn particle_mgr(&self) -> &ParticleMgr { &self.particle_mgr }
 
+    /// Get a mutable reference to the scene's particle manager.
+    pub fn particle_mgr_mut(&mut self) -> &mut ParticleMgr { &mut self.particle_mgr }
+
     /// Get a reference to the scene's figure manager.
     pub fn figure_mgr(&self) -> &FigureMgr { &self.figure_mgr }
 

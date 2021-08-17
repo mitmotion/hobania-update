@@ -104,6 +104,8 @@ image = {version = "0.23.12", default-features = false, features = ["ico", "png"
 lazy_static = "1.4.0"
 native-dialog = { version = "0.5.2", optional = true }
 num = "0.4"
+num-traits = "0.2"
+num-derive = "0.3"
 ordered-float = { version = "2.0.1", default-features = false }
 rand = "0.8"
 rayon = "1.5"

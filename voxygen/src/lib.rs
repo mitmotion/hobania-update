@@ -37,6 +37,9 @@ pub mod window;
 pub use crate::error::Error;
 pub use i18n;
 
+extern crate num;
+#[macro_use] extern crate num_derive;
+
 #[cfg(feature = "singleplayer")]
 use crate::singleplayer::Singleplayer;
 #[cfg(feature = "egui-ui")]

@@ -26,6 +26,7 @@ layout(location = 4) in float inst_entropy;
 layout(location = 5) in int inst_mode;
 layout(location = 6) in vec3 inst_dir;
 layout(location = 7) in vec3 inst_pos;
+layout(location = 8) in vec3 inst_col;
 
 layout(location = 0) out vec3 f_pos;
 layout(location = 1) flat out vec3 f_norm;
@@ -194,15 +195,20 @@ void main() {
             );
             break;
         case FIRE:
-            f_reflect = 0.0; // Fire doesn't reflect light, it emits it
+            //f_reflect = 0.0; // Fire doesn't reflect light, it emits it
             attr = Attr(
-                linear_motion(
-                    vec3(0.0),
-                    vec3(rand2 * 0.1, rand3 * 0.1, 2.0 + rand4 * 1.0)
-                ),
-                vec3(1.0),
-                vec4(2, 1.5 + rand5 * 0.5, 0, start_end(1.0, 0.0)),
-                spin_in_axis(vec3(rand6, rand7, rand8), rand9 * 3)
+//                linear_motion( // Offset
+//                    vec3(0.0),
+//                    vec3(1.0 * 0.1, 1.0 * 0.1, 2.0 + 1.0 * 1.0)
+//                ),
+            vec3(0, 0, 1.0 * 5.0) + vec3(
+                sin(lifetime * 1.0 + 5.0) + sin(lifetime * 7.0 + 0.0) * 0.3,
+                sin(lifetime * 3.0 + 0.0) + sin(lifetime * 8.0 + 0.0) * 0.3,
+                sin(lifetime * 2.0 + 0.0) + sin(lifetime * 9.0 + 0.0) * 0.3
+            ),
+                vec3(3.0), // Scale
+                vec4(inst_col, 1), // Colour
+                spin_in_axis(vec3(1,0,0),0) // Rotation
             );
             break;
         case FIRE_BOWL:

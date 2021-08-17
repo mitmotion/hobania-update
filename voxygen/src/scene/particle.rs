@@ -51,6 +51,25 @@ impl ParticleMgr {
         }
     }
 
+    pub fn add_debug_particles(
+        &mut self,
+        qty: usize,
+        lifespan: Duration,
+        time: f64,
+        mode: ParticleMode,
+        pos: Vec3<f32>,
+        color: &Option<Vec3<f32>>,
+    ) {
+        self.particles.resize_with(self.particles.len() + qty, || {
+            let particle = Particle::new(lifespan, time, mode, pos);
+            if let Some(color) = color {
+                particle.with_color(*color);
+                println!("{:?}", *color);
+            }
+            particle
+        });
+    }
+
     pub fn handle_outcome(&mut self, outcome: &Outcome, scene_data: &SceneData) {
         span!(_guard, "handle_outcome", "ParticleMgr::handle_outcome");
         let time = scene_data.state.get_time();
@@ -1527,8 +1546,13 @@ impl Particle {
     fn new(lifespan: Duration, time: f64, mode: ParticleMode, pos: Vec3<f32>) -> Self {
         Particle {
             alive_until: time + lifespan.as_secs_f64(),
-            instance: ParticleInstance::new(time, lifespan.as_secs_f32(), mode, pos),
+            instance: ParticleInstance::new(time, lifespan.as_secs_f32(), mode, pos, Vec3::zero()),
         }
+    }
+
+    fn with_color(mut self, color: Vec3<f32>) -> Self {
+        self.instance.with_color(color);
+        self
     }
 
     fn new_directed(

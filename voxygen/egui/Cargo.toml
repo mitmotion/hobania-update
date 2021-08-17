@@ -13,6 +13,9 @@ client = {package = "veloren-client", path = "../../client"}
 common = {package = "veloren-common", path = "../../common"}
 egui = "0.12"
 egui_winit_platform = "0.8"
+strum = "0.21"
+strum_macros = "0.21"
+vek = "=0.14.1"
 voxygen-dynlib = {package = "veloren-voxygen-dynlib", path = "../dynlib", optional = true}
 
 # Hot Reloading
