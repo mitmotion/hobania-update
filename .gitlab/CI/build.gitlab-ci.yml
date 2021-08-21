@@ -2,7 +2,7 @@ unittests:
   extends: .recompile-branch
   stage: build
   image: registry.gitlab.com/veloren/veloren-docker-ci/cache/quality:${CACHE_IMAGE_TAG}
-  tags: ["veloren/veloren", "check"]
+  tags: ["xvartest"]
   variables:
     GIT_DEPTH: 9999999999999
   script:
@@ -16,7 +16,7 @@ translation:
   extends: .release
   stage: build
   image: registry.gitlab.com/veloren/veloren-docker-ci/cache/quality:${CACHE_IMAGE_TAG}
-  tags: ["veloren/veloren", "check"]
+  tags: ["xvartest"]
   script:
     - ln -s /dockercache/target target
     - cat ./.gitlab/scripts/translation.sh
@@ -36,7 +36,7 @@ benchmarks:
   extends: .release
   stage: build
   image: registry.gitlab.com/veloren/veloren-docker-ci/cache/bench:${CACHE_IMAGE_TAG}
-  tags: ["veloren/veloren", "check", "benchmark"]
+  tags: ["xvartest"]
   script:
     - unset DISABLE_GIT_LFS_CHECK
     - ln -s /dockercache/target target
@@ -59,7 +59,7 @@ coverage:
   extends: .release
   stage: build
   image: registry.gitlab.com/veloren/veloren-docker-ci/cache/tarpaulin:${CACHE_IMAGE_TAG}
-  tags: ["veloren/veloren", "check"]
+  tags: ["xvartest"]
   script:
     - ln -s /dockercache/target target
     - cat ./.gitlab/scripts/coverage.sh
