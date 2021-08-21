@@ -188,13 +188,13 @@ opt-linux:
   extends:
     - .tlinux
     - .optional-release
-  tags: ["veloren/veloren", "build"]
+  tags: ["xvartest"]
 
 opt-windows:
   extends:
     - .twindows
     - .optional-release
-  tags: ["veloren/veloren", "build"]
+  tags: ["xvartest"]
 
 opt-macos:
   extends:
