@@ -1,6 +1,7 @@
 #[cfg(not(feature = "tracy"))] use std::fs;
 use std::path::Path;
 
+use console_subscriber::Server;
 use termcolor::{ColorChoice, StandardStream};
 use tracing::info;
 use tracing_appender::non_blocking::WorkerGuard;
@@ -32,7 +33,7 @@ const RUST_LOG_ENV: &str = "RUST_LOG";
 ///
 /// By default a few directives are set to `warn` by default, until explicitly
 /// overwritten! e.g. `RUST_LOG="gfx_device_gl=debug"`
-pub fn init<W2>(log_path_file: Option<(&Path, &str)>, terminal: W2) -> Vec<impl Drop>
+pub fn init<W2>(log_path_file: Option<(&Path, &str)>, terminal: W2) -> (Vec<impl Drop>, Server)
 where
     W2: MakeWriter + 'static,
     <W2 as MakeWriter>::Writer: Send + Sync,
@@ -67,6 +68,7 @@ where
             .add_directive("wgpu_core::swap_chain=info".parse().unwrap())
             .add_directive("veloren_network_protocol=info".parse().unwrap())
             .add_directive("quinn_proto::connection=info".parse().unwrap())
+            .add_directive("tokio=trace".parse().unwrap()) // TODO: Only enable when console-subscriber in use
             .add_directive(
                 "veloren_server::persistence::character=info"
                     .parse()
@@ -108,6 +110,8 @@ where
         registry.with(tracing_subscriber::fmt::layer().with_writer(non_blocking))
     };
 
+    let (console_subscriber_layer, console_subscriber_server) =
+        console_subscriber::TasksLayer::new();
     // Try to create the log file's parent folders.
     #[cfg(not(feature = "tracy"))]
     if let Some((path, file)) = log_path_file {
@@ -120,6 +124,7 @@ where
                 registry
                     .with(tracing_subscriber::fmt::layer().with_writer(non_blocking_file))
                     .with(filter)
+                    .with(console_subscriber_layer)
                     .init();
             },
             Err(e) => {
@@ -148,9 +153,9 @@ where
     };
 
     // Return the guards
-    guards
+    (guards, console_subscriber_server)
 }
 
-pub fn init_stdout(log_path_file: Option<(&Path, &str)>) -> Vec<impl Drop> {
+pub fn init_stdout(log_path_file: Option<(&Path, &str)>) -> (Vec<impl Drop>, Server) {
     init(log_path_file, || StandardStream::stdout(ColorChoice::Auto))
 }

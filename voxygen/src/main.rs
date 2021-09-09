@@ -40,7 +40,8 @@ fn main() {
 
     // Init logging and hold the guards.
     const LOG_FILENAME: &str = "voxygen.log";
-    let _guards = common_frontend::init_stdout(Some((&logs_dir, LOG_FILENAME)));
+    let (_guards, console_subscriber_server) =
+        common_frontend::init_stdout(Some((&logs_dir, LOG_FILENAME)));
 
     info!("Using userdata dir at: {}", userdata_dir.display());
 
@@ -187,6 +188,8 @@ fn main() {
             .build()
             .unwrap(),
     );
+
+    tokio_runtime.spawn(console_subscriber_server.serve());
 
     #[cfg(feature = "hot-reloading")]
     assets::start_hot_reloading();

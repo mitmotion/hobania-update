@@ -48,10 +48,12 @@ fn main() -> io::Result<()> {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     let _ = signal_hook::flag::register(signal_hook::consts::SIGUSR1, Arc::clone(&sigusr1_signal));
 
-    let (_guards, _guards2) = if basic {
-        (vec![], common_frontend::init_stdout(None))
+    let (_guards, _guards2, console_subscriber_server) = if basic {
+        let result = common_frontend::init_stdout(None);
+        (vec![], result.0, result.1)
     } else {
-        (common_frontend::init(None, || LOG.clone()), vec![])
+        let result = common_frontend::init(None, || LOG.clone());
+        (result.0, vec![], result.1)
     };
 
     // Load settings
@@ -80,6 +82,9 @@ fn main() -> io::Result<()> {
             .build()
             .unwrap(),
     );
+
+    runtime.spawn(console_subscriber_server.serve());
+    //tokio::spawn(console_subscriber_server.serve());
 
     // Load server settings
     let mut server_settings = server::Settings::load(&server_data_dir);

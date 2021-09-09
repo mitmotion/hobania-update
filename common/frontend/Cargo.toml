@@ -17,6 +17,10 @@ tracing = { version = "0.1", default-features = false }
 tracing-appender = "0.1"
 tracing-log = "0.1.1"
 tracing-subscriber = { version = "0.2.3", default-features = false, features = ["env-filter", "fmt", "chrono", "ansi", "smallvec", "tracing-log"]}
+console-subscriber = { git = "https://github.com/tokio-rs/console.git", rev = "926de99ce4cbfd02c87190f9ec5f1c60b5c305d5" }
+
+# TODO: required for console-subscriber, don't include by default
+tokio = "1.2"
 
 # Tracy
 tracing-tracy = { version = "0.6.0", optional = true }
