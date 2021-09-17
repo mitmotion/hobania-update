@@ -1,9 +1,10 @@
-use crate::comp::Controller;
+use crate::{comp::Controller, util::Dir};
 use hashbrown::HashSet;
 use serde::{Deserialize, Serialize};
 use specs::Component;
 use specs_idvs::IdvStorage;
 use std::{collections::VecDeque, time::Duration};
+use vek::Vec3;
 
 pub type ControlCommands = VecDeque<ControlCommand>;
 
@@ -31,15 +32,18 @@ pub struct ControlCommand {
 impl RemoteController {
     /// delte old commands
     pub fn maintain(&mut self) {
-        let min_allowed_age = self.commands.back().unwrap().source_time;
+        self.commands.make_contiguous();
+        if let Some(last) = self.commands.back() {
+            let min_allowed_age = last.source_time;
 
-        while let Some(first) = self.commands.front() {
-            if first.source_time + self.max_hold < min_allowed_age {
-                self.commands
-                    .pop_front()
-                    .map(|c| self.existing_commands.remove(&c.id));
-            } else {
-                break;
+            while let Some(first) = self.commands.front() {
+                if first.source_time + self.max_hold < min_allowed_age {
+                    self.commands
+                        .pop_front()
+                        .map(|c| self.existing_commands.remove(&c.id));
+                } else {
+                    break;
+                }
             }
         }
     }
@@ -50,10 +54,18 @@ impl RemoteController {
         if self.existing_commands.contains(&id) {
             return None; // element already existed
         }
-        self.existing_commands.insert(id);
-        self.commands.push_back(command);
+        match self
+            .commands
+            .binary_search_by_key(&command.source_time, |e| e.source_time)
+        {
+            Ok(_) => None,
+            Err(i) => {
+                self.existing_commands.insert(id);
+                self.commands.insert(i, command);
 
-        Some(id)
+                Some(id)
+            },
+        }
     }
 
     pub fn append(&mut self, commands: ControlCommands) -> HashSet<u64> {
@@ -61,37 +73,95 @@ impl RemoteController {
         for command in commands {
             let id = command.id;
             if !self.existing_commands.contains(&id) {
-                result.insert(id);
-                self.existing_commands.insert(id);
-                self.commands.push_back(command);
-            }
-        }
-        result
-    }
-
-    pub fn current(&self, time: Duration) -> Option<&ControlCommand> {
-        //TODO: actually sort it!
-        let mut lowest = None;
-        let mut lowest_cmd = None;
-        for c in &self.commands {
-            if c.source_time >= time {
-                let diff = c.source_time - time;
-                if match lowest {
-                    None => true,
-                    Some(lowest) => diff < lowest,
-                } {
-                    lowest = Some(diff);
-                    lowest_cmd = Some(c);
+                // TODO: improve algorithm to move binary search out of loop
+                if let Err(i) = self
+                    .commands
+                    .binary_search_by_key(&command.source_time, |e| e.source_time)
+                {
+                    result.insert(id);
+                    self.existing_commands.insert(id);
+                    self.commands.insert(i, command);
                 }
             }
         }
-        lowest_cmd
+        result
     }
 
     /// arrived at remote and no longer need to be hold locally
     pub fn acked(&mut self, ids: HashSet<u64>) { self.commands.retain(|c| !ids.contains(&c.id)); }
 
     pub fn commands(&self) -> &ControlCommands { &self.commands }
+
+    /// Creates a single Controller event from all existing Controllers in the
+    /// time range. E.g. when client with 60Hz sends: STAY JUMP STAY
+    /// and server runs at 30Hz it could oversee the JUMP Control otherwise
+    /// At the cost of a command to may be executed for longer
+    /// on the server the client (1/30 instead 1/60)
+    pub fn compress(&self, start: Duration, dt: Duration) -> Option<Controller> {
+        // Assume we have 1 event every sec: 0,1,2,3,4
+        // compressing   1s - 3s   should lead to index 1-2
+        // compressing   1s - 2s   should lead to index 1 only
+        // compressing   1s - 1.2s should lead to index 1 only
+        // compressing 0.8s - 1.2s should lead to index 0-1
+        let start_i = match self
+            .commands
+            .binary_search_by_key(&start, |e| e.source_time)
+        {
+            Ok(i) => i,
+            Err(0) => 0,
+            Err(i) => i - 1,
+        };
+        let end_exclusive_i = match self
+            .commands
+            .binary_search_by_key(&(start + dt), |e| e.source_time)
+        {
+            Ok(i) => i,
+            Err(i) => i,
+        };
+        println!("start_i {:?}", start_i);
+        println!("end_exclusive_i {:?}", end_exclusive_i);
+
+        if self.commands.is_empty() || end_exclusive_i == start_i {
+            return None;
+        }
+        let mut result = Controller::default();
+        let mut look_dir = Vec3::zero();
+        //if self.commands[start_i].source_time
+        // Inputs are averaged over all elements by time
+        // Queued Inputs are just added
+        // Events and Actions are not included when the frame isn't fully inserted, must
+        // not be duplicated
+        let mut last_start = start;
+        for i in start_i..end_exclusive_i {
+            let e = &self.commands[i];
+            let local_start = e.source_time.max(last_start);
+            let local_end = if let Some(e) = self.commands.get(i + 1) {
+                e.source_time.min(start + dt)
+            } else {
+                start + dt
+            };
+            let local_dur = local_end - local_start;
+            println!("local_start {:?}, local_end {:?}", local_start, local_end);
+            println!("source_time {:?}", e.source_time);
+            result.inputs.move_dir += e.msg.inputs.move_dir * local_dur.as_secs_f32();
+            result.inputs.move_z += e.msg.inputs.move_z * local_dur.as_secs_f32();
+            look_dir = result.inputs.look_dir.to_vec()
+                + e.msg.inputs.look_dir.to_vec() * local_dur.as_secs_f32();
+            //TODO: manually combine 70% up and 30% down to UP
+            result.inputs.climb = result.inputs.climb.or(e.msg.inputs.climb);
+            result.inputs.break_block_pos = result
+                .inputs
+                .break_block_pos
+                .or(e.msg.inputs.break_block_pos);
+            result.inputs.strafing = result.inputs.strafing || e.msg.inputs.strafing;
+            last_start = local_start;
+        }
+        result.inputs.move_dir /= dt.as_secs_f32();
+        result.inputs.move_z /= dt.as_secs_f32();
+        result.inputs.look_dir = Dir::new(look_dir.normalized());
+
+        Some(result)
+    }
 }
 
 impl Default for RemoteController {
@@ -131,14 +201,58 @@ impl ControlCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        comp,
+        comp::{Climb, ControllerInputs},
+    };
+    use std::collections::BTreeMap;
+    use vek::{Vec2, Vec3};
+
+    const INCREASE: Duration = Duration::from_millis(33);
 
     fn generate_control_cmds(count: usize) -> ControlCommands {
         let mut result = VecDeque::new();
         let mut generator = CommandGenerator::default();
         let mut time = Duration::new(0, 0);
-        const INCREASE: Duration = Duration::from_millis(33);
-        for _ in 0..count {
-            let msg = Controller::default();
+        for i in 0..count {
+            let mut msg = Controller::default();
+            msg.inputs.move_dir = Vec2::new(i as f32 / 5.0, i as f32 / 10.0);
+            msg.inputs.move_z = i as f32;
+            if i == 7 {
+                msg.inputs.break_block_pos = Some(Vec3::new(2.0, 3.0, 4.0));
+            }
+            if i > 6 {
+                msg.inputs.climb = Some(comp::Climb::Up);
+            }
+            if i == 4 {
+                msg.inputs.strafing = true;
+            }
+            if i < 5 {
+                msg.events.push(comp::ControlEvent::EnableLantern);
+            };
+            if i >= 5 && i < 10 {
+                msg.events.push(comp::ControlEvent::DisableLantern);
+            }
+            if i == 1 {
+                msg.actions.push(comp::ControlAction::Dance);
+            }
+            if i == 9 {
+                msg.actions.push(comp::ControlAction::Wield);
+            }
+            if i < 5 {
+                msg.queued_inputs
+                    .insert(comp::InputKind::Jump, comp::InputAttr {
+                        select_pos: None,
+                        target_entity: None,
+                    });
+            }
+            if i >= 10 && i < 15 {
+                msg.queued_inputs
+                    .insert(comp::InputKind::Primary, comp::InputAttr {
+                        select_pos: None,
+                        target_entity: None,
+                    });
+            }
             let cc = generator.gen(time, msg);
             result.push_back(cc);
             time += INCREASE;
@@ -147,7 +261,7 @@ mod tests {
     }
 
     #[test]
-    fn test_resend_data() {
+    fn resend_data() {
         let data = generate_control_cmds(5);
         let mut list = RemoteController::default();
         assert_eq!(list.push(data[0].clone()), Some(1));
@@ -174,7 +288,7 @@ mod tests {
     }
 
     #[test]
-    fn test_auto_evict() {
+    fn auto_evict() {
         let data = generate_control_cmds(6);
         let mut list = RemoteController::default();
         list.max_hold = Duration::from_millis(100);
@@ -201,7 +315,7 @@ mod tests {
     }
 
     #[test]
-    fn test_acked() {
+    fn acked() {
         let data = generate_control_cmds(7);
         let mut list = RemoteController::default();
         assert_eq!(list.push(data[0].clone()), Some(1));
@@ -225,7 +339,7 @@ mod tests {
     }
 
     #[test]
-    fn test_append() {
+    fn append() {
         let data = generate_control_cmds(5);
         let mut list = RemoteController::default();
         let set = list.append(data);
@@ -238,4 +352,110 @@ mod tests {
         assert!(set.contains(&5));
         assert!(!set.contains(&6));
     }
+
+    #[test]
+    fn compress_basic() {
+        let data = generate_control_cmds(5);
+        let mut list = RemoteController::default();
+        list.append(data);
+        let compressed = list.compress(0 * INCREASE, 1 * INCREASE).unwrap();
+        assert_eq!(compressed, Controller {
+            inputs: comp::ControllerInputs {
+                break_block_pos: None,
+                climb: None,
+                move_dir: Vec2::new(0.0, 0.0),
+                move_z: 0.,
+                look_dir: Dir::new(Vec3::new(0.0, 1.0, 0.0)),
+                strafing: false,
+            },
+            queued_inputs: BTreeMap::new(),
+            events: Vec::new(),
+            actions: Vec::new(),
+        });
+    }
+
+    #[test]
+    fn compress_avg_input_full() {
+        let data = generate_control_cmds(4);
+        let mut list = RemoteController::default();
+        list.append(data);
+        let compressed = list.compress(0 * INCREASE, 2 * INCREASE).unwrap();
+        assert_eq!(compressed.inputs, ControllerInputs {
+            move_dir: Vec2::new(0.1, 0.05),
+            move_z: 0.5,
+            ..ControllerInputs::default()
+        });
+        let compressed = list.compress(0 * INCREASE, 3 * INCREASE).unwrap();
+        assert_eq!(compressed.inputs, ControllerInputs {
+            move_dir: Vec2::new(0.2, 0.1),
+            move_z: 1.0,
+            ..ControllerInputs::default()
+        });
+        let compressed = list.compress(1 * INCREASE, 3 * INCREASE).unwrap();
+        assert_eq!(compressed.inputs, ControllerInputs {
+            move_dir: Vec2::new(0.4, 0.2),
+            move_z: 2.0,
+            ..ControllerInputs::default()
+        });
+    }
+
+    #[test]
+    fn compress_avg_input_partial() {
+        let data = generate_control_cmds(4);
+        let mut list = RemoteController::default();
+        list.append(data);
+        const HALF: Duration = Duration::from_nanos(INCREASE.as_nanos() as u64 / 2);
+        let compressed = list.compress(HALF, INCREASE).unwrap();
+        assert_eq!(compressed.inputs, ControllerInputs {
+            move_dir: Vec2::new(0.1, 0.05),
+            move_z: 0.5,
+            ..ControllerInputs::default()
+        });
+        let compressed = list.compress(HALF, 3 * INCREASE).unwrap();
+        assert_eq!(compressed.inputs, ControllerInputs {
+            move_dir: Vec2::new(0.3, 0.15),
+            move_z: 1.5,
+            ..ControllerInputs::default()
+        });
+        let compressed = list.compress(INCREASE + HALF, 2 * INCREASE).unwrap();
+        assert_eq!(compressed.inputs, ControllerInputs {
+            move_dir: Vec2::new(0.4, 0.2),
+            move_z: 2.0,
+            ..ControllerInputs::default()
+        });
+    }
+
+    #[test]
+    fn compress_avg_input_missing() {
+        let mut data = generate_control_cmds(7);
+        let mut list = RemoteController::default();
+        data.pop_front();
+        data.pop_front();
+        data.pop_front();
+        list.append(data);
+        let compressed = list.compress(0 * INCREASE, 2 * INCREASE);
+        assert_eq!(compressed, None);
+        //let compressed = list.compress(10 * INCREASE, 2 * INCREASE);
+        //assert_eq!(compressed, None);
+    }
+
+    #[test]
+    fn compress_other_input() {
+        let data = generate_control_cmds(10);
+        let mut list = RemoteController::default();
+        list.append(data);
+        let compressed = list.compress(5 * INCREASE, 5 * INCREASE).unwrap();
+        assert_eq!(
+            compressed.inputs.break_block_pos,
+            Some(Vec3::new(2.0, 3.0, 4.0))
+        );
+        assert_eq!(compressed.inputs.climb, Some(Climb::Up));
+        assert_eq!(compressed.inputs.move_dir, Vec2::new(1.4, 0.7));
+        let move_z = (compressed.inputs.move_z - 7.0).abs();
+        println!("move_z: {}", move_z);
+        assert!(move_z < 0.0001);
+        assert_eq!(compressed.inputs.strafing, false);
+    }
+
+    //
 }
