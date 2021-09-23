@@ -13,8 +13,8 @@ use common::{
     outcome::Outcome,
     region::RegionMap,
     resources::{
-        DeltaTime, EntitiesDiedLastTick, GameMode, PlayerEntity, PlayerPhysicsSettings, Time,
-        TimeOfDay,
+        DeltaTime, EntitiesDiedLastTick, GameMode, PlayerEntity, PlayerPhysicsSettings, ServerTime,
+        Time, TimeOfDay,
     },
     slowjob::SlowJobPool,
     terrain::{Block, TerrainChunk, TerrainGrid},
@@ -210,6 +210,7 @@ impl State {
 
         // Register unsynced resources used by the ECS.
         ecs.insert(Time(0.0));
+        ecs.insert(ServerTime(0.0)); //synced by msg
         ecs.insert(DeltaTime(0.0));
         ecs.insert(PlayerEntity(None));
         ecs.insert(TerrainGrid::new().unwrap());

@@ -8,7 +8,7 @@ use common::{
     event::{EventBus, ServerEvent},
     link::Is,
     mounting::Rider,
-    resources::PlayerPhysicsSettings,
+    resources::{PlayerPhysicsSettings, Time},
     terrain::TerrainGrid,
     vol::ReadVol,
 };
@@ -16,6 +16,7 @@ use common_ecs::{Job, Origin, Phase, System};
 use common_net::msg::{ClientGeneral, ServerGeneral};
 use common_state::{BlockChange, BuildAreas};
 use specs::{Entities, Join, Read, ReadExpect, ReadStorage, Write, WriteStorage};
+use std::time::Duration;
 use tracing::{debug, trace, warn};
 use vek::*;
 
@@ -29,6 +30,7 @@ impl Sys {
     fn handle_client_in_game_msg(
         server_emitter: &mut common::event::Emitter<'_, ServerEvent>,
         entity: specs::Entity,
+        time: &Time,
         client: &Client,
         maybe_presence: &mut Option<&mut Presence>,
         terrain: &ReadExpect<'_, TerrainGrid>,
@@ -89,9 +91,9 @@ impl Sys {
                         .map(|e| e.or_insert_with(Default::default))
                     {
                         let ids = remote_controller.append(rc);
-                        remote_controller.maintain();
+                        remote_controller.maintain(Some(Duration::from_secs_f64(time.0)));
                         // confirm controls
-                        client.send(ServerGeneral::AckControl(ids))?;
+                        client.send(ServerGeneral::AckControl(ids, *time))?;
                         //Todo: FIXME!!!
                         /*
                                                             // Skip respawn if client entity is alive
@@ -321,6 +323,7 @@ impl<'a> System<'a> for Sys {
     #[allow(clippy::type_complexity)]
     type SystemData = (
         Entities<'a>,
+        Read<'a, Time>,
         Read<'a, EventBus<ServerEvent>>,
         ReadExpect<'a, TerrainGrid>,
         ReadStorage<'a, CanBuild>,
@@ -351,6 +354,7 @@ impl<'a> System<'a> for Sys {
         _job: &mut Job<Self>,
         (
             entities,
+            time,
             server_event_bus,
             terrain,
             can_build,
@@ -388,6 +392,7 @@ impl<'a> System<'a> for Sys {
                 Self::handle_client_in_game_msg(
                     &mut server_emitter,
                     entity,
+                    &time,
                     client,
                     &mut maybe_presence.as_deref_mut(),
                     &terrain,

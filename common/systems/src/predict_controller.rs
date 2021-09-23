@@ -1,6 +1,6 @@
 use common::{
     comp::{Controller, RemoteController},
-    resources::{Time, DeltaTime,},
+    resources::{DeltaTime, Time},
 };
 use common_ecs::{Job, Origin, Phase, System};
 use specs::{

@@ -20,6 +20,7 @@ pub struct RemoteController {
     commands: ControlCommands,
     existing_commands: HashSet<u64>,
     max_hold: Duration,
+    avg_latency: Duration,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -30,14 +31,16 @@ pub struct ControlCommand {
 }
 
 impl RemoteController {
-    /// delte old commands
-    pub fn maintain(&mut self) {
+    /// delte old and outdated( older than server_time) commands
+    pub fn maintain(&mut self, server_time: Option<Duration>) {
         self.commands.make_contiguous();
         if let Some(last) = self.commands.back() {
             let min_allowed_age = last.source_time;
 
             while let Some(first) = self.commands.front() {
-                if first.source_time + self.max_hold < min_allowed_age {
+                if first.source_time + self.max_hold < min_allowed_age
+                    || matches!(server_time, Some(x) if first.source_time < x)
+                {
                     self.commands
                         .pop_front()
                         .map(|c| self.existing_commands.remove(&c.id));
@@ -88,7 +91,32 @@ impl RemoteController {
     }
 
     /// arrived at remote and no longer need to be hold locally
-    pub fn acked(&mut self, ids: HashSet<u64>) { self.commands.retain(|c| !ids.contains(&c.id)); }
+    pub fn acked(&mut self, ids: HashSet<u64>, server_send_time: Duration) {
+        //get latency from oldest removed command and server_send_time
+        let mut highest_source_time = Duration::from_secs(0);
+        self.commands.retain(|c| {
+            let retain = !ids.contains(&c.id);
+            if !retain && c.source_time > highest_source_time {
+                highest_source_time = c.source_time;
+            }
+            retain
+        });
+        // we add self.avg_latency here as we must assume that highest_source_time was
+        // increased by avg_latency in client TimeSync though we assume that
+        // avg_latency is quite stable and didnt change much between when the component
+        // was added and now
+        if let Some(latency) =
+            (server_send_time + self.avg_latency).checked_sub(highest_source_time)
+        {
+            tracing::error!(?latency, "ggg");
+            self.avg_latency = (99 * self.avg_latency + latency) / 100;
+        } else {
+            // add 5% and 10ms to the latency
+            self.avg_latency =
+                Duration::from_secs_f64(self.avg_latency.as_secs_f64() * 1.05 + 0.01);
+        }
+        tracing::error!(?highest_source_time, ?self.avg_latency, "aaa");
+    }
 
     pub fn commands(&self) -> &ControlCommands { &self.commands }
 
@@ -118,9 +146,6 @@ impl RemoteController {
             Ok(i) => i,
             Err(i) => i,
         };
-        println!("start_i {:?}", start_i);
-        println!("end_exclusive_i {:?}", end_exclusive_i);
-
         if self.commands.is_empty() || end_exclusive_i == start_i {
             return None;
         }
@@ -141,8 +166,6 @@ impl RemoteController {
                 start + dt
             };
             let local_dur = local_end - local_start;
-            println!("local_start {:?}, local_end {:?}", local_start, local_end);
-            println!("source_time {:?}", e.source_time);
             result.inputs.move_dir += e.msg.inputs.move_dir * local_dur.as_secs_f32();
             result.inputs.move_z += e.msg.inputs.move_z * local_dur.as_secs_f32();
             look_dir = result.inputs.look_dir.to_vec()
@@ -154,6 +177,16 @@ impl RemoteController {
                 .break_block_pos
                 .or(e.msg.inputs.break_block_pos);
             result.inputs.strafing = result.inputs.strafing || e.msg.inputs.strafing;
+            // we apply events from all that are started here.
+            // if we only are part of 1 tick here we would assume that it was already
+            // covered before
+            if i != start_i || e.source_time >= start {
+                result.actions.append(&mut e.msg.actions.clone());
+                result.events.append(&mut e.msg.events.clone());
+                result
+                    .queued_inputs
+                    .append(&mut e.msg.queued_inputs.clone());
+            }
             last_start = local_start;
         }
         result.inputs.move_dir /= dt.as_secs_f32();
@@ -162,6 +195,13 @@ impl RemoteController {
 
         Some(result)
     }
+
+    /// the average latency is 300ms by default and will be adjusted over time
+    /// with every Ack the server sends its local tick time at the Ack
+    /// so we can calculate how much time was spent for 1 way from
+    /// server->client and assume that this is also true for client->server
+    /// latency
+    pub fn avg_latency(&self) -> Duration { self.avg_latency }
 }
 
 impl Default for RemoteController {
@@ -170,6 +210,7 @@ impl Default for RemoteController {
             commands: VecDeque::new(),
             existing_commands: HashSet::new(),
             max_hold: Duration::from_secs(1),
+            avg_latency: Duration::from_millis(300),
         }
     }
 }

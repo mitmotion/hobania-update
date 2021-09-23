@@ -12,6 +12,12 @@ pub struct TimeOfDay(pub f64);
 #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Time(pub f64);
 
+/// A resource that stores the Server-Time, its needed to calculate the input
+/// delay and adjust Time on the client keep in mind that it contains a
+/// network-latency. Only filled on the client
+#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ServerTime(pub f64);
+
 /// A resource that stores the time since the previous tick.
 #[derive(Default)]
 pub struct DeltaTime(pub f32);

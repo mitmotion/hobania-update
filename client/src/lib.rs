@@ -40,7 +40,7 @@ use common::{
     mounting::Rider,
     outcome::Outcome,
     recipe::{ComponentRecipeBook, RecipeBook},
-    resources::{PlayerEntity, TimeOfDay},
+    resources::{PlayerEntity, ServerTime, Time, TimeOfDay},
     spiral::Spiral2d,
     terrain::{
         block::Block, map::MapConfig, neighbors, BiomeKind, SitesKind, SpriteKind, TerrainChunk,
@@ -1114,7 +1114,7 @@ impl Client {
             (mod_kind(primary_component), mod_kind(secondary_component))
         {
             drop(inventories);
-            self.send_msg(ClientGeneral::ControlEvent(ControlEvent::InventoryEvent(
+            self.next_control.events.push(ControlEvent::InventoryEvent(
                 InventoryEvent::CraftRecipe {
                     craft_event: CraftEvent::ModularWeapon {
                         primary_component,
@@ -1122,7 +1122,7 @@ impl Client {
                     },
                     craft_sprite: sprite_pos,
                 },
-            )));
+            ));
             true
         } else {
             false
@@ -1137,8 +1137,9 @@ impl Client {
         slots: Vec<(u32, InvSlotId)>,
         sprite_pos: Option<Vec3<i32>>,
     ) {
-        self.send_msg(ClientGeneral::ControlEvent(ControlEvent::InventoryEvent(
-            InventoryEvent::CraftRecipe {
+        self.next_control
+            .events
+            .push(ControlEvent::InventoryEvent(InventoryEvent::CraftRecipe {
                 craft_event: CraftEvent::ModularWeaponPrimaryComponent {
                     toolkind,
                     material,
@@ -1146,8 +1147,7 @@ impl Client {
                     slots,
                 },
                 craft_sprite: sprite_pos,
-            },
-        )));
+            }));
     }
 
     fn update_available_recipes(&mut self) {
@@ -1535,7 +1535,6 @@ impl Client {
         &mut self,
         inputs: ControllerInputs,
         dt: Duration,
-        total_tick_time: Duration,
         add_foreign_systems: impl Fn(&mut DispatcherBuilder),
     ) -> Result<Vec<Event>, Error> {
         span!(_guard, "tick", "Client::tick");
@@ -1564,7 +1563,8 @@ impl Client {
             prof_span!("handle and send inputs");
             self.next_control.inputs = inputs;
             let con = std::mem::take(&mut self.next_control);
-            let rcon = self.local_command_gen.gen(total_tick_time, con);
+            let time = Duration::from_secs_f64(self.state.ecs().read_resource::<Time>().0);
+            let rcon = self.local_command_gen.gen(time, con);
             let commands = self
                 .state
                 .ecs()
@@ -2011,15 +2011,27 @@ impl Client {
     ) -> Result<(), Error> {
         prof_span!("handle_server_in_game_msg");
         match msg {
-            ServerGeneral::AckControl(acked_ids) => {
+            ServerGeneral::TimeSync(time) => {
+                self.state.ecs().write_resource::<ServerTime>().0 = time.0;
+                let latency = self
+                    .state
+                    .ecs()
+                    .read_storage::<RemoteController>()
+                    .get(self.entity())
+                    .map(|rc| rc.avg_latency())
+                    .unwrap_or_default();
+                self.state.ecs().write_resource::<Time>().0 = time.0 + latency.as_secs_f64();
+            },
+            ServerGeneral::AckControl(acked_ids, time) => {
                 if let Some(remote_controller) = self
                     .state
                     .ecs()
                     .write_storage::<RemoteController>()
                     .get_mut(self.entity())
                 {
-                    remote_controller.acked(acked_ids);
-                    remote_controller.maintain();
+                    let time = Duration::from_secs_f64(time.0);
+                    remote_controller.acked(acked_ids, time);
+                    remote_controller.maintain(None);
                 }
             },
             ServerGeneral::GroupUpdate(change_notification) => {
@@ -2805,12 +2817,8 @@ mod tests {
             let mut clock = Clock::new(Duration::from_secs_f64(SPT));
 
             //tick
-            let events_result: Result<Vec<Event>, Error> = client.tick(
-                comp::ControllerInputs::default(),
-                clock.dt(),
-                clock.total_tick_time(),
-                |_| {},
-            );
+            let events_result: Result<Vec<Event>, Error> =
+                client.tick(comp::ControllerInputs::default(), clock.dt(), |_| {});
 
             //chat functionality
             client.send_chat("foobar".to_string());
