@@ -68,11 +68,6 @@ pub enum ClientGeneral {
     BreakBlock(Vec3<i32>),
     PlaceBlock(Vec3<i32>, Block),
     ExitInGame,
-    PlayerPhysics {
-        pos: comp::Pos,
-        vel: comp::Vel,
-        ori: comp::Ori,
-    },
     UnlockSkill(Skill),
     UnlockSkillGroup(SkillGroupKind),
     RequestSiteInfo(SiteId),
@@ -88,9 +83,6 @@ pub enum ClientGeneral {
     ChatMsg(String),
     Command(String, Vec<String>),
     Terminate,
-    RequestPlayerPhysics {
-        server_authoritative: bool,
-    },
     RequestLossyTerrainCompression {
         lossy_terrain_compression: bool,
     },
@@ -125,13 +117,11 @@ impl ClientMsg {
                         | ClientGeneral::BreakBlock(_)
                         | ClientGeneral::PlaceBlock(_, _)
                         | ClientGeneral::ExitInGame
-                        | ClientGeneral::PlayerPhysics { .. }
                         | ClientGeneral::TerrainChunkRequest { .. }
                         | ClientGeneral::LodZoneRequest { .. }
                         | ClientGeneral::UnlockSkill(_)
                         | ClientGeneral::RequestSiteInfo(_)
                         | ClientGeneral::UnlockSkillGroup(_)
-                        | ClientGeneral::RequestPlayerPhysics { .. }
                         | ClientGeneral::RequestLossyTerrainCompression { .. }
                         | ClientGeneral::AcknowledgePersistenceLoadError
                         | ClientGeneral::UpdateMapMarker(_) => {

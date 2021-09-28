@@ -2,13 +2,9 @@
 use crate::TerrainPersistence;
 use crate::{client::Client, presence::Presence, Settings};
 use common::{
-    comp::{
-        Admin, CanBuild, ForceUpdate, Health, Ori, Player, Pos, RemoteController, SkillSet, Vel,
-    },
+    comp::{CanBuild, RemoteController, SkillSet},
     event::{EventBus, ServerEvent},
-    link::Is,
-    mounting::Rider,
-    resources::{PlayerPhysicsSettings, Time},
+    resources::Time,
     terrain::TerrainGrid,
     vol::ReadVol,
 };
@@ -17,8 +13,7 @@ use common_net::msg::{ClientGeneral, ServerGeneral};
 use common_state::{BlockChange, BuildAreas};
 use specs::{Entities, Join, Read, ReadExpect, ReadStorage, Write, WriteStorage};
 use std::time::Duration;
-use tracing::{debug, trace, warn};
-use vek::*;
+use tracing::{debug, trace};
 
 #[cfg(feature = "persistent_world")]
 pub type TerrainPersistenceData<'a> = Option<Write<'a, TerrainPersistence>>;
@@ -35,21 +30,12 @@ impl Sys {
         maybe_presence: &mut Option<&mut Presence>,
         terrain: &ReadExpect<'_, TerrainGrid>,
         can_build: &ReadStorage<'_, CanBuild>,
-        is_rider: &ReadStorage<'_, Is<Rider>>,
-        force_updates: &ReadStorage<'_, ForceUpdate>,
         skill_sets: &mut WriteStorage<'_, SkillSet>,
-        healths: &ReadStorage<'_, Health>,
         block_changes: &mut Write<'_, BlockChange>,
-        positions: &mut WriteStorage<'_, Pos>,
-        velocities: &mut WriteStorage<'_, Vel>,
-        orientations: &mut WriteStorage<'_, Ori>,
         remote_controllers: &mut WriteStorage<'_, RemoteController>,
         settings: &Read<'_, Settings>,
         build_areas: &Read<'_, BuildAreas>,
-        player_physics_settings: &mut Write<'_, PlayerPhysicsSettings>,
         _terrain_persistence: &mut TerrainPersistenceData<'_>,
-        maybe_player: &Option<&Player>,
-        maybe_admin: &Option<&Admin>,
         msg: ClientGeneral,
     ) -> Result<(), crate::error::Error> {
         let presence = match maybe_presence {
@@ -117,6 +103,7 @@ impl Sys {
                     }
                 }
             },
+/*
             ClientGeneral::PlayerPhysics { pos, vel, ori } => {
                 let player_physics_setting = maybe_player.map(|p| {
                     player_physics_settings
@@ -204,6 +191,7 @@ impl Sys {
                     }
                 }
             },
+*/
             ClientGeneral::BreakBlock(pos) => {
                 if let Some(comp_can_build) = can_build.get(entity) {
                     if comp_can_build.enabled {
@@ -268,19 +256,6 @@ impl Sys {
             ClientGeneral::RequestSiteInfo(id) => {
                 server_emitter.emit(ServerEvent::RequestSiteInfo { entity, id });
             },
-            ClientGeneral::RequestPlayerPhysics {
-                server_authoritative,
-            } => {
-                let player_physics_setting = maybe_player.map(|p| {
-                    player_physics_settings
-                        .settings
-                        .entry(p.uuid())
-                        .or_default()
-                });
-                if let Some(setting) = player_physics_setting {
-                    setting.client_optin = server_authoritative;
-                }
-            },
             ClientGeneral::RequestLossyTerrainCompression {
                 lossy_terrain_compression,
             } => {
@@ -327,23 +302,14 @@ impl<'a> System<'a> for Sys {
         Read<'a, EventBus<ServerEvent>>,
         ReadExpect<'a, TerrainGrid>,
         ReadStorage<'a, CanBuild>,
-        ReadStorage<'a, ForceUpdate>,
-        ReadStorage<'a, Is<Rider>>,
         WriteStorage<'a, SkillSet>,
-        ReadStorage<'a, Health>,
         Write<'a, BlockChange>,
-        WriteStorage<'a, Pos>,
-        WriteStorage<'a, Vel>,
-        WriteStorage<'a, Ori>,
         WriteStorage<'a, Presence>,
         WriteStorage<'a, Client>,
         WriteStorage<'a, RemoteController>,
         Read<'a, Settings>,
         Read<'a, BuildAreas>,
-        Write<'a, PlayerPhysicsSettings>,
         TerrainPersistenceData<'a>,
-        ReadStorage<'a, Player>,
-        ReadStorage<'a, Admin>,
     );
 
     const NAME: &'static str = "msg::in_game";
@@ -358,35 +324,20 @@ impl<'a> System<'a> for Sys {
             server_event_bus,
             terrain,
             can_build,
-            force_updates,
-            is_rider,
             mut skill_sets,
-            healths,
             mut block_changes,
-            mut positions,
-            mut velocities,
-            mut orientations,
             mut presences,
             mut clients,
             mut remote_controllers,
             settings,
             build_areas,
-            mut player_physics_settings,
             mut terrain_persistence,
-            players,
-            admins,
         ): Self::SystemData,
     ) {
         let mut server_emitter = server_event_bus.emitter();
 
-        for (entity, client, mut maybe_presence, player, maybe_admin) in (
-            &entities,
-            &mut clients,
-            (&mut presences).maybe(),
-            players.maybe(),
-            admins.maybe(),
-        )
-            .join()
+        for (entity, client, mut maybe_presence) in
+            (&entities, &mut clients, (&mut presences).maybe()).join()
         {
             let _ = super::try_recv_all(client, 2, |client, msg| {
                 Self::handle_client_in_game_msg(
@@ -397,21 +348,12 @@ impl<'a> System<'a> for Sys {
                     &mut maybe_presence.as_deref_mut(),
                     &terrain,
                     &can_build,
-                    &is_rider,
-                    &force_updates,
                     &mut skill_sets,
-                    &healths,
                     &mut block_changes,
-                    &mut positions,
-                    &mut velocities,
-                    &mut orientations,
                     &mut remote_controllers,
                     &settings,
                     &build_areas,
-                    &mut player_physics_settings,
                     &mut terrain_persistence,
-                    &player,
-                    &maybe_admin,
                     msg,
                 )
             });

@@ -432,42 +432,6 @@ impl<'a> Widget for Gameplay<'a> {
             }
         }
 
-        // Player physics behavior
-        Text::new(
-            self.localized_strings
-                .get("hud.settings.player_physics_behavior"),
-        )
-        .down_from(state.ids.auto_walk_behavior_list, 10.0)
-        .right_from(state.ids.camera_clamp_behavior_text, 118.0)
-        .font_size(self.fonts.cyri.scale(14))
-        .font_id(self.fonts.cyri.conrod_id)
-        .color(TEXT_COLOR)
-        .set(state.ids.player_physics_behavior_text, ui);
-
-        let player_physics_selected =
-            self.global_state.settings.gameplay.player_physics_behavior as usize;
-
-        if let Some(clicked) = DropDownList::new(
-            &["Client-authoritative", "Server-authoritative"],
-            Some(player_physics_selected),
-        )
-        .w_h(200.0, 30.0)
-        .color(MENU_BG)
-        .label_color(TEXT_COLOR)
-        .label_font_id(self.fonts.cyri.conrod_id)
-        .down_from(state.ids.player_physics_behavior_text, 8.0)
-        .set(state.ids.player_physics_behavior_list, ui)
-        {
-            match clicked {
-                0 => events.push(ChangePlayerPhysicsBehavior {
-                    server_authoritative: false,
-                }),
-                _ => events.push(ChangePlayerPhysicsBehavior {
-                    server_authoritative: true,
-                }),
-            }
-        }
-
         // Stop autowalk on input toggle
         let stop_auto_walk_on_input_toggle = ToggleButton::new(
             self.global_state.settings.gameplay.stop_auto_walk_on_input,

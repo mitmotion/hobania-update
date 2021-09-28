@@ -189,6 +189,20 @@ impl RemoteController {
             }
             last_start = local_start;
         }
+        if result.actions.iter().any(|e| {
+            if let crate::comp::ControlAction::StartInput {
+                input,
+                target_entity: _,
+                select_pos: _,
+            } = e
+            {
+                input == &crate::comp::InputKind::Jump
+            } else {
+                false
+            }
+        }) {
+            tracing::error!("jump detencted");
+        }
         result.inputs.move_dir /= dt.as_secs_f32();
         result.inputs.move_z /= dt.as_secs_f32();
         result.inputs.look_dir = Dir::new(look_dir.normalized());

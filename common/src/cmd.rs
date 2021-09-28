@@ -92,7 +92,6 @@ pub enum ChatCommand {
     RevokeBuildAll,
     Safezone,
     Say,
-    ServerPhysics,
     SetMotd,
     Ship,
     Site,
@@ -575,14 +574,6 @@ impl ChatCommand {
                 "Send messages to everyone within shouting distance",
                 None,
             ),
-            ChatCommand::ServerPhysics => cmd(
-                vec![
-                    PlayerName(Required),
-                    Boolean("enabled", "true".to_string(), Optional),
-                ],
-                "Set/unset server-authoritative physics for an account",
-                Some(Moderator),
-            ),
             ChatCommand::SetMotd => cmd(
                 vec![Message(Optional)],
                 "Set the server description",
@@ -735,7 +726,6 @@ impl ChatCommand {
             ChatCommand::RevokeBuildAll => "revoke_build_all",
             ChatCommand::Safezone => "safezone",
             ChatCommand::Say => "say",
-            ChatCommand::ServerPhysics => "server_physics",
             ChatCommand::SetMotd => "set_motd",
             ChatCommand::Ship => "ship",
             ChatCommand::Site => "site",

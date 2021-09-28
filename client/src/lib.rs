@@ -40,7 +40,7 @@ use common::{
     mounting::Rider,
     outcome::Outcome,
     recipe::{ComponentRecipeBook, RecipeBook},
-    resources::{PlayerEntity, ServerTime, Time, TimeOfDay},
+    resources::{DeltaTime, PlayerEntity, ServerTime, Time, TimeOfDay},
     spiral::Spiral2d,
     terrain::{
         block::Block, map::MapConfig, neighbors, BiomeKind, SitesKind, SpriteKind, TerrainChunk,
@@ -764,11 +764,9 @@ impl Client {
                     | ClientGeneral::BreakBlock(_)
                     | ClientGeneral::PlaceBlock(_, _)
                     | ClientGeneral::ExitInGame
-                    | ClientGeneral::PlayerPhysics { .. }
                     | ClientGeneral::UnlockSkill(_)
                     | ClientGeneral::RequestSiteInfo(_)
                     | ClientGeneral::UnlockSkillGroup(_)
-                    | ClientGeneral::RequestPlayerPhysics { .. }
                     | ClientGeneral::RequestLossyTerrainCompression { .. }
                     | ClientGeneral::AcknowledgePersistenceLoadError
                     | ClientGeneral::UpdateMapMarker(_) => {
@@ -801,12 +799,6 @@ impl Client {
             },
             ClientMsg::Ping(msg) => self.ping_stream.send(msg),
         }
-    }
-
-    pub fn request_player_physics(&mut self, server_authoritative: bool) {
-        self.send_msg(ClientGeneral::RequestPlayerPhysics {
-            server_authoritative,
-        })
     }
 
     pub fn request_lossy_terrain_compression(&mut self, lossy_terrain_compression: bool) {
@@ -1657,18 +1649,6 @@ impl Client {
             self.last_server_ping = self.state.get_time();
         }
 
-        // 6) Update the server about the player's physics attributes.
-        if self.presence.is_some() {
-            if let (Some(pos), Some(vel), Some(ori)) = (
-                self.state.read_storage().get(self.entity()).cloned(),
-                self.state.read_storage().get(self.entity()).cloned(),
-                self.state.read_storage().get(self.entity()).cloned(),
-            ) {
-                self.in_game_stream
-                    .send(ClientGeneral::PlayerPhysics { pos, vel, ori })?;
-            }
-        }
-
         /*
         // Output debug metrics
         if log_enabled!(Level::Info) && self.tick % 600 == 0 {
@@ -2013,6 +1993,7 @@ impl Client {
         match msg {
             ServerGeneral::TimeSync(time) => {
                 self.state.ecs().write_resource::<ServerTime>().0 = time.0;
+                let dt = self.state.ecs().read_resource::<DeltaTime>().0 as f64;
                 let latency = self
                     .state
                     .ecs()
@@ -2020,7 +2001,8 @@ impl Client {
                     .get(self.entity())
                     .map(|rc| rc.avg_latency())
                     .unwrap_or_default();
-                self.state.ecs().write_resource::<Time>().0 = time.0 + latency.as_secs_f64();
+                //remove dt as it is applied in state.tick again
+                self.state.ecs().write_resource::<Time>().0 = time.0 + latency.as_secs_f64() - dt;
             },
             ServerGeneral::AckControl(acked_ids, time) => {
                 if let Some(remote_controller) = self

@@ -112,7 +112,6 @@ impl SessionState {
         let mut mumble_link = SharedLink::new("veloren", "veloren-voxygen");
         {
             let mut client = client.borrow_mut();
-            client.request_player_physics(global_state.settings.gameplay.player_physics_behavior);
             client.request_lossy_terrain_compression(
                 global_state.settings.graphics.lossy_terrain_compression,
             );

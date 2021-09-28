@@ -10,7 +10,7 @@ use common::{
     event::EventBus,
     outcome::Outcome,
     region::{Event as RegionEvent, RegionMap},
-    resources::{PlayerPhysicsSettings, TimeOfDay},
+    resources::TimeOfDay,
     terrain::TerrainChunkSize,
     uid::Uid,
     vol::RectVolSize,
@@ -30,7 +30,6 @@ impl<'a> System<'a> for Sys {
     type SystemData = (
         Entities<'a>,
         Read<'a, Tick>,
-        Read<'a, PlayerPhysicsSettings>,
         TrackedStorages<'a>,
         ReadExpect<'a, TimeOfDay>,
         ReadExpect<'a, Calendar>,
@@ -60,7 +59,6 @@ impl<'a> System<'a> for Sys {
         (
             entities,
             tick,
-            player_physics_settings,
             tracked_storages,
             time_of_day,
             calendar,
@@ -88,7 +86,6 @@ impl<'a> System<'a> for Sys {
         let uids = &tracked_storages.uid;
         let colliders = &tracked_storages.collider;
         let inventories = &tracked_storages.inventory;
-        let players = &tracked_storages.player;
         let is_rider = &tracked_storages.is_rider;
 
         // To send entity updates
@@ -241,18 +238,10 @@ impl<'a> System<'a> for Sys {
                     {
                         // Decide how regularly to send physics updates.
                         let send_now = if client_entity == &entity {
-                            let player_physics_setting = players
-                                .get(entity)
-                                .and_then(|p| {
-                                    player_physics_settings.settings.get(&p.uuid()).copied()
-                                })
-                                .unwrap_or_default();
                             // Don't send client physics updates about itself unless force update is
                             // set or the client is subject to
                             // server-authoritative physics
-                            force_update.is_some()
-                                || player_physics_setting.server_authoritative()
-                                || is_rider.get(entity).is_some()
+                            force_update.is_some() || true || is_rider.get(entity).is_some()
                         } else if matches!(collider, Some(Collider::Voxel { .. })) {
                             // Things with a voxel collider (airships, etc.) need to have very
                             // stable physics so we always send updated
