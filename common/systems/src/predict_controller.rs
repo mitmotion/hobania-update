@@ -28,9 +28,20 @@ impl<'a> System<'a> for Sys {
 
     fn run(_job: &mut Job<Self>, (read_data, mut controllers): Self::SystemData) {
         for (entity, _a) in (&read_data.entities, &read_data.remote_controllers).join() {
-            let i = _a.commands().len();
-            let time = Duration::from_secs_f64(read_data.time.0);
-            tracing::warn!(?i, ?time, "foo");
+            let command_len = _a.commands().len();
+            common_base::plot!("predict_available", command_len as f64);
+            common_base::plot!("predict_time", read_data.time.0);
+            let first = _a
+                .commands()
+                .front()
+                .map_or(read_data.time.0 - 1.0, |c| c.source_time().as_secs_f64());
+            let last = _a
+                .commands()
+                .back()
+                .map_or(read_data.time.0 - 1.0, |c| c.source_time().as_secs_f64());
+            common_base::plot!("predict_first", first - read_data.time.0);
+            common_base::plot!("predict_last", last - read_data.time.0);
+
             let _ = controllers
                 .entry(entity)
                 .map(|e| e.or_insert_with(Default::default));

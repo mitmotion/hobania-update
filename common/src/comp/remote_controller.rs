@@ -108,14 +108,15 @@ impl RemoteController {
         if let Some(latency) =
             (server_send_time + self.avg_latency).checked_sub(highest_source_time)
         {
-            tracing::error!(?latency, "ggg");
+            common_base::plot!("latency", latency.as_secs_f64());
             self.avg_latency = (99 * self.avg_latency + latency) / 100;
         } else {
-            // add 5% and 10ms to the latency
+            // add 10% and 20ms to the latency
             self.avg_latency =
-                Duration::from_secs_f64(self.avg_latency.as_secs_f64() * 1.05 + 0.01);
+                Duration::from_secs_f64(self.avg_latency.as_secs_f64() * 1.1 + 0.02);
         }
-        tracing::error!(?highest_source_time, ?self.avg_latency, "aaa");
+        common_base::plot!("avg_latency", self.avg_latency.as_secs_f64());
+        common_base::plot!("highest_source_time", highest_source_time.as_secs_f64());
     }
 
     pub fn commands(&self) -> &ControlCommands { &self.commands }
@@ -251,6 +252,8 @@ impl CommandGenerator {
 
 impl ControlCommand {
     pub fn msg(&self) -> &Controller { &self.msg }
+
+    pub fn source_time(&self) -> Duration { self.source_time }
 }
 
 #[cfg(test)]

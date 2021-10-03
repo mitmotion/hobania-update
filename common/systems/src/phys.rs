@@ -1440,6 +1440,8 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
 
     let mut pos_delta = tgt_pos - pos.0;
 
+    common_base::plot!("z", pos.0.z as f64);
+
     // Don't jump too far at once
     const MAX_INCREMENTS: usize = 100; // The maximum number of collision tests per tick
     let increments = ((pos_delta.map(|e| e.abs()).reduce_partial_max() / 0.3).ceil() as usize)

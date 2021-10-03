@@ -480,6 +480,8 @@ impl PlayState for SessionState {
             // Throw out distance info, it will be useful in the future
             self.target_entity = entity_target.map(|t| t.kind.0);
 
+            common_base::plot!("voxygen_jumps", 0.0);
+
             // Handle window events.
             for event in events {
                 // Pass all events to the ui first.
@@ -583,6 +585,7 @@ impl PlayState for SessionState {
                                 }
                             },
                             GameInput::Jump => {
+                                common_base::plot!("voxygen_jumps", 1.0);
                                 self.client.borrow_mut().handle_input(
                                     InputKind::Jump,
                                     state,
