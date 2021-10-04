@@ -40,7 +40,7 @@ use common::{
     mounting::Rider,
     outcome::Outcome,
     recipe::{ComponentRecipeBook, RecipeBook},
-    resources::{DeltaTime, PlayerEntity, ServerTime, Time, TimeOfDay},
+    resources::{DeltaTime, MonotonicTime, PlayerEntity, Time, TimeOfDay},
     spiral::Spiral2d,
     terrain::{
         block::Block, map::MapConfig, neighbors, BiomeKind, SitesKind, SpriteKind, TerrainChunk,
@@ -1536,9 +1536,9 @@ impl Client {
         // significant changes to this code. Here is the approximate order of
         // things. Please update it as this code changes.
         //
-        // 1) Collect input from the frontend, apply input effects to the state
+        // 1) Handle messages from the server
+        // 2) Collect input from the frontend, apply input effects to the state
         //    of the game
-        // 2) Handle messages from the server
         // 3) Go through any events (timer-driven or otherwise) that need handling
         //    and apply them to the state of the game
         // 4) Perform a single LocalState tick (i.e: update the world and entities
@@ -1549,33 +1549,7 @@ impl Client {
         // 7) Finish the tick, passing actions of the main thread back
         //    to the frontend
 
-        // 1) Handle input from frontend.
-        // Pass character actions from frontend input to the player's entity.
-        if self.presence.is_some() {
-            prof_span!("handle and send inputs");
-            self.next_control.inputs = inputs;
-            let con = std::mem::take(&mut self.next_control);
-            let time = Duration::from_secs_f64(self.state.ecs().read_resource::<Time>().0);
-            let rcon = self.local_command_gen.gen(time, con);
-            let commands = self
-                .state
-                .ecs()
-                .write_storage::<RemoteController>()
-                .entry(self.entity())
-                .map(|rc| {
-                    let rc = rc.or_insert_with(RemoteController::default);
-                    rc.push(rcon);
-                    rc.commands().clone()
-                });
-            match commands {
-                Ok(commands) => self.send_msg_err(ClientGeneral::Control(commands))?,
-                Err(e) => {
-                    error!(?e, "couldn't create RemoteController for own entity");
-                },
-            };
-        }
-
-        // 2) Build up a list of events for this frame, to be passed to the frontend.
+        // 1) Build up a list of events for this frame, to be passed to the frontend.
         let mut frontend_events = Vec::new();
 
         // Prepare for new events
@@ -1605,6 +1579,34 @@ impl Client {
 
         // Handle new messages from the server.
         frontend_events.append(&mut self.handle_new_messages()?);
+
+        // 2) Handle input from frontend.
+        // Pass character actions from frontend input to the player's entity.
+        if self.presence.is_some() {
+            prof_span!("handle and send inputs");
+            self.next_control.inputs = inputs;
+            let con = std::mem::take(&mut self.next_control);
+            let time = Duration::from_secs_f64(self.state.ecs().read_resource::<Time>().0);
+            let monotonic_time =
+                Duration::from_secs_f64(self.state.ecs().read_resource::<MonotonicTime>().0);
+            let rcon = self.local_command_gen.gen(time, con);
+            let commands = self
+                .state
+                .ecs()
+                .write_storage::<RemoteController>()
+                .entry(self.entity())
+                .map(|rc| {
+                    let rc = rc.or_insert_with(RemoteController::default);
+                    rc.push(rcon);
+                    rc.prepare_commands(monotonic_time)
+                });
+            match commands {
+                Ok(commands) => self.send_msg_err(ClientGeneral::Control(commands))?,
+                Err(e) => {
+                    error!(?e, "couldn't create RemoteController for own entity");
+                },
+            };
+        }
 
         // 3) Update client local data
         // Check if the invite has timed out and remove if so
@@ -1992,7 +1994,6 @@ impl Client {
         prof_span!("handle_server_in_game_msg");
         match msg {
             ServerGeneral::TimeSync(time) => {
-                self.state.ecs().write_resource::<ServerTime>().0 = time.0;
                 let dt = self.state.ecs().read_resource::<DeltaTime>().0 as f64;
                 let latency = self
                     .state
@@ -2002,17 +2003,22 @@ impl Client {
                     .map(|rc| rc.avg_latency())
                     .unwrap_or_default();
                 //remove dt as it is applied in state.tick again
-                self.state.ecs().write_resource::<Time>().0 = time.0 + latency.as_secs_f64() - dt;
+                self.state.ecs().write_resource::<Time>().0 = time.0 + latency.as_secs_f64() /* - dt */;
             },
-            ServerGeneral::AckControl(acked_ids, time) => {
+            ServerGeneral::AckControl(acked_ids, _time) => {
                 if let Some(remote_controller) = self
                     .state
                     .ecs()
                     .write_storage::<RemoteController>()
                     .get_mut(self.entity())
                 {
-                    let time = Duration::from_secs_f64(time.0);
-                    remote_controller.acked(acked_ids, time);
+                    // for now ignore the time send by the server as its based on TIME and just use
+                    // MonotonicTime
+                    let monotonic_time = Duration::from_secs_f64(
+                        self.state.ecs().read_resource::<MonotonicTime>().0,
+                    );
+                    //let time = Duration::from_secs_f64(time.0);
+                    remote_controller.acked(acked_ids, monotonic_time);
                     remote_controller.maintain(None);
                 }
             },

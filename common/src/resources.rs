@@ -9,14 +9,17 @@ use specs::Entity;
 pub struct TimeOfDay(pub f64);
 
 /// A resource that stores the tick (i.e: physics) time.
+/// This will jump on the client in order to simulate network predictions
 #[derive(Copy, Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Time(pub f64);
 
-/// A resource that stores the Server-Time, its needed to calculate the input
-/// delay and adjust Time on the client keep in mind that it contains a
-/// network-latency. Only filled on the client
-#[derive(Copy, Clone, Debug, Default, Serialize, Deserialize)]
-pub struct ServerTime(pub f64);
+/// A resource that stores a continuous monotonic time.
+/// It should ONLY EVER be used to be compared to a previous state of
+/// MonotonicTime in order to calculate PING and LATENCIES
+/// DO NOT use it in any game mechanics, use Time or DeltaTime instead
+/// For now this is only needed on the client
+#[derive(Debug, Default)]
+pub struct MonotonicTime(pub f64);
 
 /// A resource that stores the time since the previous tick.
 #[derive(Default)]

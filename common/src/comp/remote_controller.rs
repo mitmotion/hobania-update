@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use specs::Component;
 use specs_idvs::IdvStorage;
 use std::{collections::VecDeque, time::Duration};
+use tracing::warn;
 use vek::Vec3;
 
 pub type ControlCommands = VecDeque<ControlCommand>;
@@ -26,20 +27,23 @@ pub struct RemoteController {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ControlCommand {
     id: u64,
-    source_time: Duration,
+    /// *Time* when Controller should be applied
+    action_time: Duration,
+    /// *ContinuousMonotonicTime* when this msg was first send to remote
+    first_send_monotonic_time: Option<Duration>,
     msg: Controller,
 }
 
 impl RemoteController {
-    /// delte old and outdated( older than server_time) commands
+    /// delete old and outdated( older than server_time) commands
     pub fn maintain(&mut self, server_time: Option<Duration>) {
         self.commands.make_contiguous();
         if let Some(last) = self.commands.back() {
-            let min_allowed_age = last.source_time;
+            let min_allowed_age = last.action_time;
 
             while let Some(first) = self.commands.front() {
-                if first.source_time + self.max_hold < min_allowed_age
-                    || matches!(server_time, Some(x) if first.source_time < x)
+                if first.action_time + self.max_hold < min_allowed_age
+                    || matches!(server_time, Some(x) if first.action_time < x)
                 {
                     self.commands
                         .pop_front()
@@ -59,7 +63,7 @@ impl RemoteController {
         }
         match self
             .commands
-            .binary_search_by_key(&command.source_time, |e| e.source_time)
+            .binary_search_by_key(&command.action_time, |e| e.action_time)
         {
             Ok(_) => None,
             Err(i) => {
@@ -79,7 +83,7 @@ impl RemoteController {
                 // TODO: improve algorithm to move binary search out of loop
                 if let Err(i) = self
                     .commands
-                    .binary_search_by_key(&command.source_time, |e| e.source_time)
+                    .binary_search_by_key(&command.action_time, |e| e.action_time)
                 {
                     result.insert(id);
                     self.existing_commands.insert(id);
@@ -91,32 +95,42 @@ impl RemoteController {
     }
 
     /// arrived at remote and no longer need to be hold locally
-    pub fn acked(&mut self, ids: HashSet<u64>, server_send_time: Duration) {
-        //get latency from oldest removed command and server_send_time
-        let mut highest_source_time = Duration::from_secs(0);
+    pub fn acked(&mut self, ids: HashSet<u64>, monotonic_time: Duration) {
+        // To get the latency we use the LOWEST `first_send_monotonic_time` in this Set.
+        // Why lowest ? Because we want to be STABLE, and if we just use the highest it
+        // wouldn't be enough latency for all (e.g. retransmittion)
+        let mut lowest_monotonic_time = None;
         self.commands.retain(|c| {
             let retain = !ids.contains(&c.id);
-            if !retain && c.source_time > highest_source_time {
-                highest_source_time = c.source_time;
+            if !retain
+                && c.first_send_monotonic_time.map_or(false, |mt| {
+                    mt < lowest_monotonic_time.unwrap_or(monotonic_time)
+                })
+            {
+                lowest_monotonic_time = c.first_send_monotonic_time;
             }
             retain
         });
-        // we add self.avg_latency here as we must assume that highest_source_time was
-        // increased by avg_latency in client TimeSync though we assume that
-        // avg_latency is quite stable and didnt change much between when the component
-        // was added and now
-        if let Some(latency) =
-            (server_send_time + self.avg_latency).checked_sub(highest_source_time)
-        {
-            common_base::plot!("latency", latency.as_secs_f64());
-            self.avg_latency = (99 * self.avg_latency + latency) / 100;
-        } else {
-            // add 10% and 20ms to the latency
-            self.avg_latency =
-                Duration::from_secs_f64(self.avg_latency.as_secs_f64() * 1.1 + 0.02);
+        if let Some(lowest_monotonic_time) = lowest_monotonic_time {
+            if let Some(latency) = monotonic_time.checked_sub(lowest_monotonic_time) {
+                common_base::plot!("latency", latency.as_secs_f64());
+                self.avg_latency = ((99 * self.avg_latency + latency) / 100).max(latency);
+            } else {
+                warn!(
+                    "latency is negative, this should never be the case as this value is not \
+                     synced and monotonic!"
+                );
+            }
         }
         common_base::plot!("avg_latency", self.avg_latency.as_secs_f64());
-        common_base::plot!("highest_source_time", highest_source_time.as_secs_f64());
+    }
+
+    /// prepare commands for sending
+    pub fn prepare_commands(&mut self, monotonic_time: Duration) -> ControlCommands {
+        for c in &mut self.commands {
+            c.first_send_monotonic_time.get_or_insert(monotonic_time);
+        }
+        self.commands.clone()
     }
 
     pub fn commands(&self) -> &ControlCommands { &self.commands }
@@ -134,7 +148,7 @@ impl RemoteController {
         // compressing 0.8s - 1.2s should lead to index 0-1
         let start_i = match self
             .commands
-            .binary_search_by_key(&start, |e| e.source_time)
+            .binary_search_by_key(&start, |e| e.action_time)
         {
             Ok(i) => i,
             Err(0) => 0,
@@ -142,7 +156,7 @@ impl RemoteController {
         };
         let end_exclusive_i = match self
             .commands
-            .binary_search_by_key(&(start + dt), |e| e.source_time)
+            .binary_search_by_key(&(start + dt), |e| e.action_time)
         {
             Ok(i) => i,
             Err(i) => i,
@@ -160,9 +174,9 @@ impl RemoteController {
         let mut last_start = start;
         for i in start_i..end_exclusive_i {
             let e = &self.commands[i];
-            let local_start = e.source_time.max(last_start);
+            let local_start = e.action_time.max(last_start);
             let local_end = if let Some(e) = self.commands.get(i + 1) {
-                e.source_time.min(start + dt)
+                e.action_time.min(start + dt)
             } else {
                 start + dt
             };
@@ -181,7 +195,7 @@ impl RemoteController {
             // we apply events from all that are started here.
             // if we only are part of 1 tick here we would assume that it was already
             // covered before
-            if i != start_i || e.source_time >= start {
+            if i != start_i || e.action_time >= start {
                 result.actions.append(&mut e.msg.actions.clone());
                 result.events.append(&mut e.msg.events.clone());
                 result
@@ -225,7 +239,7 @@ impl Default for RemoteController {
             commands: VecDeque::new(),
             existing_commands: HashSet::new(),
             max_hold: Duration::from_secs(1),
-            avg_latency: Duration::from_millis(300),
+            avg_latency: Duration::from_millis(50),
         }
     }
 }
@@ -240,10 +254,11 @@ pub struct CommandGenerator {
 }
 
 impl CommandGenerator {
-    pub fn gen(&mut self, time: Duration, msg: Controller) -> ControlCommand {
+    pub fn gen(&mut self, action_time: Duration, msg: Controller) -> ControlCommand {
         self.id += 1;
         ControlCommand {
-            source_time: time,
+            action_time,
+            first_send_monotonic_time: None,
             id: self.id,
             msg,
         }
@@ -253,7 +268,7 @@ impl CommandGenerator {
 impl ControlCommand {
     pub fn msg(&self) -> &Controller { &self.msg }
 
-    pub fn source_time(&self) -> Duration { self.source_time }
+    pub fn source_time(&self) -> Duration { self.action_time }
 }
 
 #[cfg(test)]
@@ -263,7 +278,6 @@ mod tests {
         comp,
         comp::{Climb, ControllerInputs},
     };
-    use std::collections::BTreeMap;
     use vek::{Vec2, Vec3};
 
     const INCREASE: Duration = Duration::from_millis(33);
@@ -359,12 +373,12 @@ mod tests {
         assert_eq!(list.commands[0].id, 1);
         assert_eq!(list.push(data[4].clone()), Some(5));
         assert_eq!(list.commands.len(), 5);
-        list.maintain();
+        list.maintain(None);
         assert_eq!(list.commands.len(), 4);
         assert_eq!(list.commands[0].id, 2);
         assert_eq!(list.push(data[5].clone()), Some(6));
         assert_eq!(list.commands.len(), 5);
-        list.maintain();
+        list.maintain(None);
         assert_eq!(list.commands.len(), 4);
         assert_eq!(list.commands[0].id, 3);
         assert_eq!(list.commands[1].id, 4);
@@ -384,7 +398,7 @@ mod tests {
         let mut to_export = list.commands().iter().map(|e| e.id).collect::<HashSet<_>>();
         // damange one entry
         to_export.remove(&3);
-        list.acked(to_export);
+        list.acked(to_export, Duration::from_secs(6));
         assert_eq!(list.push(data[5].clone()), Some(6));
         assert_eq!(list.push(data[6].clone()), Some(7));
         println!("asd{:?}", &list);
@@ -426,9 +440,14 @@ mod tests {
                 look_dir: Dir::new(Vec3::new(0.0, 1.0, 0.0)),
                 strafing: false,
             },
-            queued_inputs: BTreeMap::new(),
-            events: Vec::new(),
-            actions: Vec::new(),
+            queued_inputs: vec!((comp::InputKind::Jump, comp::InputAttr {
+                select_pos: None,
+                target_entity: None
+            }))
+            .into_iter()
+            .collect(),
+            events: vec!(comp::ControlEvent::EnableLantern),
+            actions: vec!(),
         });
     }
 
@@ -453,6 +472,19 @@ mod tests {
         assert_eq!(compressed.inputs, ControllerInputs {
             move_dir: Vec2::new(0.4, 0.2),
             move_z: 2.0,
+            ..ControllerInputs::default()
+        });
+    }
+
+    #[test]
+    fn compress_last_input_afterwards() {
+        let data = generate_control_cmds(4);
+        let mut list = RemoteController::default();
+        list.append(data);
+        let compressed = list.compress(10 * INCREASE, 2 * INCREASE).unwrap();
+        assert_eq!(compressed.inputs, ControllerInputs {
+            move_dir: Vec2::new(0.6, 0.3),
+            move_z: 3.0,
             ..ControllerInputs::default()
         });
     }

@@ -13,7 +13,7 @@ use common::{
     outcome::Outcome,
     region::RegionMap,
     resources::{
-        DeltaTime, EntitiesDiedLastTick, GameMode, PlayerEntity, ServerTime, Time, TimeOfDay,
+        DeltaTime, EntitiesDiedLastTick, GameMode, MonotonicTime, PlayerEntity, Time, TimeOfDay,
     },
     slowjob::SlowJobPool,
     terrain::{Block, TerrainChunk, TerrainGrid},
@@ -209,7 +209,7 @@ impl State {
 
         // Register unsynced resources used by the ECS.
         ecs.insert(Time(0.0));
-        ecs.insert(ServerTime(0.0)); //synced by msg
+        ecs.insert(MonotonicTime(0.0));
         ecs.insert(DeltaTime(0.0));
         ecs.insert(PlayerEntity(None));
         ecs.insert(TerrainGrid::new().unwrap());
@@ -495,6 +495,7 @@ impl State {
         // Change the time accordingly.
         self.ecs.write_resource::<TimeOfDay>().0 += dt.as_secs_f64() * DAY_CYCLE_FACTOR;
         self.ecs.write_resource::<Time>().0 += dt.as_secs_f64();
+        self.ecs.write_resource::<MonotonicTime>().0 += dt.as_secs_f64();
 
         // Update delta time.
         // Beyond a delta time of MAX_DELTA_TIME, start lagging to avoid skipping
