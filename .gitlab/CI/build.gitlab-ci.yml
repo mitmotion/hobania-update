@@ -36,7 +36,7 @@ benchmarks:
   extends: .release
   stage: build
   image: registry.gitlab.com/veloren/veloren-docker-ci/cache/bench:${CACHE_IMAGE_TAG}
-  tags: ["veloren/veloren", "check", "benchmark"]
+  tags: ["time-test"]
   script:
     - unset DISABLE_GIT_LFS_CHECK
     - ln -s /dockercache/target target
