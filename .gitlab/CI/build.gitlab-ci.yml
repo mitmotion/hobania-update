@@ -33,8 +33,8 @@ translation:
     max: 2
 
 benchmarks:
-  extends: .release
-  stage: build
+  extends: .recompile-branch
+  stage: check
   image: registry.gitlab.com/veloren/veloren-docker-ci/cache/bench:${CACHE_IMAGE_TAG}
   tags: ["time-test"]
   script:
@@ -42,14 +42,6 @@ benchmarks:
     - ln -s /dockercache/target target
     - cat ./.gitlab/scripts/benchmark.sh
     - source ./.gitlab/scripts/benchmark.sh
-    - TAGUUID="Z$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1)" || echo "ignore this returncode, dont ask me why, it works"
-    - echo $TAGUUID # Use TAGUUID to mitigate https://xkcd.com/327/ in the branch name
-    - echo 'SET veloren.timestamp = "'"$(git show --no-patch --no-notes --pretty='%cd' HEAD)"'";' > upload.sql
-    - echo "SET veloren.branch = \$${TAGUUID}\$${CI_COMMIT_REF_NAME}\$${TAGUUID}\$;" >> upload.sql
-    - echo "SET veloren.sha = \$${TAGUUID}\$${CI_COMMIT_SHA}\$${TAGUUID}\$;" >> upload.sql
-    - find target/criterion -wholename "*new/*.csv" -exec echo '\copy benchmarks ("group", "function", "value", throughput_num, throughput_type, sample_measured_value, unit, iteration_count) from '"'{}' csv header" >> upload.sql \;
-    - cat upload.sql
-    - PGPASSWORD="${CIDBPASSWORD}" PGSSLROOTCERT="./.gitlab/ci-db.crt" psql "sslmode=verify-ca host=grafana.veloren.net port=15432 dbname=benchmarks" -U hgseehzjtsrghtjdcqw -f upload.sql;
   retry:
     max: 2
 
