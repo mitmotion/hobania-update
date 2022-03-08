@@ -5,7 +5,6 @@ use specs::Component;
 use specs_idvs::IdvStorage;
 use std::{collections::VecDeque, time::Duration};
 use tracing::warn;
-use vek::Vec3;
 
 pub type ControlCommands = VecDeque<ControlCommand>;
 
@@ -165,7 +164,7 @@ impl RemoteController {
             return None;
         }
         let mut result = Controller::default();
-        let mut look_dir = Vec3::zero();
+        let mut look_dir = result.inputs.look_dir.to_vec();
         //if self.commands[start_i].source_time
         // Inputs are averaged over all elements by time
         // Queued Inputs are just added
@@ -183,8 +182,7 @@ impl RemoteController {
             let local_dur = local_end - local_start;
             result.inputs.move_dir += e.msg.inputs.move_dir * local_dur.as_secs_f32();
             result.inputs.move_z += e.msg.inputs.move_z * local_dur.as_secs_f32();
-            look_dir = result.inputs.look_dir.to_vec()
-                + e.msg.inputs.look_dir.to_vec() * local_dur.as_secs_f32();
+            look_dir = look_dir + e.msg.inputs.look_dir.to_vec() * local_dur.as_secs_f32();
             //TODO: manually combine 70% up and 30% down to UP
             result.inputs.climb = result.inputs.climb.or(e.msg.inputs.climb);
             result.inputs.break_block_pos = result
@@ -231,6 +229,11 @@ impl RemoteController {
     /// server->client and assume that this is also true for client->server
     /// latency
     pub fn avg_latency(&self) -> Duration { self.avg_latency }
+
+    pub fn simulate_ahead(&self) -> Duration {
+        const FIXED_OFFSET: Duration = Duration::from_millis(50);
+        self.avg_latency() + FIXED_OFFSET
+    }
 }
 
 impl Default for RemoteController {

@@ -240,6 +240,7 @@ widget_ids! {
         debug_bg,
         fps_counter,
         ping,
+        simulate_ahead,
         coordinates,
         velocity,
         glide_ratio,
@@ -473,6 +474,7 @@ pub struct DebugInfo {
     pub tps: f64,
     pub frame_time: Duration,
     pub ping_ms: f64,
+    pub simulate_ahead: f64,
     pub coordinates: Option<comp::Pos>,
     pub velocity: Option<comp::Vel>,
     pub ori: Option<comp::Ori>,
@@ -2367,6 +2369,16 @@ impl Hud {
                 .font_id(self.fonts.cyri.conrod_id)
                 .font_size(self.fonts.cyri.scale(14))
                 .set(self.ids.ping, ui_widgets);
+            // Simulate Ahead timing
+            Text::new(&format!(
+                "Simulate Ahead: {:.0}ms",
+                debug_info.simulate_ahead * 1000.0
+            ))
+            .color(TEXT_COLOR)
+            .down_from(self.ids.ping, V_PAD)
+            .font_id(self.fonts.cyri.conrod_id)
+            .font_size(self.fonts.cyri.scale(14))
+            .set(self.ids.simulate_ahead, ui_widgets);
             // Player's position
             let coordinates_text = match debug_info.coordinates {
                 Some(coordinates) => format!(
@@ -2377,7 +2389,7 @@ impl Hud {
             };
             Text::new(&coordinates_text)
                 .color(TEXT_COLOR)
-                .down_from(self.ids.ping, V_PAD)
+                .down_from(self.ids.simulate_ahead, V_PAD)
                 .font_id(self.fonts.cyri.conrod_id)
                 .font_size(self.fonts.cyri.scale(14))
                 .set(self.ids.coordinates, ui_widgets);

@@ -901,6 +901,7 @@ pub fn handle_jump(
     _update: &mut StateUpdate,
     strength: f32,
 ) -> bool {
+    common_base::plot!("jumps", 0.0);
     (input_is_pressed(data, InputKind::Jump) && data.physics.on_ground.is_some())
         .then(|| data.body.jump_impulse())
         .flatten()
@@ -909,6 +910,7 @@ pub fn handle_jump(
                 data.entity,
                 strength * impulse / data.mass.0 * data.stats.move_speed_modifier,
             ));
+            common_base::plot!("jumps", 1.0);
         })
         .is_some()
 }

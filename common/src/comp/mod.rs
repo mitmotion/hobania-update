@@ -107,7 +107,7 @@ pub use self::{
     player::{AliasError, Player, MAX_ALIAS_LEN},
     poise::{Poise, PoiseChange, PoiseState},
     projectile::{Projectile, ProjectileConstructor},
-    remote_controller::{CommandGenerator, ControlCommands, RemoteController},
+    remote_controller::{CommandGenerator, ControlCommand, ControlCommands, RemoteController},
     shockwave::{Shockwave, ShockwaveHitEntities},
     skillset::{
         skills::{self, Skill},

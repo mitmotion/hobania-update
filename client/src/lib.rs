@@ -1586,7 +1586,7 @@ impl Client {
             prof_span!("handle and send inputs");
             self.next_control.inputs = inputs;
             let con = std::mem::take(&mut self.next_control);
-            let time = Duration::from_secs_f64(self.state.ecs().read_resource::<Time>().0);
+            let time = Duration::from_secs_f64(self.state.ecs().read_resource::<Time>().0) + dt;
             let monotonic_time =
                 Duration::from_secs_f64(self.state.ecs().read_resource::<MonotonicTime>().0);
             let rcon = self.local_command_gen.gen(time, con);
@@ -1600,6 +1600,7 @@ impl Client {
                     rc.push(rcon);
                     rc.prepare_commands(monotonic_time)
                 });
+
             match commands {
                 Ok(commands) => self.send_msg_err(ClientGeneral::Control(commands))?,
                 Err(e) => {
@@ -1995,15 +1996,16 @@ impl Client {
         match msg {
             ServerGeneral::TimeSync(time) => {
                 let dt = self.state.ecs().read_resource::<DeltaTime>().0 as f64;
-                let latency = self
+                let simulate_ahead = self
                     .state
                     .ecs()
                     .read_storage::<RemoteController>()
                     .get(self.entity())
-                    .map(|rc| rc.avg_latency())
+                    .map(|rc| rc.simulate_ahead())
                     .unwrap_or_default();
                 //remove dt as it is applied in state.tick again
-                self.state.ecs().write_resource::<Time>().0 = time.0 + latency.as_secs_f64() /* - dt */;
+                self.state.ecs().write_resource::<Time>().0 =
+                    time.0 + simulate_ahead.as_secs_f64() - dt;
             },
             ServerGeneral::AckControl(acked_ids, _time) => {
                 if let Some(remote_controller) = self
