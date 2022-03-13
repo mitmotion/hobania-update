@@ -40,7 +40,7 @@ use common::{
     mounting::Rider,
     outcome::Outcome,
     recipe::{ComponentRecipeBook, RecipeBook},
-    resources::{DeltaTime, MonotonicTime, PlayerEntity, Time, TimeOfDay},
+    resources::{MonotonicTime, PlayerEntity, Time, TimeOfDay},
     spiral::Spiral2d,
     terrain::{
         block::Block, map::MapConfig, neighbors, BiomeKind, SitesKind, SpriteKind, TerrainChunk,
@@ -64,7 +64,7 @@ use common_net::{
     sync::WorldSyncExt,
 };
 use common_state::State;
-use common_systems::add_local_systems;
+use common_systems::{add_local_systems, add_rewind_systems};
 use comp::BuffKind;
 use hashbrown::{HashMap, HashSet};
 use image::DynamicImage;
@@ -182,6 +182,7 @@ pub struct Client {
 
     local_command_gen: CommandGenerator,
     next_control: Controller,
+    inter_tick_rewind_time: Option<Duration>,
 
     network: Option<Network>,
     participant: Option<Participant>,
@@ -641,6 +642,7 @@ impl Client {
 
             local_command_gen: CommandGenerator::default(),
             next_control: Controller::default(),
+            inter_tick_rewind_time: None,
 
             network: Some(network),
             participant: Some(participant),
@@ -1551,6 +1553,7 @@ impl Client {
 
         // 1) Build up a list of events for this frame, to be passed to the frontend.
         let mut frontend_events = Vec::new();
+        self.inter_tick_rewind_time = None;
 
         // Prepare for new events
         {
@@ -1579,6 +1582,36 @@ impl Client {
 
         // Handle new messages from the server.
         frontend_events.append(&mut self.handle_new_messages()?);
+
+        // Simulate Ahead
+        if let Some(_rewind_time) = self.inter_tick_rewind_time {
+            let _time = self.state.ecs().read_resource::<Time>().0 as f64;
+            let simulate_ahead = self
+                .state
+                .ecs()
+                .read_storage::<RemoteController>()
+                .get(self.entity())
+                .map(|rc| rc.simulate_ahead())
+                .unwrap_or_default();
+            let simulate_ahead = simulate_ahead.max(dt) - dt;
+            tracing::warn!(?simulate_ahead, ?dt, "simulating ahead again");
+            self.state.rewind_tick(
+                simulate_ahead.max(dt) - dt,
+                |dispatch_builder| {
+                    add_rewind_systems(dispatch_builder);
+                },
+                false,
+            );
+        }
+
+        self.state.tick(
+            dt,
+            |dispatch_builder| {
+                add_local_systems(dispatch_builder);
+                add_foreign_systems(dispatch_builder);
+            },
+            true,
+        );
 
         // 2) Handle input from frontend.
         // Pass character actions from frontend input to the player's entity.
@@ -1995,17 +2028,17 @@ impl Client {
         prof_span!("handle_server_in_game_msg");
         match msg {
             ServerGeneral::TimeSync(time) => {
-                let dt = self.state.ecs().read_resource::<DeltaTime>().0 as f64;
-                let simulate_ahead = self
-                    .state
-                    .ecs()
-                    .read_storage::<RemoteController>()
-                    .get(self.entity())
-                    .map(|rc| rc.simulate_ahead())
-                    .unwrap_or_default();
-                //remove dt as it is applied in state.tick again
-                self.state.ecs().write_resource::<Time>().0 =
-                    time.0 + simulate_ahead.as_secs_f64() - dt;
+                let old_time = self.state.ecs().read_resource::<Time>().0;
+                let diff = old_time - time.0;
+                self.state.ecs().write_resource::<Time>().0 = time.0;
+                if diff > 0.0 {
+                    tracing::warn!(?old_time, ?diff, "Time was reverted by server");
+                    let rewind_time = self.inter_tick_rewind_time.unwrap_or_default()
+                        + Duration::from_secs_f64(diff);
+                    self.inter_tick_rewind_time = Some(rewind_time);
+                } else {
+                    tracing::warn!(?old_time, ?diff, "Time was advanced by server");
+                }
             },
             ServerGeneral::AckControl(acked_ids, _time) => {
                 if let Some(remote_controller) = self

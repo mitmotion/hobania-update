@@ -484,6 +484,28 @@ impl State {
         self.ecs.write_resource::<TerrainChanges>().modified_blocks = modified_blocks;
     }
 
+    /// Rewind local changes after the server send some old state
+    pub fn rewind_tick(
+        &mut self,
+        simulate_ahead: Duration,
+        add_systems: impl Fn(&mut DispatcherBuilder),
+        update_terrain_and_regions: bool,
+    ) {
+        let time_of_day = self.ecs.read_resource::<TimeOfDay>().0;
+        let _time = self.ecs.read_resource::<Time>().0;
+        let monotonic_time = self.ecs.read_resource::<MonotonicTime>().0;
+        let delta_time = self.ecs.read_resource::<DeltaTime>().0;
+
+        self.tick(simulate_ahead, add_systems, update_terrain_and_regions);
+
+        // rewind changes
+
+        self.ecs.write_resource::<TimeOfDay>().0 = time_of_day;
+        //self.ecs.write_resource::<Time>().0 = time;
+        self.ecs.write_resource::<MonotonicTime>().0 = monotonic_time;
+        self.ecs.write_resource::<DeltaTime>().0 = delta_time;
+    }
+
     /// Execute a single tick, simulating the game state by the given duration.
     pub fn tick(
         &mut self,
