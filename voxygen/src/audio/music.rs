@@ -48,6 +48,7 @@ use client::Client;
 use common::{
     assets::{self, AssetExt, AssetHandle},
     terrain::{BiomeKind, SitesKind},
+    comp::Pos
 };
 use common_state::State;
 use hashbrown::HashMap;
@@ -155,6 +156,8 @@ pub struct MusicMgr {
     last_interrupt: Instant,
     /// The previous track's activity kind, for transitions
     last_activity: MusicState,
+    last_player_pos: Pos,
+    player_travel_distance: f32
 }
 
 #[derive(Deserialize)]
@@ -202,6 +205,8 @@ impl Default for MusicMgr {
             last_track: String::from("None"),
             last_interrupt: Instant::now(),
             last_activity: MusicState::Activity(MusicActivity::Explore),
+            last_player_pos: Pos::default(),
+            player_travel_distance: 100.0
         }
     }
 }
@@ -222,7 +227,7 @@ impl MusicMgr {
         //    player_alt = position.0.z;
         //}
 
-        use common::comp::{group::ENEMY, Group, Health, Pos};
+        use common::comp::{group::ENEMY, Group, Health};
         use specs::{Join, WorldExt};
 
         let mut activity_state = MusicActivity::Explore;
@@ -279,6 +284,17 @@ impl MusicMgr {
             MusicState::Transition(_, next) => MusicState::Activity(next),
         };
 
+        let mut interrupt_tp = false;
+        if let Some(player_pos) = positions.get(player) {
+            if (player_pos.0 - self.last_player_pos.0).magnitude_squared() > self.player_travel_distance.powi(2) {
+                println!("Need to stop music!!!!!!");
+                interrupt_tp = true;
+            }
+            self.last_player_pos = *player_pos;
+        }
+
+
+
         // TODO: Instead of a constant tick, make this a timer that starts only when
         // combat might end, providing a proper "buffer".
         let interrupt = matches!(music_state, MusicState::Transition(_, _))
@@ -286,9 +302,9 @@ impl MusicMgr {
 
         if audio.music_enabled()
             && !self.soundtrack.read().tracks.is_empty()
-            && (self.began_playing.elapsed().as_secs_f32() > self.next_track_change || interrupt)
+            && (self.began_playing.elapsed().as_secs_f32() > self.next_track_change || interrupt || interrupt_tp)
         {
-            if interrupt {
+            if interrupt || interrupt_tp {
                 self.last_interrupt = Instant::now();
             }
             trace!(
