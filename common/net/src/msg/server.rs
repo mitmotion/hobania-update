@@ -140,7 +140,14 @@ pub enum ServerGeneral {
     CharacterSuccess,
     //Ingame related
     TimeSync(Time),
-    AckControl(HashSet<u64>, Time),
+    AckControl {
+        acked_ids: HashSet<u64>,
+        /// measured by the time the furthest command to become active <>
+        /// current server time
+        highest_ahead_command: f64,
+        /// number of predicts available at the server
+        predict_available: usize,
+    },
     GroupUpdate(comp::group::ChangeNotification<sync::Uid>),
     /// Indicate to the client that they are invited to join a group
     Invite {
@@ -296,7 +303,7 @@ impl ServerMsg {
                         //Ingame related
                         ServerGeneral::GroupUpdate(_)
                         | ServerGeneral::TimeSync(_)
-                        | ServerGeneral::AckControl(_, _)
+                        | ServerGeneral::AckControl { .. }
                         | ServerGeneral::Invite { .. }
                         | ServerGeneral::InvitePending(_)
                         | ServerGeneral::InviteComplete { .. }

@@ -488,15 +488,24 @@ impl State {
     pub fn rewind_tick(
         &mut self,
         simulate_ahead: Duration,
-        add_systems: impl Fn(&mut DispatcherBuilder),
+        add_systems: impl Fn(&mut DispatcherBuilder) + Clone,
         update_terrain_and_regions: bool,
     ) {
+        common_base::plot!("simulate_ahead", simulate_ahead.as_secs_f64());
         let time_of_day = self.ecs.read_resource::<TimeOfDay>().0;
         let _time = self.ecs.read_resource::<Time>().0;
         let monotonic_time = self.ecs.read_resource::<MonotonicTime>().0;
         let delta_time = self.ecs.read_resource::<DeltaTime>().0;
 
-        self.tick(simulate_ahead, add_systems, update_terrain_and_regions);
+        const MAX_INCREMENTS: usize = 100; // The maximum number of collision tests per tick
+        const STEP_SEC: f64 = 0.1;
+        let increments =
+            ((simulate_ahead.as_secs_f64() / STEP_SEC).ceil() as usize).clamped(1, MAX_INCREMENTS);
+        for _i in 0..increments {
+            //tracing::trace!(?i, ?increments, "subtick");
+            let partial = simulate_ahead / (increments as u32);
+            self.tick(partial, add_systems.clone(), update_terrain_and_regions);
+        }
 
         // rewind changes
 
@@ -522,7 +531,7 @@ impl State {
         // Update delta time.
         // Beyond a delta time of MAX_DELTA_TIME, start lagging to avoid skipping
         // important physics events.
-        self.ecs.write_resource::<DeltaTime>().0 = dt.as_secs_f32().min(MAX_DELTA_TIME);
+        self.ecs.write_resource::<DeltaTime>().0 = dt.as_secs_f32(); //.min(MAX_DELTA_TIME);
 
         if update_terrain_and_regions {
             self.update_region_map();

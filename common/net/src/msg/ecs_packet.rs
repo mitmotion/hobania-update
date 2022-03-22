@@ -49,13 +49,13 @@ macro_rules! comp_packet {
                         sync::handle_insert(comp, entity, world);
                     },)*
                     Self::Pos(comp) => {
-                        sync::handle_interp_insert(comp, entity, world, force_update)
+                        sync::handle_interp_insert(comp, entity, world, true)
                     },
                     Self::Vel(comp) => {
-                        sync::handle_interp_insert(comp, entity, world, force_update)
+                        sync::handle_interp_insert(comp, entity, world, true)
                     },
                     Self::Ori(comp) => {
-                        sync::handle_interp_insert(comp, entity, world, force_update)
+                        sync::handle_interp_insert(comp, entity, world, true)
                     },
                 }
             }
@@ -67,13 +67,13 @@ macro_rules! comp_packet {
                         sync::handle_modify(comp, entity, world);
                     },)*
                     Self::Pos(comp) => {
-                        sync::handle_interp_modify(comp, entity, world, force_update)
+                        sync::handle_interp_modify(comp, entity, world, true)
                     },
                     Self::Vel(comp) => {
-                        sync::handle_interp_modify(comp, entity, world, force_update)
+                        sync::handle_interp_modify(comp, entity, world, true)
                     },
                     Self::Ori(comp) => {
-                        sync::handle_interp_modify(comp, entity, world, force_update)
+                        sync::handle_interp_modify(comp, entity, world, true)
                     },
                 }
             }

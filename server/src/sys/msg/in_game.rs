@@ -76,10 +76,20 @@ impl Sys {
                         .entry(entity)
                         .map(|e| e.or_insert_with(Default::default))
                     {
-                        let ids = remote_controller.append(rc);
-                        remote_controller.maintain(Some(Duration::from_secs_f64(time.0)));
-                        // confirm controls
-                        client.send(ServerGeneral::AckControl(ids, *time))?;
+                        let highest_action_time = rc.iter().map(|rc| rc.source_time()).max().unwrap_or_default();
+                        if rc.is_empty() {
+                            tracing::warn!("client send a empty ClientGeneral::Control msg");
+                        } else {
+                            let acked_ids = remote_controller.append(rc);
+                            remote_controller.maintain(Some(Duration::from_secs_f64(time.0)));
+                            let highest_ahead_command = highest_action_time.as_secs_f64()-time.0;
+                            let predict_available = remote_controller.commands().len();
+                            client.send(ServerGeneral::AckControl{
+                                acked_ids,
+                                highest_ahead_command,
+                                predict_available
+                            })?;
+                        }
                         //Todo: FIXME!!!
                         /*
                                                             // Skip respawn if client entity is alive

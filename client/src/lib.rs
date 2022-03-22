@@ -31,7 +31,7 @@ use common::{
         slot::{EquipSlot, InvSlotId, Slot},
         CharacterState, ChatMode, CommandGenerator, ControlAction, ControlEvent, Controller,
         ControllerInputs, GroupManip, InputKind, InventoryAction, InventoryEvent,
-        InventoryUpdateEvent, MapMarkerChange, RemoteController, UtteranceKind,
+        InventoryUpdateEvent, MapMarkerChange, RemoteController, UtteranceKind, Vel,
     },
     event::{EventBus, LocalEvent},
     grid::Grid,
@@ -183,6 +183,7 @@ pub struct Client {
     local_command_gen: CommandGenerator,
     next_control: Controller,
     inter_tick_rewind_time: Option<Duration>,
+    _rewind_fluctuation_budget: f64,
 
     network: Option<Network>,
     participant: Option<Participant>,
@@ -643,6 +644,7 @@ impl Client {
             local_command_gen: CommandGenerator::default(),
             next_control: Controller::default(),
             inter_tick_rewind_time: None,
+            _rewind_fluctuation_budget: 0.0,
 
             network: Some(network),
             participant: Some(participant),
@@ -1584,7 +1586,9 @@ impl Client {
         frontend_events.append(&mut self.handle_new_messages()?);
 
         // Simulate Ahead
-        if let Some(_rewind_time) = self.inter_tick_rewind_time {
+        common_base::plot!("recived_time_sync", 0.0);
+        if let Some(rewind_time) = self.inter_tick_rewind_time {
+            common_base::plot!("recived_time_sync", 1.0);
             let _time = self.state.ecs().read_resource::<Time>().0 as f64;
             let simulate_ahead = self
                 .state
@@ -1593,10 +1597,49 @@ impl Client {
                 .get(self.entity())
                 .map(|rc| rc.simulate_ahead())
                 .unwrap_or_default();
+            // We substract `dt` here, as otherwise we
+            // Tick1: server_time=100ms dt=60ms ping=30 simulate_ahead=130ms,
+            // rewind_tick=130ms end_tick=100+130+60=290
+            // Tick2: server_time=130ms dt=30ms ping=30 simulate_ahead=130ms,
+            // rewind_tick=130ms end_tick=130+130+30=290
+            // Tick3: server_time=160ms dt=60ms ping=30 simulate_ahead=130ms,
+            // rewind_tick=130ms end_tick=160+130+60=350 with dt substraction
+            // Tick1: server_time=100ms dt=60ms ping=30 simulate_ahead=130ms,
+            // rewind_tick=70ms end_tick=100+70+60=230 Tick2: server_time=130ms
+            // dt=30ms ping=30 simulate_ahead=130ms, rewind_tick=100ms
+            // end_tick=130+100+30=260 Tick3: server_time=160ms dt=60ms ping=30
+            // simulate_ahead=130ms, rewind_tick=70ms end_tick=160+70+60=290
             let simulate_ahead = simulate_ahead.max(dt) - dt;
+            // measurements lead to the effect that smooth_diff is == 0.0 when we add 2
+            // server ticks here.
+            let simulate_ahead = simulate_ahead + Duration::from_secs_f64(1.0 / 30.0);
+
+            let _strict_end_tick_time =
+                simulate_ahead.as_secs_f64() + /*simulated dt of this tick*/dt.as_secs_f64();
+
+            // Simulate_ahead still fluctionates because Server Tick != Client Tick, and we
+            // cant control the phase in which the sync happens.
+            // In order to dampen it, we calculate the smooth_time and make sure to not
+            // derive to much from it
+            let smooth_diff = simulate_ahead.as_secs_f64() - rewind_time.as_secs_f64();
+
+            //const WARP_PERCENT: f64 = 0.05; // make sure we end up not further than 5%
+            // from the estimated tick let warp_budget
+            let simulate_ahead = if smooth_diff / dt.as_secs_f64() > 0.05 {
+                // use
+                simulate_ahead
+            } else {
+                simulate_ahead
+            };
+
+            common_base::plot!("smooth_diff", smooth_diff);
+
+            //let simulate_ahead = simulate_ahead.max(dt)/* - dt*/;
+            //let simulate_ahead = rewind_time.min(simulate_ahead);
             tracing::warn!(?simulate_ahead, ?dt, "simulating ahead again");
+            common_base::plot!("rewind_time", rewind_time.as_secs_f64());
             self.state.rewind_tick(
-                simulate_ahead.max(dt) - dt,
+                simulate_ahead,
                 |dispatch_builder| {
                     add_rewind_systems(dispatch_builder);
                 },
@@ -1604,6 +1647,7 @@ impl Client {
             );
         }
 
+        common_base::plot!("dt", dt.as_secs_f64());
         self.state.tick(
             dt,
             |dispatch_builder| {
@@ -1612,6 +1656,29 @@ impl Client {
             },
             true,
         );
+        let time = self.state.ecs().read_resource::<Time>().0;
+        common_base::plot!("tick_afterwards", time);
+        let vel = self
+            .state
+            .ecs()
+            .read_storage::<Vel>()
+            .get(self.entity())
+            .cloned()
+            .unwrap_or(Vel(Vec3::zero()));
+
+        common_base::plot!("vel_x_after", vel.0.x as f64);
+        common_base::plot!("vel_y_after", vel.0.y as f64);
+        let pos = self
+            .state
+            .ecs()
+            .read_storage::<common::comp::Pos>()
+            .get(self.entity())
+            .cloned()
+            .unwrap_or(common::comp::Pos(Vec3::zero()));
+
+        common_base::plot!("pos_x_after", pos.0.x as f64);
+        common_base::plot!("pos_y_after", pos.0.y as f64);
+        common_base::plot!("pos_z_after", pos.0.z as f64);
 
         // 2) Handle input from frontend.
         // Pass character actions from frontend input to the player's entity.
@@ -2028,6 +2095,8 @@ impl Client {
         prof_span!("handle_server_in_game_msg");
         match msg {
             ServerGeneral::TimeSync(time) => {
+                // Even with a stable network, expect time to oscillate around the actual time
+                // by SERVER_TICK (33.3ms)
                 let old_time = self.state.ecs().read_resource::<Time>().0;
                 let diff = old_time - time.0;
                 self.state.ecs().write_resource::<Time>().0 = time.0;
@@ -2040,20 +2109,28 @@ impl Client {
                     tracing::warn!(?old_time, ?diff, "Time was advanced by server");
                 }
             },
-            ServerGeneral::AckControl(acked_ids, _time) => {
+
+            ServerGeneral::AckControl {
+                acked_ids,
+                highest_ahead_command,
+                predict_available,
+            } => {
                 if let Some(remote_controller) = self
                     .state
                     .ecs()
                     .write_storage::<RemoteController>()
                     .get_mut(self.entity())
                 {
+                    common_base::plot!("server_predict_available", predict_available as f64);
+                    common_base::plot!("highest_ahead_command2", highest_ahead_command);
+
                     // for now ignore the time send by the server as its based on TIME and just use
                     // MonotonicTime
                     let monotonic_time = Duration::from_secs_f64(
                         self.state.ecs().read_resource::<MonotonicTime>().0,
                     );
                     //let time = Duration::from_secs_f64(time.0);
-                    remote_controller.acked(acked_ids, monotonic_time);
+                    remote_controller.acked(acked_ids, monotonic_time, highest_ahead_command);
                     remote_controller.maintain(None);
                 }
             },

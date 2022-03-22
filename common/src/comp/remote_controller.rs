@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use specs::Component;
 use specs_idvs::IdvStorage;
 use std::{collections::VecDeque, time::Duration};
-use tracing::warn;
 
 pub type ControlCommands = VecDeque<ControlCommand>;
 
@@ -30,6 +29,10 @@ pub struct ControlCommand {
     action_time: Duration,
     /// *ContinuousMonotonicTime* when this msg was first send to remote
     first_send_monotonic_time: Option<Duration>,
+    /// action_time - *Time* when this msg was first send to remote
+    first_send_simulate_ahead_time: Option<f64>,
+    /// *ContinuousMonotonicTime* when this msg was first acked by remote
+    first_acked_monotonic_time: Option<Duration>,
     msg: Controller,
 }
 
@@ -93,23 +96,88 @@ impl RemoteController {
         result
     }
 
-    /// arrived at remote and no longer need to be hold locally
-    pub fn acked(&mut self, ids: HashSet<u64>, monotonic_time: Duration) {
-        // To get the latency we use the LOWEST `first_send_monotonic_time` in this Set.
-        // Why lowest ? Because we want to be STABLE, and if we just use the highest it
-        // wouldn't be enough latency for all (e.g. retransmittion)
-        let mut lowest_monotonic_time = None;
-        self.commands.retain(|c| {
-            let retain = !ids.contains(&c.id);
-            if !retain
-                && c.first_send_monotonic_time.map_or(false, |mt| {
-                    mt < lowest_monotonic_time.unwrap_or(monotonic_time)
-                })
-            {
-                lowest_monotonic_time = c.first_send_monotonic_time;
+    /// remote confirmed arrival of commands. (not that they actually were used)
+    /// we need to hold them, (especially with high lag) as we might revert to
+    /// server-time.
+    pub fn acked(
+        &mut self,
+        ids: HashSet<u64>,
+        monotonic_time: Duration,
+        highest_ahead_command: f64,
+    ) {
+        // calculating avg_latency.
+        //  - server returns the time the furthest away command has left till it becomes
+        //    active. As the server time is constant and we stored this value locally,
+        //    we use it to calculate the first ahead_command for the first command in
+        //    this batch.
+        //  - we try to keep the remote_ahead in a specific window to allow for
+        //    retransmittion and remote tick time
+
+        // find time it took from client -> server
+        let high_filter = self
+            .commands
+            .iter()
+            .filter(|c| ids.contains(&c.id) && c.first_acked_monotonic_time.is_none());
+        if let Some(highest) = high_filter.max_by_key(|c| c.action_time) {
+            let remote_time = highest.action_time.as_secs_f64() - highest_ahead_command;
+            //let latency = highest.first_send_simulate_ahead_time.unwrap_or_default() -
+            // remote_time;
+            common_base::plot!("prob_remote_time", remote_time);
+            //common_base::plot!("prob_avg_latency", latency);
+            //let low_filter = self.commands.iter().filter(|c| ids.contains(&c.id) &&
+            // c.first_send_monotonic_time == highest.first_send_monotonic_time);
+            let low_filter = self
+                .commands
+                .iter()
+                .filter(|c| ids.contains(&c.id) && c.first_acked_monotonic_time.is_none());
+            if let Some(lowest) = low_filter.min_by_key(|c| c.action_time) {
+                let low_high_diff = highest.action_time - lowest.action_time;
+                // if this is 50ms, it means the lowest command arrived at server 50 before it
+                // was used
+                common_base::plot!("highest_ahead_command", highest_ahead_command);
+                let ahead_time = highest_ahead_command - low_high_diff.as_secs_f64();
+                common_base::plot!("low_high_diff", low_high_diff.as_secs_f64());
+                common_base::plot!("ahead_time", ahead_time);
+                const LOWER_END: f64 = 0.18;
+                const UPPER_END: f64 = 0.22;
+                //if ahead_time > 2.0 {
+                let len = self.commands.len();
+                tracing::error!(
+                    ?ahead_time,
+                    ?ids,
+                    ?highest_ahead_command,
+                    ?highest,
+                    ?lowest,
+                    ?len,
+                    "bigger2"
+                );
+                //}
+                if ahead_time < LOWER_END {
+                    self.avg_latency += Duration::from_millis(10);
+                }
+                if ahead_time > UPPER_END && self.avg_latency > Duration::from_millis(3) {
+                    self.avg_latency -= Duration::from_millis(3);
+                }
             }
-            retain
-        });
+        }
+
+        for c in &mut self.commands {
+            c.first_acked_monotonic_time = Some(monotonic_time);
+        }
+
+        /*
+        let mut lowest_monotonic_time = None;
+        for c in &mut self.commands {
+            let new_acked = c.first_acked_monotonic_time.is_none() && ids.contains(&c.id);
+            if new_acked {
+                c.first_acked_monotonic_time = Some(monotonic_time);
+                if c.first_send_monotonic_time.map_or(false, |mt| {
+                    mt < lowest_monotonic_time.unwrap_or(monotonic_time)
+                }) {
+                    lowest_monotonic_time = c.first_send_monotonic_time;
+                }
+            }
+        }
         if let Some(lowest_monotonic_time) = lowest_monotonic_time {
             if let Some(latency) = monotonic_time.checked_sub(lowest_monotonic_time) {
                 common_base::plot!("latency", latency.as_secs_f64());
@@ -120,16 +188,25 @@ impl RemoteController {
                      synced and monotonic!"
                 );
             }
-        }
+        }*/
         common_base::plot!("avg_latency", self.avg_latency.as_secs_f64());
     }
 
     /// prepare commands for sending
+    /// only include commands, that were not yet acked!
     pub fn prepare_commands(&mut self, monotonic_time: Duration) -> ControlCommands {
-        for c in &mut self.commands {
-            c.first_send_monotonic_time.get_or_insert(monotonic_time);
-        }
-        self.commands.clone()
+        let simulate_ahead = self.simulate_ahead().as_secs_f64();
+        self.commands
+            .iter_mut()
+            .filter(|c| c.first_acked_monotonic_time.is_none())
+            .map(|c| {
+                c.first_send_monotonic_time.get_or_insert(monotonic_time);
+                c.first_send_simulate_ahead_time
+                    .get_or_insert(simulate_ahead);
+                &*c
+            })
+            .cloned()
+            .collect()
     }
 
     pub fn commands(&self) -> &ControlCommands { &self.commands }
@@ -231,7 +308,7 @@ impl RemoteController {
     pub fn avg_latency(&self) -> Duration { self.avg_latency }
 
     pub fn simulate_ahead(&self) -> Duration {
-        const FIXED_OFFSET: Duration = Duration::from_millis(50);
+        const FIXED_OFFSET: Duration = Duration::from_millis(0);
         self.avg_latency() + FIXED_OFFSET
     }
 }
@@ -241,7 +318,7 @@ impl Default for RemoteController {
         Self {
             commands: VecDeque::new(),
             existing_commands: HashSet::new(),
-            max_hold: Duration::from_secs(1),
+            max_hold: Duration::from_secs(5),
             avg_latency: Duration::from_millis(50),
         }
     }
@@ -262,6 +339,8 @@ impl CommandGenerator {
         ControlCommand {
             action_time,
             first_send_monotonic_time: None,
+            first_send_simulate_ahead_time: None,
+            first_acked_monotonic_time: None,
             id: self.id,
             msg,
         }

@@ -216,6 +216,9 @@ impl<'a> PhysicsData<'a> {
             let entity_center = position.0 + Vec3::new(0.0, 0.0, z_min + half_height);
             let flat_radius = collider.bounding_radius() * scale;
             let radius = (flat_radius.powi(2) + half_height.powi(2)).sqrt();
+            //tracing::info!(?i, ?vel, "vel");
+            common_base::plot!("vel_x", vel.0.x as f64);
+            common_base::plot!("vel_y", vel.0.y as f64);
 
             // Move center to the middle between OLD and OLD+VEL_DT
             // so that we can reduce the collision_boundary.
