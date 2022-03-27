@@ -902,6 +902,18 @@ pub fn handle_jump(
     strength: f32,
 ) -> bool {
     common_base::plot!("jumps", 0.0);
+    let x = if input_is_pressed(data, InputKind::Jump) {
+        1.0
+    } else {
+        0.0
+    };
+    common_base::plot!("jumps_pressed", x);
+    let y = if data.physics.on_ground.is_some() {
+        1.0
+    } else {
+        0.0
+    };
+    common_base::plot!("jumps_ground", y);
     (input_is_pressed(data, InputKind::Jump) && data.physics.on_ground.is_some())
         .then(|| data.body.jump_impulse())
         .flatten()

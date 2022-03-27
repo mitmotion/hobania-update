@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use specs::Component;
 use specs_idvs::IdvStorage;
 use std::{collections::VecDeque, time::Duration};
+use vek::Vec3;
 
 pub type ControlCommands = VecDeque<ControlCommand>;
 
@@ -241,7 +242,7 @@ impl RemoteController {
             return None;
         }
         let mut result = Controller::default();
-        let mut look_dir = result.inputs.look_dir.to_vec();
+        let mut look_dir = Vec3::default(); // explicitly set to 0/0/0, as Dir::default ist 0/1/0
         //if self.commands[start_i].source_time
         // Inputs are averaged over all elements by time
         // Queued Inputs are just added
@@ -293,9 +294,14 @@ impl RemoteController {
         }) {
             tracing::error!("jump detencted");
         }
+        let look_dir = if !look_dir.is_approx_zero() {
+            look_dir.normalized()
+        } else {
+            Dir::default().to_vec()
+        };
         result.inputs.move_dir /= dt.as_secs_f32();
         result.inputs.move_z /= dt.as_secs_f32();
-        result.inputs.look_dir = Dir::new(look_dir.normalized());
+        result.inputs.look_dir = Dir::new(look_dir);
 
         Some(result)
     }
@@ -308,8 +314,11 @@ impl RemoteController {
     pub fn avg_latency(&self) -> Duration { self.avg_latency }
 
     pub fn simulate_ahead(&self) -> Duration {
-        const FIXED_OFFSET: Duration = Duration::from_millis(0);
-        self.avg_latency() + FIXED_OFFSET
+        //const FIXED_OFFSET: Duration = Duration::from_millis(0);
+        //self.avg_latency() + FIXED_OFFSET
+        // TODO:: mocked, as we use it internally for the new input functions and assume
+        // that time - simulate ahead = server time iirc
+        Duration::from_millis(200)
     }
 }
 
@@ -414,6 +423,11 @@ mod tests {
         result
     }
 
+    fn prepare_send(command: &mut ControlCommand, monotinic_time: Duration, simulate_ahead: f64) {
+        command.first_send_monotonic_time = Some(monotinic_time);
+        command.first_send_simulate_ahead_time = Some(simulate_ahead);
+    }
+
     #[test]
     fn resend_data() {
         let data = generate_control_cmds(5);
@@ -469,6 +483,26 @@ mod tests {
     }
 
     #[test]
+    fn dropping_all_commands_when_then_become_outdated() {
+        let data = generate_control_cmds(7);
+        let mut list = RemoteController::default();
+        assert_eq!(list.push(data[0].clone()), Some(1));
+        assert_eq!(list.push(data[1].clone()), Some(2));
+        assert_eq!(list.push(data[2].clone()), Some(3));
+        assert_eq!(list.push(data[3].clone()), Some(4));
+        assert_eq!(list.push(data[4].clone()), Some(5));
+        assert_eq!(list.push(data[5].clone()), Some(6));
+        assert_eq!(list.push(data[6].clone()), Some(7));
+        assert_eq!(list.commands.len(), 7);
+        list.maintain(Some(Duration::from_millis(0)));
+        assert_eq!(list.commands.len(), 7);
+        list.maintain(Some(INCREASE * 2));
+        assert_eq!(list.commands.len(), 5);
+        list.maintain(Some(INCREASE * 7));
+        assert_eq!(list.commands.len(), 0);
+    }
+
+    #[test]
     fn acked() {
         let data = generate_control_cmds(7);
         let mut list = RemoteController::default();
@@ -478,18 +512,23 @@ mod tests {
         assert_eq!(list.push(data[3].clone()), Some(4));
         assert_eq!(list.push(data[4].clone()), Some(5));
         let mut to_export = list.commands().iter().map(|e| e.id).collect::<HashSet<_>>();
+        prepare_send(&mut list.commands[0], Duration::from_millis(100), 200.0);
+        prepare_send(&mut list.commands[1], Duration::from_millis(100), 200.0);
+        prepare_send(&mut list.commands[2], Duration::from_millis(100), 200.0);
+        prepare_send(&mut list.commands[3], Duration::from_millis(100), 200.0);
+        prepare_send(&mut list.commands[4], Duration::from_millis(100), 200.0);
         // damange one entry
         to_export.remove(&3);
-        list.acked(to_export, Duration::from_secs(6));
+        list.acked(to_export, Duration::from_secs(6), 200.0);
+        list.maintain(Some(Duration::from_millis(1000)));
         assert_eq!(list.push(data[5].clone()), Some(6));
         assert_eq!(list.push(data[6].clone()), Some(7));
         println!("asd{:?}", &list);
 
         let to_export = list.commands().clone();
-        assert_eq!(to_export.len(), 3);
-        assert_eq!(to_export[0].id, 3);
-        assert_eq!(to_export[1].id, 6);
-        assert_eq!(to_export[2].id, 7);
+        assert_eq!(to_export.len(), 2);
+        assert_eq!(to_export[0].id, 6);
+        assert_eq!(to_export[1].id, 7);
     }
 
     #[test]

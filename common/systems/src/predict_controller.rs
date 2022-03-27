@@ -60,7 +60,21 @@ impl<'a> System<'a> for Sys {
             let r = remote_controller.compress(time, dt);
             // Do nothing when already populated and we dont have a new value
             if let Some(r) = r {
-                *controller = r.clone()
+                *controller = r.clone();
+                let mut action = 0.0;
+                for a in r.actions {
+                    if let common::comp::ControlAction::StartInput {
+                        input,
+                        target_entity,
+                        select_pos,
+                    } = a
+                    {
+                        if input == common::comp::InputKind::Jump {
+                            action = 1.0;
+                        }
+                    }
+                }
+                common_base::plot!("action_contains_jump", action);
             }
         }
     }

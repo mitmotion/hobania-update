@@ -638,6 +638,8 @@ impl<'a> PhysicsData<'a> {
                         .get_key(read.terrain.pos_key(pos.0.map(|e| e.floor() as i32)))
                         .is_some();
 
+
+
                     // Apply physics only if in a loaded chunk
                     if in_loaded_chunk
                     // And not already stuck on a block (e.g., for arrows)
@@ -1176,6 +1178,10 @@ impl<'a> PhysicsData<'a> {
                                     }
                                     physics_state.on_ground =
                                         physics_state.on_ground.or(physics_state_delta.on_ground);
+                                    common_base::plot!(
+                                        "on_ground_1",
+                                        physics_state.on_ground.map(|_| 1.0f64).unwrap_or_default()
+                                    );
                                     physics_state.on_ceiling |= physics_state_delta.on_ceiling;
                                     physics_state.on_wall = physics_state.on_wall.or_else(|| {
                                         physics_state_delta
@@ -1433,6 +1439,10 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
     let z_range = z_min..z_max;
 
     // Setup values for the loop below
+    common_base::plot!(
+        "on_ground_2",
+        physics_state.on_ground.map(|_| 1.0f64).unwrap_or_default()
+    );
     physics_state.on_ground = None;
     physics_state.on_ceiling = false;
 
@@ -1442,8 +1452,6 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
     let mut attempts = 0;
 
     let mut pos_delta = tgt_pos - pos.0;
-
-    common_base::plot!("z", pos.0.z as f64);
 
     // Don't jump too far at once
     const MAX_INCREMENTS: usize = 100; // The maximum number of collision tests per tick
@@ -1614,6 +1622,7 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
     }
 
     if on_ground.is_some() {
+        common_base::plot!("on_ground_3", on_ground.map(|_| 1.0f64).unwrap_or_default());
         physics_state.on_ground = on_ground;
     // If the space below us is free, then "snap" to the ground
     } else if vel.0.z <= 0.0 && was_on_ground && block_snap && {
@@ -1639,6 +1648,10 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
             .get(Vec3::new(pos.0.x, pos.0.y, pos.0.z - 0.01).map(|e| e.floor() as i32))
             .ok()
             .copied();
+        common_base::plot!(
+            "on_ground_4",
+            physics_state.on_ground.map(|_| 1.0f64).unwrap_or_default()
+        );
     }
 
     // Find liquid immersion and wall collision all in one round of iteration

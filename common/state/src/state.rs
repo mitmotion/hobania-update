@@ -498,7 +498,7 @@ impl State {
         let delta_time = self.ecs.read_resource::<DeltaTime>().0;
 
         const MAX_INCREMENTS: usize = 100; // The maximum number of collision tests per tick
-        const STEP_SEC: f64 = 0.1;
+        const STEP_SEC: f64 = 0.04;
         let increments =
             ((simulate_ahead.as_secs_f64() / STEP_SEC).ceil() as usize).clamped(1, MAX_INCREMENTS);
         for _i in 0..increments {
@@ -574,6 +574,7 @@ impl State {
                 LocalEvent::Jump(entity, impulse) => {
                     if let Some(vel) = velocities.get_mut(entity) {
                         vel.0.z = impulse + physics.get(entity).map_or(0.0, |ps| ps.ground_vel.z);
+                        common_base::plot!("state_jump_event", impulse as f64);
                     }
                 },
                 LocalEvent::ApplyImpulse { entity, impulse } => {
