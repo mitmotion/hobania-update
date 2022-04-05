@@ -21,6 +21,7 @@ pub struct RemoteController {
     existing_commands: HashSet<u64>,
     max_hold: Duration,
     avg_latency: Duration,
+    avg_ahead_time: Duration,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -106,7 +107,7 @@ impl RemoteController {
         monotonic_time: Duration,
         highest_ahead_command: f64,
     ) {
-        // calculating avg_latency.
+        // calculating avg_ahead_time.
         //  - server returns the time the furthest away command has left till it becomes
         //    active. As the server time is constant and we stored this value locally,
         //    we use it to calculate the first ahead_command for the first command in
@@ -114,83 +115,54 @@ impl RemoteController {
         //  - we try to keep the remote_ahead in a specific window to allow for
         //    retransmittion and remote tick time
 
+        // Buffer we try to keep on the server, make this a config
+        const AHEAD_TARGET: f64 = 0.055;
+        const AHEAD_TARGET_DIFF: f64 = 0.005;
+        const AHEAD_TARGET_STEP: Duration = Duration::from_millis(2);
+        const AHEAD_TARGET_NO_ACK_STEP: Duration = Duration::from_nanos(500000);
+
         // find time it took from client -> server
         let high_filter = self
             .commands
             .iter()
             .filter(|c| ids.contains(&c.id) && c.first_acked_monotonic_time.is_none());
         if let Some(highest) = high_filter.max_by_key(|c| c.action_time) {
-            let remote_time = highest.action_time.as_secs_f64() - highest_ahead_command;
-            //let latency = highest.first_send_simulate_ahead_time.unwrap_or_default() -
-            // remote_time;
-            common_base::plot!("prob_remote_time", remote_time);
-            //common_base::plot!("prob_avg_latency", latency);
-            //let low_filter = self.commands.iter().filter(|c| ids.contains(&c.id) &&
-            // c.first_send_monotonic_time == highest.first_send_monotonic_time);
+            if let Some(first_send_monotonic_time) = highest.first_send_monotonic_time {
+                let latency = monotonic_time - first_send_monotonic_time;
+                self.avg_latency = Duration::from_secs_f64(
+                    self.avg_latency.as_secs_f64() * 0.99 + latency.as_secs_f64() * 0.01,
+                );
+            }
             let low_filter = self
                 .commands
                 .iter()
                 .filter(|c| ids.contains(&c.id) && c.first_acked_monotonic_time.is_none());
             if let Some(lowest) = low_filter.min_by_key(|c| c.action_time) {
                 let low_high_diff = highest.action_time - lowest.action_time;
-                // if this is 50ms, it means the lowest command arrived at server 50 before it
+                // if this is 50ms, it means the lowest command arrived at server 50ms before it
                 // was used
-                common_base::plot!("highest_ahead_command", highest_ahead_command);
                 let ahead_time = highest_ahead_command - low_high_diff.as_secs_f64();
                 common_base::plot!("low_high_diff", low_high_diff.as_secs_f64());
                 common_base::plot!("ahead_time", ahead_time);
-                const LOWER_END: f64 = 0.18;
-                const UPPER_END: f64 = 0.22;
-                //if ahead_time > 2.0 {
-                let len = self.commands.len();
-                tracing::error!(
-                    ?ahead_time,
-                    ?ids,
-                    ?highest_ahead_command,
-                    ?highest,
-                    ?lowest,
-                    ?len,
-                    "bigger2"
+                let avg_ahead_time = (lowest.first_send_simulate_ahead_time.unwrap_or_default()
+                    - ahead_time)
+                    .max(0.0)
+                    + AHEAD_TARGET;
+                // avg_ahead_time fluctuates by 1 dt, so we average it.
+                self.avg_ahead_time = Duration::from_secs_f64(
+                    self.avg_ahead_time.as_secs_f64() * 0.995 + avg_ahead_time * 0.005,
                 );
-                //}
-                if ahead_time < LOWER_END {
-                    self.avg_latency += Duration::from_millis(10);
-                }
-                if ahead_time > UPPER_END && self.avg_latency > Duration::from_millis(3) {
-                    self.avg_latency -= Duration::from_millis(3);
-                }
             }
+        } else {
+            self.avg_ahead_time += AHEAD_TARGET_NO_ACK_STEP;
+            tracing::warn!(?self.avg_ahead_time, "No Highest");
         }
 
-        for c in &mut self.commands {
+        for c in &mut self.commands.iter_mut().filter(|c| ids.contains(&c.id)) {
             c.first_acked_monotonic_time = Some(monotonic_time);
         }
 
-        /*
-        let mut lowest_monotonic_time = None;
-        for c in &mut self.commands {
-            let new_acked = c.first_acked_monotonic_time.is_none() && ids.contains(&c.id);
-            if new_acked {
-                c.first_acked_monotonic_time = Some(monotonic_time);
-                if c.first_send_monotonic_time.map_or(false, |mt| {
-                    mt < lowest_monotonic_time.unwrap_or(monotonic_time)
-                }) {
-                    lowest_monotonic_time = c.first_send_monotonic_time;
-                }
-            }
-        }
-        if let Some(lowest_monotonic_time) = lowest_monotonic_time {
-            if let Some(latency) = monotonic_time.checked_sub(lowest_monotonic_time) {
-                common_base::plot!("latency", latency.as_secs_f64());
-                self.avg_latency = ((99 * self.avg_latency + latency) / 100).max(latency);
-            } else {
-                warn!(
-                    "latency is negative, this should never be the case as this value is not \
-                     synced and monotonic!"
-                );
-            }
-        }*/
-        common_base::plot!("avg_latency", self.avg_latency.as_secs_f64());
+        common_base::plot!("avg_ahead_time", self.avg_ahead_time.as_secs_f64());
     }
 
     /// prepare commands for sending
@@ -306,19 +278,22 @@ impl RemoteController {
         Some(result)
     }
 
-    /// the average latency is 300ms by default and will be adjusted over time
+    /// the average latency is 500ms by default and will be adjusted over time
     /// with every Ack the server sends its local tick time at the Ack
     /// so we can calculate how much time was spent for 1 way from
     /// server->client and assume that this is also true for client->server
     /// latency
-    pub fn avg_latency(&self) -> Duration { self.avg_latency }
+    //pub fn avg_latency(&self) -> Duration { self.avg_latency }
 
+    /// In contrast to avg_latency this calculates how much ahead we should
+    /// simulate in order to be just received on the server in time
     pub fn simulate_ahead(&self) -> Duration {
-        //const FIXED_OFFSET: Duration = Duration::from_millis(0);
-        //self.avg_latency() + FIXED_OFFSET
-        // TODO:: mocked, as we use it internally for the new input functions and assume
-        // that time - simulate ahead = server time iirc
-        Duration::from_millis(200)
+        const OVERWRITE_SIMULATE_AHEAD: Option<Duration> = None; // Some(Durations::from_millis(1100));
+        if let Some(d) = OVERWRITE_SIMULATE_AHEAD {
+            d
+        } else {
+            self.avg_ahead_time
+        }
     }
 }
 
@@ -328,7 +303,8 @@ impl Default for RemoteController {
             commands: VecDeque::new(),
             existing_commands: HashSet::new(),
             max_hold: Duration::from_secs(5),
-            avg_latency: Duration::from_millis(50),
+            avg_latency: Duration::from_millis(500),
+            avg_ahead_time: Duration::from_millis(500),
         }
     }
 }

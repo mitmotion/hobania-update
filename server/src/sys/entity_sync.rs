@@ -2,7 +2,7 @@ use super::sentinel::{DeletedEntities, TrackedStorages, UpdateTrackers};
 use crate::{
     client::Client,
     presence::{Presence, RegionSubscription},
-    Tick,
+    Tick, TickStart,
 };
 use common::{
     calendar::Calendar,
@@ -10,7 +10,7 @@ use common::{
     event::EventBus,
     outcome::Outcome,
     region::{Event as RegionEvent, RegionMap},
-    resources::TimeOfDay,
+    resources::{Time, TimeOfDay},
     terrain::TerrainChunkSize,
     uid::Uid,
     vol::RectVolSize,
@@ -20,6 +20,7 @@ use common_net::{msg::ServerGeneral, sync::CompSyncPackage};
 use itertools::Either;
 use specs::{Entities, Join, Read, ReadExpect, ReadStorage, Write, WriteStorage};
 use vek::*;
+use common::comp::PhysicsState;
 
 /// This system will send physics updates to the client
 #[derive(Default)]
@@ -32,12 +33,15 @@ impl<'a> System<'a> for Sys {
         Read<'a, Tick>,
         TrackedStorages<'a>,
         ReadExpect<'a, TimeOfDay>,
+        ReadExpect<'a, Time>,
+        ReadExpect<'a, TickStart>,
         ReadExpect<'a, Calendar>,
         ReadExpect<'a, RegionMap>,
         ReadExpect<'a, UpdateTrackers>,
         ReadStorage<'a, Pos>,
         ReadStorage<'a, Vel>,
         ReadStorage<'a, Ori>,
+        ReadStorage<'a, PhysicsState>,
         ReadStorage<'a, RegionSubscription>,
         ReadStorage<'a, Presence>,
         ReadStorage<'a, Client>,
@@ -61,12 +65,15 @@ impl<'a> System<'a> for Sys {
             tick,
             tracked_storages,
             time_of_day,
+            time,
+            tick_start,
             calendar,
             region_map,
             trackers,
             positions,
             velocities,
             orientations,
+            physics_states,
             subscriptions,
             presences,
             clients,
@@ -80,6 +87,11 @@ impl<'a> System<'a> for Sys {
         ): Self::SystemData,
     ) {
         let tick = tick.0;
+
+        //use rand::Rng;
+        //let _rng = rand::thread_rng();
+        //std::thread::sleep(std::time::Duration::from_millis(rng.gen_range(0..2) *
+        // 28));
 
         // Storages already provided in `TrackedStorages` that we need to use
         // for other things besides change detection.
@@ -224,13 +236,14 @@ impl<'a> System<'a> for Sys {
                 for (client, _, client_entity, client_pos) in &mut subscribers {
                     let mut comp_sync_package = CompSyncPackage::new();
 
-                    for (_, entity, &uid, (&pos, last_pos), vel, ori, force_update, collider) in (
+                    for (_, entity, &uid, (&pos, last_pos), vel, ori, physic_state, force_update, collider) in (
                         region.entities(),
                         &entities,
                         uids,
                         (&positions, last_pos.mask().maybe()),
                         (&velocities, last_vel.mask().maybe()).maybe(),
                         (&orientations, last_vel.mask().maybe()).maybe(),
+                        (&physics_states, physics_states.mask().maybe()).maybe(),
                         force_updates.mask().maybe(),
                         colliders.maybe(),
                     )
@@ -292,9 +305,29 @@ impl<'a> System<'a> for Sys {
                                 comp_sync_package.comp_modified(uid, *o);
                             }
                         }
+
+                        if let Some((physic_state, last_physic_state)) = physic_state {
+                            if last_physic_state.is_none() {
+                                comp_sync_package.comp_inserted(uid, physic_state.clone());
+                            } else if send_now {
+                                comp_sync_package.comp_modified(uid, physic_state.clone());
+                            }
+                        }
                     }
 
                     client.send_fallible(ServerGeneral::CompSync(comp_sync_package));
+                    /*
+                    multiple problems
+                     - CompSync and TimeSync could (theoretically be received in 2 different ticks, client would be confused for 1 tick then
+                     - we dont send the client in which part of this tick we are sending this. Imaging a fluctuating server, that either needs 1ms or 100ms per tick.
+                       The client would get confused as the dt might be 1 ms, but the information arrives 99ms late because of server is running behind.
+                       As we send this info as fast as possible, this also is a problem when the server is running "ahead" (faster than 33ms)
+                       To mitigate this, we might use the Duration between now and TickStart
+                     */
+                    client.send_fallible(ServerGeneral::TimeSync {
+                        server_time: *time,
+                        inter_tick_offset: tick_start.0.elapsed(),
+                    });
                 }
             },
         );

@@ -24,6 +24,7 @@ macro_rules! comp_packet {
                 Pos(comp::Pos),
                 Vel(comp::Vel),
                 Ori(comp::Ori),
+                PhysicsState(comp::PhysicsState),
             }
         }
 
@@ -36,6 +37,7 @@ macro_rules! comp_packet {
                 Pos(PhantomData<comp::Pos>),
                 Vel(PhantomData<comp::Vel>),
                 Ori(PhantomData<comp::Ori>),
+                PhysicsState(PhantomData<comp::PhysicsState>),
             }
         }
 
@@ -57,6 +59,9 @@ macro_rules! comp_packet {
                     Self::Ori(comp) => {
                         sync::handle_interp_insert(comp, entity, world, true)
                     },
+                    Self::PhysicsState(comp) => {
+                        crate::sync::packet::handle_insert(comp, entity, world);
+                    },
                 }
             }
 
@@ -75,6 +80,9 @@ macro_rules! comp_packet {
                     Self::Ori(comp) => {
                         sync::handle_interp_modify(comp, entity, world, true)
                     },
+                    Self::PhysicsState(comp) => {
+                        crate::sync::packet::handle_modify(comp, entity, world);
+                    },
                 }
             }
 
@@ -91,6 +99,9 @@ macro_rules! comp_packet {
                     },
                     EcsCompPhantom::Ori(_) => {
                         sync::handle_interp_remove::<comp::Ori>(entity, world)
+                    },
+                    EcsCompPhantom::PhysicsState(_) => {
+                        crate::sync::packet::handle_remove::<comp::PhysicsState>(entity, world);
                     },
                 }
             }

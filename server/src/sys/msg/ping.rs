@@ -4,7 +4,7 @@ use common::{
     resources::Time,
 };
 use common_ecs::{Job, Origin, Phase, System};
-use common_net::msg::{PingMsg, ServerGeneral};
+use common_net::msg::PingMsg;
 use specs::{Entities, Join, Read, ReadStorage};
 use tracing::{debug, info};
 
@@ -39,10 +39,6 @@ impl<'a> System<'a> for Sys {
         (entities, server_event_bus, time, clients, settings): Self::SystemData,
     ) {
         let mut server_emitter = server_event_bus.emitter();
-
-        for client in (&clients).join() {
-            client.send_fallible(ServerGeneral::TimeSync(*time));
-        }
 
         for (entity, client) in (&entities, &clients).join() {
             let res = super::try_recv_all(client, 4, Self::handle_ping_msg);

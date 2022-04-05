@@ -139,7 +139,10 @@ pub enum ServerGeneral {
     CharacterEdited(character::CharacterId),
     CharacterSuccess,
     //Ingame related
-    TimeSync(Time),
+    TimeSync {
+        server_time: Time,
+        inter_tick_offset: Duration,
+    },
     AckControl {
         acked_ids: HashSet<u64>,
         /// measured by the time the furthest command to become active <>
@@ -302,7 +305,7 @@ impl ServerMsg {
                         },
                         //Ingame related
                         ServerGeneral::GroupUpdate(_)
-                        | ServerGeneral::TimeSync(_)
+                        | ServerGeneral::TimeSync { .. }
                         | ServerGeneral::AckControl { .. }
                         | ServerGeneral::Invite { .. }
                         | ServerGeneral::InvitePending(_)

@@ -2,7 +2,7 @@
 // sync arises
 pub mod interpolation;
 mod net_sync;
-mod packet;
+pub (crate) mod packet;
 mod sync_ext;
 mod track;
 

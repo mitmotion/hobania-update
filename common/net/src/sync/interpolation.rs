@@ -2,7 +2,7 @@
 // `common_net` is downstream of `common`, and an `InterpolationSystem` that
 // applies them
 use super::InterpolatableComponent;
-use common::comp::{Ori, Pos, Vel};
+use common::comp::{Ori, Pos, Vel, PhysicsState};
 use specs::Component;
 use specs_idvs::IdvStorage;
 use tracing::warn;

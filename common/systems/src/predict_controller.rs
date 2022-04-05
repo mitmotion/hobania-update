@@ -65,8 +65,8 @@ impl<'a> System<'a> for Sys {
                 for a in r.actions {
                     if let common::comp::ControlAction::StartInput {
                         input,
-                        target_entity,
-                        select_pos,
+                        target_entity: _,
+                        select_pos: _,
                     } = a
                     {
                         if input == common::comp::InputKind::Jump {
