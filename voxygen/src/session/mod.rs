@@ -21,7 +21,8 @@ use common::{
             tool::{AbilityMap, MaterialStatManifest, ToolKind},
             ItemDesc,
         },
-        ChatMsg, ChatType, InputKind, InventoryUpdateEvent, Pos, Stats, UtteranceKind, Vel,
+        CharacterState, ChatMsg, ChatType, InputKind, InventoryUpdateEvent, Pos, Stats,
+        UtteranceKind, Vel,
     },
     consts::MAX_MOUNT_RANGE,
     link::Is,
@@ -376,17 +377,42 @@ impl PlayState for SessionState {
             let cam_pos = cam_pos + focus_off;
 
             let (is_aiming, aim_dir_offset) = {
-                let is_aiming = client
+                let (is_aiming, projectile_speed) = client
                     .state()
                     .read_storage::<comp::CharacterState>()
                     .get(player_entity)
-                    .map(|cs| cs.is_aimed())
-                    .unwrap_or(false);
+                    .map(|cs| {
+                        (cs.is_aimed(), match cs {
+                            CharacterState::BasicRanged(data) => data.static_data.projectile_speed,
+                            CharacterState::ChargedRanged(data) => {
+                                data.static_data.initial_projectile_speed
+                                    + data.charge_frac() * data.static_data.scaled_projectile_speed
+                            },
+                            CharacterState::RepeaterRanged(data) => {
+                                data.static_data.projectile_speed
+                            },
+                            _ => 0.0,
+                        })
+                    })
+                    .unwrap_or((false, 0.0));
 
                 (
                     is_aiming,
                     if is_aiming && self.scene.camera().get_mode() == CameraMode::ThirdPerson {
-                        Vec3::unit_z() * 0.025
+                        let vel = (
+                            &client.state().ecs().read_storage::<comp::Vel>(),
+                            &client.state().ecs().read_storage::<comp::PhysicsState>(),
+                        )
+                            .join()
+                            .get(player_entity, &client.state().ecs().entities())
+                            .map(|(vel, physics)| physics.ground_vel - vel.0)
+                            .unwrap_or(Vec3::zero());
+                        let vel = if projectile_speed > 0.0 {
+                            vel / projectile_speed
+                        } else {
+                            Vec3::zero()
+                        };
+                        Vec3::unit_z() * 0.025 + vel
                     } else {
                         Vec3::zero()
                     },
