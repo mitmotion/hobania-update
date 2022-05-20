@@ -399,6 +399,8 @@ impl PlayState for SessionState {
                 (
                     is_aiming,
                     if is_aiming && self.scene.camera().get_mode() == CameraMode::ThirdPerson {
+                        Vec3::unit_z() * 0.025
+                    } else if is_aiming {
                         let vel = (
                             &client.state().ecs().read_storage::<comp::Vel>(),
                             &client.state().ecs().read_storage::<comp::PhysicsState>(),
@@ -412,7 +414,7 @@ impl PlayState for SessionState {
                         } else {
                             Vec3::zero()
                         };
-                        Vec3::unit_z() * 0.025 + vel
+                        vel
                     } else {
                         Vec3::zero()
                     },
