@@ -63,6 +63,10 @@ strum = "0.24"
 harness = false
 name = "tree"
 
+[[bench]]
+harness = false
+name = "site2"
+
 [[example]]
 name = "chunk_compression_benchmarks"
 required-features = ["bin_compression"]
