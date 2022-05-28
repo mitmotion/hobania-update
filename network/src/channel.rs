@@ -101,6 +101,13 @@ impl Protocols {
             socket2_socket.set_only_v6(true)?
         }
         socket2_socket.set_nonblocking(true)?; // Needed by Tokio
+        // Increase Buffers size to 256 KiB and 128 KiB
+        if let Err(e) = socket2_socket.set_send_buffer_size(256 * 1024) {
+            trace!(?e, "couldn't specify send buffer size");
+        }
+        if let Err(e) = socket2_socket.set_recv_buffer_size(128 * 1024) {
+            trace!(?e, "couldn't specify recv buffer size");
+        }
         // See https://docs.rs/tokio/latest/tokio/net/struct.TcpSocket.html
         #[cfg(not(windows))]
         socket2_socket.set_reuse_address(true)?;
