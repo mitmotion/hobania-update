@@ -1627,6 +1627,7 @@ fn box_voxel_collision<T: BaseVol<Vox = Block> + ReadVol>(
             .get(Vec3::new(pos.0.x, pos.0.y, pos.0.z - 0.01).map(|e| e.floor() as i32))
             .ok()
             .copied();
+        // calc frictions which didn't applied in the loop above
     }
 
     // Find liquid immersion and wall collision all in one round of iteration
