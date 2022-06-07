@@ -5,6 +5,7 @@ use specs::WorldExt;
 use std::error::Error;
 use utils::{DT, DT_F64, EPSILON};
 use vek::{approx, Vec2, Vec3};
+use common::states::utils::unwrap_tool_data;
 use veloren_common_systems::add_local_systems;
 
 #[test]
@@ -317,32 +318,36 @@ fn physics_theory() -> Result<(), Box<dyn Error>> {
             https://sciencing.com/calculate-force-friction-6454395.html
 
             https://www.leifiphysik.de/mechanik/reibung-und-fortbewegung
+
+
          */
 
-        let mass = 80.0;
-        let gravity = 9.81;
-        let f_n = mass * gravity;
+        let mass = 1.0;
 
-        let total_force = 2.0_f64 * mass;
-        let rolling_friction_co = 0.0001;
-        let rolling_friction_force = rolling_friction_co * f_n;
-        let air_friction_co = 0.0000_f64;
-        let air_friction_force = air_friction_co;
-        let accel_force = total_force - rolling_friction_force - air_friction_force;
-        let acc = accel_force / mass * move_dir;
-        
+        let air_friction_co = 1.1_f64;
+        let air_friction_area = 1.0_f64;
+        let air_density = 1.225_f64;
+        let c = air_friction_co * air_friction_area * 0.5 * air_density * mass;
+        //let acc = accel_force / mass * move_dir;
+
+        let acc = 9.0_f64; // btw: cant accelerate faster than gravity on foot
+        let old_vel = vel;
+
         // controller
-        let vel = vel + acc * dt;
+        // I know what you think, wtf, yep: https://math.stackexchange.com/questions/1929436/line-integral-of-force-of-air-resistanc
+        // basically an integral of the air resistance formula which scales with v^2 transformed with an ODE.
+        let vel = (mass * acc / c).sqrt() * ( ( (c / acc / mass ).sqrt() * old_vel ).atanh() + (c * acc / mass).sqrt() * 0.1* dt ).tanh();
 
         //physics
-        let distance = vel * dt - 0.5 * acc * dt * dt;
+        let acc2 = (vel - old_vel) / dt;
+        let distance = vel * dt;// 0.5 * vel * dt - 0.5 * acc2 * dt * dt;
         let pos = pos + distance;
 
 
 
-        if ((i+1) as f64 *dt * 10.0).round() as i64 % 2 == 0 {
-            println!("[{:0>2.1}]:    move_dir: {:4.1},    acc: {:4.4},    vel: {:4.4},    pos: {:4.4},    accel_force: {:4.4}", (i+1) as f64 *dt, move_dir, acc, vel, pos, accel_force);
-        }
+        //if ((i+1) as f64 *dt * 10.0).round() as i64 % 2 == 0 {
+            println!("[{:0>2.1}]:    move_dir: {:4.1},    acc: {:4.4},    vel: {:4.4},    pos: {:4.4},    c: {:4.4}", (i+1) as f64 *dt, move_dir, acc, vel, pos, c);
+        //}
         (acc, vel, pos)
     };
 
