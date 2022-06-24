@@ -5,7 +5,7 @@ pub mod util;
 
 use self::tile::{HazardKind, KeepKind, RoofKind, Tile, TileGrid, TileKind, TILE_SIZE};
 pub use self::{
-    gen::{aabr_with_z, Fill, Painter, Primitive, PrimitiveRef, Structure},
+    gen::{aabr_with_z, render_collect, Fill, Filler, FillFn, Painter, Primitive, PrimitiveTransform, Structure},
     plot::{Plot, PlotKind},
     util::Dir,
 };
@@ -22,7 +22,7 @@ use common::{
     terrain::{Block, BlockKind, SpriteKind, TerrainChunkSize},
     vol::RectVolSize,
 };
-use hashbrown::hash_map::DefaultHashBuilder;
+use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
 use rand::prelude::*;
 use rand_chacha::ChaChaRng;
 use std::ops::Range;
@@ -386,6 +386,34 @@ impl Site {
         site
     }
 
+    pub fn generate_citadel(land: &Land, rng: &mut impl Rng, origin: Vec2<i32>) -> Self {
+        let mut rng = reseed(rng);
+        let mut site = Site {
+            origin,
+            ..Site::default()
+        };
+        site.demarcate_obstacles(land);
+        let citadel = plot::Citadel::generate(origin, land, &mut rng);
+        site.name = citadel.name().to_string();
+        let size = citadel.radius() / tile::TILE_SIZE as i32;
+        let aabr = Aabr {
+            min: Vec2::broadcast(-size),
+            max: Vec2::broadcast(size),
+        };
+        let plot = site.create_plot(Plot {
+            kind: PlotKind::Citadel(citadel),
+            root_tile: aabr.center(),
+            tiles: aabr_tiles(aabr).collect(),
+            seed: rng.gen(),
+        });
+        site.blit_aabr(aabr, Tile {
+            kind: TileKind::Building,
+            plot: Some(plot),
+            hard_alt: None,
+        });
+        site
+    }
+
     pub fn generate_gnarling(land: &Land, rng: &mut impl Rng, origin: Vec2<i32>) -> Self {
         let mut rng = reseed(rng);
         let mut site = Site {
@@ -451,7 +479,7 @@ impl Site {
             ..Site::default()
         };
 
-        site.demarcate_obstacles(land);
+        // site.demarcate_obstacles(land);
 
         site.make_plaza(land, &mut rng);
 
@@ -866,7 +894,7 @@ impl Site {
         }
     }
 
-    pub fn render(&self, canvas: &mut Canvas, dynamic_rng: &mut impl Rng) {
+    pub fn render<'a>(&'a self, canvas: &mut Canvas<'a>, arena: &mut bumpalo::Bump, dynamic_rng: &mut impl Rng) {
         canvas.foreach_col(|canvas, wpos2d, col| {
 
             let tpos = self.wpos_tile_pos(wpos2d);
@@ -1029,34 +1057,59 @@ impl Site {
         let info = canvas.info();
 
         for plot in plots_to_render {
-            let (prim_tree, fills, mut entities) = match &self.plots[plot].kind {
-                PlotKind::House(house) => house.render_collect(self, canvas),
-                PlotKind::Workshop(workshop) => workshop.render_collect(self, canvas),
-                PlotKind::Castle(castle) => castle.render_collect(self, canvas),
-                PlotKind::Dungeon(dungeon) => dungeon.render_collect(self, canvas),
-                PlotKind::Gnarling(gnarling) => gnarling.render_collect(self, canvas),
-                PlotKind::GiantTree(giant_tree) => giant_tree.render_collect(self, canvas),
-                PlotKind::CliffTower(cliff_tower) => cliff_tower.render_collect(self, canvas),
+            common_base::prof_span!(guard, "site2::Site::render::plot_rendering");
+            let structure: &dyn Structure</*'a, */Canvas<'a>> = match &self.plots[plot].kind {
+                PlotKind::House(house) => house,
+                PlotKind::Workshop(workshop) => workshop,
+                PlotKind::Castle(castle) => castle,
+                PlotKind::Dungeon(dungeon) => dungeon,
+                PlotKind::Gnarling(gnarling) => gnarling,
+                PlotKind::GiantTree(giant_tree) => giant_tree,
+                PlotKind::CliffTower(cliff_tower) => cliff_tower,
+                PlotKind::Citadel(citadel) => citadel,
                 _ => continue,
             };
+            drop(guard);
 
-            let mut spawn = |pos, last_block| {
+            /* let (prim_tree, fills, mut entities) = structure.render_collect(self, canvas); */
+            common_base::prof_span!("site2::Site::render::plot_rasterization");
+
+            /* let mut bounds_cache = HashMap::default(); */
+            /* let arena = canvas.arena; */
+            let render_area = Aabr {
+                min: canvas.wpos,
+                max: canvas.wpos + TerrainChunkSize::RECT_SIZE.map(|e| e as i32),
+            };
+            /* let mut entities = */structure.render_collect(
+                self,
+                arena,
+                info,
+                render_area,
+                /*|canvas| */canvas,
+            );
+            // NOTE: Clearing out the primitives between renders costs us nothing, because any
+            // chunks that get deallocated were going to be eventually deallocated anyway, while
+            // the current chunk remains for reuse.  So this just ends up saving memory.
+            arena.reset();
+
+            /* let mut spawn = |pos, last_block| {
                 if let Some(entity) = match &self.plots[plot].kind {
                     PlotKind::GiantTree(tree) => tree.entity_at(pos, &last_block, dynamic_rng),
                     _ => None,
                 } {
-                    entities.push(entity);
+                    canvas.spawn(entity);
                 }
-            };
+            }; */
 
-            for (prim, fill) in fills {
-                for mut aabb in Fill::get_bounds_disjoint(&prim_tree, prim) {
+            /* for (prim, fill) in fills {
+                /*Fill::get_bounds_disjoint*/fill.sample_at(arena, &mut bounds_cache, &prim_tree, prim, chunk_aabr, &info, /* |pos| {
+                /* for mut aabb in Fill::get_bounds_disjoint(&mut bounds_cache, &prim_tree, prim) {
                     aabb.min = Vec2::max(aabb.min.xy(), chunk_aabr.min).with_z(aabb.min.z);
                     aabb.max = Vec2::min(aabb.max.xy(), chunk_aabr.max).with_z(aabb.max.z);
 
                     for x in aabb.min.x..aabb.max.x {
                         for y in aabb.min.y..aabb.max.y {
-                            let col_tile = self.wpos_tile(Vec2::new(x, y));
+                            /* let col_tile = self.wpos_tile(Vec2::new(x, y));
                             if
                             /* col_tile.is_building() && */
                             col_tile
@@ -1066,32 +1119,40 @@ impl Site {
                                 .map_or(false, |(a, b)| a.end > b.end)
                             {
                                 continue;
-                            }
+                            } */
                             let mut last_block = None;
                             for z in aabb.min.z..aabb.max.z {
-                                let pos = Vec3::new(x, y, z);
+                                let pos = Vec3::new(x, y, z); */
 
                                 canvas.map(pos, |block| {
                                     let current_block =
-                                        fill.sample_at(&prim_tree, prim, pos, &info, block);
-                                    if let (Some(last_block), None) = (last_block, current_block) {
+                                        fill.sample_at(
+                                            /* &mut bounds_cache,
+                                            &prim_tree,
+                                            prim, */
+                                            pos,
+                                            &info,
+                                            block,
+                                        );
+                                    /* if let (Some(last_block), None) = (last_block, current_block) {
                                         spawn(pos, last_block);
                                     }
-                                    last_block = current_block;
+                                    last_block = current_block; */
                                     current_block.unwrap_or(block)
                                 });
-                            }
+                            /* }
                             if let Some(block) = last_block {
                                 spawn(Vec3::new(x, y, aabb.max.z), block);
                             }
                         }
                     }
-                }
-            }
+                }*/
+                }*/canvas);
+            } */
 
-            for entity in entities {
+            /* for entity in entities {
                 canvas.spawn(entity);
-            }
+            } */
         }
     }
 

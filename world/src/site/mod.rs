@@ -199,18 +199,18 @@ impl Site {
         }
     }
 
-    pub fn apply_to<'a>(&'a self, canvas: &mut Canvas, dynamic_rng: &mut impl Rng) {
+    pub fn apply_to<'a>(&'a self, canvas: &mut Canvas<'a>, arena: &mut bumpalo::Bump, dynamic_rng: &mut impl Rng) {
         let info = canvas.info();
         let get_col = |wpos| info.col(wpos + info.wpos);
         match &self.kind {
             SiteKind::Settlement(s) => s.apply_to(canvas.index, canvas.wpos, get_col, canvas.chunk),
-            SiteKind::Dungeon(d) => d.render(canvas, dynamic_rng),
+            SiteKind::Dungeon(d) => d.render(canvas, arena, dynamic_rng),
             SiteKind::Castle(c) => c.apply_to(canvas.index, canvas.wpos, get_col, canvas.chunk),
-            SiteKind::Refactor(s) => s.render(canvas, dynamic_rng),
-            SiteKind::CliffTown(ct) => ct.render(canvas, dynamic_rng),
+            SiteKind::Refactor(s) => s.render(canvas, arena, dynamic_rng),
+            SiteKind::CliffTown(ct) => ct.render(canvas, arena, dynamic_rng),
             SiteKind::Tree(t) => t.render(canvas, dynamic_rng),
-            SiteKind::GiantTree(gt) => gt.render(canvas, dynamic_rng),
-            SiteKind::Gnarling(g) => g.render(canvas, dynamic_rng),
+            SiteKind::GiantTree(gt) => gt.render(canvas, arena, dynamic_rng),
+            SiteKind::Gnarling(g) => g.render(canvas, arena, dynamic_rng),
         }
     }
 

@@ -1,6 +1,7 @@
 use crate::{
     block::{block_from_structure, ZCache},
     column::{ColumnGen, ColumnSample},
+    site2::{Fill, Filler},
     index::IndexRef,
     land::Land,
     layer::spot::Spot,
@@ -41,7 +42,7 @@ impl<'a> CanvasInfo<'a> {
         .into()
     }
 
-    pub fn col(&self, wpos: Vec2<i32>) -> Option<&'a ColumnSample> {
+    pub fn col(&self, wpos: Vec2<i32>) -> Option<&'a ColumnSample<'a>> {
         self.column_grid
             .get(self.column_grid_border + wpos - self.wpos())
             .and_then(Option::as_ref)
@@ -87,7 +88,7 @@ impl<'a> CanvasInfo<'a> {
 
     pub fn chunks(&self) -> &'a WorldSim { self.chunks }
 
-    pub fn land(&self) -> Land<'_> { Land::from_sim(self.chunks) }
+    pub fn land(&self) -> Land<'a> { Land::from_sim(self.chunks) }
 
     pub fn with_mock_canvas_info<A, F: for<'b> FnOnce(&CanvasInfo<'b>) -> A>(
         index: IndexRef<'a>,
@@ -133,6 +134,7 @@ impl<'a> CanvasInfo<'a> {
 }
 
 pub struct Canvas<'a> {
+    // pub(crate) arena: &'a mut bumpalo::Bump,
     pub(crate) info: CanvasInfo<'a>,
     pub(crate) chunk: &'a mut TerrainChunk,
     pub(crate) entities: Vec<EntityInfo>,
@@ -143,7 +145,7 @@ impl<'a> Canvas<'a> {
     /// sampling, etc.) being used at the same time as mutable features
     /// (writing blocks). To avoid this, this method extracts the
     /// inner `CanvasInfo` such that it may be used independently.
-    pub fn info(&mut self) -> CanvasInfo<'a> { self.info }
+    pub fn info(&self) -> CanvasInfo<'a> { self.info }
 
     pub fn get(&self, pos: Vec3<i32>) -> Block {
         self.chunk
@@ -273,4 +275,24 @@ impl<'a> Deref for Canvas<'a> {
     type Target = CanvasInfo<'a>;
 
     fn deref(&self) -> &Self::Target { &self.info }
+}
+
+impl Filler for Canvas<'_> {
+    #[inline]
+    fn map<F: Fill>(&mut self, pos: Vec3<i32>, f: F) {
+        Canvas::map(self, pos, |block| {
+            let current_block =
+                f.sample_at(pos, /*&info*/block);
+            /* if let (Some(last_block), None) = (last_block, current_block) {
+                spawn(pos, last_block);
+            }
+            last_block = current_block; */
+            current_block.unwrap_or(block)
+        })
+    }
+
+    #[inline]
+    fn spawn(&mut self, entity: EntityInfo) {
+        self.entities.push(entity);
+    }
 }

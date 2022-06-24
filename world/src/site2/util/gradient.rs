@@ -39,7 +39,7 @@ impl Shape {
     pub fn radial_line(direction: Vec3<f32>) -> Self { Shape::Line(direction.normalized()) }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Gradient {
     /// The center of the gradient shape
     pub(super) center: Vec3<f32>,

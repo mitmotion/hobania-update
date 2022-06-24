@@ -2148,7 +2148,8 @@ impl WorldSim {
             })
     }
 
-    pub fn get_area_trees(
+    /// TOOD: Abstract over sequential and parallel iteration.
+    pub fn get_area_trees_par(
         &self,
         wpos_min: Vec2<i32>,
         wpos_max: Vec2<i32>,
@@ -2156,6 +2157,27 @@ impl WorldSim {
         self.gen_ctx
             .structure_gen
             .par_iter(wpos_min, wpos_max)
+            .filter_map(move |(wpos, seed)| {
+                let lottery = self.make_forest_lottery(wpos);
+                Some(TreeAttr {
+                    pos: wpos,
+                    seed,
+                    scale: 1.0,
+                    forest_kind: *lottery.choose_seeded(seed).as_ref()?,
+                    inhabited: false,
+                })
+            })
+    }
+
+    /// TOOD: Abstract over sequential and parallel iteration.
+    pub fn get_area_trees(
+        &self,
+        wpos_min: Vec2<i32>,
+        wpos_max: Vec2<i32>,
+    ) -> impl Iterator<Item = TreeAttr> + '_ {
+        self.gen_ctx
+            .structure_gen
+            .iter(wpos_min, wpos_max)
             .filter_map(move |(wpos, seed)| {
                 let lottery = self.make_forest_lottery(wpos);
                 Some(TreeAttr {

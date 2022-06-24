@@ -215,6 +215,10 @@ impl Tile {
         }
     }
 
+    pub fn plot(&self) -> Option<Id<Plot>> {
+        self.plot
+    }
+
     pub fn is_empty(&self) -> bool { self.kind == TileKind::Empty }
 
     pub fn is_natural(&self) -> bool { matches!(self.kind, TileKind::Empty | TileKind::Hazard(_)) }

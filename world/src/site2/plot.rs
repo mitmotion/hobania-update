@@ -1,4 +1,5 @@
 mod castle;
+mod citadel;
 mod cliff_tower;
 pub mod dungeon;
 mod giant_tree;
@@ -7,7 +8,8 @@ mod house;
 mod workshop;
 
 pub use self::{
-    castle::Castle, cliff_tower::CliffTower, dungeon::Dungeon, giant_tree::GiantTree,
+    castle::Castle, citadel::Citadel, cliff_tower::CliffTower,
+    dungeon::Dungeon, giant_tree::GiantTree,
     gnarling::GnarlingFortification, house::House, workshop::Workshop,
 };
 
@@ -53,5 +55,6 @@ pub enum PlotKind {
     Dungeon(Dungeon),
     Gnarling(GnarlingFortification),
     GiantTree(GiantTree),
+    Citadel(Citadel),
     CliffTower(CliffTower),
 }

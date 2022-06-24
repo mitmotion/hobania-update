@@ -84,6 +84,10 @@ impl<T> Store<T> {
             Some(Id::<T>(i, PhantomData))
         }
     }
+
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
 }
 
 impl<T: Send + Sync> Store<T> {

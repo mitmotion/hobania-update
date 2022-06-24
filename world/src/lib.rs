@@ -8,10 +8,16 @@
 #![allow(clippy::branches_sharing_code)] // TODO: evaluate
 #![deny(clippy::clone_on_ref_ptr)]
 #![feature(
+    arbitrary_enum_discriminant,
+    associated_const_equality,
     bool_to_option,
     label_break_value,
     option_zip,
-    arbitrary_enum_discriminant
+    portable_simd,
+    int_log,
+    let_else,
+    map_first_last,
+    trait_alias,
 )]
 
 mod all;
@@ -158,7 +164,7 @@ impl World {
                                 civ::SiteKind::Castle => world_msg::SiteKind::Castle,
                                 civ::SiteKind::Tree | civ::SiteKind::GiantTree => world_msg::SiteKind::Tree,
                                 // TODO: Maybe change?
-                                civ::SiteKind::Gnarling => world_msg::SiteKind::Gnarling,
+                                civ::SiteKind::Gnarling | civ::SiteKind::Citadel => world_msg::SiteKind::Gnarling,
                             },
                             wpos: site.center * TerrainChunkSize::RECT_SIZE.map(|e| e as i32),
                         }
@@ -347,6 +353,7 @@ impl World {
         let mut dynamic_rng = ChaCha8Rng::from_seed(thread_rng().gen());
 
         // Apply layers (paths, caves, etc.)
+        let mut arena = bumpalo::Bump::new();
         let mut canvas = Canvas {
             info: CanvasInfo {
                 chunk_pos,
@@ -359,6 +366,7 @@ impl World {
                 calendar,
             },
             chunk: &mut chunk,
+            // arena: &mut arena,
             entities: Vec::new(),
         };
 
@@ -392,7 +400,7 @@ impl World {
         sim_chunk
             .sites
             .iter()
-            .for_each(|site| index.sites[*site].apply_to(&mut canvas, &mut dynamic_rng));
+            .for_each(|site| index.sites[*site].apply_to(&mut canvas, &mut arena, &mut dynamic_rng));
 
         let mut supplement = ChunkSupplement {
             entities: canvas.entities,
@@ -477,7 +485,7 @@ impl World {
         objects.append(
             &mut self
                 .sim()
-                .get_area_trees(min_wpos, max_wpos)
+                .get_area_trees_par(min_wpos, max_wpos)
                 .filter_map(|attr| {
                     ColumnGen::new(self.sim())
                         .get((attr.pos, index, self.sim().calendar.as_ref()))

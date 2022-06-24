@@ -7,6 +7,7 @@
     associated_type_defaults,
     bool_to_option,
     fundamental,
+    generic_const_exprs,
     label_break_value,
     option_zip,
     trait_alias,

@@ -55,6 +55,7 @@ pub struct Structure {
 
 #[derive(Debug)]
 struct BaseStructure {
+    len: usize,
     vol: Dyna<Option<NonZeroU8>, ()>,
     palette: [StructureBlock; 256],
 }
@@ -68,6 +69,8 @@ impl std::ops::Deref for StructuresGroup {
 }
 
 impl assets::Compound for StructuresGroup {
+    const HOT_RELOADED: bool = false;
+
     fn load<S: assets::source::Source + ?Sized>(
         cache: &assets::AssetCache<S>,
         specifier: &str,
@@ -100,6 +103,8 @@ impl assets::Compound for StructuresGroup {
     }
 }
 
+impl assets::NotHotReloaded for StructuresGroup {}
+
 impl Structure {
     pub fn load_group(specifier: &str) -> AssetHandle<StructuresGroup> {
         StructuresGroup::load_expect(&["world.manifests.", specifier].concat())
@@ -116,6 +121,10 @@ impl Structure {
             min: -self.center,
             max: self.base.vol.size().map(|e| e as i32) - self.center,
         }
+    }
+
+    pub fn len(&self) -> usize {
+        self.base.len
     }
 }
 
@@ -171,11 +180,12 @@ impl assets::Compound for BaseStructure {
                 );
             }
 
-            Ok(BaseStructure { vol, palette })
+            Ok(BaseStructure { len: model.voxels.len(), vol, palette })
         } else {
             Ok(BaseStructure {
                 vol: Dyna::filled(Vec3::zero(), None, ()),
                 palette: [StructureBlock::None; 256],
+                len: 0,
             })
         }
     }

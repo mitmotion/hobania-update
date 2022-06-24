@@ -7,7 +7,7 @@ use lazy_static::lazy_static;
 use std::{borrow::Cow, path::PathBuf, sync::Arc};
 
 pub use assets_manager::{
-    asset::{DirLoadable, Ron},
+    asset::{DirLoadable, NotHotReloaded, Ron},
     loader::{
         self, BincodeLoader, BytesLoader, JsonLoader, LoadFrom, Loader, RonLoader, StringLoader,
     },

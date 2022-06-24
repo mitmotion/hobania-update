@@ -5,7 +5,11 @@ authors = ["Joshua Barretto <joshua.s.barretto@gmail.com>"]
 edition = "2021"
 
 [features]
-simd = ["vek/platform_intrinsics", "packed_simd"]
+simd = [
+    "vek/platform_intrinsics",
+    # "vek/vec8",
+    "packed_simd",
+]
 bin_compression = ["lz-fear", "deflate", "flate2", "image/jpeg", "num-traits", "fallible-iterator", "clap", "rstar"]
 
 default = ["simd"]
@@ -17,12 +21,14 @@ common-net = { package = "veloren-common-net", path = "../common/net" }
 
 bincode = "1.3.1"
 bitvec = "0.22"
+bumpalo = "3.9.1"
 enum-iterator = "0.7"
 fxhash = "0.2.1"
 image = { version = "0.23.12", default-features = false, features = ["png"] }
 itertools = "0.10"
 vek = { version = "0.15.8", features = ["serde"] }
 noise = { version = "0.7", default-features = false }
+noisy_float = { version = "0.2", default-features = false }
 num = "0.4"
 ordered-float = "2.0.1"
 hashbrown = { version = "0.11", features = ["rayon", "serde", "nightly"] }
@@ -50,7 +56,7 @@ clap = { version = "3.1.8", optional = true }
 
 [dev-dependencies]
 common-frontend = { package = "veloren-common-frontend", path = "../common/frontend" }
-criterion = "0.3"
+criterion = { version = "0.3", features = ["real_blackbox"] }
 csv = "1.1.3"
 tracing-subscriber = { version = "0.3.7", default-features = false, features = ["fmt", "time", "ansi", "smallvec", "env-filter"] }
 minifb = "0.22"

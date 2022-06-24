@@ -1,7 +1,7 @@
 use crate::{
     layer::tree::{ProceduralTree, TreeConfig},
     site::namegen::NameGen,
-    site2::{Fill, Painter, Site, Structure},
+    site2::{Fill, Filler, FillFn, Painter, Site, Structure},
     util::FastNoise,
     Land, Sampler,
 };
@@ -78,8 +78,8 @@ impl GiantTree {
     }
 }
 
-impl Structure for GiantTree {
-    fn render(&self, _site: &Site, _land: &Land, painter: &Painter) {
+impl<F: Filler> Structure<F> for GiantTree {
+    fn render<'a>(&self, _site: &Site, _land: Land, painter: &Painter<'a>, filler: &mut FillFn<'a, '_, F>) {
         let fast_noise = FastNoise::new(self.seed);
         let dark = Rgb::new(10, 70, 50).map(|e| e as f32);
         let light = Rgb::new(80, 140, 10).map(|e| e as f32);
@@ -88,23 +88,25 @@ impl Structure for GiantTree {
             light,
             fast_noise.get((self.wpos.map(|e| e as f64) * 0.05) * 0.5 + 0.5),
         );
+        let leaf_vertical_scale = /*t.config.leaf_vertical_scale*/0.6f32.recip()/*1.0*/;
         self.tree.walk(|branch, parent| {
             let aabr = Aabr {
                 min: self.wpos.xy() + branch.get_aabb().min.xy().as_(),
                 max: self.wpos.xy() + branch.get_aabb().max.xy().as_(),
             };
-            if aabr.collides_with_aabr(painter.render_aabr().as_()) {
+            if aabr.collides_with_aabr(filler.render_aabr().as_()) {
                 painter
                     .line_two_radius(
                         self.wpos + branch.get_line().start.as_(),
                         self.wpos + branch.get_line().end.as_(),
                         parent.get_wood_radius(),
                         branch.get_wood_radius(),
+                        1.0,
                     )
-                    .fill(Fill::Block(Block::new(
+                    .fill(filler.block(Block::new(
                         BlockKind::Wood,
                         Rgb::new(80, 32, 0),
-                    )));
+                    )), filler);
                 if branch.get_leaf_radius() > branch.get_wood_radius() {
                     painter
                         .line_two_radius(
@@ -112,11 +114,12 @@ impl Structure for GiantTree {
                             self.wpos + branch.get_line().end.as_(),
                             parent.get_leaf_radius(),
                             branch.get_leaf_radius(),
+                            leaf_vertical_scale,
                         )
-                        .fill(Fill::Block(Block::new(
+                        .fill(filler.block(Block::new(
                             BlockKind::Leaves,
                             leaf_col.map(|e| e as u8),
-                        )))
+                        )), filler)
                 }
                 true
             } else {

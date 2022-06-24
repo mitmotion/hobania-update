@@ -2,6 +2,7 @@ use crate::{
     all::*,
     block::block_from_structure,
     column::ColumnGen,
+    site2::{self, PrimitiveTransform},
     util::{gen_cache::StructureGenCache, RandomPerm, Sampler, UnitChooser},
     Canvas, ColumnSample,
 };
@@ -58,7 +59,7 @@ pub fn apply_trees_to(
     // TODO: Get rid of this
     #[allow(clippy::large_enum_variant)]
     enum TreeModel {
-        Structure(Structure),
+        Structure(&'static Structure),
         Procedural(ProceduralTree, StructureBlock),
     }
 
@@ -71,12 +72,27 @@ pub fn apply_trees_to(
     }
 
     let info = canvas.info();
-    let mut tree_cache = StructureGenCache::new(info.chunks().gen_ctx.structure_gen.clone());
+    /* let mut tree_cache = StructureGenCache::new(info.chunks().gen_ctx.structure_gen.clone()); */
 
-    canvas.foreach_col(|canvas, wpos2d, col| {
-        let trees = tree_cache.get(wpos2d, |wpos, seed| {
-            let scale = 1.0;
-            let inhabited = false;
+    // Get all the trees in range.
+    let render_area = Aabr {
+        min: info.wpos(),
+        max: info.wpos() + Vec2::from(info.area().size().map(|e| e as i32)),
+    };
+
+    let mut arena = bumpalo::Bump::new();
+
+    /*canvas.foreach_col(|canvas, wpos2d, col| {*/
+    info.chunks()
+        .get_area_trees(render_area.min, render_area.max)
+        .filter_map(|attr| {
+            info.col_or_gen(attr.pos)
+                .filter(|col| tree_valid_at(col, attr.seed))
+                .zip(Some(attr))
+        })
+        .for_each(|(col, attr)| {
+            let seed = attr.seed;
+        /* let trees = tree_cache.get(wpos2d, |wpos, seed| {
             let forest_kind = *info
                 .chunks()
                 .make_forest_lottery(wpos)
@@ -87,12 +103,14 @@ pub fn apply_trees_to(
 
             if !tree_valid_at(&col, seed) {
                 return None;
-            }
+            } */
 
-            Some(Tree {
-                pos: Vec3::new(wpos.x, wpos.y, col.alt as i32),
+            let scale = 1.0;
+            let inhabited = false;
+            let tree = /*Some(*/Tree {
+                pos: Vec3::new(/*wpos.x*/attr.pos.x, /*wpos.y*/attr.pos.y, col.alt as i32),
                 model: 'model: {
-                    let models: AssetHandle<_> = match forest_kind {
+                    let models: AssetHandle<_> = match attr.forest_kind {
                         ForestKind::Oak if QUIRKY_RAND.chance(seed + 1, 1.0 / 16.0) => *OAK_STUMPS,
                         ForestKind::Oak if QUIRKY_RAND.chance(seed + 2, 1.0 / 20.0) => {
                             break 'model TreeModel::Procedural(
@@ -198,21 +216,168 @@ pub fn apply_trees_to(
                         },
                     };
 
-                    let models = models.read();
+                    let models = models./*read*/get();
                     TreeModel::Structure(
-                        models
+                        &models
                             [(MODEL_RAND.get(seed.wrapping_mul(17)) / 13) as usize % models.len()]
-                        .clone(),
+                        /*.clone(),*/
                     )
                 },
                 seed,
                 units: UNIT_CHOOSER.get(seed),
                 lights: inhabited,
-            })
-        });
+            }/*)*/;
+        /* }); */
 
-        for tree in trees {
-            let bounds = match &tree.model {
+            /* criterion::black_box(tree); */
+        /*for tree in trees {*/
+            /* 
+    arena: &'b bumpalo::Bump,
+    canvas_info: CanvasInfo<'c>,
+    render_area: Aabr<i32>,
+    filler: /*impl FnOnce(&'b mut Canvas<'a>) -> &'b mut F*/&'b mut F,
+    render: Render, */
+            let (bounds, hanging_sprites) = match &tree.model {
+                TreeModel::Structure(s) => {
+                    site2::render_collect(
+                        &arena,
+                        info,
+                        render_area,
+                        canvas,
+                        |painter, filler| {
+                            painter
+                                .prefab(s)
+                                .translate(/*totem_pos*/tree.pos)
+                                .fill(filler.prefab(s, tree.pos, tree.seed), filler);
+                        },
+                    );
+                    arena.reset();
+                    (s.get_bounds(), [(0.0004, SpriteKind::Beehive)].as_ref())
+                },
+                &TreeModel::Procedural(ref t, leaf_block) => {
+                    let bounds = t.get_bounds().map(|e| e as i32);
+                    let trunk_block = t.config.trunk_block;
+                    let leaf_vertical_scale = t.config.leaf_vertical_scale.recip();
+                    let branch_child_radius_lerp = t.config.branch_child_radius_lerp;
+                    let wpos = tree.pos;
+
+                    // NOTE: Technically block_from_structure isn't correct here, because it could
+                    // lerp with position; in practice, it almost never does, and most of the other
+                    // expensive parameters are unused.
+                    /* let trunk_block = if let Some(block) = block_from_structure(
+                        info.index(),
+                        trunk_block,
+                        wpos,
+                        tree.pos.xy(),
+                        tree.seed,
+                        &col,
+                        Block::air,
+                        calendar,
+                    ) {
+                        block
+                    } else {
+                        return;
+                    };
+                    let leaf_block = if let Some(block) = block_from_structure(
+                        info.index(),
+                        leaf_block,
+                        wpos,
+                        tree.pos.xy(),
+                        tree.seed,
+                        &col,
+                        Block::air,
+                        calendar,
+                    ) {
+                        block
+                    } else {
+                        return;
+                    }; */
+
+                    site2::render_collect(
+                        &arena,
+                        info,
+                        render_area,
+                        canvas,
+                        |painter, filler| {
+                            let trunk_block = filler.block_from_structure(
+                                trunk_block,
+                                tree.pos.xy(),
+                                tree.seed,
+                                &col,
+                            );
+                            let leaf_block = filler.block_from_structure(
+                                leaf_block,
+                                tree.pos.xy(),
+                                tree.seed,
+                                &col,
+                            );
+                            t.walk(|branch, parent| {
+                                let aabr = Aabr {
+                                    min: wpos.xy() + branch.get_aabb().min.xy().as_(),
+                                    max: wpos.xy() + branch.get_aabb().max.xy().as_(),
+                                };
+                                if aabr.collides_with_aabr(filler.render_aabr().as_()) {
+                                    let start =
+                                        wpos.as_::<f32>() + branch.get_line().start/*.as_()*//* - 0.5*/;
+                                    let end =
+                                        wpos.as_::<f32>() + branch.get_line().end/*.as_()*//* - 0.5*/;
+                                    let wood_radius = branch.get_wood_radius();
+                                    let leaf_radius = branch.get_leaf_radius();
+                                    let parent_wood_radius = if branch_child_radius_lerp {
+                                        parent.get_wood_radius()
+                                    } else {
+                                        wood_radius
+                                    };
+                                    let leaf_eats_wood = leaf_radius > wood_radius;
+                                    let leaf_eats_parent_wood = leaf_radius > parent_wood_radius;
+                                    if !leaf_eats_wood || !leaf_eats_parent_wood {
+                                        // Render the trunk, since it's not swallowed by its leaf.
+                                        painter
+                                            .line_two_radius(
+                                                start,
+                                                end,
+                                                parent_wood_radius,
+                                                wood_radius,
+                                                1.0,
+                                            )
+                                            .fill(/*filler.block(trunk_block)*/trunk_block, filler);
+                                    }
+                                    if leaf_eats_wood || leaf_eats_parent_wood {
+                                        // Render the leaf, since it's not *completely* swallowed
+                                        // by the trunk.
+                                        painter
+                                            .line_two_radius(
+                                                start,
+                                                end,
+                                                leaf_radius,
+                                                leaf_radius,
+                                                leaf_vertical_scale,
+                                            )
+                                            .fill(/*filler.block(leaf_block)*/leaf_block, filler);
+                                    }
+                                    true
+                                } else {
+                                    false
+                                }
+                            });
+                            // Draw the roots.
+                            t.roots.iter().for_each(|root| {
+                                painter
+                                    .line(
+                                        wpos/*.as_::<f32>()*/ + root.line.start.as_()/* - 0.5*/,
+                                        wpos/*.as_::<f32>()*/ + root.line.end.as_()/* - 0.5*/,
+                                        root.radius,
+                                    )
+                                    .fill(/*filler.block(leaf_block)*/trunk_block, filler);
+                            });
+                        },
+                    );
+                    arena.reset();
+                    (bounds, t.config.hanging_sprites)
+                },
+            };
+
+            /* let bounds = match &tree.model {
                 TreeModel::Structure(s) => s.get_bounds(),
                 TreeModel::Procedural(t, _) => t.get_bounds().map(|e| e as i32),
             };
@@ -224,7 +389,6 @@ pub fn apply_trees_to(
                 // Skip this column
                 continue;
             }
-
             let hanging_sprites = match &tree.model {
                 TreeModel::Structure(_) => [(0.0004, SpriteKind::Beehive)].as_ref(),
                 TreeModel::Procedural(t, _) => t.config.hanging_sprites,
@@ -307,9 +471,10 @@ pub fn apply_trees_to(
                     is_leaf_top = true;
                     last_block = Block::empty();
                 });
-            }
-        }
-    });
+            } */
+        /*}*/
+        })
+    /*})*/;
 }
 
 /// A type that specifies the generation properties of a tree.

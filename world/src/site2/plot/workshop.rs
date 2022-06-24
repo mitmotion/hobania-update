@@ -39,29 +39,29 @@ impl Workshop {
     }
 }
 
-impl Structure for Workshop {
-    fn render(&self, _site: &Site, _land: &Land, painter: &Painter) {
-        let brick = Fill::Brick(BlockKind::Rock, Rgb::new(80, 75, 85), 24);
+impl<F: Filler> Structure<F> for Workshop {
+    fn render<'a>(&self, _site: &Site, _land: Land, painter: &Painter<'a>, filler: &mut FillFn<'a, '_, F>) {
+        let brick = filler.brick(BlockKind::Rock, Rgb::new(80, 75, 85), 24);
 
         let base = self.alt + 1;
         let center = self.bounds.center();
 
         // Base
         painter
-            .aabb(Aabb {
+            .aabb/*::<super::gen::Cbn>*/(Aabb {
                 min: (self.bounds.min + 1).with_z(base - 16),
                 max: self.bounds.max.with_z(base),
             })
-            .fill(brick.clone());
+            .fill(brick, filler);
 
         let roof = base + 5;
 
         painter
-            .aabb(Aabb {
+            .aabb/*::<super::gen::Cbn>*/(Aabb {
                 min: (self.bounds.min + 2).with_z(base),
                 max: (self.bounds.max - 1).with_z(roof),
             })
-            .clear();
+            .clear(filler);
 
         // Supports
         for pos in [
@@ -72,10 +72,10 @@ impl Structure for Workshop {
         ] {
             painter
                 .line(pos.with_z(base), pos.with_z(roof), 1.0)
-                .fill(Fill::Block(Block::new(
+                .fill(filler.block(Block::new(
                     BlockKind::Wood,
                     Rgb::new(55, 25, 8),
-                )));
+                )), filler);
         }
 
         let roof_top = roof + 5;
@@ -86,7 +86,7 @@ impl Structure for Workshop {
                 min: (self.bounds.min + 2).with_z(roof),
                 max: (self.bounds.max - 1).with_z(roof_top),
             })
-            .fill(Fill::Brick(BlockKind::Rock, Rgb::new(45, 28, 21), 24));
+            .fill(filler.brick(BlockKind::Rock, Rgb::new(45, 28, 21), 24), filler);
 
         let chimney = roof_top + 2;
 
@@ -98,19 +98,20 @@ impl Structure for Workshop {
                 center.with_z(chimney),
                 chimney_radius,
             )
-            .fill(brick);
+            .fill(brick, filler);
         painter
             .line(
                 center.with_z(base),
                 center.with_z(chimney + 2),
                 chimney_radius - 1.0,
             )
-            .clear();
+            .clear(filler);
         for x in -1..2 {
             for y in -1..2 {
                 painter.sprite(
                     (center + Vec2::new(x, y)).with_z(base - 1),
                     SpriteKind::Ember,
+                    filler,
                 );
             }
         }
@@ -134,11 +135,11 @@ impl Structure for Workshop {
                 let cr_station = stations.swap_remove(
                     RandomField::new(0).get(position.with_z(base)) as usize % stations.len(),
                 );
-                painter.sprite(position.with_z(base), cr_station);
+                painter.sprite(position.with_z(base), cr_station, filler);
             }
         }
 
-        painter.spawn(
+        filler.spawn(
             EntityInfo::at(self.bounds.center().with_z(base).map(|e| e as f32 + 0.5))
                 .into_waypoint(),
         );
