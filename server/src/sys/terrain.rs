@@ -15,7 +15,7 @@ use crate::{
     ChunkRequest, SpawnPoint, Tick,
 };
 use common::{
-    calendar::Calendar,
+    /* calendar::Calendar, */
     comp::{
         self, agent, bird_medium, skillset::skills, BehaviorCapability, ForceUpdate, Pos, Waypoint,
     },
@@ -59,7 +59,7 @@ impl<'a> System<'a> for Sys {
         Read<'a, SpawnPoint>,
         Read<'a, Settings>,
         Read<'a, TimeOfDay>,
-        Read<'a, Calendar>,
+        /* Read<'a, Calendar>, */
         ReadExpect<'a, SlowJobPool>,
         ReadExpect<'a, IndexOwned>,
         ReadExpect<'a, Arc<World>>,
@@ -92,7 +92,7 @@ impl<'a> System<'a> for Sys {
             spawn_point,
             server_settings,
             time_of_day,
-            calendar,
+            /* calendar, */
             slow_jobs,
             index,
             world,
@@ -127,7 +127,7 @@ impl<'a> System<'a> for Sys {
                 &slow_jobs,
                 Arc::clone(&world),
                 index.clone(),
-                (*time_of_day, calendar.clone()),
+                (*time_of_day/*, calendar.clone()*/),
             )
         });
 

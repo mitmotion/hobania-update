@@ -4,10 +4,13 @@
 #![allow(clippy::option_map_unit_fn)]
 #![deny(clippy::clone_on_ref_ptr)]
 #![feature(
+    allocator_api,
+    array_chunks,
     associated_type_defaults,
     bool_to_option,
     fundamental,
     generic_const_exprs,
+    generic_arg_infer,
     label_break_value,
     option_zip,
     trait_alias,

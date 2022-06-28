@@ -1,3 +1,4 @@
+use zerocopy::AsBytes;
 use super::SpriteKind;
 use crate::{
     comp::{fluid_dynamics::LiquidKind, tool::ToolKind},
@@ -14,6 +15,7 @@ use vek::*;
 make_case_elim!(
     block_kind,
     #[derive(
+        AsBytes,
         Copy,
         Clone,
         Debug,
@@ -28,6 +30,7 @@ make_case_elim!(
         Display,
     )]
     #[repr(u8)]
+    /// NOTE: repr(u8) preserves the niche optimization for fieldless enums!
     pub enum BlockKind {
         Air = 0x00, // Air counts as a fluid
         Water = 0x01,
@@ -110,10 +113,28 @@ impl BlockKind {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(AsBytes, Copy, Clone, Debug, Eq, Serialize, Deserialize)]
+/// NOTE: repr(C) appears to preservre niche optimizations!
+#[repr(align(4), C)]
 pub struct Block {
     kind: BlockKind,
     attr: [u8; 3],
+}
+
+impl core::hash::Hash for Block {
+    #[inline]
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        u32::hash(&zerocopy::transmute!(*self), state)
+    }
+}
+
+impl PartialEq for Block {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        let a: u32 = zerocopy::transmute!(*self);
+        let b: u32 = zerocopy::transmute!(*other);
+        a == b
+    }
 }
 
 impl Deref for Block {

@@ -945,13 +945,19 @@ impl<V: RectRasterableVol> Terrain<V> {
 
         span!(guard, "Queue meshing from todo list");
         let mesh_focus_pos = focus_pos.map(|e| e.trunc()).xy().as_::<i64>();
-        for (todo, chunk) in self
+        let mut todo = self
             .mesh_todo
             .values_mut()
             .filter(|todo| !todo.is_worker_active)
-            .min_by_key(|todo| ((todo.pos.as_::<i64>() * TerrainChunk::RECT_SIZE.as_::<i64>()).distance_squared(mesh_focus_pos), todo.started_tick))
+            // TODO: BinaryHeap
+            .collect::<Vec<_>>();
+        todo.sort_unstable_by_key(|todo| ((todo.pos.as_::<i64>() * TerrainChunk::RECT_SIZE.as_::<i64>()).distance_squared(mesh_focus_pos), todo.started_tick));
+
+        for (todo, chunk) in todo.into_iter()
+            .filter(|todo| !todo.is_worker_active)
+            /* .min_by_key(|todo| ((todo.pos.as_::<i64>() * TerrainChunk::RECT_SIZE.as_::<i64>()).distance_squared(mesh_focus_pos), todo.started_tick)) */
             // Find a reference to the actual `TerrainChunk` we're meshing
-            .and_then(|todo| {
+            ./*and_then*/filter_map(|todo| {
                 let pos = todo.pos;
                 Some((todo, scene_data.state
                     .terrain()

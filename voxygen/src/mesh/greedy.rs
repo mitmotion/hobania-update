@@ -112,8 +112,8 @@ impl<'a> GreedyMesh<'a> {
             max_size
         );
         // TODO: Collect information to see if we can choose a good value here.
-        let large_size_threshold = 256.min(min_max_dim / 2 + 1);
-        let small_size_threshold = 33.min(large_size_threshold / 2 + 1);
+        let large_size_threshold = /*256*/8.min(min_max_dim / 2 + 1);
+        let small_size_threshold = /*33*/3.min(large_size_threshold / 2 + 1);
         let size = guillotiere::Size::new(32, 32).min(max_size);
         let atlas =
             guillotiere::SimpleAtlasAllocator::with_options(size, &guillotiere::AllocatorOptions {

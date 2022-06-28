@@ -213,12 +213,12 @@ fn simulate_return(index: &mut Index, world: &mut WorldSim) -> Result<(), std::i
         for site in index.sites.ids() {
             let site = &index.sites[site];
             match site.kind {
-                SiteKind::Settlement(_) | SiteKind::Refactor(_) | SiteKind::CliffTown(_) => {
+                /*SiteKind::Settlement(_) | */SiteKind::Refactor(_) | SiteKind::CliffTown(_) => {
                     towns += site.economy.pop
                 },
                 SiteKind::Dungeon(_) => dungeons += site.economy.pop,
                 SiteKind::Castle(_) => castles += site.economy.pop,
-                SiteKind::Tree(_) => (),
+                /* SiteKind::Tree(_) => (), */
                 SiteKind::GiantTree(_) => (),
                 SiteKind::Gnarling(_) => {},
             }
@@ -538,7 +538,7 @@ mod tests {
                         resources,
                         neighbors,
                         kind: match i.kind {
-                            crate::site::SiteKind::Settlement(_)
+                            /* crate::site::SiteKind::Settlement(_) */
                             | crate::site::SiteKind::Refactor(_)
                             | crate::site::SiteKind::CliffTown(_) => {
                                 common::terrain::site::SitesKind::Settlement
@@ -584,9 +584,9 @@ mod tests {
                             ))
                         },
                         // common::terrain::site::SitesKind::Settlement |
-                        _ => crate::site::Site::settlement(crate::site::Settlement::generate(
+                        _ => crate::site::Site::settlement(crate::/*site::Settlement::generate(
                             wpos, None, &mut rng,
-                        )),
+                        )*/site2::Site::generate_city(&crate::Land::empty(), &mut env.rng, wpos)),
                     };
                     for g in i.resources.iter() {
                         //let c = sim::SimChunk::new();
@@ -648,12 +648,12 @@ mod tests {
             resources: &[(Good, f32)],
         ) -> Id<crate::site::Site> {
             let wpos = Vec2 { x: 42, y: 42 };
-            let mut settlement = crate::site::Site::settlement(crate::site::Settlement::generate(
+            let mut settlement = crate::site::Site::/*settlement*/refactor(crate::/*site::Settlement::generate(
                 wpos,
                 None,
                 &mut env.rng,
                 //Some(name),
-            ));
+            )*/site2::Site::generate_city(&crate::Land::empty(), &mut env.rng, wpos));
             for (good, amount) in resources.iter() {
                 settlement.economy.natural_resources.chunks_per_resource
                     [(*good).try_into().unwrap_or_default()] = *amount;

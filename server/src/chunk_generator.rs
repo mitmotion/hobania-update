@@ -44,7 +44,7 @@ impl ChunkGenerator {
         slowjob_pool: &SlowJobPool,
         world: Arc<World>,
         index: IndexOwned,
-        time: (TimeOfDay, Calendar),
+        time: /*(TimeOfDay, Calendar)*/TimeOfDay,
     ) {
         let v = if let Entry::Vacant(v) = self.pending_chunks.entry(key) {
             v

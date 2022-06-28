@@ -31,35 +31,33 @@ pub struct BlockGen<'a> {
 impl<'a> BlockGen<'a> {
     pub fn new(column_gen: ColumnGen<'a>) -> Self { Self { column_gen } }
 
-    pub fn sample_column<'b>(
+    /* pub fn sample_column<'b>(
         column_gen: &ColumnGen<'a>,
-        cache: &'b mut SmallCache<Option<ColumnSample<'a>>>,
+        cache: &'b mut SmallCache<ColumnSample<'a>>,
         wpos: Vec2<i32>,
-        index: IndexRef<'a>,
-        calendar: Option<&'a Calendar>,
-    ) -> Option<&'b ColumnSample<'a>> {
+        /* index: IndexRef<'a>,
+        calendar: Option<&'a Calendar>, */
+    ) -> &'b ColumnSample<'a> {
         cache
-            .get(wpos, |wpos| column_gen.get((wpos, index, calendar)))
-            .as_ref()
-    }
+            .get(wpos, |wpos| column_gen.get(/*(wpos, index, calendar)*/wpos))
+    } */
 
-    pub fn get_z_cache(
+    /* pub fn get_z_cache(
         &mut self,
         wpos: Vec2<i32>,
-        index: IndexRef<'a>,
-        calendar: Option<&'a Calendar>,
-    ) -> Option<ZCache<'a>> {
+        /* index: IndexRef<'a>,
+        calendar: Option<&'a Calendar>, */
+    ) -> ZCache<'a> {
         let BlockGen { column_gen } = self;
 
         // Main sample
-        let sample = column_gen.get((wpos, index, calendar))?;
+        let sample = column_gen.get((wpos/*, index, calendar*/));
 
-        Some(ZCache { sample, calendar })
-    }
+        /*Some(*/ZCache { sample, calendar: column_gen.sim.calendar.as_ref(), }/*)*/
+    } */
 
-    pub fn get_with_z_cache(&mut self, wpos: Vec3<i32>, z_cache: Option<&ZCache>) -> Option<Block> {
-        let z_cache = z_cache?;
-        let sample = &z_cache.sample;
+    pub fn get_with_z_cache(&mut self, wpos: Vec3<i32>, z_cache: ZCache) -> Option<Block> {
+        let sample = z_cache.sample;
         let &ColumnSample {
             alt,
             basement,
@@ -101,10 +99,14 @@ impl<'a> BlockGen<'a> {
                     {
                         Some(Block::empty())
                     } else {
+                        let sinlike = |x: f32| {
+                            // x.sin()
+                            (x.fract() - 0.5).abs() * 2.0 - 1.0
+                        };
                         let col = Lerp::lerp(
                             col.map(|e| e as f32),
                             col.map(|e| e as f32) * 0.7,
-                            (wposf.z as f32 - basement * 0.3).div(2.0).sin() * 0.5 + 0.5,
+                            sinlike((wposf.z as f32 - basement * 0.3).div(2.0)) * 0.5 + 0.5,
                         )
                         .map(|e| e as u8);
                         Some(Block::new(BlockKind::Rock, col))
@@ -154,13 +156,15 @@ impl<'a> BlockGen<'a> {
     }
 }
 
+#[derive(Clone,Copy)]
 pub struct ZCache<'a> {
-    pub sample: ColumnSample<'a>,
-    pub calendar: Option<&'a Calendar>,
+    pub sample: &'a ColumnSample/*<'a>*/,
+    /* pub calendar: Option<&'a Calendar>, */
 }
 
 impl<'a> ZCache<'a> {
-    pub fn get_z_limits(&self) -> (f32, f32) {
+    pub fn get_z_limits(self) -> (f32, f32) {
+        // dbg!(self.sample.alt, self.sample.chaos, self.sample.cliff_offset);
         let min = self.sample.alt
             - (self.sample.chaos.min(1.0) * 16.0)
             - self.sample.cliff_offset.max(0.0);

@@ -47,6 +47,7 @@ pub use column::ColumnSample;
 pub use index::{IndexOwned, IndexRef};
 
 use crate::{
+    block::ZCache,
     column::ColumnGen,
     index::Index,
     layer::spot::Spot,
@@ -154,7 +155,7 @@ impl World {
                             name: site.site_tmp.map(|id| index.sites[id].name().to_string()),
                             // TODO: Probably unify these, at some point
                             kind: match &site.kind {
-                                civ::SiteKind::Settlement | civ::SiteKind::Refactor | civ::SiteKind::CliffTown => world_msg::SiteKind::Town,
+                                /* civ::SiteKind::Settlement | */civ::SiteKind::Refactor | civ::SiteKind::CliffTown => world_msg::SiteKind::Town,
                                 civ::SiteKind::Dungeon => world_msg::SiteKind::Dungeon {
                                     difficulty: match site.site_tmp.map(|id| &index.sites[id].kind) {
                                         Some(site::SiteKind::Dungeon(d)) => d.dungeon_difficulty().unwrap_or(0),
@@ -162,7 +163,7 @@ impl World {
                                     },
                                 },
                                 civ::SiteKind::Castle => world_msg::SiteKind::Castle,
-                                civ::SiteKind::Tree | civ::SiteKind::GiantTree => world_msg::SiteKind::Tree,
+                                /* civ::SiteKind::Tree | */civ::SiteKind::GiantTree => world_msg::SiteKind::Tree,
                                 // TODO: Maybe change?
                                 civ::SiteKind::Gnarling | civ::SiteKind::Citadel => world_msg::SiteKind::Gnarling,
                             },
@@ -187,21 +188,26 @@ impl World {
                             }),
                     )
                     .collect(),
-                ..self.sim.get_map(index, self.sim().calendar.as_ref())
+                ..self.sim.get_map(index/*, self.sim().calendar.as_ref()*/)
             }
         })
     }
 
-    pub fn sample_columns(
-        &self,
-    ) -> impl Sampler<
-        Index = (Vec2<i32>, IndexRef, Option<&'_ Calendar>),
-        Sample = Option<ColumnSample>,
-    > + '_ {
-        ColumnGen::new(&self.sim)
+    pub fn sample_columns<'a>(
+        &'a self,
+        chunk_pos: Vec2<i32>,
+        index: IndexRef<'a>,
+        /* calendar: Option<&'_ Calendar>, */
+    ) -> Option<impl for<'b> Sampler<'a, 'b,
+        Index = /*(Vec2<i32>, IndexRef, Option<&'_ Calendar>)*/Vec2<i32>,
+        Sample = ColumnSample/*<'a>*/,
+    > + 'a> {
+        ColumnGen::new(&self.sim, chunk_pos, index/*, calendar*/)
     }
 
-    pub fn sample_blocks(&self) -> BlockGen { BlockGen::new(ColumnGen::new(&self.sim)) }
+    pub fn sample_blocks<'a>(&'a self, chunk_pos: Vec2<i32>, index: IndexRef<'a>/*, calendar: Option<&'_ Calendar>*/) -> Option<BlockGen<'a>> {
+        ColumnGen::new(&self.sim, chunk_pos, index/*, calendar*/).map(BlockGen::new)
+    }
 
     pub fn find_accessible_pos(
         &self,
@@ -227,18 +233,31 @@ impl World {
         chunk_pos: Vec2<i32>,
         // TODO: misleading name
         mut should_continue: impl FnMut() -> bool,
-        time: Option<(TimeOfDay, Calendar)>,
+        time: Option<(TimeOfDay/*, Calendar*/)>,
     ) -> Result<(TerrainChunk, ChunkSupplement), ()> {
-        let calendar = time.as_ref().map(|(_, cal)| cal);
+        /* let calendar = time.as_ref().map(|(_, cal)| cal); */
+        let calendar = self.sim.calendar.as_ref();
 
-        let mut sampler = self.sample_blocks();
+        // FIXME: Deal with this properly if it's not okay to exit early.
+        let mut sampler = self.sample_blocks(chunk_pos, index/*, calendar*/).ok_or(())?;
+        // dbg!(&sampler.column_gen.chaos_spline);
 
         let chunk_wpos2d = chunk_pos * TerrainChunkSize::RECT_SIZE.map(|e| e as i32);
         let chunk_center_wpos2d = chunk_wpos2d + TerrainChunkSize::RECT_SIZE.map(|e| e as i32 / 2);
-        let grid_border = 4;
-        let zcache_grid = Grid::populate_from(
-            TerrainChunkSize::RECT_SIZE.map(|e| e as i32) + grid_border * 2,
-            |offs| sampler.get_z_cache(chunk_wpos2d - grid_border + offs, index, calendar),
+        let grid_border = /*4*/0;
+        let zcache_grid: Grid<ColumnSample> =
+            Grid::populate_by_row::<_, _, {TerrainChunkSize::RECT_SIZE.x}, {TerrainChunkSize::RECT_SIZE.y}>(
+            /* TerrainChunkSize::RECT_SIZE.map(|e| e as i32) + grid_border * 2, */
+            |offs_y| {
+                let column_gen = sampler.column_gen.eval_at_row(chunk_wpos2d.y/* - grid_border*/ + offs_y);
+                move |offs_x| {
+                    /* ZCache {
+                        sample: */column_gen.get(chunk_wpos2d.x/* - grid_border*/ + offs_x)/*,
+                        calendar: column_gen.parent.sim.calendar.as_ref(),
+                    }*/
+                }
+            },
+            /* |offs| sampler.get_z_cache(chunk_wpos2d - grid_border + offs/*, index, calendar*/)/*None*/ */
         );
 
         let air = Block::air(SpriteKind::Empty);
@@ -246,8 +265,8 @@ impl World {
             BlockKind::Rock,
             zcache_grid
                 .get(grid_border + TerrainChunkSize::RECT_SIZE.map(|e| e as i32) / 2)
-                .and_then(|zcache| zcache.as_ref())
-                .map(|zcache| zcache.sample.stone_col)
+                /* .and_then(|zcache| zcache.as_ref()) */
+                .map(|zcache| zcache/*.sample*/.stone_col)
                 .unwrap_or_else(|| index.colors.deep_stone_color.into()),
         );
         let water = Block::new(BlockKind::Water, Rgb::zero());
@@ -311,6 +330,7 @@ impl World {
         );
 
         let mut chunk = TerrainChunk::new(base_z, stone, air, meta);
+        let calendar = self.sim.calendar.as_ref();
 
         for y in 0..TerrainChunkSize::RECT_SIZE.y as i32 {
             for x in 0..TerrainChunkSize::RECT_SIZE.x as i32 {
@@ -320,33 +340,43 @@ impl World {
 
                 let offs = Vec2::new(x, y);
 
-                let z_cache = match zcache_grid.get(grid_border + offs) {
-                    Some(Some(z_cache)) => z_cache,
+                let z_cache = zcache_grid.get(grid_border + offs)/*sampler.get_z_cache(chunk_wpos2d + offs, index, calendar)*/;
+                let z_cache = match z_cache/*.as_ref()*/ {
+                    /*Some(*/Some(sample)/*)*/ =>
+                        ZCache { sample/*, calendar*/ },
                     _ => continue,
                 };
 
+                // dbg!(chunk_pos, x, y, z_cache.get_z_limits());
                 let (min_z, max_z) = z_cache.get_z_limits();
+                /* let max_z = min_z + 1.0;
+                let base_z = min_z as i32 - 1; */
 
                 (base_z..min_z as i32).for_each(|z| {
                     let _ = chunk.set(Vec3::new(x, y, z), stone);
                 });
 
+                let mut block_ = None;
                 (min_z as i32..max_z as i32).for_each(|z| {
                     let lpos = Vec3::new(x, y, z);
                     let wpos = Vec3::from(chunk_wpos2d) + lpos;
 
-                    if let Some(block) = sampler.get_with_z_cache(wpos, Some(z_cache)) {
-                        let _ = chunk.set(lpos, block);
+                    if let Some(block) = sampler.get_with_z_cache(wpos, /*Some(&*/z_cache/*)*/) {
+                        block_ = Some(block);
+                        // let _ = chunk.set(lpos, block);
                     }
                 });
+                if let Some(block_) = block_ {
+                    let _ = chunk.set(Vec3::new(x, y, min_z as i32), block_);
+                }
             }
         }
 
         let sample_get = |offs| {
             zcache_grid
                 .get(grid_border + offs)
-                .and_then(Option::as_ref)
-                .map(|zc| &zc.sample)
+                // .and_then(Option::as_ref)
+                /* .map(|zc| &zc.sample) */
         };
 
         // Only use for rng affecting dynamic elements like chests and entities!
@@ -363,7 +393,7 @@ impl World {
                 chunks: &self.sim,
                 index,
                 chunk: sim_chunk,
-                calendar,
+                /* calendar, */
             },
             chunk: &mut chunk,
             // arena: &mut arena,
@@ -383,7 +413,7 @@ impl World {
             layer::apply_shrubs_to(&mut canvas, &mut dynamic_rng);
         }
         if index.features.trees {
-            layer::apply_trees_to(&mut canvas, &mut dynamic_rng, calendar);
+            layer::apply_trees_to(&mut canvas, &mut dynamic_rng/*, calendar*/);
         }
         if index.features.scatter {
             layer::apply_scatter_to(&mut canvas, &mut dynamic_rng);
@@ -445,7 +475,7 @@ impl World {
             &mut supplement,
         );
 
-        // Apply layer supplement
+        /* // Apply layer supplement
         layer::wildlife::apply_wildlife_supplement(
             &mut dynamic_rng,
             chunk_wpos2d,
@@ -454,8 +484,8 @@ impl World {
             index,
             sim_chunk,
             &mut supplement,
-            time.as_ref(),
-        );
+            time.as_ref().zip(calendar),
+        ); */
 
         // Apply site supplementary information
         sim_chunk.sites.iter().for_each(|site| {
@@ -487,10 +517,10 @@ impl World {
                 .sim()
                 .get_area_trees_par(min_wpos, max_wpos)
                 .filter_map(|attr| {
-                    ColumnGen::new(self.sim())
-                        .get((attr.pos, index, self.sim().calendar.as_ref()))
-                        .filter(|col| layer::tree::tree_valid_at(col, attr.seed))
-                        .zip(Some(attr))
+                    let chunk_pos = TerrainGrid::chunk_key(attr.pos);
+                    let col = ColumnGen::new(self.sim(), chunk_pos, index/*, self.sim().calendar.as_ref()*/)?
+                        .get((attr.pos/*, index, self.sim().calendar.as_ref()*/));
+                    layer::tree::tree_valid_at(&col, attr.seed).then_some((col, attr))
                 })
                 .filter_map(|(col, tree)| {
                     Some(lod::Object {
@@ -562,11 +592,12 @@ impl World {
                 .filter(|(_, site)| matches!(&site.kind, SiteKind::GiantTree(_)))
                 .filter_map(|(_, site)| {
                     let wpos2d = site.get_origin();
-                    let col = ColumnGen::new(self.sim()).get((
-                        wpos2d,
+                    let chunk_pos = TerrainGrid::chunk_key(wpos2d);
+                    let col = ColumnGen::new(self.sim(), chunk_pos, index/*, self.sim().calendar.as_ref()*/)?.get((
+                        wpos2d/* ,
                         index,
-                        self.sim().calendar.as_ref(),
-                    ))?;
+                        self.sim().calendar.as_ref(), */
+                    ));
                     Some(lod::Object {
                         kind: lod::ObjectKind::GiantTree,
                         pos: {

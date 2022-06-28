@@ -40,7 +40,7 @@ fn calc_light<V: RectRasterableVol<Vox = Block> + ReadVol + Debug>(
     vol: &VolGrid2d<V>,
     lit_blocks: impl Iterator<Item = (Vec3<i32>, u8)>,
 ) -> impl Fn(Vec3<i32>) -> f32 + 'static + Send + Sync {
-    span!(_guard, "calc_light");
+    /* span!(_guard, "calc_light");
     const UNKNOWN: u8 = 255;
     const OPAQUE: u8 = 254;
 
@@ -207,10 +207,11 @@ fn calc_light<V: RectRasterableVol<Vox = Block> + ReadVol + Debug>(
         }
     }
 
-    drop(light_map);
+    drop(light_map); */
 
     move |wpos| {
-        let pos = wpos - min_bounds.min;
+        1.0
+        /* let pos = wpos - min_bounds.min;
         let l = light_map2
             .get(lm_idx2(pos.x, pos.y, pos.z))
             .copied()
@@ -220,7 +221,7 @@ fn calc_light<V: RectRasterableVol<Vox = Block> + ReadVol + Debug>(
             l as f32 / SUNLIGHT as f32
         } else {
             0.0
-        }
+        } */
     }
 }
 
@@ -255,7 +256,7 @@ pub fn generate_mesh<'a, V: RectRasterableVol<Vox = Block> + ReadVol + Debug + '
 
     let mut glow_blocks = Vec::new();
 
-    // TODO: This expensive, use BlocksOfInterest instead
+    /* // TODO: This expensive, use BlocksOfInterest instead
     let mut volume = vol.cached();
     for x in -MAX_LIGHT_DIST..range.size().w + MAX_LIGHT_DIST {
         for y in -MAX_LIGHT_DIST..range.size().h + MAX_LIGHT_DIST {
@@ -268,7 +269,7 @@ pub fn generate_mesh<'a, V: RectRasterableVol<Vox = Block> + ReadVol + Debug + '
                     .map(|glow| glow_blocks.push((wpos, glow)));
             }
         }
-    }
+    } */
 
     // Calculate chunk lighting (sunlight defaults to 1.0, glow to 0.0)
     let light = calc_light(true, SUNLIGHT, range, vol, core::iter::empty());

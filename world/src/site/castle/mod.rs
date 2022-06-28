@@ -189,7 +189,7 @@ impl Castle {
         &'a self,
         index: IndexRef,
         wpos2d: Vec2<i32>,
-        mut get_column: impl FnMut(Vec2<i32>) -> Option<&'a ColumnSample<'a>>,
+        mut get_column: impl FnMut(Vec2<i32>) -> Option<&'a ColumnSample/*<'a>*/>,
         vol: &mut (impl BaseVol<Vox = Block> + RectSizedVol + ReadVol + WriteVol),
     ) {
         for y in 0..vol.size_xy().y as i32 {
@@ -284,11 +284,11 @@ impl Castle {
                     .map(|(dist, _, path, _)| path.head_space(dist))
                     .unwrap_or(0);
 
-                let wall_sample = if let Some(col) = get_column(offs + wall_pos - rpos) {
+                let wall_sample = /* if let Some(col) = get_column(offs + wall_pos - rpos) {
                     col
                 } else {
                     col_sample
-                };
+                }*/col_sample;
 
                 // Make sure particularly weird terrain doesn't give us underground walls
                 let wall_alt = wall_alt + (wall_sample.alt as i32 - wall_alt - 10).max(0);
@@ -433,7 +433,7 @@ impl Castle {
         // NOTE: Used only for dynamic elements like chests and entities!
         _dynamic_rng: &mut impl Rng,
         _wpos2d: Vec2<i32>,
-        _get_column: impl FnMut(Vec2<i32>) -> Option<&'a ColumnSample<'a>>,
+        _get_column: impl FnMut(Vec2<i32>) -> Option<&'a ColumnSample/*<'a>*/>,
         _supplement: &mut ChunkSupplement,
     ) {
         // TODO

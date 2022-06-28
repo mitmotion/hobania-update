@@ -282,10 +282,10 @@ pub fn spawn_manifest() -> Vec<(&'static str, DensityFn)> {
                 }
         }),
         // Ocean animals
-        ("world.wildlife.spawn.tropical.ocean", |_c, col| {
+        ("world.wildlife.spawn.tropical.ocean", |c, col| {
             close(col.temp, CONFIG.tropical_temp, 0.1) / 10.0
                 * if col.water_dist.map(|d| d < 1.0).unwrap_or(false)
-                    && !matches!(col.chunk.get_biome(), BiomeKind::Ocean)
+                    && !matches!(c.get_biome(), BiomeKind::Ocean)
                 {
                     0.001
                 } else {
@@ -293,9 +293,9 @@ pub fn spawn_manifest() -> Vec<(&'static str, DensityFn)> {
                 }
         }),
         // Arctic ocean animals
-        ("world.wildlife.spawn.arctic.ocean", |_c, col| {
+        ("world.wildlife.spawn.arctic.ocean", |c, col| {
             close(col.temp, 0.0, 0.25) / 10.0
-                * if matches!(col.chunk.get_biome(), BiomeKind::Ocean) {
+                * if matches!(c.get_biome(), BiomeKind::Ocean) {
                     0.001
                 } else {
                     0.0
@@ -347,12 +347,12 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
     // NOTE: Used only for dynamic elements like chests and entities!
     dynamic_rng: &mut R,
     wpos2d: Vec2<i32>,
-    mut get_column: impl FnMut(Vec2<i32>) -> Option<&'a ColumnSample<'a>>,
+    mut get_column: impl FnMut(Vec2<i32>) -> Option<&'a ColumnSample/*<'a>*/>,
     vol: &(impl BaseVol<Vox = Block> + RectSizedVol + ReadVol + WriteVol),
     index: IndexRef,
     chunk: &SimChunk,
     supplement: &mut ChunkSupplement,
-    time: Option<&(TimeOfDay, Calendar)>,
+    time: Option<(&TimeOfDay, &Calendar)>,
 ) {
     let scatter = &index.wildlife_spawns;
     // Configurable density multiplier
@@ -391,7 +391,7 @@ pub fn apply_wildlife_supplement<'a, R: Rng>(
                                 .request(current_day_period, calendar, is_underwater, is_ice)
                                 .and_then(|pack| {
                                     (dynamic_rng.gen::<f32>() < density * col_sample.spawn_rate
-                                        && col_sample.gradient < Some(1.3))
+                                        && col_sample.gradient < /*Some(*/1.3/*)*/)
                                     .then(|| pack)
                                 })
                         })

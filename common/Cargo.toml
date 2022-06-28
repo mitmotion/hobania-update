@@ -38,6 +38,8 @@ strum = { version = "0.24", features = ["derive"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 approx = "0.4.0"
+bitvec = "0.22"
+# bumpalo = { version = "3.9.1", features = ["allocator_api"] }
 clap = "2.33"
 crossbeam-utils = "0.8.1"
 bitflags = "1.2"
@@ -53,6 +55,7 @@ tracing = { version = "0.1", default-features = false }
 uuid = { version = "0.8.1", default-features = false, features = ["serde", "v4"] }
 rand = "0.8"
 fxhash = "0.2.1"
+zerocopy = "0.6.1"
 
 # Assets
 common-assets = {package = "veloren-common-assets", path = "assets"}

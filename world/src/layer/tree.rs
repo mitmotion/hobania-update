@@ -16,7 +16,10 @@ use common::{
     vol::ReadVol,
 };
 use lazy_static::lazy_static;
-use rand::prelude::*;
+use probability::{
+    prelude::{source, Gaussian, Inverse},
+};
+use rand::{distributions::Uniform, prelude::*};
 use std::{f32, ops::Range};
 use vek::*;
 
@@ -51,10 +54,54 @@ pub fn tree_valid_at(col: &ColumnSample, seed: u32) -> bool {
     true
 }
 
+// Inlined from
+//
+// https://docs.rs/probability/latest/src/probability/distribution/binomial.rs.html#393
+//
+// Approximate normal of binomial distribution.
+fn approximate_by_normal(p: f64, np: f64, v: f64, u: f64) -> f64 {
+    let w = Gaussian::new(0.0, 1.0).inverse(u);
+    let w2 = w * w;
+    let w3 = w2 * w;
+    let w4 = w3 * w;
+    let w5 = w4 * w;
+    let w6 = w5 * w;
+    let sd = v.sqrt();
+    let sd_em1 = sd.recip();
+    let sd_em2 = v.recip();
+    let sd_em3 = sd_em1 * sd_em2;
+    let sd_em4 = sd_em2 * sd_em2;
+    let p2 = p * p;
+    let p3 = p2 * p;
+    let p4 = p2 * p2;
+
+    np +
+    sd * w +
+    (p + 1.0) / 3.0 -
+    (2.0 * p - 1.0) * w2 / 6.0 +
+    sd_em1 * w3 * (2.0 * p2 - 2.0 * p - 1.0) / 72.0 -
+    w * (7.0 * p2 - 7.0 * p + 1.0) / 36.0 +
+    sd_em2 * (2.0 * p - 1.0) * (p + 1.0) * (p - 2.0) * (3.0 * w4 + 7.0 * w2 - 16.0 / 1620.0) +
+    sd_em3 * (
+        w5 * (4.0 * p4 - 8.0 * p3 - 48.0 * p2 + 52.0 * p - 23.0) / 17280.0 +
+        w3 * (256.0 * p4 - 512.0 * p3 - 147.0 * p2 + 403.0 * p - 137.0) / 38880.0 -
+        w * (433.0 * p4 - 866.0 * p3 - 921.0 * p2 + 1354.0 * p - 671.0) / 38880.0
+    ) +
+    sd_em4 * (
+        w6 * (2.0 * p - 1.0) * (p2 - p + 1.0) * (p2 - p + 19.0) / 34020.0 +
+        w4 * (2.0 * p - 1.0) * (9.0 * p4 - 18.0 * p3 - 35.0 * p2 + 44.0 * p - 25.0) / 15120.0 +
+        w2 * (2.0 * p - 1.0) * (
+                923.0 * p4 - 1846.0 * p3 + 5271.0 * p2 - 4348.0 * p + 5189.0
+        ) / 408240.0 -
+        4.0 * (2.0 * p - 1.0) * (p + 1.0) * (p - 2.0) * (23.0 * p2 - 23.0 * p + 2.0) / 25515.0
+    )
+    // + O(v.powf(-2.5)), with probabilty of 1 - 2e-9
+}
+
 pub fn apply_trees_to(
     canvas: &mut Canvas,
     dynamic_rng: &mut impl Rng,
-    calendar: Option<&Calendar>,
+    /* calendar: Option<&Calendar>, */
 ) {
     // TODO: Get rid of this
     #[allow(clippy::large_enum_variant)]
@@ -72,6 +119,7 @@ pub fn apply_trees_to(
     }
 
     let info = canvas.info();
+    let calendar = info.calendar();
     /* let mut tree_cache = StructureGenCache::new(info.chunks().gen_ctx.structure_gen.clone()); */
 
     // Get all the trees in range.
@@ -237,6 +285,7 @@ pub fn apply_trees_to(
     render_area: Aabr<i32>,
     filler: /*impl FnOnce(&'b mut Canvas<'a>) -> &'b mut F*/&'b mut F,
     render: Render, */
+            let mut wpos = tree.pos;
             let (bounds, hanging_sprites) = match &tree.model {
                 TreeModel::Structure(s) => {
                     site2::render_collect(
@@ -251,7 +300,6 @@ pub fn apply_trees_to(
                                 .fill(filler.prefab(s, tree.pos, tree.seed), filler);
                         },
                     );
-                    arena.reset();
                     (s.get_bounds(), [(0.0004, SpriteKind::Beehive)].as_ref())
                 },
                 &TreeModel::Procedural(ref t, leaf_block) => {
@@ -259,7 +307,6 @@ pub fn apply_trees_to(
                     let trunk_block = t.config.trunk_block;
                     let leaf_vertical_scale = t.config.leaf_vertical_scale.recip();
                     let branch_child_radius_lerp = t.config.branch_child_radius_lerp;
-                    let wpos = tree.pos;
 
                     // NOTE: Technically block_from_structure isn't correct here, because it could
                     // lerp with position; in practice, it almost never does, and most of the other
@@ -372,10 +419,153 @@ pub fn apply_trees_to(
                             });
                         },
                     );
-                    arena.reset();
                     (bounds, t.config.hanging_sprites)
                 },
             };
+            arena.reset();
+
+            // Subtract 1 from our max z, since we know there can be no hanging sprites at the top
+            // of the tree.
+            wpos.z -= 1;
+            let mut aabb = Aabb {
+                min: tree.pos + bounds.min.as_(),
+                max: wpos + bounds.max.as_(),
+            };
+            if !aabb.is_valid() {
+                // Zero-size tree somehow?
+                return;
+            }
+            let size = aabb.size();
+            // NOTE: The chunk volume should always fit into 24 bits, so if it doesn't we can
+            // exit early (as sprites not rendering will be the least of our worries).
+            let volume: u32 = if let Ok(volume) = size.product().abs().try_into() {
+                volume
+            } else {
+                tracing::warn!("Tree bounds were larger than our maximum chunk size...");
+                return;
+            };
+            if volume == 0 {
+                // One-layer tree, so we can't draw any sprites...
+                return;
+            }
+            // NOTE: volume.x * volume.y fits in 10 bits, so it fits in a u32, hence can't overflow.
+            let volume_x = size.w.abs() as u32;
+            // NOTE: volume.z fits into 14 bits, so it fits into a u32, and it times volume_x fits
+            // into 19 bits, so this can't overflow.
+            let volume_xy = volume_x * size.h.abs() as u32;
+            aabb.intersect(Aabb {
+                min: render_area.min.with_z(aabb.min.z),
+                max: render_area.max.with_z(aabb.max.z),
+            });
+
+            struct Source<T: ?Sized>(T);
+            impl<'a, T: rand::Rng + ?Sized> source::Source for Source<T> {
+                fn read_u64(&mut self) -> u64 {
+                    self.0.next_u64()
+                }
+            }
+
+            let mut source = Source(&mut *dynamic_rng);
+
+            // Sprite rendering is performed by constructing random sequences of sample blocks,
+            // then testing whether they are valid for placement in the tree.  This should
+            // hopefully be a lot more efficient than actually iterating through the tree and
+            // randomly sampling each time, since the sprite probability is tiny, assuming
+            // that we can keep sampling from the distribution cheap enough (to be determined!) and
+            // that the difference between overall volume and hangable surface area doesn't drop
+            // too low (very likely).
+            hanging_sprites.iter().for_each(|(chance, sprite)| {
+                // Let B(volume, chance) be the binomial distribution over independent
+                // tests of [volume] blocks, each of which has probability [chance].  We sample
+                // uniformly at random from this distribution in order to get an expected number of
+                // *successful* trials, without actually having to iterate over every block.
+                // Hopefully (assuming sampling the distribution isn't too slow), this should be a
+                // lot faster than *actually* iterating over that many blocks.
+                //
+                // NOTE: We assume u32 fits into usize, so this is legal; we should statically
+                // assert this somewhere (we might already do so).
+                /* println!("Generating samples: n={} p={}", volume, chance); */
+                let num_samples = {
+                    use source::Source;
+
+                    let n = volume;
+                    let p = (*chance).into();
+                    let q = 1.0 - p;
+                    let np = volume as f64 * p;
+                    let npq = np * q;
+
+                    let u = source.read_f64();
+                     approximate_by_normal(p, np, npq, u).floor() as usize
+                };
+                // let num_samples = Binomial::new(volume as usize, (*chance).into()).sample(&mut source);
+                // Now, we choose [num_samples] blocks uniformly at random from the AABB, and test
+                // them to see if they're candidates for our sprite; if so, we place it there.
+                /* println!("Generated samples: {}", num_samples); */
+                (&mut source.0)
+                    // NOTE: Cannot panic, as we checked earlier that volume > 0.
+                    .sample_iter(Uniform::new(0, volume))
+                    .take(num_samples)
+                    // NOTE: We gamble here that division and modulus for the tree volume will
+                    // still be faster than sampling three times from the RNG.
+                    .map(|ipos| {
+                        let z = ipos.div_euclid(volume_xy);
+                        let ipos = ipos - z * volume_xy;
+                        let y = ipos.div_euclid(volume_x);
+                        let x = ipos - y * volume_x;
+                        tree.pos + Vec3::new(x, y, z).as_()
+                    })
+                    .for_each(|mut wpos| {
+                        let get_block = |wpos| {
+                            let mut model_pos = /*Vec3::from(*/
+                                (wpos - tree.pos)/*
+                                    .xy()
+                                    .map2(Vec2::new(tree.units.0, tree.units.1), |rpos, unit| {
+                                        unit * rpos
+                                    })
+                                    .sum(),
+                            ) + Vec3::unit_z() * (wpos.z - tree.pos.z)*/;
+
+                            block_from_structure(
+                                info.index(),
+                                match &tree.model {
+                                    TreeModel::Structure(s) => s.get(model_pos).ok().copied()?,
+                                    TreeModel::Procedural(t, leaf_block) =>
+                                        match t.is_branch_or_leaves_at(model_pos.map(|e| e as f32 + 0.5)) {
+                                            (_, _, true, _) => {
+                                                StructureBlock::Filled(BlockKind::Wood, Rgb::new(150, 98, 41))
+                                            },
+                                            (_, _, _, true) => StructureBlock::None,
+                                            (true, _, _, _) => t.config.trunk_block,
+                                            (_, true, _, _) => *leaf_block,
+                                            _ => StructureBlock::None,
+                                        },
+                                },
+                                wpos,
+                                tree.pos.xy(),
+                                tree.seed,
+                                &col,
+                                Block::air,
+                                calendar,
+                            )
+                        };
+                        // Hanging sprites can be placed in locations that are currently empty, and
+                        // which have a tree block above them.  NOTE: The old code overwrote
+                        // existing terrain as well, but we opt not to do this.
+                        canvas.map(wpos, |block| {
+                            if !block.is_filled() {
+                                wpos.z += 1;
+                                if get_block(wpos).map_or(false, |block| block.is_filled()) {
+                                    /* println!("Success: {:?} = {:?}", wpos, sprite); */
+                                    block.with_sprite(*sprite)
+                                } else {
+                                    block
+                                }
+                            } else {
+                                block
+                            }
+                        })
+                    });
+            });
 
             /* let bounds = match &tree.model {
                 TreeModel::Structure(s) => s.get_bounds(),
@@ -808,7 +998,7 @@ impl TreeConfig {
 pub struct ProceduralTree {
     branches: Vec<Branch>,
     trunk_idx: usize,
-    config: TreeConfig,
+    pub(crate) config: TreeConfig,
     roots: Vec<Root>,
     root_aabb: Aabb<f32>,
 }

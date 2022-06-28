@@ -482,7 +482,7 @@ pub fn apply_caves_supplement<'a>(
     // NOTE: Used only for dynamic elements like chests and entities!
     dynamic_rng: &mut impl Rng,
     wpos2d: Vec2<i32>,
-    mut get_column: impl FnMut(Vec2<i32>) -> Option<&'a ColumnSample<'a>>,
+    mut get_column: impl FnMut(Vec2<i32>) -> Option<&'a ColumnSample/*<'a>*/>,
     vol: &(impl BaseVol<Vox = Block> + RectSizedVol + ReadVol + WriteVol),
     index: IndexRef,
     supplement: &mut ChunkSupplement,

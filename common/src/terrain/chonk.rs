@@ -106,7 +106,8 @@ impl<V, S: RectVolSize, M: Clone> Chonk<V, S, M> {
     /// Compress chunk by using more intelligent defaults.
     pub fn defragment(&mut self)
     where
-        V: Clone + Eq + Hash,
+        V: zerocopy::AsBytes + Clone + Eq + Hash,
+        [(); { core::mem::size_of::<V>() }]:,
     {
         // First, defragment all subchunks.
         self.sub_chunks.iter_mut().for_each(SubChunk::defragment);

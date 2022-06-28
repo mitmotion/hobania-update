@@ -675,7 +675,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             .enumerate()
             .find_map(|(i, (kind, water_mode, f))| {
                 let (density, patch) = f(canvas.chunk(), col);
-                let density = patch
+                let density = /* patch
                     .map(|(base_density_prop, wavelen, threshold)| {
                         if canvas
                             .index()
@@ -694,7 +694,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                             density * base_density_prop
                         }
                     })
-                    .unwrap_or(density);
+                    .unwrap_or(*/density/*)*/;
                 if density > 0.0
                     && rng.gen::<f32>() < density //RandomField::new(i as u32).chance(Vec3::new(wpos2d.x, wpos2d.y, 0), density)
                     && matches!(&water_mode, Underwater | Floating) == underwater

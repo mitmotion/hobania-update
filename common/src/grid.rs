@@ -25,6 +25,34 @@ impl<T> Grid<T> {
         }
     }
 
+    #[inline]
+    pub fn populate_by_row<Row: FnMut(i32) -> Col, Col: FnMut(i32) -> T, const X: u32, const Y: u32>(
+        mut row: Row,
+    ) -> Self
+        where
+            T: Clone + Default,
+            [(); {X as usize}]:
+    {
+        let mut cells = vec![T::default(); {X as usize * Y as usize}];
+        cells.array_chunks_mut::<{X as usize}>().enumerate().for_each(|(y, cells)| {
+            let mut col = row(y as i32);
+            cells.iter_mut().enumerate().for_each(|(x, cell)| {
+                *cell = col(x as i32);
+            });
+        });
+        Self {
+            cells,
+            /* cells: (0..size.y)
+                .flat_map(|y| {
+                    let col = row(y);
+                    (0..size.x).map(col)
+                })
+                /* .map(&mut f) */
+                .collect(), */
+            size: Vec2::new(X, Y).as_(),
+        }
+    }
+
     pub fn new(size: Vec2<i32>, default_cell: T) -> Self
     where
         T: Clone,

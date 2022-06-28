@@ -557,7 +557,7 @@ impl Settlement {
         &'a self,
         index: IndexRef,
         wpos2d: Vec2<i32>,
-        mut get_column: impl FnMut(Vec2<i32>) -> Option<&'a ColumnSample<'a>>,
+        mut get_column: impl FnMut(Vec2<i32>) -> Option<&'a ColumnSample/*<'a>*/>,
         vol: &mut (impl BaseVol<Vox = Block> + RectSizedVol + ReadVol + WriteVol),
     ) {
         let colors = &index.colors.site.settlement;
@@ -812,15 +812,20 @@ impl Settlement {
         for structure in &self.structures {
             let bounds = structure.bounds_2d();
 
-            // Skip this structure if it's not near this chunk
-            if !bounds.collides_with_aabr(Aabr {
+            let this_aabr = Aabr {
                 min: wpos2d - self.origin,
                 max: wpos2d - self.origin + vol.size_xy().map(|e| e as i32 + 1),
-            }) {
+            };
+            // Skip this structure if it's not near this chunk
+            if !bounds.collides_with_aabr(this_aabr) {
                 continue;
             }
 
-            let bounds = structure.bounds();
+            let mut bounds = structure.bounds();
+            bounds.intersect(Aabb {
+                min: this_aabr.min.with_z(bounds.min.z),
+                max: this_aabr.max.with_z(bounds.max.z),
+            });
 
             for x in bounds.min.x..bounds.max.x + 1 {
                 for y in bounds.min.y..bounds.max.y + 1 {
@@ -850,7 +855,7 @@ impl Settlement {
         // NOTE: Used only for dynamic elements like chests and entities!
         dynamic_rng: &mut impl Rng,
         wpos2d: Vec2<i32>,
-        mut get_column: impl FnMut(Vec2<i32>) -> Option<&'a ColumnSample<'a>>,
+        mut get_column: impl FnMut(Vec2<i32>) -> Option<&'a ColumnSample/*<'a>*/>,
         supplement: &mut ChunkSupplement,
         economy: SiteInformation,
     ) {

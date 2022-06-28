@@ -2823,8 +2823,7 @@ fn handle_debug_column(
     _action: &ChatCommand,
 ) -> CmdResult<()> {
     let sim = server.world.sim();
-    let calendar = (*server.state.ecs().read_resource::<Calendar>()).clone();
-    let sampler = server.world.sample_columns();
+    /* let calendar = (*server.state.ecs().read_resource::<Calendar>()).clone(); */
     let wpos = if let (Some(x), Some(y)) = parse_args!(args, i32, i32) {
         Vec2::new(x, y)
     } else {
@@ -2832,7 +2831,9 @@ fn handle_debug_column(
         // FIXME: Deal with overflow, if needed.
         pos.0.xy().map(|x| x as i32)
     };
-    let msg_generator = |calendar| {
+    let chunk_pos = wpos.map2(TerrainChunkSize::RECT_SIZE, |e, sz: u32| e / sz as i32);
+    let msg_generator = |/*calendar*/| {
+        let sampler = server.world.sample_columns(chunk_pos, server.index.as_index_ref())?;
         let alt = sim.get_interpolated(wpos, |chunk| chunk.alt)?;
         let basement = sim.get_interpolated(wpos, |chunk| chunk.basement)?;
         let water_alt = sim.get_interpolated(wpos, |chunk| chunk.water_alt)?;
@@ -2842,9 +2843,8 @@ fn handle_debug_column(
         let rockiness = sim.get_interpolated(wpos, |chunk| chunk.rockiness)?;
         let tree_density = sim.get_interpolated(wpos, |chunk| chunk.tree_density)?;
         let spawn_rate = sim.get_interpolated(wpos, |chunk| chunk.spawn_rate)?;
-        let chunk_pos = wpos.map2(TerrainChunkSize::RECT_SIZE, |e, sz: u32| e / sz as i32);
         let chunk = sim.get(chunk_pos)?;
-        let col = sampler.get((wpos, server.index.as_index_ref(), Some(calendar)))?;
+        let col = sampler.get((wpos/*, server.index.as_index_ref(), Some(calendar)*/));
         let gradient = sim.get_gradient_approx(chunk_pos)?;
         let downhill = chunk.downhill;
         let river = &chunk.river;
@@ -2883,7 +2883,7 @@ spawn_rate {:?} "#,
             spawn_rate
         ))
     };
-    if let Some(s) = msg_generator(&calendar) {
+    if let Some(s) = msg_generator(/*&calendar*/) {
         server.notify_client(client, ServerGeneral::server_msg(ChatType::CommandInfo, s));
         Ok(())
     } else {

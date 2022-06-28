@@ -7,6 +7,7 @@ use crate::{
     layer::spot::Spot,
     sim::{SimChunk, WorldSim},
     util::{Grid, Sampler},
+    TerrainGrid,
 };
 use common::{
     calendar::Calendar,
@@ -21,16 +22,16 @@ use vek::*;
 pub struct CanvasInfo<'a> {
     pub(crate) chunk_pos: Vec2<i32>,
     pub(crate) wpos: Vec2<i32>,
-    pub(crate) column_grid: &'a Grid<Option<ZCache<'a>>>,
+    pub(crate) column_grid: &'a Grid</*Option<ZCache<'a>*/ColumnSample/*<'a>*//*>*/>,
     pub(crate) column_grid_border: i32,
     pub(crate) chunks: &'a WorldSim,
     pub(crate) index: IndexRef<'a>,
     pub(crate) chunk: &'a SimChunk,
-    pub(crate) calendar: Option<&'a Calendar>,
+    /* pub(crate) calendar: Option<&'a Calendar>, */
 }
 
 impl<'a> CanvasInfo<'a> {
-    pub fn calendar(&self) -> Option<&'a Calendar> { self.calendar }
+    pub fn calendar(&self) -> Option<&'a Calendar> { self.chunks.calendar.as_ref() }
 
     pub fn wpos(&self) -> Vec2<i32> { self.wpos }
 
@@ -42,24 +43,41 @@ impl<'a> CanvasInfo<'a> {
         .into()
     }
 
-    pub fn col(&self, wpos: Vec2<i32>) -> Option<&'a ColumnSample<'a>> {
+    #[inline]
+    fn col_inner(&self, wpos: Vec2<i32>) -> Option<&'a ColumnSample/*<'a>*/> {
         self.column_grid
             .get(self.column_grid_border + wpos - self.wpos())
-            .and_then(Option::as_ref)
-            .map(|zc| &zc.sample)
+            /* .and_then(Option::as_ref)
+            .map(|zc| &zc.sample) */
+    }
+
+    #[inline]
+    pub fn col(&self, wpos: Vec2<i32>) -> Option<&'a ColumnSample/*<'a>*/> {
+        /* match self.col_inner(wpos) {
+            Some(col) => Some(col),
+            None => {
+                println!("Hit: {:?} vs. {:?}", wpos, self.area());
+                None
+            }
+        } */
+        self.col_inner(wpos)
     }
 
     /// Attempt to get the data for the given column, generating it if we don't
     /// have it.
     ///
     /// This function does not (currently) cache generated columns.
+    #[inline]
     pub fn col_or_gen(&self, wpos: Vec2<i32>) -> Option<Cow<'a, ColumnSample>> {
-        self.col(wpos).map(Cow::Borrowed).or_else(|| {
-            Some(Cow::Owned(ColumnGen::new(self.chunks()).get((
-                wpos,
+        self.col_inner(wpos).map(Cow::Borrowed).or_else(|| {
+            let chunk_pos = TerrainGrid::chunk_key(wpos);
+            let column_gen = ColumnGen::new(self.chunks(), chunk_pos, self.index())?;
+
+            Some(Cow::Owned(column_gen.get((
+                wpos/* ,
                 self.index(),
-                self.calendar,
-            ))?))
+                self.calendar, */
+            ))))
         })
     }
 
@@ -95,7 +113,7 @@ impl<'a> CanvasInfo<'a> {
         sim: &'a WorldSim,
         f: F,
     ) -> A {
-        let zcache_grid = Grid::populate_from(Vec2::broadcast(1), |_| None);
+        let zcache_grid = Grid::populate_from(Vec2::broadcast(0), |_| /*None*/unimplemented!("Zero size grid"));
         let sim_chunk = SimChunk {
             chaos: 0.0,
             alt: 0.0,
@@ -128,7 +146,7 @@ impl<'a> CanvasInfo<'a> {
             chunks: sim,
             index,
             chunk: &sim_chunk,
-            calendar: None,
+            /* calendar: None, */
         })
     }
 }
@@ -177,7 +195,7 @@ impl<'a> Canvas<'a> {
             for x in chunk_aabr.min.x.max(aabr.min.x)..chunk_aabr.max.x.min(aabr.max.x) {
                 let wpos2d = Vec2::new(x, y);
                 let info = self.info;
-                let col = if let Some(col) = info.col(wpos2d) {
+                let col = if let Some(col) = info.col_inner(wpos2d) {
                     col
                 } else {
                     return;
@@ -229,7 +247,7 @@ impl<'a> Canvas<'a> {
                             seed,
                             col,
                             |sprite| block.with_sprite(sprite),
-                            info.calendar,
+                            info.calendar(),
                         ) {
                             if !new_block.is_air() {
                                 if with_snow && col.snow_cover && above {

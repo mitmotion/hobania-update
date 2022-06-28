@@ -19,7 +19,7 @@ impl FastNoise {
     }
 }
 
-impl Sampler<'static> for FastNoise {
+impl Sampler<'static, '_> for FastNoise {
     type Index = Vec3<f64>;
     type Sample = f32;
 
@@ -93,7 +93,7 @@ impl FastNoise2d {
     }
 }
 
-impl Sampler<'static> for FastNoise2d {
+impl Sampler<'static, '_> for FastNoise2d {
     type Index = Vec2<f64>;
     type Sample = f32;
 

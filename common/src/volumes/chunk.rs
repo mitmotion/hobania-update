@@ -1,9 +1,11 @@
 use crate::vol::{
     BaseVol, IntoPosIterator, IntoVolIterator, RasterableVol, ReadVol, VolSize, WriteVol,
 };
+use bitvec::prelude::*;
 use core::{hash::Hash, iter::Iterator, marker::PhantomData, mem};
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
+use zerocopy::AsBytes;
 use vek::*;
 
 #[derive(Debug)]
@@ -119,13 +121,21 @@ impl<V, S: VolSize, M> Chunk<V, S, M> {
     /// Compress this subchunk by frequency.
     pub fn defragment(&mut self)
     where
-        V: Clone + Eq + Hash,
+        V: zerocopy::AsBytes + Clone + Eq + Hash,
+        [(); { core::mem::size_of::<V>() }]:,
     {
         // First, construct a HashMap with max capacity equal to GROUP_COUNT (since each
         // filled group can have at most one slot).
-        let mut map = HashMap::with_capacity(Self::GROUP_COUNT_TOTAL as usize);
+        //
+        // We use this hasher because:
+        //
+        // (1) we don't care about DDOS attacks (ruling out SipHash);
+        // (2) we don't care about determinism across computers (we could use AAHash);
+        // (3) we have 4-byte keys (for which FxHash is fastest).
+        let mut map = HashMap::/*with_capacity(Self::GROUP_COUNT_TOTAL as usize)*/with_hasher(core::hash::BuildHasherDefault::<fxhash::FxHasher64>::default());
         let vox = &self.vox;
         let default = &self.default;
+        let empty_bits = /*BitArray::new([0u32; /*Self::GROUP_COUNT_TOTAL as usize >> 5*/8])*/bitarr![0; 256];
         self.indices
             .iter()
             .enumerate()
@@ -134,23 +144,29 @@ impl<V, S: VolSize, M> Chunk<V, S, M> {
                 let end = start + Self::GROUP_VOLUME as usize;
                 if let Some(group) = vox.get(start..end) {
                     // Check to see if all blocks in this group are the same.
-                    let mut group = group.iter();
-                    let first = group.next().expect("GROUP_VOLUME ≥ 1");
-                    if group.all(|block| block == first) {
-                        // All blocks in the group were the same, so add our position to this entry
-                        // in the HashMap.
-                        map.entry(first).or_insert(vec![]).push(grp_idx);
+                    // NOTE: First element must exist because GROUP_VOLUME ≥ 1
+                    let first = &group[0];
+                    let first_ = first.as_bytes();
+                    // View group as bytes to benefit from specialization on [u8].
+                    let group = group.as_bytes();
+                    /* let mut group = group.iter();
+                    let first = group.next().expect("group_volume ≥ 1"); */
+                    if group.array_chunks::<{ core::mem::size_of::<V>() }>().all(|block| block == first_) {
+                        // all blocks in the group were the same, so add our position to this entry
+                        // in the hashmap.
+                        map.entry(first).or_insert_with(/*vec![]*//*bitvec::bitarr![0; chunk<v, s, m>::group_count_total]*/|| empty_bits)./*push*/set(grp_idx, true);
                     }
                 } else {
-                    // This slot is empty (i.e. has the default value).
-                    map.entry(default).or_insert(vec![]).push(grp_idx);
+                    // this slot is empty (i.e. has the default value).
+                    map.entry(default).or_insert_with(|| empty_bits)./*push*/set(grp_idx, true);
                 }
             });
+        // println!("{:?}", map);
         // Now, find the block with max frequency in the HashMap and make that our new
         // default.
         let (new_default, default_groups) = if let Some((new_default, default_groups)) = map
             .into_iter()
-            .max_by_key(|(_, default_groups)| default_groups.len())
+            .max_by_key(|(_, default_groups)| default_groups./*len*/count_ones())
         {
             (new_default.clone(), default_groups)
         } else {
@@ -163,11 +179,12 @@ impl<V, S: VolSize, M> Chunk<V, S, M> {
         let mut new_vox =
             Vec::with_capacity(Self::GROUP_COUNT_TOTAL as usize - default_groups.len());
         let num_groups = self.num_groups();
-        self.indices
+        let mut indices = &mut self.indices[..Self::GROUP_COUNT_TOTAL as usize];
+        indices
             .iter_mut()
             .enumerate()
             .for_each(|(grp_idx, base)| {
-                if default_groups.contains(&grp_idx) {
+                if default_groups/*.contains(&grp_idx)*/[grp_idx] {
                     // Default groups become 255
                     *base = 255;
                 } else {

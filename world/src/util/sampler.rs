@@ -1,8 +1,8 @@
-pub trait Sampler<'a>: Sized {
+pub trait Sampler<'a, 'b>: Sized {
     type Index: 'a;
     type Sample: 'a;
 
-    fn get(&self, index: Self::Index) -> Self::Sample;
+    fn get(&'b self, index: Self::Index) -> Self::Sample;
 }
 
 pub trait SamplerMut<'a>: Sized {

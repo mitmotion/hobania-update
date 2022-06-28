@@ -1778,7 +1778,7 @@ impl Client {
                         if self.state.terrain().get_key(*key).is_none() {
                             if !skip_mode && !self.pending_chunks.contains_key(key) {
                                 const TOTAL_PENDING_CHUNKS_LIMIT: usize = 1024;
-                                const CURRENT_TICK_PENDING_CHUNKS_LIMIT: usize = 2;
+                                const CURRENT_TICK_PENDING_CHUNKS_LIMIT: usize = 8;
                                 if self.pending_chunks.len() < TOTAL_PENDING_CHUNKS_LIMIT
                                     && current_tick_send_chunk_requests
                                         < CURRENT_TICK_PENDING_CHUNKS_LIMIT

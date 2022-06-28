@@ -80,7 +80,100 @@ impl GiantTree {
 
 impl<F: Filler> Structure<F> for GiantTree {
     fn render<'a>(&self, _site: &Site, _land: Land, painter: &Painter<'a>, filler: &mut FillFn<'a, '_, F>) {
+        let bounds = self.tree.get_bounds().map(|e| e as i32);
+        /* let trunk_block = self.tree.config.trunk_block; */
+        /* let leaf_vertical_scale = self.tree.config.leaf_vertical_scale.recip();
+        let branch_child_radius_lerp = self.tree.config.branch_child_radius_lerp; */
+        let leaf_vertical_scale = /*t.config.leaf_vertical_scale*/0.6f32.recip()/*1.0*/;
+        let branch_child_radius_lerp = true;
+
+        /* let trunk_block = filler.block_from_structure(
+            trunk_block,
+            self.wpos.xy(),
+            self.seed,
+            &col,
+        ); */
+        let trunk_block = Block::new(BlockKind::Wood, Rgb::new(80, 32, 0));
+        /* let leaf_block = filler.block_from_structure(
+            leaf_block,
+            self.wpos.xy(),
+            self.seed,
+            &col,
+        ); */
         let fast_noise = FastNoise::new(self.seed);
+        let dark = Rgb::new(10, 70, 50).map(|e| e as f32);
+        let light = Rgb::new(80, 140, 10).map(|e| e as f32);
+        let leaf_col = Lerp::lerp(
+            dark,
+            light,
+            fast_noise.get((self.wpos.map(|e| e as f64) * 0.05) * 0.5 + 0.5),
+        );
+        let leaf_block = Block::new(BlockKind::Leaves, leaf_col.map(|e| e as u8));
+
+        let trunk_block = filler.block(trunk_block);
+        let leaf_block = filler.block(leaf_block);
+
+        self.tree.walk(|branch, parent| {
+            let aabr = Aabr {
+                min: self.wpos.xy() + branch.get_aabb().min.xy().as_(),
+                max: self.wpos.xy() + branch.get_aabb().max.xy().as_(),
+            };
+            if aabr.collides_with_aabr(filler.render_aabr().as_()) {
+                let start =
+                    self.wpos.as_::<f32>() + branch.get_line().start/*.as_()*//* - 0.5*/;
+                let end =
+                    self.wpos.as_::<f32>() + branch.get_line().end/*.as_()*//* - 0.5*/;
+                let wood_radius = branch.get_wood_radius();
+                let leaf_radius = branch.get_leaf_radius();
+                let parent_wood_radius = if branch_child_radius_lerp {
+                    parent.get_wood_radius()
+                } else {
+                    wood_radius
+                };
+                let leaf_eats_wood = leaf_radius > wood_radius;
+                let leaf_eats_parent_wood = leaf_radius > parent_wood_radius;
+                if !leaf_eats_wood || !leaf_eats_parent_wood {
+                    // Render the trunk, since it's not swallowed by its leaf.
+                    painter
+                        .line_two_radius(
+                            start,
+                            end,
+                            parent_wood_radius,
+                            wood_radius,
+                            1.0,
+                        )
+                        .fill(/*filler.block(trunk_block)*/trunk_block, filler);
+                }
+                if leaf_eats_wood || leaf_eats_parent_wood {
+                    // Render the leaf, since it's not *completely* swallowed
+                    // by the trunk.
+                    painter
+                        .line_two_radius(
+                            start,
+                            end,
+                            leaf_radius,
+                            leaf_radius,
+                            leaf_vertical_scale,
+                        )
+                        .fill(/*filler.block(leaf_block)*/leaf_block, filler);
+                }
+                true
+            } else {
+                false
+            }
+        });
+        /* // Draw the roots.
+        t.roots.iter().for_each(|root| {
+            painter
+                .line(
+                    wpos/*.as_::<f32>()*/ + root.line.start.as_()/* - 0.5*/,
+                    wpos/*.as_::<f32>()*/ + root.line.end.as_()/* - 0.5*/,
+                    root.radius,
+                )
+                .fill(/*filler.block(leaf_block)*/trunk_block, filler);
+        }); */
+
+        /* let fast_noise = FastNoise::new(self.seed);
         let dark = Rgb::new(10, 70, 50).map(|e| e as f32);
         let light = Rgb::new(80, 140, 10).map(|e| e as f32);
         let leaf_col = Lerp::lerp(
@@ -125,6 +218,6 @@ impl<F: Filler> Structure<F> for GiantTree {
             } else {
                 false
             }
-        });
+        }); */
     }
 }

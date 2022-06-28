@@ -87,7 +87,7 @@ impl Site {
                 }
             })
             .min_by_key(|d2| *d2 as i32)
-            .map(|d2| d2.sqrt() as f32 / TILE_SIZE as f32)
+            .map(|d2| d2/*.sqrt()*/ as f32 / (TILE_SIZE * TILE_SIZE) as f32)
             .unwrap_or(1.0);
         let base_spawn_rules = SpawnRules {
             trees: max_warp == 1.0,
@@ -862,10 +862,10 @@ impl Site {
                         .min_by_key(|d| (*d * 100.0) as i32);
 
                     if dist.map_or(false, |d| d <= 1.5) {
-                        let alt = canvas.col(wpos2d).map_or(0, |col| col.alt as i32);
-                        let sub_surface_color = canvas
-                            .col(wpos2d)
-                            .map_or(Rgb::zero(), |col| col.sub_surface_color * 0.5);
+                        let col = /*canvas.col(wpos2d)*/None::<&crate::ColumnSample>;
+                        let alt = col.map_or(0, |col| col.alt as i32);
+                        let sub_surface_color =
+                            col.map_or(Rgb::zero(), |col| col.sub_surface_color * 0.5);
                         let mut underground = true;
                         for z in -8..6 {
                             canvas.map(Vec3::new(wpos2d.x, wpos2d.y, alt + z), |b| {
@@ -938,11 +938,11 @@ impl Site {
             //     .min_by_key(|d| (*d * 100.0) as i32);
 
             if min_dist.is_some() {
-                let alt = /*avg_hard_alt.map(|(sum, weight)| sum / weight).unwrap_or_else(||*/ canvas.col(wpos2d).map_or(0.0, |col| col.alt)/*)*/ as i32;
+                let col = /*canvas.col(wpos2d)*/col;
+                let alt = /*avg_hard_alt.map(|(sum, weight)| sum / weight).unwrap_or_else(||*/ /*col.map_or(0.0, |col| */col.alt/*))*/ as i32;
                 let mut underground = true;
-                let sub_surface_color = canvas
-                    .col(wpos2d)
-                    .map_or(Rgb::zero(), |col| col.sub_surface_color * 0.5);
+                let sub_surface_color =
+                    /*col.map_or(Rgb::zero(), |col| */col.sub_surface_color * 0.5/*)*/;
                 for z in -6..4 {
                     canvas.map(
                         Vec3::new(wpos2d.x, wpos2d.y, alt + z),

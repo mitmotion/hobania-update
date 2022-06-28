@@ -55,7 +55,7 @@ use common_net::msg::WorldMapMsg;
 use enum_iterator::IntoEnumIterator;
 use noise::{
     BasicMulti, Billow, Fbm, HybridMulti, MultiFractal, NoiseFn, RangeFunction, RidgedMulti,
-    Seedable, SuperSimplex, Worley,
+    Seedable, SuperSimplex, Value, Worley,
 };
 use num::{traits::FloatConst, Float, Signed};
 use rand::{Rng, SeedableRng};
@@ -125,13 +125,15 @@ pub(crate) struct GenCtx {
     pub _big_structure_gen: StructureGen2d,
     pub _region_gen: StructureGen2d,
 
-    pub _fast_turb_x_nz: FastNoise,
+    // pub _fast_turb_x_nz: FastNoise,
     pub _fast_turb_y_nz: FastNoise,
 
     pub _town_gen: StructureGen2d,
     pub river_seed: RandomField,
     pub rock_strength_nz: Fbm,
     pub uplift_nz: Worley,
+
+    pub fast_hill_nz: Value,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -531,6 +533,7 @@ impl WorldSim {
         let rock_lacunarity = 2.0;
         let uplift_scale = 128.0;
         let uplift_turb_scale = uplift_scale / 4.0;
+        let hill_nz_seed;
 
         // NOTE: Changing order will significantly change WorldGen, so try not to!
         let gen_ctx = GenCtx {
@@ -540,7 +543,7 @@ impl WorldSim {
                 .set_octaves(7)
                 .set_frequency(RidgedMulti::DEFAULT_FREQUENCY * (5_000.0 / continent_scale))
                 .set_seed(rng.gen()),
-            hill_nz: SuperSimplex::new().set_seed(rng.gen()),
+            hill_nz: SuperSimplex::new().set_seed({ hill_nz_seed = rng.gen(); hill_nz_seed }),
             alt_nz: util::HybridMulti::new()
                 .set_octaves(8)
                 .set_frequency((10_000.0 / continent_scale) as f64)
@@ -574,7 +577,9 @@ impl WorldSim {
                 .set_frequency(0.2)
                 .set_seed(rng.gen()),
 
-            _fast_turb_x_nz: FastNoise::new(rng.gen()),
+            // _fast_turb_x_nz: FastNoise::new(rng.gen()),
+            fast_hill_nz: Value::new()
+                .set_seed({ let _ = rng.gen::<u32>(); hill_nz_seed }),
             _fast_turb_y_nz: FastNoise::new(rng.gen()),
 
             _town_gen: StructureGen2d::new(rng.gen(), 2048, 1024),
@@ -1470,7 +1475,7 @@ impl WorldSim {
 
     /// Draw a map of the world based on chunk information.  Returns a buffer of
     /// u32s.
-    pub fn get_map(&self, index: IndexRef, calendar: Option<&Calendar>) -> WorldMapMsg {
+    pub fn get_map(&self, index: IndexRef/*, calendar: Option<&Calendar>*/) -> WorldMapMsg {
         let mut map_config = MapConfig::orthographic(
             self.map_size_lg(),
             core::ops::RangeInclusive::new(CONFIG.sea_level, CONFIG.sea_level + self.max_height),
@@ -1488,19 +1493,24 @@ impl WorldSim {
         };
 
         let samples_data = {
-            let column_sample = ColumnGen::new(self);
             (0..self.map_size_lg().chunks_len())
                 .into_par_iter()
                 .map_init(
-                    || Box::new(BlockGen::new(ColumnGen::new(self))),
-                    |_block_gen, posi| {
-                        let sample = column_sample.get(
+                    || Box::new(BlockGen::new(
+                        ColumnGen::new(self, Vec2::new(1, 1), index)
+                        .expect("BlockGen for 1 will never fail unless there are fewer than 4 chunks, \
+                                 which we should statically disallow (and if we don't, we should \
+                                 start"))),
+                    |block_gen, posi| {
+                        let chunk_pos = uniform_idx_as_vec2(self.map_size_lg(), posi);
+                        block_gen.column_gen = ColumnGen::new(self, chunk_pos, index)?;
+                        let sample = block_gen.column_gen.get(
                             (
-                                uniform_idx_as_vec2(self.map_size_lg(), posi) * TerrainChunkSize::RECT_SIZE.map(|e| e as i32),
+                                chunk_pos * TerrainChunkSize::RECT_SIZE.map(|e| e as i32)/* ,
                                 index,
-                                calendar,
+                                calendar, */
                             )
-                        )?;
+                        );
                         // sample.water_level = CONFIG.sea_level.max(sample.water_level);
 
                         Some(sample)

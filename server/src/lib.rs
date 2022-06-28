@@ -420,7 +420,7 @@ impl Server {
                         .civs()
                         .sites()
                         .filter(|site| {
-                            matches!(site.kind, SiteKind::Settlement | SiteKind::Refactor)
+                            matches!(site.kind, /* SiteKind::Settlement | */SiteKind::Refactor)
                         })
                         .map(|site| site.center)
                         .min_by_key(|site_pos| site_pos.distance_squared(center_chunk))
@@ -981,8 +981,8 @@ impl Server {
                             Arc::clone(world),
                             index.clone(),
                             (
-                                *ecs.read_resource::<TimeOfDay>(),
-                                (*ecs.read_resource::<Calendar>()).clone(),
+                                *ecs.read_resource::<TimeOfDay>()/* ,
+                                (*ecs.read_resource::<Calendar>()).clone(), */
                             ),
                         );
                     });
@@ -1201,8 +1201,8 @@ impl Server {
             Arc::clone(&self.world),
             self.index.clone(),
             (
-                *ecs.read_resource::<TimeOfDay>(),
-                (*ecs.read_resource::<Calendar>()).clone(),
+                *ecs.read_resource::<TimeOfDay>()/* ,
+                (*ecs.read_resource::<Calendar>()).clone(), */
             ),
         );
     }

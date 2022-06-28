@@ -5,7 +5,7 @@ mod econ;
 use crate::{
     config::CONFIG,
     sim::WorldSim,
-    site::{namegen::NameGen, Castle, Settlement, Site as WorldSite, Tree},
+    site::{namegen::NameGen, Castle, /*Settlement, */Site as WorldSite/*, Tree */},
     site2,
     util::{attempt, seed_expan, DHashMap, NEIGHBORS},
     Index, Land,
@@ -119,11 +119,11 @@ impl Civs {
                 let (kind, size, avoid) = match ctx.rng.gen_range(0..64) {
                     0..=5 => (SiteKind::Castle, 3, (&castle_enemies, 40)),
                     28..=31 => {
-                        if index.features().site2_giant_trees {
+                        /*if index.features().site2_giant_trees */{
                             (SiteKind::GiantTree, 4, (&tree_enemies, 40))
-                        } else {
+                        }/* else {
                             (SiteKind::Tree, 4, (&tree_enemies, 40))
-                        }
+                        }*/
                     },
                     32..=37 => (SiteKind::Gnarling, 5, (&gnarling_enemies, 40)),
                     // 32..=37 => (SiteKind::Citadel, 5, (&castle_enemies, 20)),
@@ -166,19 +166,19 @@ impl Civs {
             let wpos = site.center * TerrainChunkSize::RECT_SIZE.map(|e: u32| e as i32);
 
             let (radius, flatten_radius) = match &site.kind {
-                SiteKind::Settlement => (32i32, 10.0f32),
-                SiteKind::Dungeon => (8i32, 3.0),
+                /* SiteKind::Settlement => (32i32, 10.0f32), */
+                SiteKind::Dungeon => (8i32, 3.0f32),
                 SiteKind::Castle => (16i32, 5.0),
                 SiteKind::Refactor => (32i32, 10.0),
                 SiteKind::CliffTown => (32i32, 10.0),
-                SiteKind::Tree => (12i32, 8.0),
+                /* SiteKind::Tree => (12i32, 8.0), */
                 SiteKind::GiantTree => (12i32, 8.0),
                 SiteKind::Gnarling => (16i32, 10.0),
                 SiteKind::Citadel => (16i32, 0.0),
             };
 
             let (raise, raise_dist, make_waypoint): (f32, i32, bool) = match &site.kind {
-                SiteKind::Settlement => (10.0, 6, true),
+                /* SiteKind::Settlement => (10.0, 6, true), */
                 SiteKind::Castle => (0.0, 6, true),
                 _ => (0.0, 0, false),
             };
@@ -235,9 +235,9 @@ impl Civs {
 
             let mut rng = ctx.reseed().rng;
             let site = index.sites.insert(match &sim_site.kind {
-                SiteKind::Settlement => {
+                /* SiteKind::Settlement => {
                     WorldSite::settlement(Settlement::generate(wpos, Some(ctx.sim), &mut rng))
-                },
+                }, */
                 SiteKind::Dungeon => WorldSite::dungeon(site2::Site::generate_dungeon(
                     &Land::from_sim(ctx.sim),
                     &mut rng,
@@ -256,9 +256,9 @@ impl Civs {
                     &mut rng,
                     wpos,
                 )),
-                SiteKind::Tree => {
+                /* SiteKind::Tree => {
                     WorldSite::tree(Tree::generate(wpos, &Land::from_sim(ctx.sim), &mut rng))
-                },
+                }, */
                 SiteKind::GiantTree => WorldSite::giant_tree(site2::Site::generate_giant_tree(
                     &Land::from_sim(ctx.sim),
                     &mut rng,
@@ -974,7 +974,7 @@ impl Civs {
                 matches!(
                     p.kind,
                     SiteKind::Refactor
-                        | SiteKind::Settlement
+                        /* | SiteKind::Settlement */
                         | SiteKind::CliffTown
                         | SiteKind::Castle
                 )
@@ -984,7 +984,7 @@ impl Civs {
             .collect::<Vec<_>>();
         nearby.sort_by_key(|(_, dist)| *dist as i32);
 
-        if let SiteKind::Refactor | SiteKind::Settlement | SiteKind::CliffTown | SiteKind::Castle =
+        if let SiteKind::Refactor | /* SiteKind::Settlement | */SiteKind::CliffTown | SiteKind::Castle =
             self.sites[site].kind
         {
             for (nearby, _) in nearby.into_iter().take(5) {
@@ -1235,12 +1235,12 @@ impl fmt::Display for Site {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SiteKind {
-    Settlement,
+    /* Settlement, */
     Dungeon,
     Castle,
     Refactor,
     CliffTown,
-    Tree,
+    /* Tree, */
     GiantTree,
     Gnarling,
     Citadel,
@@ -1349,7 +1349,7 @@ impl SiteKind {
                     (-0.3..0.4).contains(&chunk.temp) && chunk.tree_density > 0.75
                 },
                 SiteKind::Citadel => (-0.3..0.7).contains(&chunk.temp) && chunk.tree_density < 0.4,
-                SiteKind::GiantTree | SiteKind::Tree => chunk.tree_density > 0.4,
+                SiteKind::GiantTree /* | SiteKind::Tree */=> chunk.tree_density > 0.4,
                 SiteKind::CliffTown => {
                     (-0.6..0.4).contains(&chunk.temp)
                         && chunk.near_cliffs()
@@ -1382,7 +1382,7 @@ impl SiteKind {
                     }
                     true
                 },
-                SiteKind::Refactor | SiteKind::Settlement => suitable_for_town(6.7),
+                SiteKind::Refactor/* | SiteKind::Settlement*/ => suitable_for_town(6.7),
                 _ => true,
             }
         })
@@ -1403,7 +1403,7 @@ impl Site {
     pub fn is_dungeon(&self) -> bool { matches!(self.kind, SiteKind::Dungeon) }
 
     pub fn is_settlement(&self) -> bool {
-        matches!(self.kind, SiteKind::Settlement | SiteKind::Refactor)
+        matches!(self.kind, /*SiteKind::Settlement | */SiteKind::Refactor)
     }
 
     pub fn is_castle(&self) -> bool { matches!(self.kind, SiteKind::Castle) }

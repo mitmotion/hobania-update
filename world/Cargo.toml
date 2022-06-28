@@ -27,10 +27,12 @@ fxhash = "0.2.1"
 image = { version = "0.23.12", default-features = false, features = ["png"] }
 itertools = "0.10"
 vek = { version = "0.15.8", features = ["serde"] }
+# noise = { git = "https://github.com/Razaekel/noise-rs.git", rev = "ef8a859116c7f743bf00ee672a1b20ae653ec15c", version = "0.7", default-features = false }
 noise = { version = "0.7", default-features = false }
 noisy_float = { version = "0.2", default-features = false }
 num = "0.4"
 ordered-float = "2.0.1"
+probability = "0.18.0"
 hashbrown = { version = "0.11", features = ["rayon", "serde", "nightly"] }
 lazy_static = "1.4.0"
 tracing = { version = "0.1", default-features = false }

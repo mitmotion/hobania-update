@@ -9,7 +9,7 @@ use crate::{
     wiring, BattleModeBuffer, SpawnPoint,
 };
 use common::{
-    calendar::Calendar,
+    /* calendar::Calendar, */
     character::CharacterId,
     combat,
     combat::DamageContributor,
@@ -465,7 +465,7 @@ impl StateExt for State {
             .for_each(|chunk_key| {
                 #[cfg(feature = "worldgen")]
                 {
-                    let time = (*ecs.read_resource::<TimeOfDay>(), (*ecs.read_resource::<Calendar>()).clone());
+                    let time = (*ecs.read_resource::<TimeOfDay>()/* , (*ecs.read_resource::<Calendar>()).clone() */);
                     chunk_generator.generate_chunk(None, chunk_key, &slow_jobs, Arc::clone(world), index.clone(), time);
                 }
             });
