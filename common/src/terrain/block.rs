@@ -1,5 +1,5 @@
-use zerocopy::AsBytes;
 use super::SpriteKind;
+use bitvec::prelude::*;
 use crate::{
     comp::{fluid_dynamics::LiquidKind, tool::ToolKind},
     consts::FRIC_GROUND,
@@ -7,10 +7,11 @@ use crate::{
 };
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
-use serde::{Deserialize, Serialize};
+use serde::{ser, Deserialize, Serialize};
 use std::ops::Deref;
 use strum::{Display, EnumIter, EnumString};
 use vek::*;
+use zerocopy::AsBytes;
 
 make_case_elim!(
     block_kind,
@@ -30,6 +31,11 @@ make_case_elim!(
         Display,
     )]
     #[repr(u8)]
+    /// XXX(@Sharp): If you feel like significantly modifying how BlockKind works, you *MUST* also
+    /// update the implementation of BlockVec!  BlockVec uses unsafe code that relies on EnumIter.
+    /// If you are just adding variants, that's fine (for now), but any other changes (like
+    /// changing from repr(u8)) need review.
+    ///
     /// NOTE: repr(u8) preserves the niche optimization for fieldless enums!
     pub enum BlockKind {
         Air = 0x00, // Air counts as a fluid
@@ -113,8 +119,12 @@ impl BlockKind {
     }
 }
 
+/// XXX(@Sharp): If you feel like significantly modifying how Block works, you *MUST* also update
+/// the implementation of BlockVec!  BlockVec uses unsafe code that depends on being able to
+/// independently validate the kind and treat attr as bytes; changing things so that this no longer
+/// works will require careful review.
 #[derive(AsBytes, Copy, Clone, Debug, Eq, Serialize, Deserialize)]
-/// NOTE: repr(C) appears to preservre niche optimizations!
+/// NOTE: repr(C) appears to preserve niche optimizations!
 #[repr(align(4), C)]
 pub struct Block {
     kind: BlockKind,
@@ -428,6 +438,125 @@ impl Block {
     #[inline]
     pub fn to_u32(&self) -> u32 {
         u32::from_le_bytes([self.kind as u8, self.attr[0], self.attr[1], self.attr[2]])
+    }
+}
+
+/// A wrapper around Vec<Block>, usable for efficient deserialization.
+///
+/// XXX(@Sharp): This is crucially interwoven with the definition of Block and BlockKind, as it
+/// uses unsafe code to speed up deserialization.  If you decide to change how these types work in
+/// a significant way (i.e. beyond adding new variants to BlockKind), this needs careful review!
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Hash,
+    Eq,
+    PartialEq,
+)]
+#[serde(try_from = "&'_ [u8]")]
+pub struct BlockVec(Vec<Block>);
+
+impl core::ops::Deref for BlockVec {
+    type Target = Vec<Block>;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl core::ops::DerefMut for BlockVec {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl From<Vec<Block>> for BlockVec {
+    #[inline]
+    fn from(inner: Vec<Block>) -> Self {
+        Self(inner)
+    }
+}
+
+impl Serialize for BlockVec {
+    /// We can *safely* serialize a BlockVec as a Vec of bytes (this is validated by AsBytes).
+    /// This also means that the representation here is architecture independent.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: ser::Serializer,
+    {
+        serializer.serialize_bytes(self.0.as_bytes())
+    }
+}
+
+impl<'a/*, Error: de::Error*/> TryFrom<&'a [u8]> for BlockVec {
+    type Error = &'static str;
+    /// XXX(@Sharp): This implementation is subtle and its safety depens on correct implementation!
+    /// It is well-commented, but those comments are only valid so long as this implementation
+    /// doesn't change.  If you do need to change this implementation, please seek careful review!
+    ///
+    /// NOTE: Ideally, we would perform a try_from(Vec<u8>) instead, to avoid the extra copy.
+    /// Unfortunately this is not generally sound, since Vec allocations must be deallocated with
+    /// the same layout with which they were allocated, which includes alignment (and no, it does
+    /// not matter if they in practice have the same alignment at runtime, it's still UB).  If we
+    /// were to do this, we'd effectively have to hold a Vec<u8> inside BlockVec at all times, not
+    /// exposing &mut access at all, and instead requiring transmutes to get access to Blocks.
+    /// This seems like a huge pain so for now, hopefully deserialize (the non-owned version) is
+    /// sufficient.
+    #[allow(unsafe_code)]
+    fn try_from(blocks: &'a [u8]) -> Result<Self, Self::Error>
+    {
+        // First, make sure we're correctly interpretable as a [u8; 4].
+        let blocks: &[[u8; 4]] = bytemuck::try_cast_slice(blocks)
+            .map_err(|_| /*Error::invalid_length(blocks.len(), &"a multiple of 4")*/"Length must be a multiple of 4")?;
+        // The basic observation here is that a slice of [u8; 4] is *almost* the same as a slice of
+        // blocks, so conversion from the former to the latter can be very cheap.  The only problem
+        // is that BlockKind (the first byte in `Block`) has some invalid states, so not every u8
+        // slice of the appropriate size is a block slice.  Fortunately, since we don't care about
+        // figuring out which block triggered the error, we can figure this out really cheaply--we
+        // just have to set a bit for every block we see, then check at the end to make sure all
+        // the bits we set are valid elements.  We can construct the valid bit set using EnumIter,
+        // and the requirement is: (!valid & set_bits) = 0.
+
+        // Construct the invalid list.  Initially, it's all 1s, then we set all the bits
+        // corresponding to valid block kinds to 0, leaving a set bit for each invalid block kind.
+        //
+        // TODO: Verify whether this gets constant folded away; if not, try to do this as a const
+        // fn?  Might need to modify the EnumIter implementation.
+        let mut invalid_bits = bitarr![1; 256];
+        <BlockKind as strum::IntoEnumIterator>::iter().for_each(|bk| {
+            invalid_bits.set((bk as u8).into(), false);
+        });
+
+        // Initially, the set bit list is empty.
+        let mut set_bits = bitarr![0; 256];
+
+        // TODO: SIMD iteration.
+        // NOTE: The block kind is guaranteed to be at the front, thanks to the repr(C).
+        blocks.into_iter().for_each(|&[kind, _, _, _]| {
+            // TODO: Check assembly to see if the bounds check gets elided; if so, leave this as
+            // set instead of set_unchecked, to scope down the use of unsafe as much as possible.
+            set_bits.set(kind.into(), true);
+        });
+
+        // The invalid bits and the set bits should have no overlap.
+        set_bits &= invalid_bits;
+        if set_bits.any() {
+            // At least one invalid bit was set, so there was an invalid BlockKind somewhere.
+            //
+            // TODO: Use radix representation of the bad block kind.
+            return Err(/*Error::unknown_variant("an invalid u8", &["see the definition of BlockKind for details"])*/"Found an unknown BlockKind while parsing Vec<Block>");
+        }
+        // All set bits are cleared, so all block kinds were valid.  Combined with the slice being
+        // compatible with [u8; 4], we can transmute the slice to a slice of Blocks and then
+        // construct a new vector from it.
+        let blocks = unsafe { core::mem::transmute::<&'a [[u8; 4]], &'a [Block]>(blocks) };
+        // Finally, *safely* construct a vector from the new blocks (as mentioned above, we cannot
+        // reuse the old byte vector even if we wanted to, since it doesn't have the same
+        // alignment as Block).
+        Ok(Self(blocks.to_vec()))
     }
 }
 

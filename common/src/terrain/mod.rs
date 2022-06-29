@@ -9,7 +9,7 @@ pub mod structure;
 // Reexports
 pub use self::{
     biome::BiomeKind,
-    block::{Block, BlockKind},
+    block::{Block, BlockKind, BlockVec},
     map::MapSizeLg,
     site::SitesKind,
     sprite::SpriteKind,
@@ -157,7 +157,7 @@ impl TerrainChunkMeta {
 
 // Terrain type aliases
 
-pub type TerrainChunk = chonk::Chonk<Block, TerrainChunkSize, TerrainChunkMeta>;
+pub type TerrainChunk = chonk::Chonk<Block, BlockVec, TerrainChunkSize, TerrainChunkMeta>;
 pub type TerrainGrid = VolGrid2d<TerrainChunk>;
 
 impl TerrainGrid {

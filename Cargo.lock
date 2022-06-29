@@ -6554,6 +6554,7 @@ dependencies = [
  "approx 0.4.0",
  "bitflags",
  "bitvec",
+ "bytemuck",
  "chrono",
  "chrono-tz",
  "clap 2.34.0",

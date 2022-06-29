@@ -4,7 +4,12 @@ use vek::*;
 
 /// Used to specify a volume's compile-time size. This exists as a substitute
 /// until const generics are implemented.
-pub trait VolSize: Clone {
+///
+/// The actual type should be suitable for use as storage for a vector of Vs.  The type signature
+/// essentially requires that this "just" be a wrapper around Vec<V>, but in some cases we may be
+/// able to implement serialization / deserialization, and potentially other operations, more
+/// efficiently with such a wrapper than we would by using Vec<Vox>.
+pub trait VolSize<V>/*: Clone + core::ops::Deref<Target=Vec<V>> + core::ops::DerefMut + From<Vec<V>>*/ {
     const SIZE: Vec3<u32>;
 }
 

@@ -672,10 +672,10 @@ impl<const AVERAGE_PALETTE: bool> VoxelImageDecoding for TriPngEncoding<AVERAGE_
     }
 }
 
-pub fn image_terrain_chonk<S: RectVolSize, M: Clone, P: PackingFormula, VIE: VoxelImageEncoding>(
+pub fn image_terrain_chonk<S: RectVolSize, Storage: core::ops::DerefMut<Target=Vec<Block>>, M: Clone, P: PackingFormula, VIE: VoxelImageEncoding>(
     vie: &VIE,
     packing: P,
-    chonk: &Chonk<Block, S, M>,
+    chonk: &Chonk<Block, Storage, S, M>,
 ) -> Option<VIE::Output> {
     image_terrain(
         vie,
@@ -688,13 +688,14 @@ pub fn image_terrain_chonk<S: RectVolSize, M: Clone, P: PackingFormula, VIE: Vox
 
 pub fn image_terrain_volgrid<
     S: RectVolSize + Debug,
+    Storage: core::ops::DerefMut<Target=Vec<Block>> + Debug,
     M: Clone + Debug,
     P: PackingFormula,
     VIE: VoxelImageEncoding,
 >(
     vie: &VIE,
     packing: P,
-    volgrid: &VolGrid2d<Chonk<Block, S, M>>,
+    volgrid: &VolGrid2d<Chonk<Block, Storage, S, M>>,
 ) -> Option<VIE::Output> {
     let mut lo = Vec3::broadcast(i32::MAX);
     let mut hi = Vec3::broadcast(i32::MIN);
@@ -818,7 +819,7 @@ pub struct WireChonk<VIE: VoxelImageEncoding, P: PackingFormula, M: Clone, S: Re
 impl<VIE: VoxelImageEncoding + VoxelImageDecoding, P: PackingFormula, M: Clone, S: RectVolSize>
     WireChonk<VIE, P, M, S>
 {
-    pub fn from_chonk(vie: VIE, packing: P, chonk: &Chonk<Block, S, M>) -> Option<Self> {
+    pub fn from_chonk<Storage: core::ops::DerefMut<Target=Vec<Block>>>(vie: VIE, packing: P, chonk: &Chonk<Block, Storage, S, M>) -> Option<Self> {
         let data = image_terrain_chonk(&vie, packing, chonk)?;
         Some(Self {
             zmin: chonk.get_min_z(),
@@ -835,7 +836,7 @@ impl<VIE: VoxelImageEncoding + VoxelImageDecoding, P: PackingFormula, M: Clone, 
         })
     }
 
-    pub fn to_chonk(&self) -> Option<Chonk<Block, S, M>> {
+    pub fn to_chonk<Storage: Clone + core::ops::DerefMut<Target=Vec<Block>> + From<Vec<Block>>>(&self) -> Option<Chonk<Block, Storage, S, M>> {
         let mut chonk = Chonk::new(self.zmin, self.below, self.above, self.meta.clone());
         write_image_terrain(
             &self.vie,

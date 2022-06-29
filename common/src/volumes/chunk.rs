@@ -49,16 +49,15 @@ pub enum ChunkError {
 /// index buffer can consist of `u8`s. This keeps the space requirement for the
 /// index buffer as low as 4 cache lines.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Chunk<V, S: VolSize, M> {
+pub struct Chunk<V, S: VolSize<V>, M> {
     indices: Vec<u8>, /* TODO (haslersn): Box<[u8; S::SIZE.x * S::SIZE.y * S::SIZE.z]>, this is
                        * however not possible in Rust yet */
-    vox: Vec<V>,
+    vox: S,
     default: V,
     meta: M,
-    phantom: PhantomData<S>,
 }
 
-impl<V, S: VolSize, M> Chunk<V, S, M> {
+impl<V, S: VolSize<V>, M> Chunk<V, S, M> {
     pub const GROUP_COUNT: Vec3<u32> = Vec3::new(
         S::SIZE.x / Self::GROUP_SIZE.x,
         S::SIZE.y / Self::GROUP_SIZE.y,
@@ -74,10 +73,15 @@ impl<V, S: VolSize, M> Chunk<V, S, M> {
     );
     const GROUP_VOLUME: u32 = [Self::VOLUME / 256, 1][(Self::VOLUME < 256) as usize];
     const VOLUME: u32 = (S::SIZE.x * S::SIZE.y * S::SIZE.z) as u32;
+}
 
+impl<V, S: core::ops::DerefMut<Target=Vec<V>> + VolSize<V>, M> Chunk<V, S, M> {
     /// Creates a new `Chunk` with the provided dimensions and all voxels filled
     /// with duplicates of the provided voxel.
-    pub fn filled(default: V, meta: M) -> Self {
+    pub fn filled(default: V, meta: M) -> Self
+        where
+            S: From<Vec<V>>,
+    {
         // TODO (haslersn): Alter into compile time assertions
         //
         // An extent is valid if it fulfils the following conditions.
@@ -111,10 +115,9 @@ impl<V, S: VolSize, M> Chunk<V, S, M> {
 
         Self {
             indices: vec![255; Self::GROUP_COUNT_TOTAL as usize],
-            vox: Vec::new(),
+            vox: Vec::new().into(),
             default,
             meta,
-            phantom: PhantomData,
         }
     }
 
@@ -122,6 +125,7 @@ impl<V, S: VolSize, M> Chunk<V, S, M> {
     pub fn defragment(&mut self)
     where
         V: zerocopy::AsBytes + Clone + Eq + Hash,
+        S: From<Vec<V>>,
         [(); { core::mem::size_of::<V>() }]:,
     {
         // First, construct a HashMap with max capacity equal to GROUP_COUNT (since each
@@ -179,7 +183,7 @@ impl<V, S: VolSize, M> Chunk<V, S, M> {
         let mut new_vox =
             Vec::with_capacity(Self::GROUP_COUNT_TOTAL as usize - default_groups.len());
         let num_groups = self.num_groups();
-        let mut indices = &mut self.indices[..Self::GROUP_COUNT_TOTAL as usize];
+        let indices = &mut self.indices[..Self::GROUP_COUNT_TOTAL as usize];
         indices
             .iter_mut()
             .enumerate()
@@ -209,7 +213,7 @@ impl<V, S: VolSize, M> Chunk<V, S, M> {
             });
 
         // Finally, reset our vox and default values to the new ones.
-        self.vox = new_vox;
+        self.vox = new_vox.into();
         self.default = new_default;
     }
 
@@ -250,7 +254,8 @@ impl<V, S: VolSize, M> Chunk<V, S, M> {
     }
 
     #[inline(always)]
-    fn idx_unchecked(&self, pos: Vec3<i32>) -> Option<usize> {
+    fn idx_unchecked(&self, pos: Vec3<i32>) -> Option<usize>
+    {
         let grp_idx = Self::grp_idx(pos);
         let rel_idx = Self::rel_idx(pos);
         let base = u32::from(self.indices[grp_idx as usize]);
@@ -290,6 +295,7 @@ impl<V, S: VolSize, M> Chunk<V, S, M> {
     #[inline(always)]
     fn set_unchecked(&mut self, pos: Vec3<i32>, vox: V) -> V
     where
+        S: core::ops::DerefMut<Target=Vec<V>>,
         V: Clone + PartialEq,
     {
         if vox != self.default {
@@ -303,16 +309,16 @@ impl<V, S: VolSize, M> Chunk<V, S, M> {
     }
 }
 
-impl<V, S: VolSize, M> BaseVol for Chunk<V, S, M> {
+impl<V, S: VolSize<V>, M> BaseVol for Chunk<V, S, M> {
     type Error = ChunkError;
     type Vox = V;
 }
 
-impl<V, S: VolSize, M> RasterableVol for Chunk<V, S, M> {
+impl<V, S: VolSize<V>, M> RasterableVol for Chunk<V, S, M> {
     const SIZE: Vec3<u32> = S::SIZE;
 }
 
-impl<V, S: VolSize, M> ReadVol for Chunk<V, S, M> {
+impl<V, S: core::ops::DerefMut<Target=Vec<V>> + VolSize<V>, M> ReadVol for Chunk<V, S, M> {
     #[inline(always)]
     fn get(&self, pos: Vec3<i32>) -> Result<&Self::Vox, Self::Error> {
         if !pos
@@ -326,7 +332,10 @@ impl<V, S: VolSize, M> ReadVol for Chunk<V, S, M> {
     }
 }
 
-impl<V: Clone + PartialEq, S: VolSize, M> WriteVol for Chunk<V, S, M> {
+impl<V: Clone + PartialEq, S: VolSize<V>, M> WriteVol for Chunk<V, S, M>
+    where
+        S: core::ops::DerefMut<Target=Vec<V>>,
+{
     #[inline(always)]
     fn set(&mut self, pos: Vec3<i32>, vox: Self::Vox) -> Result<Self::Vox, Self::Error> {
         if !pos
@@ -340,7 +349,7 @@ impl<V: Clone + PartialEq, S: VolSize, M> WriteVol for Chunk<V, S, M> {
     }
 }
 
-pub struct ChunkPosIter<V, S: VolSize, M> {
+pub struct ChunkPosIter<V, S: VolSize<V>, M> {
     // Store as `u8`s so as to reduce memory footprint.
     lb: Vec3<i32>,
     ub: Vec3<i32>,
@@ -348,7 +357,7 @@ pub struct ChunkPosIter<V, S: VolSize, M> {
     phantom: PhantomData<Chunk<V, S, M>>,
 }
 
-impl<V, S: VolSize, M> ChunkPosIter<V, S, M> {
+impl<V, S: VolSize<V>, M> ChunkPosIter<V, S, M> {
     fn new(lower_bound: Vec3<i32>, upper_bound: Vec3<i32>) -> Self {
         // If the range is empty, then we have the special case `ub = lower_bound`.
         let ub = if lower_bound.map2(upper_bound, |l, u| l < u).reduce_and() {
@@ -365,7 +374,7 @@ impl<V, S: VolSize, M> ChunkPosIter<V, S, M> {
     }
 }
 
-impl<V, S: VolSize, M> Iterator for ChunkPosIter<V, S, M> {
+impl<V, S: VolSize<V>, M> Iterator for ChunkPosIter<V, S, M> {
     type Item = Vec3<i32>;
 
     #[inline(always)]
@@ -420,12 +429,12 @@ impl<V, S: VolSize, M> Iterator for ChunkPosIter<V, S, M> {
     }
 }
 
-pub struct ChunkVolIter<'a, V, S: VolSize, M> {
+pub struct ChunkVolIter<'a, V, S: VolSize<V>, M> {
     chunk: &'a Chunk<V, S, M>,
     iter_impl: ChunkPosIter<V, S, M>,
 }
 
-impl<'a, V, S: VolSize, M> Iterator for ChunkVolIter<'a, V, S, M> {
+impl<'a, V, S: core::ops::DerefMut<Target=Vec<V>> + VolSize<V>, M> Iterator for ChunkVolIter<'a, V, S, M> {
     type Item = (Vec3<i32>, &'a V);
 
     #[inline(always)]
@@ -436,7 +445,7 @@ impl<'a, V, S: VolSize, M> Iterator for ChunkVolIter<'a, V, S, M> {
     }
 }
 
-impl<V, S: VolSize, M> Chunk<V, S, M> {
+impl<V, S: VolSize<V>, M> Chunk<V, S, M> {
     /// It's possible to obtain a positional iterator without having a `Chunk`
     /// instance.
     pub fn pos_iter(lower_bound: Vec3<i32>, upper_bound: Vec3<i32>) -> ChunkPosIter<V, S, M> {
@@ -444,7 +453,7 @@ impl<V, S: VolSize, M> Chunk<V, S, M> {
     }
 }
 
-impl<'a, V, S: VolSize, M> IntoPosIterator for &'a Chunk<V, S, M> {
+impl<'a, V, S: VolSize<V>, M> IntoPosIterator for &'a Chunk<V, S, M> {
     type IntoIter = ChunkPosIter<V, S, M>;
 
     fn pos_iter(self, lower_bound: Vec3<i32>, upper_bound: Vec3<i32>) -> Self::IntoIter {
@@ -452,7 +461,7 @@ impl<'a, V, S: VolSize, M> IntoPosIterator for &'a Chunk<V, S, M> {
     }
 }
 
-impl<'a, V, S: VolSize, M> IntoVolIterator<'a> for &'a Chunk<V, S, M> {
+impl<'a, V, S: core::ops::DerefMut<Target=Vec<V>> + VolSize<V>, M> IntoVolIterator<'a> for &'a Chunk<V, S, M> {
     type IntoIter = ChunkVolIter<'a, V, S, M>;
 
     fn vol_iter(self, lower_bound: Vec3<i32>, upper_bound: Vec3<i32>) -> Self::IntoIter {

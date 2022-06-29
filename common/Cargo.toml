@@ -40,6 +40,7 @@ strum = { version = "0.24", features = ["derive"] }
 approx = "0.4.0"
 bitvec = "0.22"
 # bumpalo = { version = "3.9.1", features = ["allocator_api"] }
+bytemuck = { version="1.4", features=["derive"] }
 clap = "2.33"
 crossbeam-utils = "0.8.1"
 bitflags = "1.2"

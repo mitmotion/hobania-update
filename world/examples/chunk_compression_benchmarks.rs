@@ -78,8 +78,8 @@ fn do_deflate_flate2<const LEVEL: u32>(data: &[u8]) -> Vec<u8> {
     encoder.finish().expect("Failed to finish compression!")
 }
 
-fn chonk_to_dyna<V: Clone, S: RectVolSize, M: Clone, A: Access>(
-    chonk: &Chonk<V, S, M>,
+fn chonk_to_dyna<V: Clone, Storage, S: RectVolSize, M: Clone, A: Access>(
+    chonk: &Chonk<V, Storage, S, M>,
     block: V,
 ) -> Dyna<V, M, A> {
     let mut dyna = Dyna::<V, M, A>::filled(

@@ -310,6 +310,19 @@ fn dungeon(c: &mut Criterion) {
         });
     });
 
+    c.bench_function("deserialize_chunk", |b| {
+        // let chunk_pos = (world.sim().map_size_lg().chunks() >> 1).as_();
+        // let chunk_pos = Vec2::new(9500 / 32, 29042 / 32);
+        // let chunk_pos = Vec2::new(26944 / 32, 26848 / 32);
+        let chunk_pos = Vec2::new(842, 839);
+        let chunk = world.generate_chunk(index.as_index_ref(), chunk_pos, || false, None).unwrap().0;
+        let serialized = bincode::serialize(&chunk).unwrap();
+        // let chunk_pos = Vec2::new(24507/32, 20682/32);
+        // let chunk_pos = Vec2::new(19638/32, 19621/32);
+        b.iter(|| {
+            black_box(bincode::deserialize::<TerrainChunk>(&serialized).unwrap());
+        });
+    });
 
     /* c.bench_function("generate_dungeon", |b| {
         let mut rng = rand::rngs::StdRng::from_seed(seed);
