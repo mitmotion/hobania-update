@@ -531,19 +531,20 @@ impl<'a/*, Error: de::Error*/> TryFrom<&'a [u8]> for BlockVec {
         });
 
         // Initially, the set bit list is empty.
-        let mut set_bits = bitarr![0; 256];
+        let mut set_bits = /*bitarr!*/[false; 256];
 
         // TODO: SIMD iteration.
         // NOTE: The block kind is guaranteed to be at the front, thanks to the repr(C).
         blocks.into_iter().for_each(|&[kind, _, _, _]| {
-            // TODO: Check assembly to see if the bounds check gets elided; if so, leave this as
-            // set instead of set_unchecked, to scope down the use of unsafe as much as possible.
-            set_bits.set(kind.into(), true);
+            // NOTE: Bounds check here appears to be either elided, or perfectly predicted, so we
+            // fortunately avoid using unsafe here.
+            /* set_bits.set(kind.into(), true); */
+            set_bits[kind as usize] = true; 
         });
 
         // The invalid bits and the set bits should have no overlap.
-        set_bits &= invalid_bits;
-        if set_bits.any() {
+        invalid_bits &= set_bits;
+        if invalid_bits.any() {
             // At least one invalid bit was set, so there was an invalid BlockKind somewhere.
             //
             // TODO: Use radix representation of the bad block kind.
