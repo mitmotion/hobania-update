@@ -78,7 +78,7 @@ fn do_deflate_flate2<const LEVEL: u32>(data: &[u8]) -> Vec<u8> {
     encoder.finish().expect("Failed to finish compression!")
 }
 
-fn chonk_to_dyna<V: Clone, Storage, S: RectVolSize, M: Clone, A: Access>(
+fn chonk_to_dyna<V: Clone, Storage: core::ops::DerefMut<Target=Vec<V>>, S: RectVolSize, M: Clone, A: Access>(
     chonk: &Chonk<V, Storage, S, M>,
     block: V,
 ) -> Dyna<V, M, A> {
@@ -609,7 +609,7 @@ impl<'a, NN: NearestNeighbor, const N: u32> VoxelImageEncoding for PaletteEncodi
 
     fn put_solid(&self, ws: &mut Self::Workspace, x: u32, y: u32, kind: BlockKind, rgb: Rgb<u8>) {
         ws.0.put_pixel(x, y, image::Luma([kind as u8]));
-        let i = self.0[&kind].nearest_neighbor(&rgb).unwrap_or(0);
+        let i = self.0.get(&kind).and_then(|b| b.nearest_neighbor(&rgb)).unwrap_or(0);
         ws.3.put_pixel(x / N, y / N, image::Luma([i]));
     }
 
@@ -724,7 +724,7 @@ fn main() {
             world
                 .civs()
                 .sites()
-                .find(|s| matches!(s.kind, SiteKind::Tree))
+                .find(|s| matches!(s.kind, SiteKind::GiantTree))
                 .map(|s| s.center.as_())
                 .unwrap(),
         ),
