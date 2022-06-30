@@ -5,6 +5,7 @@ use bitvec::prelude::*;
 use core::{hash::Hash, iter::Iterator, marker::PhantomData, mem};
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, Bytes};
 use zerocopy::AsBytes;
 use vek::*;
 
@@ -48,8 +49,10 @@ pub enum ChunkError {
 /// The number of 256 groups is particularly nice because it means that the
 /// index buffer can consist of `u8`s. This keeps the space requirement for the
 /// index buffer as low as 4 cache lines.
+#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Chunk<V, S: VolSize<V>, M> {
+    #[serde_as(as = "Bytes")]
     indices: Vec<u8>, /* TODO (haslersn): Box<[u8; S::SIZE.x * S::SIZE.y * S::SIZE.z]>, this is
                        * however not possible in Rust yet */
     vox: S,
@@ -119,6 +122,10 @@ impl<V, S: core::ops::DerefMut<Target=Vec<V>> + VolSize<V>, M> Chunk<V, S, M> {
             default,
             meta,
         }
+    }
+
+    pub fn get_vox(&self) -> &S {
+        &self.vox
     }
 
     /// Compress this subchunk by frequency.

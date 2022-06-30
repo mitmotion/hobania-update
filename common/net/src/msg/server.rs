@@ -15,6 +15,7 @@ use common::{
     trade::{PendingTrade, SitePrices, TradeId, TradeResult},
     uid::Uid,
 };
+use core::marker::PhantomData;
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -24,7 +25,7 @@ use vek::*;
 ///This struct contains all messages the server might send (on different
 /// streams though)
 #[derive(Debug, Clone)]
-pub enum ServerMsg {
+pub enum ServerMsg<'a> {
     /// Basic info about server, send ONCE, clients need it to Register
     Info(ServerInfo),
     /// Initial data package, send BEFORE Register ONCE. Not Register relevant
@@ -32,7 +33,7 @@ pub enum ServerMsg {
     /// Result to `ClientMsg::Register`. send ONCE
     RegisterAnswer(ServerRegisterAnswer),
     ///Msg that can be send ALWAYS as soon as client is registered, e.g. `Chat`
-    General(ServerGeneral),
+    General(ServerGeneral<'a>),
     Ping(PingMsg),
 }
 
@@ -70,13 +71,16 @@ pub enum ServerInit {
 pub type ServerRegisterAnswer = Result<(), RegisterError>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum SerializedTerrainChunk {
-    DeflatedChonk(CompressedData<TerrainChunk>),
-    QuadPng(WireChonk<QuadPngEncoding<4>, WidePacking<true>, TerrainChunkMeta, TerrainChunkSize>),
-    TriPng(WireChonk<TriPngEncoding<false>, WidePacking<true>, TerrainChunkMeta, TerrainChunkSize>),
+pub enum SerializedTerrainChunk<'a> {
+    #[serde(borrow)]
+    DeflatedChonk(CompressedData<'a, TerrainChunk>),
+    #[serde(borrow)]
+    QuadPng(WireChonk<QuadPngEncoding<'a, 4>, WidePacking<true>, TerrainChunkMeta, TerrainChunkSize>),
+    #[serde(borrow)]
+    TriPng(WireChonk<TriPngEncoding<'a, false>, WidePacking<true>, TerrainChunkMeta, TerrainChunkSize>),
 }
 
-impl SerializedTerrainChunk {
+impl SerializedTerrainChunk<'_> {
     pub fn approx_len(&self) -> usize {
         match self {
             SerializedTerrainChunk::DeflatedChonk(data) => data.data.len(),
@@ -98,7 +102,7 @@ impl SerializedTerrainChunk {
     }
 
     pub fn quadpng(chunk: &TerrainChunk) -> Self {
-        if let Some(wc) = WireChonk::from_chonk(QuadPngEncoding(), WidePacking(), chunk) {
+        if let Some(wc) = WireChonk::from_chonk(QuadPngEncoding(PhantomData), WidePacking(), chunk) {
             Self::QuadPng(wc)
         } else {
             warn!("Image encoding failure occurred, falling back to deflate");
@@ -107,7 +111,7 @@ impl SerializedTerrainChunk {
     }
 
     pub fn tripng(chunk: &TerrainChunk) -> Self {
-        if let Some(wc) = WireChonk::from_chonk(TriPngEncoding(), WidePacking(), chunk) {
+        if let Some(wc) = WireChonk::from_chonk(TriPngEncoding(PhantomData), WidePacking(), chunk) {
             Self::TriPng(wc)
         } else {
             warn!("Image encoding failure occurred, falling back to deflate");
@@ -126,7 +130,7 @@ impl SerializedTerrainChunk {
 
 /// Messages sent from the server to the client
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ServerGeneral {
+pub enum ServerGeneral<'a> {
     //Character Screen related
     /// An error occurred while loading character data
     CharacterDataLoadError(String),
@@ -169,13 +173,14 @@ pub enum ServerGeneral {
     // Ingame related AND terrain stream
     TerrainChunkUpdate {
         key: Vec2<i32>,
-        chunk: Result<SerializedTerrainChunk, ()>,
+        chunk: Result<SerializedTerrainChunk<'a>, ()>,
     },
     LodZoneUpdate {
         key: Vec2<i32>,
         zone: lod::Zone,
     },
-    TerrainBlockUpdates(CompressedData<HashMap<Vec3<i32>, Block>>),
+    #[serde(borrow)]
+    TerrainBlockUpdates(CompressedData<'a, HashMap<Vec3<i32>, Block>>),
     // Always possible
     PlayerListUpdate(PlayerListUpdate),
     /// A message to go into the client chat box. The client is responsible for
@@ -198,7 +203,7 @@ pub enum ServerGeneral {
     MapMarker(comp::MapMarkerUpdate),
 }
 
-impl ServerGeneral {
+impl ServerGeneral<'_> {
     pub fn server_msg<S>(chat_type: comp::ChatType<String>, msg: S) -> Self
     where
         S: Into<String>,
@@ -266,7 +271,7 @@ pub enum RegisterError {
     //TODO: InvalidAlias,
 }
 
-impl ServerMsg {
+impl ServerMsg<'_> {
     pub fn verify(
         &self,
         c_type: ClientType,
@@ -329,26 +334,26 @@ impl ServerMsg {
     }
 }
 
-impl From<comp::ChatMsg> for ServerGeneral {
+impl From<comp::ChatMsg> for ServerGeneral<'_> {
     fn from(v: comp::ChatMsg) -> Self { ServerGeneral::ChatMsg(v) }
 }
 
-impl From<ServerInfo> for ServerMsg {
-    fn from(o: ServerInfo) -> ServerMsg { ServerMsg::Info(o) }
+impl From<ServerInfo> for ServerMsg<'_> {
+    fn from(o: ServerInfo) -> Self { ServerMsg::Info(o) }
 }
 
-impl From<ServerInit> for ServerMsg {
-    fn from(o: ServerInit) -> ServerMsg { ServerMsg::Init(Box::new(o)) }
+impl From<ServerInit> for ServerMsg<'_> {
+    fn from(o: ServerInit) -> Self { ServerMsg::Init(Box::new(o)) }
 }
 
-impl From<ServerRegisterAnswer> for ServerMsg {
-    fn from(o: ServerRegisterAnswer) -> ServerMsg { ServerMsg::RegisterAnswer(o) }
+impl From<ServerRegisterAnswer> for ServerMsg<'_> {
+    fn from(o: ServerRegisterAnswer) -> Self { ServerMsg::RegisterAnswer(o) }
 }
 
-impl From<ServerGeneral> for ServerMsg {
-    fn from(o: ServerGeneral) -> ServerMsg { ServerMsg::General(o) }
+impl<'a> From<ServerGeneral<'a>> for ServerMsg<'a> {
+    fn from(o: ServerGeneral<'a>) -> Self { ServerMsg::General(o) }
 }
 
-impl From<PingMsg> for ServerMsg {
-    fn from(o: PingMsg) -> ServerMsg { ServerMsg::Ping(o) }
+impl From<PingMsg> for ServerMsg<'_> {
+    fn from(o: PingMsg) -> Self { ServerMsg::Ping(o) }
 }

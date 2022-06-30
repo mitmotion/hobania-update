@@ -60,7 +60,7 @@ impl<V, Storage, ChonkSize: RectVolSize> VolSize<V> for SubChunkSize<V, Storage,
     };
 }
 
-type SubChunk<V, Storage, S, M> = Chunk<V, SubChunkSize<V, Storage, S>, M>;
+pub type SubChunk<V, Storage, S, M> = Chunk<V, SubChunkSize<V, Storage, S>, M>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Chonk<V, Storage, S: RectVolSize, M: Clone> {
@@ -98,6 +98,10 @@ impl<V, Storage: core::ops::DerefMut<Target=Vec<V>>, S: RectVolSize, M: Clone> C
 
     pub fn sub_chunk_groups(&self) -> usize {
         self.sub_chunks.iter().map(SubChunk::num_groups).sum()
+    }
+
+    pub fn sub_chunks<'a>(&'a self) -> impl Iterator<Item = &'a SubChunk<V, Storage, S, M>> {
+        self.sub_chunks.iter()
     }
 
     /// Iterate through the voxels in this chunk, attempting to avoid those that

@@ -1180,7 +1180,7 @@ impl Server {
 
     pub fn notify_client<S>(&self, entity: EcsEntity, msg: S)
     where
-        S: Into<ServerMsg>,
+        S: Into<ServerMsg<'static>>,
     {
         self.state
             .ecs()
@@ -1189,7 +1189,7 @@ impl Server {
             .map(|c| c.send(msg));
     }
 
-    pub fn notify_players(&mut self, msg: ServerGeneral) { self.state.notify_players(msg); }
+    pub fn notify_players(&mut self, msg: ServerGeneral<'static>) { self.state.notify_players(msg); }
 
     pub fn generate_chunk(&mut self, entity: EcsEntity, key: Vec2<i32>) {
         let ecs = self.state.ecs();

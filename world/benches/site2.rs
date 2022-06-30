@@ -1,7 +1,7 @@
 use common::{
     generation::EntityInfo,
     store::{Id, Store},
-    terrain::{Block, BlockKind, SpriteKind, TerrainChunk, TerrainChunkMeta, TerrainChunkSize},
+    terrain::{Block, BlockKind, SpriteKind, TerrainSubChunk, TerrainChunk, TerrainChunkMeta, TerrainChunkSize},
     vol::RectVolSize,
 };
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
@@ -316,11 +316,13 @@ fn dungeon(c: &mut Criterion) {
         // let chunk_pos = Vec2::new(26944 / 32, 26848 / 32);
         let chunk_pos = Vec2::new(842, 839);
         let chunk = world.generate_chunk(index.as_index_ref(), chunk_pos, || false, None).unwrap().0;
+        /* println!("{:?}", chunk.sub_chunks_len());
+        let chunk = chunk.sub_chunks().next().unwrap(); */
         let serialized = bincode::serialize(&chunk).unwrap();
         // let chunk_pos = Vec2::new(24507/32, 20682/32);
         // let chunk_pos = Vec2::new(19638/32, 19621/32);
         b.iter(|| {
-            black_box(bincode::deserialize::<TerrainChunk>(&serialized).unwrap());
+            black_box(bincode::deserialize::<TerrainChunk/*TerrainSubChunk*//*BlockVec*/>(&*serialized).unwrap());
         });
     });
 

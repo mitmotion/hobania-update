@@ -13,6 +13,8 @@
     generic_arg_infer,
     label_break_value,
     option_zip,
+    portable_simd,
+    slice_as_chunks,
     trait_alias,
     type_alias_impl_trait,
     extend_one,

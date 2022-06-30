@@ -111,8 +111,8 @@ pub trait StateExt {
     fn update_character_data(&mut self, entity: EcsEntity, components: PersistedComponents);
     /// Iterates over registered clients and send each `ServerMsg`
     fn send_chat(&self, msg: comp::UnresolvedChatMsg);
-    fn notify_players(&self, msg: ServerGeneral);
-    fn notify_in_game_clients(&self, msg: ServerGeneral);
+    fn notify_players(&self, msg: ServerGeneral<'static>);
+    fn notify_in_game_clients(&self, msg: ServerGeneral<'static>);
     /// Create a new link between entities (see [`common::mounting`] for an
     /// example).
     fn link<L: Link>(&mut self, link: L) -> Result<(), L::Error>;
@@ -819,7 +819,7 @@ impl StateExt for State {
     }
 
     /// Sends the message to all connected clients
-    fn notify_players(&self, msg: ServerGeneral) {
+    fn notify_players(&self, msg: ServerGeneral<'static>) {
         let mut msg = Some(msg);
         let mut lazy_msg = None;
         for (client, _) in (
@@ -836,7 +836,7 @@ impl StateExt for State {
     }
 
     /// Sends the message to all clients playing in game
-    fn notify_in_game_clients(&self, msg: ServerGeneral) {
+    fn notify_in_game_clients(&self, msg: ServerGeneral<'static>) {
         let mut msg = Some(msg);
         let mut lazy_msg = None;
         for (client, _) in (

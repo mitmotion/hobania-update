@@ -1005,6 +1005,27 @@ impl Stream {
         }
     }
 
+    #[inline]
+    pub fn try_recv_raw(&mut self) -> Result<Option<Message>, StreamError> {
+        match &mut self.b2a_msg_recv_r {
+            Some(b2a_msg_recv_r) => match b2a_msg_recv_r.try_recv() {
+                Ok(data) => Ok(Some(
+                    Message {
+                        data,
+                        #[cfg(feature = "compression")]
+                        compressed: self.promises.contains(Promises::COMPRESSED),
+                    }
+                )),
+                Err(async_channel::TryRecvError::Empty) => Ok(None),
+                Err(async_channel::TryRecvError::Closed) => {
+                    self.b2a_msg_recv_r = None; //prevent panic
+                    Err(StreamError::StreamClosed)
+                },
+            },
+            None => Err(StreamError::StreamClosed),
+        }
+    }
+
     /// use `try_recv` to check for a Message send from the remote side by their
     /// `Stream`. This function does not block and returns immediately. It's
     /// intended for use in non-async context only. Other then that, the
@@ -1041,24 +1062,7 @@ impl Stream {
     /// [`recv`]: Stream::recv
     #[inline]
     pub fn try_recv<M: DeserializeOwned>(&mut self) -> Result<Option<M>, StreamError> {
-        match &mut self.b2a_msg_recv_r {
-            Some(b2a_msg_recv_r) => match b2a_msg_recv_r.try_recv() {
-                Ok(data) => Ok(Some(
-                    Message {
-                        data,
-                        #[cfg(feature = "compression")]
-                        compressed: self.promises.contains(Promises::COMPRESSED),
-                    }
-                    .deserialize()?,
-                )),
-                Err(async_channel::TryRecvError::Empty) => Ok(None),
-                Err(async_channel::TryRecvError::Closed) => {
-                    self.b2a_msg_recv_r = None; //prevent panic
-                    Err(StreamError::StreamClosed)
-                },
-            },
-            None => Err(StreamError::StreamClosed),
-        }
+        self.try_recv_raw()?.map(|uncompressed| uncompressed.deserialize()).transpose()
     }
 
     pub fn params(&self) -> StreamParams {

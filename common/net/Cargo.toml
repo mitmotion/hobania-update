@@ -30,3 +30,4 @@ specs-idvs = { git = "https://gitlab.com/veloren/specs-idvs.git", rev = "8be2abc
 
 # Serde
 serde = { version = "1.0.110", features = ["derive"] }
+serde_with = { version = "1.14.0" }

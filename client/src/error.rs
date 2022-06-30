@@ -42,6 +42,10 @@ impl From<StreamError> for Error {
     fn from(err: StreamError) -> Self { Self::StreamErr(err) }
 }
 
+impl From<bincode::Error> for Error {
+    fn from(err: bincode::Error) -> Self { Self::StreamErr(StreamError::Deserialize(err)) }
+}
+
 impl From<AuthClientError> for Error {
     fn from(err: AuthClientError) -> Self { Self::AuthClientError(err) }
 }

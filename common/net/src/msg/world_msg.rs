@@ -1,8 +1,10 @@
 use common::{grid::Grid, trade::Good};
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, Bytes};
 use std::collections::HashMap;
 use vek::*;
 
+#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// World map information.  Note that currently, we always send the whole thing
 /// in one go, but the structure aims to try to provide information as locally
@@ -121,6 +123,7 @@ pub struct WorldMapMsg {
     /// more predictible sequence) would end up compressing better than storing
     /// angles, or that we don't need as much precision as we currently have
     /// (256 possible angles).
+    #[serde_as(as = "[(Bytes, Bytes); 2]")]
     pub horizons: [(Vec<u8>, Vec<u8>); 2],
     pub sites: Vec<SiteInfo>,
     pub pois: Vec<PoiInfo>,

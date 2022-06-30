@@ -8,23 +8,28 @@ use image::{ImageBuffer, ImageDecoder, Pixel};
 use num_traits::cast::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use std::{
+    borrow::Cow,
     fmt::Debug,
     io::{Read, Write},
     marker::PhantomData,
 };
+use serde_with::{serde_as, Bytes};
 use tracing::warn;
 use vek::*;
 
 /// Wrapper for compressed, serialized data (for stuff that doesn't use the
 /// default lz4 compression)
+#[serde_as]
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CompressedData<T> {
-    pub data: Vec<u8>,
+pub struct CompressedData<'a, T> {
+    #[serde_as(as = "Bytes")]
+    #[serde(borrow)]
+    pub data: Cow<'a, [u8]>,
     compressed: bool,
     _phantom: PhantomData<T>,
 }
 
-impl<T: Serialize> CompressedData<T> {
+impl<'a, T: Serialize> CompressedData<'a, T> {
     pub fn compress(t: &T, level: u32) -> Self {
         use flate2::{write::DeflateEncoder, Compression};
         let uncompressed = bincode::serialize(t)
@@ -39,13 +44,13 @@ impl<T: Serialize> CompressedData<T> {
             encoder.write_all(&*uncompressed).expect(EXPECT_MSG);
             let compressed = encoder.finish().expect(EXPECT_MSG);
             CompressedData {
-                data: compressed,
+                data: Cow::Owned(compressed),
                 compressed: true,
                 _phantom: PhantomData,
             }
         } else {
             CompressedData {
-                data: uncompressed,
+                data: Cow::Owned(uncompressed),
                 compressed: false,
                 _phantom: PhantomData,
             }
@@ -53,7 +58,7 @@ impl<T: Serialize> CompressedData<T> {
     }
 }
 
-impl<T: for<'a> Deserialize<'a>> CompressedData<T> {
+impl<T: for<'a> Deserialize<'a>> CompressedData<'_, T> {
     pub fn decompress(&self) -> Option<T> {
         if self.compressed {
             let mut uncompressed = Vec::with_capacity(self.data.len());
@@ -186,10 +191,10 @@ impl<'a, VIE: VoxelImageDecoding> VoxelImageDecoding for &'a VIE {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct QuadPngEncoding<const RESOLUTION_DIVIDER: u32>();
+pub struct QuadPngEncoding<'a, const RESOLUTION_DIVIDER: u32>(pub PhantomData<&'a ()>);
 
-impl<const N: u32> VoxelImageEncoding for QuadPngEncoding<N> {
-    type Output = CompressedData<(Vec<u8>, [usize; 3])>;
+impl<'a, const N: u32> VoxelImageEncoding for QuadPngEncoding<'a, N> {
+    type Output = CompressedData<'a, (Vec<u8>, [usize; 3])>;
     type Workspace = (
         ImageBuffer<image::Luma<u8>, Vec<u8>>,
         ImageBuffer<image::Luma<u8>, Vec<u8>>,
@@ -317,7 +322,7 @@ const fn gen_lanczos_lookup<const N: u32, const R: u32>(
     array
 }
 
-impl<const N: u32> VoxelImageDecoding for QuadPngEncoding<N> {
+impl<const N: u32> VoxelImageDecoding for QuadPngEncoding<'_, N> {
     fn start(data: &Self::Output) -> Option<Self::Workspace> {
         use image::codecs::png::PngDecoder;
         let (quad, indices) = data.decompress()?;
@@ -460,10 +465,10 @@ impl<const N: u32> VoxelImageDecoding for QuadPngEncoding<N> {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct TriPngEncoding<const AVERAGE_PALETTE: bool>();
+pub struct TriPngEncoding<'a, const AVERAGE_PALETTE: bool>(pub PhantomData<&'a ()>);
 
-impl<const AVERAGE_PALETTE: bool> VoxelImageEncoding for TriPngEncoding<AVERAGE_PALETTE> {
-    type Output = CompressedData<(Vec<u8>, Vec<Rgb<u8>>, [usize; 3])>;
+impl<'a, const AVERAGE_PALETTE: bool> VoxelImageEncoding for TriPngEncoding<'a, AVERAGE_PALETTE> {
+    type Output = CompressedData<'a, (Vec<u8>, Vec<Rgb<u8>>, [usize; 3])>;
     type Workspace = (
         ImageBuffer<image::Luma<u8>, Vec<u8>>,
         ImageBuffer<image::Luma<u8>, Vec<u8>>,
@@ -549,7 +554,7 @@ impl<const AVERAGE_PALETTE: bool> VoxelImageEncoding for TriPngEncoding<AVERAGE_
     }
 }
 
-impl<const AVERAGE_PALETTE: bool> VoxelImageDecoding for TriPngEncoding<AVERAGE_PALETTE> {
+impl<const AVERAGE_PALETTE: bool> VoxelImageDecoding for TriPngEncoding<'_, AVERAGE_PALETTE> {
     fn start(data: &Self::Output) -> Option<Self::Workspace> {
         use image::codecs::png::PngDecoder;
         let (quad, palette, indices) = data.decompress()?;

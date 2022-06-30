@@ -3,7 +3,7 @@ use bytes::Bytes;
 #[cfg(feature = "compression")]
 use network_protocol::Promises;
 use serde::{de::DeserializeOwned, Serialize};
-use std::io;
+use std::{borrow::Cow, io};
 #[cfg(all(feature = "compression", debug_assertions))]
 use tracing::warn;
 
@@ -98,9 +98,20 @@ impl Message {
     /// ```
     ///
     /// [`recv_raw`]: crate::api::Stream::recv_raw
-    pub fn deserialize<M: DeserializeOwned>(self) -> Result<M, StreamError> {
+    #[inline]
+    pub fn deserialize<M: DeserializeOwned>(&self) -> Result<M, StreamError> {
+        let uncompressed_data = self.decompress()?;
+        match bincode::deserialize(&uncompressed_data) {
+            Ok(m) => Ok(m),
+            Err(e) => Err(StreamError::Deserialize(e)),
+        }
+    }
+
+    /// Decompress a message without deserializing it.
+    #[inline]
+    pub fn decompress<'a>(&'a self) -> Result<Cow<'a, [u8]>, StreamError> {
         #[cfg(not(feature = "compression"))]
-        let uncompressed_data = self.data;
+        let uncompressed_data = Cow::Borrowed(&self.data);
 
         #[cfg(feature = "compression")]
         let uncompressed_data = if self.compressed {
@@ -114,16 +125,13 @@ impl Message {
                 ) {
                     return Err(StreamError::Compression(e));
                 }
-                Bytes::from(uncompressed_data)
+                Cow::Owned(uncompressed_data)
             }
         } else {
-            self.data
+            Cow::Borrowed(&*self.data)
         };
 
-        match bincode::deserialize(&uncompressed_data) {
-            Ok(m) => Ok(m),
-            Err(e) => Err(StreamError::Deserialize(e)),
-        }
+        Ok(uncompressed_data)
     }
 
     #[cfg(debug_assertions)]

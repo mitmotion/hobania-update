@@ -479,6 +479,7 @@ impl Site {
             ..Site::default()
         };
 
+        // NOTE: Remove to run benchmarks.
         // site.demarcate_obstacles(land);
 
         site.make_plaza(land, &mut rng);

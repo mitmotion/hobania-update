@@ -81,7 +81,7 @@ impl Client {
         }
     }
 
-    pub(crate) fn send<M: Into<ServerMsg>>(&self, msg: M) -> Result<(), StreamError> {
+    pub(crate) fn send<M: Into<ServerMsg<'static>>>(&self, msg: M) -> Result<(), StreamError> {
         // TODO: hack to avoid locking stream mutex while serializing the message,
         // remove this when the mutexes on the Streams are removed
         let prepared = self.prepare(msg);
@@ -140,7 +140,7 @@ impl Client {
         }*/
     }
 
-    pub(crate) fn send_fallible<M: Into<ServerMsg>>(&self, msg: M) { let _ = self.send(msg); }
+    pub(crate) fn send_fallible<M: Into<ServerMsg<'static>>>(&self, msg: M) { let _ = self.send(msg); }
 
     pub(crate) fn send_prepared(&self, msg: &PreparedMsg) -> Result<(), StreamError> {
         match msg.stream_id {
@@ -158,7 +158,7 @@ impl Client {
         }
     }
 
-    pub(crate) fn prepare<M: Into<ServerMsg>>(&self, msg: M) -> PreparedMsg {
+    pub(crate) fn prepare<M: Into<ServerMsg<'static>>>(&self, msg: M) -> PreparedMsg {
         match msg.into() {
             ServerMsg::Info(m) => PreparedMsg::new(0, &m, &self.register_stream_params),
             ServerMsg::Init(m) => PreparedMsg::new(0, &m, &self.register_stream_params),

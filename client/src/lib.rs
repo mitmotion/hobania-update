@@ -2300,28 +2300,30 @@ impl Client {
         loop {
             let cnt_start = cnt;
 
-            while let Some(msg) = self.general_stream.try_recv()? {
+            while let Some(msg) = self.general_stream.try_recv_raw()? {
                 cnt += 1;
-                self.handle_server_msg(frontend_events, msg)?;
+                self.handle_server_msg(frontend_events, bincode::deserialize(&msg.decompress()?)?)?;
             }
-            while let Some(msg) = self.ping_stream.try_recv()? {
+            while let Some(msg) = self.ping_stream.try_recv_raw()? {
                 cnt += 1;
-                self.handle_ping_msg(msg)?;
+                self.handle_ping_msg(bincode::deserialize(&msg.decompress()?)?)?;
             }
-            while let Some(msg) = self.character_screen_stream.try_recv()? {
+            while let Some(msg) = self.character_screen_stream.try_recv_raw()? {
                 cnt += 1;
-                self.handle_server_character_screen_msg(frontend_events, msg)?;
+                self.handle_server_character_screen_msg(frontend_events, bincode::deserialize(&msg.decompress()?)?)?;
             }
-            while let Some(msg) = self.in_game_stream.try_recv()? {
+            while let Some(msg) = self.in_game_stream.try_recv_raw()? {
                 cnt += 1;
                 #[cfg(feature = "tracy")]
                 {
                     ingame_cnt += 1;
                 }
-                self.handle_server_in_game_msg(frontend_events, msg)?;
+                self.handle_server_in_game_msg(frontend_events, bincode::deserialize(&msg.decompress()?)?)?;
             }
-            while let Some(msg) = self.terrain_stream.try_recv()? {
+            while let Some(msg) = self.terrain_stream.try_recv_raw()? {
                 cnt += 1;
+                let msg = msg.decompress()?;
+                let msg = bincode::deserialize(&msg)?;
                 #[cfg(feature = "tracy")]
                 {
                     if let ServerGeneral::TerrainChunkUpdate { chunk, .. } = &msg {
