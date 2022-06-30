@@ -35,7 +35,7 @@ impl<'a, T: Serialize> CompressedData<'a, T> {
         let uncompressed = bincode::serialize(t)
             .expect("bincode serialization can only fail if a byte limit is set");
 
-        if uncompressed.len() >= 32 {
+        if std::env::var("VELOREN_COMPRESS_TERRAIN").is_ok() && uncompressed.len() >= 32 {
             const EXPECT_MSG: &str =
                 "compression only fails for fallible Read/Write impls (which Vec<u8> is not)";
 
