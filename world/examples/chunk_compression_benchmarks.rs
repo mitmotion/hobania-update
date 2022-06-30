@@ -13,6 +13,7 @@ use common_net::msg::compression::{
     PackingFormula, QuadPngEncoding, TriPngEncoding, VoxelImageDecoding, VoxelImageEncoding,
     WidePacking,
 };
+use core::marker::PhantomData;
 use hashbrown::HashMap;
 use image::ImageBuffer;
 use num_traits::cast::FromPrimitive;
@@ -363,7 +364,7 @@ impl VoxelImageEncoding for MixedEncodingSparseSprites {
     type Output = (
         Vec<u8>,
         usize,
-        CompressedData<HashMap<Vec2<u32>, (SpriteKind, u8)>>,
+        CompressedData<'static, HashMap<Vec2<u32>, (SpriteKind, u8)>>,
     );
     type Workspace = (
         image::ImageBuffer<image::Luma<u8>, Vec<u8>>,
@@ -590,7 +591,7 @@ impl<P: RTreeParams> NearestNeighbor for RTree<ColorPoint, P> {
 pub struct PaletteEncoding<'a, NN: NearestNeighbor, const N: u32>(&'a HashMap<BlockKind, NN>);
 
 impl<'a, NN: NearestNeighbor, const N: u32> VoxelImageEncoding for PaletteEncoding<'a, NN, N> {
-    type Output = CompressedData<(Vec<u8>, [usize; 4])>;
+    type Output = CompressedData<'a, (Vec<u8>, [usize; 4])>;
     type Workspace = (
         ImageBuffer<image::Luma<u8>, Vec<u8>>,
         ImageBuffer<image::Luma<u8>, Vec<u8>>,
@@ -1017,7 +1018,7 @@ fn main() {
 
                 let quadpngfull_pre = Instant::now();
                 let quadpngfull = image_terrain_chonk(
-                    &QuadPngEncoding::<1>(),
+                    &QuadPngEncoding::<1>(PhantomData),
                     TallPacking { flip_y: true },
                     &chunk,
                 )
@@ -1026,7 +1027,7 @@ fn main() {
 
                 let quadpnghalf_pre = Instant::now();
                 let quadpnghalf = image_terrain_chonk(
-                    &QuadPngEncoding::<2>(),
+                    &QuadPngEncoding::<2>(PhantomData),
                     TallPacking { flip_y: true },
                     &chunk,
                 )
@@ -1035,7 +1036,7 @@ fn main() {
 
                 let quadpngquarttall_pre = Instant::now();
                 let quadpngquarttall = image_terrain_chonk(
-                    &QuadPngEncoding::<4>(),
+                    &QuadPngEncoding::<4>(PhantomData),
                     TallPacking { flip_y: true },
                     &chunk,
                 )
@@ -1044,19 +1045,19 @@ fn main() {
 
                 let quadpngquartwide_pre = Instant::now();
                 let quadpngquartwide =
-                    image_terrain_chonk(&QuadPngEncoding::<4>(), WidePacking::<true>(), &chunk)
+                    image_terrain_chonk(&QuadPngEncoding::<4>(PhantomData), WidePacking::<true>(), &chunk)
                         .unwrap();
                 let quadpngquartwide_post = Instant::now();
 
                 let tripngaverage_pre = Instant::now();
                 let tripngaverage =
-                    image_terrain_chonk(&TriPngEncoding::<true>(), WidePacking::<true>(), &chunk)
+                    image_terrain_chonk(&TriPngEncoding::<true>(PhantomData), WidePacking::<true>(), &chunk)
                         .unwrap();
                 let tripngaverage_post = Instant::now();
 
                 let tripngconst_pre = Instant::now();
                 let tripngconst =
-                    image_terrain_chonk(&TriPngEncoding::<false>(), WidePacking::<true>(), &chunk)
+                    image_terrain_chonk(&TriPngEncoding::<false>(PhantomData), WidePacking::<true>(), &chunk)
                         .unwrap();
                 let tripngconst_post = Instant::now();
 

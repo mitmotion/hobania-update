@@ -60,7 +60,7 @@ impl<V, Storage, ChonkSize: RectVolSize> VolSize<V> for SubChunkSize<V, Storage,
     };
 }
 
-pub type SubChunk<V, Storage, S, M> = Chunk<V, SubChunkSize<V, Storage, S>, M>;
+pub type SubChunk<V, Storage, S, M> = Chunk<V, SubChunkSize<V, Storage, S>, PhantomData<M>>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Chonk<V, Storage, S: RectVolSize, M: Clone> {
@@ -229,7 +229,7 @@ impl<V: Clone + PartialEq, Storage: Clone + core::ops::DerefMut<Target=Vec<V>> +
                 return Ok(self.below.clone());
             }
             // Prepend exactly sufficiently many SubChunks via Vec::splice
-            let c = Chunk::<V, SubChunkSize<V, Storage, S>, M>::filled(self.below.clone(), self.meta.clone());
+            let c = SubChunk::<V, Storage, S, M>::filled(self.below.clone(), /*self.meta.clone()*/PhantomData);
             let n = (-sub_chunk_idx) as usize;
             self.sub_chunks.splice(0..0, std::iter::repeat(c).take(n));
             self.z_offset += sub_chunk_idx * SubChunkSize::<V, Storage, S>::SIZE.z as i32;
@@ -240,7 +240,7 @@ impl<V: Clone + PartialEq, Storage: Clone + core::ops::DerefMut<Target=Vec<V>> +
                 return Ok(self.above.clone());
             }
             // Append exactly sufficiently many SubChunks via Vec::extend
-            let c = Chunk::<V, SubChunkSize<V, Storage, S>, M>::filled(self.above.clone(), self.meta.clone());
+            let c = SubChunk::<V, Storage, S, M>::filled(self.above.clone(), /*self.meta.clone()*/PhantomData);
             let n = 1 + sub_chunk_idx as usize - self.sub_chunks.len();
             self.sub_chunks.extend(std::iter::repeat(c).take(n));
         }
@@ -282,7 +282,7 @@ impl<V, Storage, S: RectVolSize, M: Clone> Iterator for ChonkIterHelper<V, Stora
 
 pub struct ChonkPosIter<V, Storage, S: RectVolSize, M: Clone> {
     outer: ChonkIterHelper<V, Storage, S, M>,
-    opt_inner: Option<(i32, ChunkPosIter<V, SubChunkSize<V, Storage, S>, M>)>,
+    opt_inner: Option<(i32, ChunkPosIter<V, SubChunkSize<V, Storage, S>, PhantomData<M>>)>,
 }
 
 impl<V, Storage, S: RectVolSize, M: Clone> Iterator for ChonkPosIter<V, Storage, S, M> {
@@ -308,8 +308,8 @@ impl<V, Storage, S: RectVolSize, M: Clone> Iterator for ChonkPosIter<V, Storage,
 }
 
 enum InnerChonkVolIter<'a, V, Storage, S: RectVolSize, M: Clone> {
-    Vol(ChunkVolIter<'a, V, SubChunkSize<V, Storage, S>, M>),
-    Pos(ChunkPosIter<V, SubChunkSize<V, Storage, S>, M>),
+    Vol(ChunkVolIter<'a, V, SubChunkSize<V, Storage, S>, PhantomData<M>>),
+    Pos(ChunkPosIter<V, SubChunkSize<V, Storage, S>, PhantomData<M>>),
 }
 
 pub struct ChonkVolIter<'a, V, Storage, S: RectVolSize, M: Clone> {
