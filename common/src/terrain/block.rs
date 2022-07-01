@@ -514,145 +514,335 @@ impl<'a> Deserialize<'a> for BlockVec {
     where
         D: de::Deserializer<'a>,
     {
-        let blocks = <Bytes as DeserializeAs::<&'a [u8]>>::deserialize_as::<D>(deserializer)?;
+        /* #[inline(always)]
+        fn deserialize_inner(blocks: &[/*[u8; 4]*/u32]) -> bool {
+            // The basic observation here is that a slice of [u8; 4] is *almost* the same as a slice of
+            // blocks, so conversion from the former to the latter can be very cheap.  The only problem
+            // is that BlockKind (the first byte in `Block`) has some invalid states, so not every u8
+            // slice of the appropriate size is a block slice.  Fortunately, since we don't care about
+            // figuring out which block triggered the error, we can figure this out really cheaply--we
+            // just have to set a bit for every block we see, then check at the end to make sure all
+            // the bits we set are valid elements.  We can construct the valid bit set using EnumIter,
+            // and the requirement is: (!valid & set_bits) = 0.
+
+            // Construct the invalid list.  Initially, it's all 1s, then we set all the bits
+            // corresponding to valid block kinds to 0, leaving a set bit for each invalid block kind.
+            //
+            // TODO: Verify whether this gets constant folded away; if not, try to do this as a const
+            // fn?  Might need to modify the EnumIter implementation.
+            /* let mut invalid_bits = [true; 256];
+            <BlockKind as strum::IntoEnumIterator>::iter().for_each(|bk| {
+                invalid_bits[(bk as u8) as usize] = false;
+            }); */
+
+            // Blocks per chunk.  Currently 16, since blocks are 4 bytes and 16 * 4 = 64 bytes is the
+            // size of a cacheline on most architectures.
+            const BLOCKS_PER_CHUNK: usize = 8;
+
+            /* // Initially, the set bit list is empty.
+            let mut set_bits: std::simd::Mask<i8, BLOCKS_PER_CHUNK> = std::simd::Mask::splat(false);
+
+            // NOTE: We iterate in chunks of BLOCKS_PER_CHUNK blocks.  This also lets us
+            // independently fetch BLOCKS_PER_CHUNK entries from the lookup table at once, setting
+            // BLOCKS_PER_CHUNK independent lanes (reducing CPU level contention on the register)
+            // instead of updating a single register in each iteration (which causes contention).
+            let (chunks, remainder) = blocks.as_chunks::<BLOCKS_PER_CHUNK>();
+            chunks.iter().for_each(|array| {
+                // Look up each of the block kind in the chunk, setting each lane of the
+                // BLOCKS_PER_CHUNK-word mask to true if the block kind is invalid.
+                //
+                // NOTE: The block kind is guaranteed to be at the front of each 4-byte word,
+                // thanks to the repr(C).
+                //
+                // NOTE: Bounds checks here appears to be either elided, or perfectly predicted, so we
+                // fortunately avoid using unsafe here.
+                //
+                // FIXME: simd table lookup, and simd packing.
+                let block_kinds = std::simd::Mask::from_array(
+                    [
+                    invalid_bits[array[0x0][0] as u8 as usize],
+                    invalid_bits[array[0x1][0] as u8 as usize],
+                    invalid_bits[array[0x2][0] as u8 as usize],
+                    invalid_bits[array[0x3][0] as u8 as usize],
+                    invalid_bits[array[0x4][0] as u8 as usize],
+                    invalid_bits[array[0x5][0] as u8 as usize],
+                    invalid_bits[array[0x6][0] as u8 as usize],
+                    invalid_bits[array[0x7][0] as u8 as usize],
+                    /* invalid_bits[array[0x8][0] as u8 as usize],
+                    invalid_bits[array[0x9][0] as u8 as usize],
+                    invalid_bits[array[0xA][0] as u8 as usize],
+                    invalid_bits[array[0xB][0] as u8 as usize],
+                    invalid_bits[array[0xC][0] as u8 as usize],
+                    invalid_bits[array[0xD][0] as u8 as usize],
+                    invalid_bits[array[0xE][0] as u8 as usize],
+                    invalid_bits[array[0xF][0] as u8 as usize], */
+                    ]
+                );
+                // Now, lanewise OR whether the block kind in this iteration was invalid, with whether
+                // the same block kind was invalid in this lane the previous iteration.
+                set_bits |= block_kinds;
+            });
+            // Now, we OR all the lanes together, to find out whether *any* of the lanes witnessed an
+            // invalid block kind.
+            let mut set_bits = set_bits.any(); */
+
+            /* let mut set_bits0 = false;
+            let mut set_bits1 = false;
+            let mut set_bits2 = false;
+            let mut set_bits3 = false;
+            let mut set_bits4 = false;
+            let mut set_bits5 = false;
+            let mut set_bits6 = false;
+            let mut set_bits7 = false;
+            // let mut set_bits8 = false; */
+
+            const MIN: u8 = 0x0d;
+            const MAX: u8 = 0x1e;
+
+            /* // Initially, the set bit list is empty.
+            let mut set_bits: std::simd::Mask<i8, BLOCKS_PER_CHUNK> = std::simd::Mask::splat(false); */
+
+            // NOTE: We iterate in chunks of BLOCKS_PER_CHUNK blocks.  This also lets us
+            // independently fetch BLOCKS_PER_CHUNK entries from the lookup table at once, setting
+            // BLOCKS_PER_CHUNK independent lanes (reducing CPU level contention on the register)
+            // instead of updating a single register in each iteration (which causes contention).
+            // let (chunks, remainder) = blocks.as_chunks::<BLOCKS_PER_CHUNK>();
+            let (prelude, chunks, remainder) = blocks./*as_chunks*/as_simd::<BLOCKS_PER_CHUNK>();
+
+            // Now handle the prelude (if this wasn't a precise fit for BLOCKS_PER_CHUNK blocks;
+            // this will never be the case for valid terrain chunks).
+            let prelude_set_bits = prelude.iter().any(|block| {
+                // invalid_bits[*block/*[0]*/ as u8 as usize]
+                let kind = *block/*[0]*/as u8;
+                (kind <= MIN) | (kind >= MAX)
+            });
+
+            let mut set_bits: std::simd::Mask<i8, BLOCKS_PER_CHUNK> = std::simd::Mask::splat(false);
+            const MIN_SIMD: std::simd::Simd<u8, BLOCKS_PER_CHUNK> = std::simd::Simd::splat(MIN);
+            const MAX_SIMD: std::simd::Simd<u8, BLOCKS_PER_CHUNK> = std::simd::Simd::splat(MAX);
+            chunks.iter().for_each(|array| {
+                // Look up each of the block kind in the chunk, setting each lane of the
+                // BLOCKS_PER_CHUNK-word mask to true if the block kind is invalid.
+                //
+                // NOTE: The block kind is guaranteed to be at the front of each 4-byte word,
+                // thanks to the repr(C).
+                //
+                // NOTE: Bounds checks here appears to be either elided, or perfectly predicted, so we
+                // fortunately avoid using unsafe here.
+                //
+                // FIXME: simd table lookup, and simd packing.
+                let array = array.cast::<u8>();
+                /* let block_kinds = array > std::simd::Simd::splat(0xFE); */
+                /* let array = array.cast::<usize>();
+                let block_kinds = std::simd::Mask::from_array(
+                    [*/
+                /* let kind0 = array[0x0]/*[0]*/as u8;
+                let kind1 = array[0x1]/*[0]*/as u8;
+                let kind2 = array[0x2]/*[0]*/as u8;
+                let kind3 = array[0x3]/*[0]*/as u8;
+                let kind4 = array[0x4]/*[0]*/as u8;
+                let kind5 = array[0x5]/*[0]*/as u8;
+                let kind6 = array[0x6]/*[0]*/as u8;
+                let kind7 = array[0x7]/*[0]*/as u8;
+                set_bits0 |= (kind0 <= MIN) | (kind0 >= MAX);
+                set_bits1 |= (kind1 <= MIN) | (kind1 >= MAX);
+                set_bits2 |= (kind2 <= MIN) | (kind2 >= MAX);
+                set_bits3 |= (kind3 <= MIN) | (kind3 >= MAX);
+                set_bits4 |= (kind4 <= MIN) | (kind4 >= MAX);
+                set_bits5 |= (kind5 <= MIN) | (kind5 >= MAX);
+                set_bits6 |= (kind6 <= MIN) | (kind6 >= MAX);
+                set_bits7 |= (kind7 <= MIN) | (kind7 >= MAX); */
+                    /* set_bits0 |= invalid_bits[array[0x0][0] as usize];
+                    set_bits1 |= invalid_bits[array[0x1][0] as usize];
+                    set_bits2 |= invalid_bits[array[0x2][0] as usize];
+                    set_bits3 |= invalid_bits[array[0x3][0] as usize];
+                    set_bits4 |= invalid_bits[array[0x4][0] as usize];
+                    set_bits5 |= invalid_bits[array[0x5][0] as usize];
+                    set_bits6 |= invalid_bits[array[0x6][0] as usize];
+                    set_bits7 |= invalid_bits[array[0x7][0] as usize];/*
+                    invalid_bits[array[0x0]/*[0]*/],
+                    invalid_bits[array[0x1]/*[0]*/],
+                    invalid_bits[array[0x2]/*[0]*/],
+                    invalid_bits[array[0x3]/*[0]*/],
+                    invalid_bits[array[0x4]/*[0]*/],
+                    invalid_bits[array[0x5]/*[0]*/],
+                    invalid_bits[array[0x6]/*[0]*/],
+                    invalid_bits[array[0x7]/*[0]*/], */
+                    /* invalid_bits[array[0x8]/*[0] as u8 as usize*/],
+                    invalid_bits[array[0x9]/*[0] as u8 as usize*/],
+                    invalid_bits[array[0xA]/*[0] as u8 as usize*/],
+                    invalid_bits[array[0xB]/*[0] as u8 as usize*/],
+                    invalid_bits[array[0xC]/*[0] as u8 as usize*/],
+                    invalid_bits[array[0xD]/*[0] as u8 as usize*/],
+                    invalid_bits[array[0xE]/*[0] as u8 as usize*/],
+                    invalid_bits[array[0xF]/*[0] as u8 as usize*/],*/
+                    ]
+                ); */
+                // Now, lanewise OR whether the block kind in this iteration was invalid, with whether
+                // the same block kind was invalid in this lane the previous iteration.
+                set_bits |= array <= MIN_SIMD;
+                set_bits |= array >= MAX_SIMD;
+            });
+
+            // Now handle the remainder (if this wasn't a precise fit for BLOCKS_PER_CHUNK blocks;
+            // this will never be the case for valid terrain chunks).
+            let remainder_set_bits = remainder.iter().any(|block| {
+                let kind = *block/*[0]*/as u8;
+                (kind <= MIN) | (kind >= MAX)
+                /* invalid_bits[*block/*[0]*/ as u8 as usize] */
+            });
+
+            // Now, we OR all the lanes together, to find out whether *any* of the lanes witnessed an
+            // invalid block kind.
+            prelude_set_bits | set_bits.any()/*set_bits0 | set_bits1 | set_bits2 | set_bits3 | set_bits4 | set_bits5 | set_bits6 | set_bits7*/ | remainder_set_bits
+        } */
+
+        #[inline(always)]
+        fn deserialize_inner(blocks: &[[u8; 4]]) -> bool {
+            // The basic observation here is that a slice of [u8; 4] is *almost* the same as a slice of
+            // blocks, so conversion from the former to the latter can be very cheap.  The only problem
+            // is that BlockKind (the first byte in `Block`) has some invalid states, so not every u8
+            // slice of the appropriate size is a block slice.  Fortunately, since we don't care about
+            // figuring out which block triggered the error, we can figure this out really cheaply--we
+            // just have to set a bit for every block we see, then check at the end to make sure all
+            // the bits we set are valid elements.  We can construct the valid bit set using EnumIter,
+            // and the requirement is: (!valid & set_bits) = 0.
+
+            // Construct the invalid list.  Initially, it's all 1s, then we set all the bits
+            // corresponding to valid block kinds to 0, leaving a set bit for each invalid block kind.
+            //
+            // TODO: Verify whether this gets constant folded away; if not, try to do this as a const
+            // fn?  Might need to modify the EnumIter implementation.
+            let mut invalid_bits = [true; 256];
+            <BlockKind as strum::IntoEnumIterator>::iter().for_each(|bk| {
+                invalid_bits[(bk as u8) as usize] = false;
+            });
+
+            // Blocks per chunk.  Currently 16, since blocks are 4 bytes and 16 * 4 = 64 bytes is the
+            // size of a cacheline on most architectures.
+            const BLOCKS_PER_CHUNK: usize = 8;
+
+            /* // Initially, the set bit list is empty.
+            let mut set_bits: std::simd::Mask<i8, BLOCKS_PER_CHUNK> = std::simd::Mask::splat(false);
+
+            // NOTE: We iterate in chunks of BLOCKS_PER_CHUNK blocks.  This also lets us
+            // independently fetch BLOCKS_PER_CHUNK entries from the lookup table at once, setting
+            // BLOCKS_PER_CHUNK independent lanes (reducing CPU level contention on the register)
+            // instead of updating a single register in each iteration (which causes contention).
+            let (chunks, remainder) = blocks.as_chunks::<BLOCKS_PER_CHUNK>();
+            chunks.iter().for_each(|array| {
+                // Look up each of the block kind in the chunk, setting each lane of the
+                // BLOCKS_PER_CHUNK-word mask to true if the block kind is invalid.
+                //
+                // NOTE: The block kind is guaranteed to be at the front of each 4-byte word,
+                // thanks to the repr(C).
+                //
+                // NOTE: Bounds checks here appears to be either elided, or perfectly predicted, so we
+                // fortunately avoid using unsafe here.
+                //
+                // FIXME: simd table lookup, and simd packing.
+                let block_kinds = std::simd::Mask::from_array(
+                    [
+                    invalid_bits[array[0x0][0] as u8 as usize],
+                    invalid_bits[array[0x1][0] as u8 as usize],
+                    invalid_bits[array[0x2][0] as u8 as usize],
+                    invalid_bits[array[0x3][0] as u8 as usize],
+                    invalid_bits[array[0x4][0] as u8 as usize],
+                    invalid_bits[array[0x5][0] as u8 as usize],
+                    invalid_bits[array[0x6][0] as u8 as usize],
+                    invalid_bits[array[0x7][0] as u8 as usize],
+                    /* invalid_bits[array[0x8][0] as u8 as usize],
+                    invalid_bits[array[0x9][0] as u8 as usize],
+                    invalid_bits[array[0xA][0] as u8 as usize],
+                    invalid_bits[array[0xB][0] as u8 as usize],
+                    invalid_bits[array[0xC][0] as u8 as usize],
+                    invalid_bits[array[0xD][0] as u8 as usize],
+                    invalid_bits[array[0xE][0] as u8 as usize],
+                    invalid_bits[array[0xF][0] as u8 as usize], */
+                    ]
+                );
+                // Now, lanewise OR whether the block kind in this iteration was invalid, with whether
+                // the same block kind was invalid in this lane the previous iteration.
+                set_bits |= block_kinds;
+            });
+            // Now, we OR all the lanes together, to find out whether *any* of the lanes witnessed an
+            // invalid block kind.
+            let mut set_bits = set_bits.any(); */
+
+            let mut set_bits0 = false;
+            let mut set_bits1 = false;
+            let mut set_bits2 = false;
+            let mut set_bits3 = false;
+            let mut set_bits4 = false;
+            let mut set_bits5 = false;
+            let mut set_bits6 = false;
+            let mut set_bits7 = false;
+            // let mut set_bits8 = false;
+
+            /* // Initially, the set bit list is empty.
+            let mut set_bits: std::simd::Mask<i8, BLOCKS_PER_CHUNK> = std::simd::Mask::splat(false); */
+
+            // NOTE: We iterate in chunks of BLOCKS_PER_CHUNK blocks.  This also lets us
+            // independently fetch BLOCKS_PER_CHUNK entries from the lookup table at once, setting
+            // BLOCKS_PER_CHUNK independent lanes (reducing CPU level contention on the register)
+            // instead of updating a single register in each iteration (which causes contention).
+            let (chunks, remainder) = blocks.as_chunks::<BLOCKS_PER_CHUNK>();
+            chunks.iter().for_each(|array| {
+                // Look up each of the block kind in the chunk, setting each lane of the
+                // BLOCKS_PER_CHUNK-word mask to true if the block kind is invalid.
+                //
+                // NOTE: The block kind is guaranteed to be at the front of each 4-byte word,
+                // thanks to the repr(C).
+                //
+                // NOTE: Bounds checks here appears to be either elided, or perfectly predicted, so we
+                // fortunately avoid using unsafe here.
+                //
+                // FIXME: simd table lookup, and simd packing.
+                /* let block_kinds = std::simd::Mask::from_array(
+                    [ */
+                    set_bits0 |= invalid_bits[array[0x0][0] as u8 as usize];
+                    set_bits1 |= invalid_bits[array[0x1][0] as u8 as usize];
+                    set_bits2 |= invalid_bits[array[0x2][0] as u8 as usize];
+                    set_bits3 |= invalid_bits[array[0x3][0] as u8 as usize];
+                    set_bits4 |= invalid_bits[array[0x4][0] as u8 as usize];
+                    set_bits5 |= invalid_bits[array[0x5][0] as u8 as usize];
+                    set_bits6 |= invalid_bits[array[0x6][0] as u8 as usize];
+                    set_bits7 |= invalid_bits[array[0x7][0] as u8 as usize];
+                    /* invalid_bits[array[0x8][0] as u8 as usize],
+                    invalid_bits[array[0x9][0] as u8 as usize],
+                    invalid_bits[array[0xA][0] as u8 as usize],
+                    invalid_bits[array[0xB][0] as u8 as usize],
+                    invalid_bits[array[0xC][0] as u8 as usize],
+                    invalid_bits[array[0xD][0] as u8 as usize],
+                    invalid_bits[array[0xE][0] as u8 as usize],
+                    invalid_bits[array[0xF][0] as u8 as usize], */
+                    /* ]
+                )*/
+                // Now, lanewise OR whether the block kind in this iteration was invalid, with whether
+                // the same block kind was invalid in this lane the previous iteration.
+                // set_bits |= block_kinds;
+            });
+            // Now, we OR all the lanes together, to find out whether *any* of the lanes witnessed an
+            // invalid block kind.
+            let mut set_bits = /*set_bits.any()*/set_bits0 | set_bits1 | set_bits2 | set_bits3 | set_bits4 | set_bits5 | set_bits6 | set_bits7;
+
+            // Now handle the remainder (if this wasn't a precise fit for BLOCKS_PER_CHUNK blocks;
+            // this will never be the case for valid terrain chunks).
+            remainder.iter().for_each(|block| {
+                set_bits |= invalid_bits[block[0] as u8 as usize];
+            });
+
+            set_bits
+        }
+
+        let blocks_ = <Bytes as DeserializeAs::<&'a [u8]>>::deserialize_as::<D>(deserializer)?;
 
         // First, make sure we're correctly interpretable as a [[u8; 4]].
         //
-        let blocks: &[[u8; 4]] = bytemuck::try_cast_slice(blocks)
-            .map_err(|_| D::Error::invalid_length(blocks.len(), &"a multiple of 4")/*"Length must be a multiple of 4"*/)?;
-        // The basic observation here is that a slice of [u8; 4] is *almost* the same as a slice of
-        // blocks, so conversion from the former to the latter can be very cheap.  The only problem
-        // is that BlockKind (the first byte in `Block`) has some invalid states, so not every u8
-        // slice of the appropriate size is a block slice.  Fortunately, since we don't care about
-        // figuring out which block triggered the error, we can figure this out really cheaply--we
-        // just have to set a bit for every block we see, then check at the end to make sure all
-        // the bits we set are valid elements.  We can construct the valid bit set using EnumIter,
-        // and the requirement is: (!valid & set_bits) = 0.
+        let blocks: &[[u8; 4]] = bytemuck::try_cast_slice(blocks_)
+            .map_err(|_| D::Error::invalid_length(blocks_.len(), &"a multiple of 4")/*"Length must be a multiple of 4"*/)?;
 
-        // Construct the invalid list.  Initially, it's all 1s, then we set all the bits
-        // corresponding to valid block kinds to 0, leaving a set bit for each invalid block kind.
-        //
-        // TODO: Verify whether this gets constant folded away; if not, try to do this as a const
-        // fn?  Might need to modify the EnumIter implementation.
-        let mut invalid_bits = [true; 256];
-        <BlockKind as strum::IntoEnumIterator>::iter().for_each(|bk| {
-            invalid_bits[(bk as u8) as usize] = false;
-        });
-
-        // Blocks per chunk.  Currently 16, since blocks are 4 bytes and 16 * 4 = 64 bytes is the
-        // size of a cacheline on most architectures.
-        const BLOCKS_PER_CHUNK: usize = 8;
-
-        /* // Initially, the set bit list is empty.
-        let mut set_bits: std::simd::Mask<i8, BLOCKS_PER_CHUNK> = std::simd::Mask::splat(false);
-
-        // NOTE: We iterate in chunks of BLOCKS_PER_CHUNK blocks.  This also lets us
-        // independently fetch BLOCKS_PER_CHUNK entries from the lookup table at once, setting
-        // BLOCKS_PER_CHUNK independent lanes (reducing CPU level contention on the register)
-        // instead of updating a single register in each iteration (which causes contention).
-        let (chunks, remainder) = blocks.as_chunks::<BLOCKS_PER_CHUNK>();
-        chunks.iter().for_each(|array| {
-            // Look up each of the block kind in the chunk, setting each lane of the
-            // BLOCKS_PER_CHUNK-word mask to true if the block kind is invalid.
-            //
-            // NOTE: The block kind is guaranteed to be at the front of each 4-byte word,
-            // thanks to the repr(C).
-            //
-            // NOTE: Bounds checks here appears to be either elided, or perfectly predicted, so we
-            // fortunately avoid using unsafe here.
-            //
-            // FIXME: simd table lookup, and simd packing.
-            let block_kinds = std::simd::Mask::from_array(
-                [
-                invalid_bits[array[0x0][0] as u8 as usize],
-                invalid_bits[array[0x1][0] as u8 as usize],
-                invalid_bits[array[0x2][0] as u8 as usize],
-                invalid_bits[array[0x3][0] as u8 as usize],
-                invalid_bits[array[0x4][0] as u8 as usize],
-                invalid_bits[array[0x5][0] as u8 as usize],
-                invalid_bits[array[0x6][0] as u8 as usize],
-                invalid_bits[array[0x7][0] as u8 as usize],
-                /* invalid_bits[array[0x8][0] as u8 as usize],
-                invalid_bits[array[0x9][0] as u8 as usize],
-                invalid_bits[array[0xA][0] as u8 as usize],
-                invalid_bits[array[0xB][0] as u8 as usize],
-                invalid_bits[array[0xC][0] as u8 as usize],
-                invalid_bits[array[0xD][0] as u8 as usize],
-                invalid_bits[array[0xE][0] as u8 as usize],
-                invalid_bits[array[0xF][0] as u8 as usize], */
-                ]
-            );
-            // Now, lanewise OR whether the block kind in this iteration was invalid, with whether
-            // the same block kind was invalid in this lane the previous iteration.
-            set_bits |= block_kinds;
-        });
-        // Now, we OR all the lanes together, to find out whether *any* of the lanes witnessed an
-        // invalid block kind.
-        let mut set_bits = set_bits.any(); */
-
-        let mut set_bits0 = false;
-        let mut set_bits1 = false;
-        let mut set_bits2 = false;
-        let mut set_bits3 = false;
-        let mut set_bits4 = false;
-        let mut set_bits5 = false;
-        let mut set_bits6 = false;
-        let mut set_bits7 = false;
-        let mut set_bits8 = false;
-
-        /* // Initially, the set bit list is empty.
-        let mut set_bits: std::simd::Mask<i8, BLOCKS_PER_CHUNK> = std::simd::Mask::splat(false); */
-
-        // NOTE: We iterate in chunks of BLOCKS_PER_CHUNK blocks.  This also lets us
-        // independently fetch BLOCKS_PER_CHUNK entries from the lookup table at once, setting
-        // BLOCKS_PER_CHUNK independent lanes (reducing CPU level contention on the register)
-        // instead of updating a single register in each iteration (which causes contention).
-        let (chunks, remainder) = blocks.as_chunks::<BLOCKS_PER_CHUNK>();
-        chunks.iter().for_each(|array| {
-            // Look up each of the block kind in the chunk, setting each lane of the
-            // BLOCKS_PER_CHUNK-word mask to true if the block kind is invalid.
-            //
-            // NOTE: The block kind is guaranteed to be at the front of each 4-byte word,
-            // thanks to the repr(C).
-            //
-            // NOTE: Bounds checks here appears to be either elided, or perfectly predicted, so we
-            // fortunately avoid using unsafe here.
-            //
-            // FIXME: simd table lookup, and simd packing.
-            /* let block_kinds = std::simd::Mask::from_array(
-                [ */
-                set_bits0 |= invalid_bits[array[0x0][0] as u8 as usize];
-                set_bits1 |= invalid_bits[array[0x1][0] as u8 as usize];
-                set_bits2 |= invalid_bits[array[0x2][0] as u8 as usize];
-                set_bits3 |= invalid_bits[array[0x3][0] as u8 as usize];
-                set_bits4 |= invalid_bits[array[0x4][0] as u8 as usize];
-                set_bits5 |= invalid_bits[array[0x5][0] as u8 as usize];
-                set_bits6 |= invalid_bits[array[0x6][0] as u8 as usize];
-                set_bits7 |= invalid_bits[array[0x7][0] as u8 as usize];
-                /* invalid_bits[array[0x8][0] as u8 as usize],
-                invalid_bits[array[0x9][0] as u8 as usize],
-                invalid_bits[array[0xA][0] as u8 as usize],
-                invalid_bits[array[0xB][0] as u8 as usize],
-                invalid_bits[array[0xC][0] as u8 as usize],
-                invalid_bits[array[0xD][0] as u8 as usize],
-                invalid_bits[array[0xE][0] as u8 as usize],
-                invalid_bits[array[0xF][0] as u8 as usize], */
-                /* ]
-            )*/
-            // Now, lanewise OR whether the block kind in this iteration was invalid, with whether
-            // the same block kind was invalid in this lane the previous iteration.
-            // set_bits |= block_kinds;
-        });
-        // Now, we OR all the lanes together, to find out whether *any* of the lanes witnessed an
-        // invalid block kind.
-        let mut set_bits = /*set_bits.any()*/set_bits0 | set_bits1 | set_bits2 | set_bits3 | set_bits4 | set_bits5 | set_bits6 | set_bits7;
-
-        // Now handle the remainder (if this wasn't a precise fit for BLOCKS_PER_CHUNK blocks;
-        // this will never be the case for valid terrain chunks).
-        remainder.iter().for_each(|block| {
-            set_bits |= invalid_bits[block[0] as u8 as usize];
-        });
-
+        let set_bits = deserialize_inner(blocks);
         // The invalid bits and the set bits should have no overlap.
         if set_bits {
             // At least one invalid bit was set, so there was an invalid BlockKind somewhere.
@@ -660,14 +850,35 @@ impl<'a> Deserialize<'a> for BlockVec {
             // TODO: Use radix representation of the bad block kind.
             return Err(D::Error::unknown_variant("an invalid u8", &["see the definition of BlockKind for details"])/*"Found an unknown BlockKind while parsing Vec<Block>"*/);
         }
+
+        let mut v: Vec<Block> = Vec::with_capacity(blocks.len());
+        {
+            // SAFETY:
+            // allocated above with the capacity of `s`, and initialize to `s.len()` in
+            // ptr::copy_to_non_overlapping below.
+            unsafe {
+                blocks_.as_ptr().copy_to_nonoverlapping(v.as_mut_ptr() as *mut u8, blocks_.len());
+                /* let set_bits = deserialize_inner(core::slice::from_raw_parts::<[u8; 4]>(v.as_ptr() as *const _, blocks.len()));
+                // The invalid bits and the set bits should have no overlap.
+                if set_bits {
+                    // At least one invalid bit was set, so there was an invalid BlockKind somewhere.
+                    //
+                    // TODO: Use radix representation of the bad block kind.
+                    return Err(D::Error::unknown_variant("an invalid u8", &["see the definition of BlockKind for details"])/*"Found an unknown BlockKind while parsing Vec<Block>"*/);
+                } */
+                v.set_len(blocks.len());
+            }
+            Ok(Self(v))
+        }
+
         // All set bits are cleared, so all block kinds were valid.  Combined with the slice being
         // compatible with [u8; 4], we can transmute the slice to a slice of Blocks and then
         // construct a new vector from it.
-        let blocks = unsafe { core::mem::transmute::<&'a [[u8; 4]], &'a [Block]>(blocks) };
+        /* let blocks = unsafe { core::mem::transmute::<&'a [[u8; 4]], &'a [Block]>(blocks) };
         // Finally, *safely* construct a vector from the new blocks (as mentioned above, we cannot
         // reuse the old byte vector even if we wanted to, since it doesn't have the same
         // alignment as Block).
-        Ok(Self(blocks.to_vec()/*Vec::new()*/))
+        Ok(Self(blocks.to_vec()/*Vec::new()*/)) */
     }
 }
 
