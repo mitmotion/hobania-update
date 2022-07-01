@@ -2480,7 +2480,7 @@ impl SimChunk {
         self.water_alt > self.alt || self.river.river_kind.is_some()
     }
 
-    pub fn get_base_z(&self) -> f32 { self.alt - self.chaos * 50.0 - 16.0 }
+    pub fn get_base_z(&self) -> f32 { self.alt/* - self.chaos * 16.0 - self.cliff_height.max(0.0) * /*3.125.powf(1.5)*/5.625 - 4.0/*/* * 50.0 - 16.0 */- 7.5*/*/ - 6.0 }
 
     pub fn get_biome(&self) -> BiomeKind {
         let savannah_hum_temp = [0.05..0.55, 0.3..1.6];

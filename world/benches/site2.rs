@@ -299,10 +299,10 @@ fn dungeon(c: &mut Criterion) {
     bench_group("generate_citadel", "render_citadel", Site::generate_citadel);
 
     c.bench_function("generate_chunk", |b| {
-        // let chunk_pos = (world.sim().map_size_lg().chunks() >> 1).as_();
+        let chunk_pos = (world.sim().map_size_lg().chunks() >> 1).as_();
         // let chunk_pos = Vec2::new(9500 / 32, 29042 / 32);
         // let chunk_pos = Vec2::new(26944 / 32, 26848 / 32);
-        let chunk_pos = Vec2::new(842, 839);
+        // let chunk_pos = Vec2::new(842, 839);
         // let chunk_pos = Vec2::new(24507/32, 20682/32);
         // let chunk_pos = Vec2::new(19638/32, 19621/32);
         b.iter(|| {
@@ -311,10 +311,10 @@ fn dungeon(c: &mut Criterion) {
     });
 
     c.bench_function("deserialize_chunk", |b| {
-        // let chunk_pos = (world.sim().map_size_lg().chunks() >> 1).as_();
+        let chunk_pos = (world.sim().map_size_lg().chunks() >> 1).as_();
         // let chunk_pos = Vec2::new(9500 / 32, 29042 / 32);
         // let chunk_pos = Vec2::new(26944 / 32, 26848 / 32);
-        let chunk_pos = Vec2::new(842, 839);
+        // let chunk_pos = Vec2::new(842, 839);
         let chunk = world.generate_chunk(index.as_index_ref(), chunk_pos, || false, None).unwrap().0;
         /* println!("{:?}", chunk.sub_chunks_len());
         let chunk = chunk.sub_chunks().next().unwrap(); */

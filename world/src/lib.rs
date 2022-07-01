@@ -239,12 +239,39 @@ impl World {
         let calendar = self.sim.calendar.as_ref();
 
         // FIXME: Deal with this properly if it's not okay to exit early.
-        let mut sampler = self.sample_blocks(chunk_pos, index/*, calendar*/).ok_or(())?;
+        let sampler = self.sample_blocks(chunk_pos, index/*, calendar*/);
         // dbg!(&sampler.column_gen.chaos_spline);
 
+        let air = Block::air(SpriteKind::Empty);
+        let water = Block::new(BlockKind::Water, Rgb::zero());
+        let (/*base_z, */sim_chunk, mut sampler) = match sampler/*.zip(
+            self.sim
+            /*.get_interpolated(
+                chunk_pos.map2(chunk_size2d, |e, sz: u32| e * sz as i32 + sz as i32 / 2),
+                |chunk| chunk.get_base_z(),
+            )
+            .and_then(|base_z| self.sim.get(chunk_pos).map(|sim_chunk| (base_z, sim_chunk))) */
+            .get_base_z(chunk_pos))*/
+        {
+            /* Some((sampler, base_z)) => (base_z as i32, sampler.column_gen.sim_chunk, sampler),*/
+            Some(sampler) => (/*base_z as i32, */sampler.column_gen.sim_chunk, sampler),
+            // Some((base_z, sim_chunk)) => (base_z as i32, sim_chunk),
+            None => {
+                return Ok((
+                    TerrainChunk::new(
+                        CONFIG.sea_level as i32,
+                        water,
+                        air,
+                        TerrainChunkMeta::void(),
+                    ),
+                    ChunkSupplement::default(),
+                ));
+            },
+        };
+
+        let grid_border = /*4*/0;
         let chunk_wpos2d = chunk_pos * TerrainChunkSize::RECT_SIZE.map(|e| e as i32);
         let chunk_center_wpos2d = chunk_wpos2d + TerrainChunkSize::RECT_SIZE.map(|e| e as i32 / 2);
-        let grid_border = /*4*/0;
         let zcache_grid: Grid<ColumnSample> =
             Grid::populate_by_row::<_, _, {TerrainChunkSize::RECT_SIZE.x}, {TerrainChunkSize::RECT_SIZE.y}>(
             /* TerrainChunkSize::RECT_SIZE.map(|e| e as i32) + grid_border * 2, */
@@ -260,7 +287,12 @@ impl World {
             /* |offs| sampler.get_z_cache(chunk_wpos2d - grid_border + offs/*, index, calendar*/)/*None*/ */
         );
 
-        let air = Block::air(SpriteKind::Empty);
+        let base_z = ZCache {
+            sample: zcache_grid.get(grid_border + TerrainChunkSize::RECT_SIZE.map(|e| e as i32) / 2) .unwrap()
+        }
+            .get_z_limits()
+            .0 as i32 + 4;
+
         let stone = Block::new(
             BlockKind::Rock,
             zcache_grid
@@ -269,32 +301,6 @@ impl World {
                 .map(|zcache| zcache/*.sample*/.stone_col)
                 .unwrap_or_else(|| index.colors.deep_stone_color.into()),
         );
-        let water = Block::new(BlockKind::Water, Rgb::zero());
-
-        let (base_z, sim_chunk) = match self
-            .sim
-            /*.get_interpolated(
-                chunk_pos.map2(chunk_size2d, |e, sz: u32| e * sz as i32 + sz as i32 / 2),
-                |chunk| chunk.get_base_z(),
-            )
-            .and_then(|base_z| self.sim.get(chunk_pos).map(|sim_chunk| (base_z, sim_chunk))) */
-            .get_base_z(chunk_pos)
-        {
-            Some(base_z) => (base_z as i32, self.sim.get(chunk_pos).unwrap()),
-            // Some((base_z, sim_chunk)) => (base_z as i32, sim_chunk),
-            None => {
-                return Ok((
-                    TerrainChunk::new(
-                        CONFIG.sea_level as i32,
-                        water,
-                        air,
-                        TerrainChunkMeta::void(),
-                    ),
-                    ChunkSupplement::default(),
-                ));
-            },
-        };
-
         let meta = TerrainChunkMeta::new(
             sim_chunk
                 .sites
@@ -332,6 +338,11 @@ impl World {
         let mut chunk = TerrainChunk::new(base_z, stone, air, meta);
         let calendar = self.sim.calendar.as_ref();
 
+        let mut delta0 = 0;
+        let mut delta1 = 0;
+        let mut delta2 = 0;
+        let mut delta3 = 0;
+        let mut delta4 = 0;
         for y in 0..TerrainChunkSize::RECT_SIZE.y as i32 {
             for x in 0..TerrainChunkSize::RECT_SIZE.x as i32 {
                 if should_continue() {
@@ -351,9 +362,21 @@ impl World {
                 let (min_z, max_z) = z_cache.get_z_limits();
                 /* let max_z = min_z + 1.0;
                 let base_z = min_z as i32 - 1; */
+                delta0 = delta0.max(min_z as i32 - base_z);
+                delta1 = delta1.max(base_z - min_z as i32);
+                delta2 += (min_z as i32 - base_z).max(0);
+                delta4 += (base_z - max_z as i32).max(0);
+
+                /* if base_z as f32 > min_z {
+                    dbg!(base_z, min_z, max_z, chunk_pos, sim_chunk);
+                    panic!("base_z > min_z");
+                } */
 
                 (base_z..min_z as i32).for_each(|z| {
                     let _ = chunk.set(Vec3::new(x, y, z), stone);
+                });
+                (max_z as i32..base_z).for_each(|z| {
+                    let _ = chunk.set(Vec3::new(x, y, z), air);
                 });
 
                 let mut block_ = None;
@@ -363,13 +386,31 @@ impl World {
 
                     if let Some(block) = sampler.get_with_z_cache(wpos, /*Some(&*/z_cache/*)*/) {
                         // block_ = Some(block);
+                        // let _ = chunk.set(lpos, block);
                         let _ = chunk.set(lpos, block);
+                    }else if z < base_z {
+                        let _ = chunk.set(lpos, air);
+                        delta3 += 1;
                     }
                 });
                 if let Some(block_) = block_ {
                     let _ = chunk.set(Vec3::new(x, y, min_z as i32), block_);
                 }
             }
+        }
+        if /*delta1 > 0*/delta2 + delta3 + delta4 > 1024 {
+            let delta2 = delta2 as f32 / 1024.0;
+            let delta3 = delta3 as f32 / 1024.0;
+            let delta4 = delta4 as f32 / 1024.0;
+            /* dbg!(
+                sim_chunk,
+                base_z,
+                delta0,
+                delta1,
+                delta2,
+                delta3,
+                delta4,
+            ); */
         }
 
         let sample_get = |offs| {

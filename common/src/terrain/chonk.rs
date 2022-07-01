@@ -146,7 +146,7 @@ impl<V, Storage: core::ops::DerefMut<Target=Vec<V>>, S: RectVolSize, M: Clone> C
         // First, defragment all subchunks.
         self.sub_chunks.iter_mut().for_each(SubChunk::defragment);
         // For each homogeneous subchunk (i.e. those where all blocks are the same),
-        // find those which match `below` at the bottom of the cunk, or `above`
+        // find those which match `below` at the bottom of the chunk, or `above`
         // at the top, since these subchunks are redundant and can be removed.
         // Note that we find (and drain) the above chunks first, so that when we
         // remove the below chunks we have fewer remaining chunks to backshift.

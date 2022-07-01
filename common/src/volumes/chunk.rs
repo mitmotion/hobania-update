@@ -247,17 +247,17 @@ impl<V, S: core::ops::DerefMut<Target=Vec<V>> + VolSize<V>, M> Chunk<V, S, M> {
     #[inline(always)]
     fn grp_idx(pos: Vec3<i32>) -> u32 {
         let grp_pos = pos.map2(Self::GROUP_SIZE, |e, s| e as u32 / s);
-        (grp_pos.z * (Self::GROUP_COUNT.y * Self::GROUP_COUNT.x))
-            + (grp_pos.y * Self::GROUP_COUNT.x)
-            + (grp_pos.x)
+        (grp_pos.x * (Self::GROUP_COUNT.y * Self::GROUP_COUNT.z))
+            + (grp_pos.y * Self::GROUP_COUNT.z)
+            + (grp_pos.z)
     }
 
     #[inline(always)]
     fn rel_idx(pos: Vec3<i32>) -> u32 {
         let rel_pos = pos.map2(Self::GROUP_SIZE, |e, s| e as u32 % s);
-        (rel_pos.z * (Self::GROUP_SIZE.y * Self::GROUP_SIZE.x))
-            + (rel_pos.y * Self::GROUP_SIZE.x)
-            + (rel_pos.x)
+        (rel_pos.x * (Self::GROUP_SIZE.y * Self::GROUP_SIZE.z))
+            + (rel_pos.y * Self::GROUP_SIZE.z)
+            + (rel_pos.z)
     }
 
     #[inline(always)]
@@ -386,6 +386,56 @@ impl<V, S: VolSize<V>, M> Iterator for ChunkPosIter<V, S, M> {
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
+        if self.pos.x >= self.ub.x {
+            return None;
+        }
+        let res = Some(self.pos);
+
+        self.pos.z += 1;
+        if self.pos.z != self.ub.z && self.pos.z % Chunk::<V, S, M>::GROUP_SIZE.z as i32 != 0 {
+            return res;
+        }
+        self.pos.z = std::cmp::max(
+            self.lb.z,
+            (self.pos.z - 1) & !(Chunk::<V, S, M>::GROUP_SIZE.z as i32 - 1),
+        );
+
+        self.pos.y += 1;
+        if self.pos.y != self.ub.y && self.pos.y % Chunk::<V, S, M>::GROUP_SIZE.y as i32 != 0 {
+            return res;
+        }
+        self.pos.y = std::cmp::max(
+            self.lb.y,
+            (self.pos.y - 1) & !(Chunk::<V, S, M>::GROUP_SIZE.y as i32 - 1),
+        );
+
+        self.pos.x += 1;
+        if self.pos.x != self.ub.x && self.pos.x % Chunk::<V, S, M>::GROUP_SIZE.x as i32 != 0 {
+            return res;
+        }
+        self.pos.x = std::cmp::max(
+            self.lb.x,
+            (self.pos.x - 1) & !(Chunk::<V, S, M>::GROUP_SIZE.x as i32 - 1),
+        );
+
+        self.pos.z = (self.pos.z | (Chunk::<V, S, M>::GROUP_SIZE.z as i32 - 1)) + 1;
+        if self.pos.z < self.ub.z {
+            return res;
+        }
+        self.pos.z = self.lb.z;
+
+        self.pos.y = (self.pos.y | (Chunk::<V, S, M>::GROUP_SIZE.y as i32 - 1)) + 1;
+        if self.pos.y < self.ub.y {
+            return res;
+        }
+        self.pos.y = self.lb.y;
+
+        self.pos.x = (self.pos.x | (Chunk::<V, S, M>::GROUP_SIZE.x as i32 - 1)) + 1;
+
+        res
+    }
+
+    /* fn next(&mut self) -> Option<Self::Item> {
         if self.pos.z >= self.ub.z {
             return None;
         }
@@ -433,7 +483,7 @@ impl<V, S: VolSize<V>, M> Iterator for ChunkPosIter<V, S, M> {
         self.pos.z = (self.pos.z | (Chunk::<V, S, M>::GROUP_SIZE.z as i32 - 1)) + 1;
 
         res
-    }
+    } */
 }
 
 pub struct ChunkVolIter<'a, V, S: VolSize<V>, M> {
