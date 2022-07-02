@@ -47,11 +47,11 @@ impl<'a> System<'a> for Sys {
             chunk_sender,
         ): Self::SystemData,
     ) {
-        // Only operate twice per second
+        /* // Only operate twice per second
         //TODO: move out of this system and now even spawn this.
         if tick.0.rem_euclid(15) != 0 {
             return;
-        }
+        } */
 
         struct Metadata {
             recipients: Vec<Entity>,

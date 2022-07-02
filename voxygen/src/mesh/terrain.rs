@@ -210,7 +210,7 @@ fn calc_light<V: RectRasterableVol<Vox = Block> + ReadVol + Debug>(
     drop(light_map); */
 
     move |wpos| {
-        1.0
+        if is_sunlight { 1.0 } else { 0.0 }
         /* let pos = wpos - min_bounds.min;
         let l = light_map2
             .get(lm_idx2(pos.x, pos.y, pos.z))

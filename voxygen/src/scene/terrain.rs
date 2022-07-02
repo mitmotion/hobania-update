@@ -970,7 +970,7 @@ impl<V: RectRasterableVol> Terrain<V> {
                     })?))
             })
         {
-            if self.mesh_todos_active.load(Ordering::Relaxed) > meshing_cores {
+            if self.mesh_todos_active.load(Ordering::Relaxed) > meshing_cores * 8 {
                 break;
             }
 
@@ -1056,7 +1056,7 @@ impl<V: RectRasterableVol> Terrain<V> {
         // store it. Vary the rate at which we pull items out to correlate with the
         // framerate, preventing tail latency.
         span!(guard, "Get/upload meshed chunk");
-        const CHUNKS_PER_SECOND: f32 = 240.0;
+        const CHUNKS_PER_SECOND: f32 = 240.0 * 8.0;
         let recv_count =
             scene_data.state.get_delta_time() * CHUNKS_PER_SECOND + self.mesh_recv_overflow;
         self.mesh_recv_overflow = recv_count.fract();
