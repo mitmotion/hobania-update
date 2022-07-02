@@ -82,6 +82,7 @@ impl AdminCommandState {
 pub struct EguiDebugInfo {
     pub frame_time: Duration,
     pub ping_ms: f64,
+    pub mesh_todo: usize,
 }
 
 pub struct EguiInnerState {
@@ -90,6 +91,7 @@ pub struct EguiInnerState {
     max_entity_distance: f32,
     selected_entity_cylinder_height: f32,
     frame_times: Vec<f32>,
+    mesh_todos: Vec<usize>,
     windows: EguiWindows,
 }
 
@@ -112,6 +114,7 @@ impl Default for EguiInnerState {
             max_entity_distance: 100000.0,
             selected_entity_cylinder_height: 10.0,
             frame_times: Vec::new(),
+            mesh_todos: Vec::new(),
             windows: EguiWindows::default(),
         }
     }
@@ -233,6 +236,11 @@ pub fn maintain_egui_inner(
         if egui_state.frame_times.len() > 250 {
             egui_state.frame_times.remove(0);
         }
+
+        egui_state.mesh_todos.push(debug_info.mesh_todo);
+        if egui_state.mesh_todos.len() > 2000 {
+            egui_state.mesh_todos.remove(0);
+        }
     };
 
     let start_pos = Pos2 { x: 300.0, y: 0.0 };
@@ -293,14 +301,36 @@ pub fn maintain_egui_inner(
         .default_width(200.0)
         .default_height(200.0)
         .show(ctx, |ui| {
-            let plot = Plot::new("Frame Time").curve(Curve::from_values_iter(
-                egui_state
-                    .frame_times
-                    .iter()
-                    .enumerate()
-                    .map(|(i, x)| Value::new(i as f64, *x)),
-            ));
+            let plot = Plot::new("Frame Time")
+                .curve(Curve::from_values_iter(
+                    egui_state
+                        .frame_times
+                        .iter()
+                        .enumerate()
+                        .map(|(i, x)| Value::new(i as f64, *x)),
+                ))
+                .height(50.0);
             ui.add(plot);
+
+            ui.add_space(20.0);
+
+            ui.label(format!(
+                "Pending Meshing: {}",
+                &egui_state.mesh_todos.last().unwrap_or(&0usize)
+            ));
+            let mesh_todo_plot = Plot::new("Chunks Pending Meshing")
+                .curve(
+                    Curve::from_values_iter(
+                        egui_state
+                            .mesh_todos
+                            .iter()
+                            .enumerate()
+                            .map(|(i, x)| Value::new(i as f64, (*x) as f64)),
+                    )
+                    .color(Color32::from_rgb(45, 91, 215)),
+                )
+                .height(200.0);
+            ui.add(mesh_todo_plot);
         });
 
     if windows.ecs_entities {

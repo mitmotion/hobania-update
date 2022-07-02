@@ -360,6 +360,10 @@ pub struct Terrain<V: RectRasterableVol = TerrainChunk> {
     phantom: PhantomData<V>,
 }
 
+impl Terrain {
+    pub fn chunks_pending_meshing_count(&self) -> usize { self.mesh_todo.iter().len() }
+}
+
 impl TerrainChunkData {
     pub fn can_shadow_sun(&self) -> bool { self.visible.is_visible() || self.can_shadow_sun }
 }
@@ -951,7 +955,13 @@ impl<V: RectRasterableVol> Terrain<V> {
             .filter(|todo| !todo.is_worker_active)
             // TODO: BinaryHeap
             .collect::<Vec<_>>();
-        todo.sort_unstable_by_key(|todo| ((todo.pos.as_::<i64>() * TerrainChunk::RECT_SIZE.as_::<i64>()).distance_squared(mesh_focus_pos), todo.started_tick));
+        todo.sort_unstable_by_key(|todo| {
+            (
+                (todo.pos.as_::<i64>() * TerrainChunk::RECT_SIZE.as_::<i64>())
+                    .distance_squared(mesh_focus_pos),
+                todo.started_tick,
+            )
+        });
 
         for (todo, chunk) in todo.into_iter()
             .filter(|todo| !todo.is_worker_active)

@@ -1103,13 +1103,16 @@ impl PlayState for SessionState {
             // Maintain egui (debug interface)
             #[cfg(feature = "egui-ui")]
             if global_state.settings.interface.egui_enabled() {
+                let debug_info = debug_info.map(|debug_info| EguiDebugInfo {
+                    frame_time: debug_info.frame_time,
+                    ping_ms: debug_info.ping_ms,
+                    mesh_todo: self.scene.terrain().chunks_pending_meshing_count(),
+                });
+
                 let settings_change = global_state.egui_state.maintain(
                     &mut self.client.borrow_mut(),
                     &mut self.scene,
-                    debug_info.map(|debug_info| EguiDebugInfo {
-                        frame_time: debug_info.frame_time,
-                        ping_ms: debug_info.ping_ms,
-                    }),
+                    debug_info,
                     &global_state.settings,
                 );
 
