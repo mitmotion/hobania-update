@@ -670,7 +670,7 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
         const SAMP_RES: i32 = 8;
         const SAMP_RES_X: f32 = SAMP_RES as f32 / TerrainChunkSize::RECT_SIZE.x as f32;
         const SAMP_RES_Y: f32 = SAMP_RES as f32 / TerrainChunkSize::RECT_SIZE.y as f32;
-        let cubic_delta = |x, delta: f32| cubic(x + SAMP_RES_X);
+        let cubic_delta = |x, delta: f32| cubic(x + delta);
         let alt_y = &self.alt_spline/*.eval_at_row(cubic_y)*/;
         let altx0 = alt_y.eval_at(cubic_delta(wposx, -SAMP_RES_X));
         let altx1 = alt_y.eval_at(cubic_delta(wposx, SAMP_RES_X));
