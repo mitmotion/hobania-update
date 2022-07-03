@@ -1,6 +1,7 @@
 use super::*;
 use crate::{
     block::block_from_structure,
+    column::DEFAULT_COLUMN_SAMPLE,
     site2::util::Dir,
     util::{RandomField, Sampler},
     CanvasInfo,
@@ -692,7 +693,7 @@ impl<'a, 'b, F: Filler> FillFn<'a, 'b, F> {
     // we probably need an evaluator for the primitive tree that gets which point is queried at
     // leaf nodes given an input point to make Translate/Rotate work generally
     pub fn prefab(&self, p: &'static PrefabStructure, tr: Vec3<i32>, seed: u32) -> impl Fill + Copy + 'b {
-        let col_sample = None;/*/*if let Some(col_sample) = */self.canvas_info.col(self.canvas_info.wpos)/* {
+        /* let col_sample = None;/*/*if let Some(col_sample) = */self.canvas_info.col(self.canvas_info.wpos)/* {
             col_sample
         } else {
             // Don't draw--technically we should probably not assume this much about
@@ -700,10 +701,11 @@ impl<'a, 'b, F: Filler> FillFn<'a, 'b, F> {
             //
             // FIXME: Fix this for alternate fillers if it turns out to matter.
             return
-        }*/*/;
+        }*/*/; */
         let index = self.canvas_info.index;
         let p_bounds = p.get_bounds().center().xy();
         let calendar = self.canvas_info.calendar();
+        static COLUMN_SAMPLE: ColumnSample = DEFAULT_COLUMN_SAMPLE;
 
         FillVar(move |pos| {
             p.get(pos - tr).ok().and_then(|&sb| {
@@ -713,7 +715,7 @@ impl<'a, 'b, F: Filler> FillFn<'a, 'b, F> {
                     pos - tr,
                     p_bounds,
                     seed,
-                    col_sample?,
+                    &/*col_sample?*/COLUMN_SAMPLE,
                     Block::air,
                     calendar,
                 )

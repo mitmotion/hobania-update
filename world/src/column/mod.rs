@@ -1833,3 +1833,33 @@ pub struct ColumnSample/*<'a>*/ {
     /* pub chunk: &'a SimChunk, */
     // pub chunk: core::marker::PhantomData<&'a SimChunk>,
 }
+
+pub const DEFAULT_COLUMN_SAMPLE: ColumnSample = ColumnSample {
+    alt: 0.0,
+    riverless_alt: 0.0,
+    basement: 0.0,
+    chaos: 0.0,
+    water_level: 0.0,
+    // warp_factor: 0.0,
+    surface_color: Rgb::new(0.0, 0.0, 0.0),
+    sub_surface_color: Rgb::new(0.0, 0.0, 0.0),
+    tree_density: 0.0,
+    // forest_kind: ForestKind,
+    // marble: 0.0,
+    // marble_mid: 0.0,
+    // marble_small: 0.0,
+    rock_density: 0.0,
+    temp: 0.0,
+    humidity: 0.0,
+    spawn_rate: 0.0,
+    stone_col: Rgb::new(0, 0, 0),
+    water_dist: None,
+    gradient: 0.0,
+    path: None,
+    cave: None,
+    snow_cover: false,
+    cliff_offset: 0.0,
+    cliff_height: 0.0,
+    // water_vel: Vec3::new(0.0, 0.0, 0.0),
+    ice_depth: 0.0,
+};
