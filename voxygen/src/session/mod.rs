@@ -1106,6 +1106,7 @@ impl PlayState for SessionState {
                 let debug_info = debug_info.map(|debug_info| EguiDebugInfo {
                     frame_time: debug_info.frame_time,
                     ping_ms: debug_info.ping_ms,
+                    mesh_active: self.scene.terrain().chunks_active_meshing_count(),
                     mesh_todo: self.scene.terrain().chunks_pending_meshing_count(),
                 });
 

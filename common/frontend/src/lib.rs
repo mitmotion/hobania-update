@@ -73,6 +73,7 @@ where
         "quinn_proto::connection=info",
         "veloren_server::persistence::character=info",
         "veloren_server::settings=info",
+        "veloren_voxygen::audio::sfx=info",
     ];
 
     for s in default_directives {

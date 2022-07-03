@@ -362,6 +362,10 @@ pub struct Terrain<V: RectRasterableVol = TerrainChunk> {
 
 impl Terrain {
     pub fn chunks_pending_meshing_count(&self) -> usize { self.mesh_todo.iter().len() }
+
+    pub fn chunks_active_meshing_count(&self) -> usize {
+        self.mesh_todos_active.load(Ordering::Relaxed) as usize
+    }
 }
 
 impl TerrainChunkData {

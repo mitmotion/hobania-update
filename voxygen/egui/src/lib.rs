@@ -19,6 +19,7 @@ use egui::{
     widgets::plot::Curve,
     CollapsingHeader, Color32, Grid, Pos2, ScrollArea, Slider, Ui, Window,
 };
+use num::{ToPrimitive, Zero};
 
 use crate::{
     admin::draw_admin_commands_window, character_states::draw_char_state_group,
@@ -82,6 +83,7 @@ impl AdminCommandState {
 pub struct EguiDebugInfo {
     pub frame_time: Duration,
     pub ping_ms: f64,
+    pub mesh_active: usize,
     pub mesh_todo: usize,
 }
 
@@ -90,9 +92,71 @@ pub struct EguiInnerState {
     admin_command_state: AdminCommandState,
     max_entity_distance: f32,
     selected_entity_cylinder_height: f32,
-    frame_times: Vec<f32>,
-    mesh_todos: Vec<usize>,
+    plots: EguiPlots,
     windows: EguiWindows,
+}
+
+pub struct EguiPlots {
+    frame_times: EguiPlot<f32>,
+    chunks_active_meshing: EguiPlot<usize>,
+    chunks_pending_meshing: EguiPlot<usize>,
+}
+
+impl Default for EguiPlots {
+    fn default() -> Self {
+        const DATA_POINT_LIMIT: usize = 2000;
+
+        Self {
+            frame_times: EguiPlot::<f32>::new("Frame Times".to_owned(), DATA_POINT_LIMIT),
+            chunks_active_meshing: EguiPlot::<usize>::new(
+                "Chunks Active Meshing".to_owned(),
+                DATA_POINT_LIMIT,
+            ),
+            chunks_pending_meshing: EguiPlot::<usize>::new(
+                "Chunks Pending Meshing".to_owned(),
+                DATA_POINT_LIMIT,
+            ),
+        }
+    }
+}
+
+pub struct EguiPlot<T> {
+    title: String,
+    data_points: Vec<T>,
+    /// The number of data points that will be retained and displayed in the
+    /// plot
+    data_point_limit: usize,
+}
+
+impl<T: Clone + Copy + ToPrimitive + Zero> EguiPlot<T> {
+    fn new(title: String, data_point_limit: usize) -> Self {
+        Self {
+            title,
+            data_points: vec![T::zero(); data_point_limit],
+            data_point_limit,
+        }
+    }
+
+    fn maintain(&mut self, value: T) {
+        self.data_points.push(value);
+        if self.data_points.len() > self.data_point_limit {
+            self.data_points.remove(0);
+        }
+    }
+
+    fn current_value(&self) -> T { self.data_points.last().map(|x| *x).unwrap_or(T::zero()) }
+
+    fn plot(&self, color: Color32) -> Plot {
+        Plot::new(self.title.to_owned()).curve(
+            Curve::from_values_iter(
+                self.data_points
+                    .iter()
+                    .enumerate()
+                    .map(|(i, x)| Value::new(i as f64, x.to_f64().unwrap())),
+            )
+            .color(color),
+        )
+    }
 }
 
 #[derive(Clone, Default)]
@@ -102,6 +166,7 @@ pub struct EguiWindows {
     egui_settings: bool,
     egui_memory: bool,
     frame_time: bool,
+    engine_performance: bool,
     ecs_entities: bool,
     experimental_shaders: bool,
 }
@@ -113,8 +178,7 @@ impl Default for EguiInnerState {
             selected_entity_info: None,
             max_entity_distance: 100000.0,
             selected_entity_cylinder_height: 10.0,
-            frame_times: Vec::new(),
-            mesh_todos: Vec::new(),
+            plots: EguiPlots::default(),
             windows: EguiWindows::default(),
         }
     }
@@ -231,16 +295,17 @@ pub fn maintain_egui_inner(
 
     if let Some(debug_info) = debug_info.as_ref() {
         egui_state
+            .plots
             .frame_times
-            .push(debug_info.frame_time.as_nanos() as f32);
-        if egui_state.frame_times.len() > 250 {
-            egui_state.frame_times.remove(0);
-        }
-
-        egui_state.mesh_todos.push(debug_info.mesh_todo);
-        if egui_state.mesh_todos.len() > 2000 {
-            egui_state.mesh_todos.remove(0);
-        }
+            .maintain(debug_info.frame_time.as_nanos() as f32);
+        egui_state
+            .plots
+            .chunks_active_meshing
+            .maintain(debug_info.mesh_active);
+        egui_state
+            .plots
+            .chunks_pending_meshing
+            .maintain(debug_info.mesh_todo);
     };
 
     let start_pos = Pos2 { x: 300.0, y: 0.0 };
@@ -260,6 +325,7 @@ pub fn maintain_egui_inner(
                     ui.checkbox(&mut windows.admin_commands, "Admin Commands");
                     ui.checkbox(&mut windows.ecs_entities, "ECS Entities");
                     ui.checkbox(&mut windows.frame_time, "Frame Time");
+                    ui.checkbox(&mut windows.engine_performance, "Engine Performance");
                     ui.checkbox(&mut windows.experimental_shaders, "Experimental Shaders");
                 });
             });
@@ -296,41 +362,43 @@ pub fn maintain_egui_inner(
             ctx.memory_ui(ui);
         });
 
+    Window::new("Engine Performance")
+        .open(&mut windows.engine_performance)
+        .default_width(200.0)
+        .default_height(400.0)
+        .show(ctx, |ui| {
+            ui.label(format!(
+                "Active Meshing: {}",
+                egui_state.plots.chunks_active_meshing.current_value()
+            ));
+            let chunks_active_meshing_plot = egui_state
+                .plots
+                .chunks_active_meshing
+                .plot(Color32::from_rgb(241, 80, 88))
+                .height(250.0);
+            ui.add(chunks_active_meshing_plot);
+
+            ui.add_space(10.0);
+
+            ui.label(format!(
+                "Pending Meshing: {}",
+                egui_state.plots.chunks_pending_meshing.current_value()
+            ));
+            let chunks_pending_meshing_plot = egui_state
+                .plots
+                .chunks_pending_meshing
+                .plot(Color32::from_rgb(45, 91, 215))
+                .height(250.0);
+            ui.add(chunks_pending_meshing_plot);
+        });
+
     Window::new("Frame Time")
         .open(&mut windows.frame_time)
         .default_width(200.0)
         .default_height(200.0)
         .show(ctx, |ui| {
-            let plot = Plot::new("Frame Time")
-                .curve(Curve::from_values_iter(
-                    egui_state
-                        .frame_times
-                        .iter()
-                        .enumerate()
-                        .map(|(i, x)| Value::new(i as f64, *x)),
-                ))
-                .height(50.0);
+            let plot = egui_state.plots.frame_times.plot(Color32::RED).height(50.0);
             ui.add(plot);
-
-            ui.add_space(20.0);
-
-            ui.label(format!(
-                "Pending Meshing: {}",
-                &egui_state.mesh_todos.last().unwrap_or(&0usize)
-            ));
-            let mesh_todo_plot = Plot::new("Chunks Pending Meshing")
-                .curve(
-                    Curve::from_values_iter(
-                        egui_state
-                            .mesh_todos
-                            .iter()
-                            .enumerate()
-                            .map(|(i, x)| Value::new(i as f64, (*x) as f64)),
-                    )
-                    .color(Color32::from_rgb(45, 91, 215)),
-                )
-                .height(200.0);
-            ui.add(mesh_todo_plot);
         });
 
     if windows.ecs_entities {
