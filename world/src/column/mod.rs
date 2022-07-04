@@ -1488,7 +1488,7 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
         let warm_stone: Rgb<f32> = warm_stone.into();
         let beach_sand = beach_sand.into();
         let desert_sand = desert_sand.into();
-        let snow = snow.into();
+        let snow: Rgb<f32> = snow.into();
         let stone_col = stone_col.into();
         let dirt_low: Rgb<f32> = dirt_low.into();
         let dirt_high = dirt_high.into();
@@ -1686,18 +1686,18 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
         let warp = riverless_alt_delta + warp;
         let alt = alt + warp;
 
-        let (snow_delta, ground, sub_surface_color) = if snow_cover && alt > water_level {
+        /* let (/*snow_delta, *//*ground, */sub_surface_color,) = if snow_cover && alt > water_level {
             // Allow snow cover.
             (
-                1.0 - snow_factor.max(0.0),
-                Rgb::lerp(snow, ground, snow_factor),
+                /* 1.0 - snow_factor.max(0.0),*/
+                /* Rgb::lerp(snow, ground, snow_factor), */
                 Lerp::lerp(sub_surface_color, ground, basement_sub_alt.mul(-0.15)),
             )
         } else {
-            (0.0, ground, sub_surface_color)
-        };
-        let alt = alt + snow_delta;
-        let basement_sub_alt = basement_sub_alt - snow_delta;
+            (/*0.0, *//*ground, */sub_surface_color,)
+        }; */
+        /* let alt = alt + snow_delta;
+        let basement_sub_alt = basement_sub_alt - snow_delta; */
 
         // Make river banks not have grass
         let ground = water_dist

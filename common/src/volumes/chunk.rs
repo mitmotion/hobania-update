@@ -67,15 +67,15 @@ impl<V, S: VolSize<V>, M> Chunk<V, S, M> {
         S::SIZE.z / Self::GROUP_SIZE.z,
     );
     /// `GROUP_COUNT_TOTAL` is always `256`, except if `VOLUME < 256`
-    const GROUP_COUNT_TOTAL: u32 = Self::VOLUME / Self::GROUP_VOLUME;
+    pub const GROUP_COUNT_TOTAL: u32 = Self::VOLUME / Self::GROUP_VOLUME;
     const GROUP_LONG_SIDE_LEN: u32 = 1 << ((Self::GROUP_VOLUME * 4 - 1).count_ones() / 3);
-    const GROUP_SIZE: Vec3<u32> = Vec3::new(
+    pub const GROUP_SIZE: Vec3<u32> = Vec3::new(
         Self::GROUP_LONG_SIDE_LEN,
         Self::GROUP_LONG_SIDE_LEN,
         Self::GROUP_VOLUME / (Self::GROUP_LONG_SIDE_LEN * Self::GROUP_LONG_SIDE_LEN),
     );
-    const GROUP_VOLUME: u32 = [Self::VOLUME / 256, 1][(Self::VOLUME < 256) as usize];
-    const VOLUME: u32 = (S::SIZE.x * S::SIZE.y * S::SIZE.z) as u32;
+    pub const GROUP_VOLUME: u32 = [Self::VOLUME / 256, 1][(Self::VOLUME < 256) as usize];
+    pub const VOLUME: u32 = (S::SIZE.x * S::SIZE.y * S::SIZE.z) as u32;
 }
 
 impl<V, S: core::ops::DerefMut<Target=Vec<V>> + VolSize<V>, M> Chunk<V, S, M> {
@@ -126,6 +126,72 @@ impl<V, S: core::ops::DerefMut<Target=Vec<V>> + VolSize<V>, M> Chunk<V, S, M> {
 
     pub fn get_vox(&self) -> &S {
         &self.vox
+    }
+
+    pub fn default(&self) -> &V {
+        &self.default
+    }
+
+    pub fn indices(&self) -> &[u8] {
+        &self.indices
+    }
+
+    /// Flattened version of this subchunk.
+    ///
+    /// It's not acutally flat, it just skips the indirection through the index.  The idea is to
+    /// use a constant stride for row access so the prefetcher can process it more easily.
+    pub fn push_flat<'a>(&'a self, flat: &mut Vec<&'a [V]>, default: &'a [V])
+        where
+            V: Copy,
+            [(); Self::GROUP_VOLUME as usize]:
+    {
+        let vox = &self.vox;
+        // let default = &[self.default; Self::GROUP_VOLUME as usize];
+        self.indices
+            .iter()
+            .enumerate()
+            .for_each(|(grp_idx, &base)| {
+                let start = usize::from(base) * Self::GROUP_VOLUME as usize;
+                let end = start + Self::GROUP_VOLUME as usize;
+                if let Some(group) = vox.get(start..end) {
+                    flat.push(group);
+                    /* flat.extend_from_slice(group); */
+                    /* flat[grp_idx / 64 * 4096 + grp_idx % 64 / 8 * 8 + grp_idx % 8..]copy_from_slice(group[0 * 64..1 * 64]);
+                    // 3*4096+(8*7+8)*16
+                    // 3*4096+7*128+7*4
+                    // (3*1024+7*32+7)*4
+                    // (3*1024+7*32+7)*4 + 1024
+                    // (3*1024+7*32+7)*4 + 1024 * 2
+                    // (3*1024+7*32+7)*4 + 1024 * 3
+                    //
+                    // 1024*15 + 7*4*32 + 7*4
+                    // 1024*15 + (7*4+1)*32 + 7*4
+                    // 1024*15 + (7*4+3)*32 + 7*4
+                    // 1024*15 + (7*4+3)*32 + 7*4
+                    flat[grp_idx * Self::GROUP_VOLUME..end].copy_from_slice(group[1 * 64..2 * 64]);
+                    flat[grp_idx * Self::GROUP_VOLUME..end].copy_from_slice(group[2 * 64..3 * 64]);
+                    flat[grp_idx * Self::GROUP_VOLUME..end].copy_from_slice(group[3 * 64..4 * 64]);
+                    flat[flat + base]
+                    // Check to see if all blocks in this group are the same.
+                    // NOTE: First element must exist because GROUP_VOLUME ≥ 1
+                    let first = &group[0];
+                    let first_ = first.as_bytes();
+                    // View group as bytes to benefit from specialization on [u8].
+                    let group = group.as_bytes();
+                    /* let mut group = group.iter();
+                    let first = group.next().expect("group_volume ≥ 1"); */
+                    if group.array_chunks::<{ core::mem::size_of::<V>() }>().all(|block| block == first_) {
+                        // all blocks in the group were the same, so add our position to this entry
+                        // in the hashmap.
+                        map.entry(first).or_insert_with(/*vec![]*//*bitvec::bitarr![0; chunk<v, s, m>::group_count_total]*/|| empty_bits)./*push*/set(grp_idx, true);
+                    } */
+                } else {
+                    // this slot is empty (i.e. has the default value).
+                    flat./*extend_from_slice*/push(default);
+                    /* map.entry(default).or_insert_with(|| empty_bits)./*push*/set(grp_idx, true);
+                    */
+                }
+            });
     }
 
     /// Compress this subchunk by frequency.
@@ -230,6 +296,7 @@ impl<V, S: core::ops::DerefMut<Target=Vec<V>> + VolSize<V>, M> Chunk<V, S, M> {
     /// Get a mutable reference to the internal metadata.
     pub fn metadata_mut(&mut self) -> &mut M { &mut self.meta }
 
+    #[inline(always)]
     pub fn num_groups(&self) -> usize { self.vox.len() / Self::GROUP_VOLUME as usize }
 
     /// Returns `Some(v)` if the block is homogeneous and contains nothing but
@@ -245,19 +312,19 @@ impl<V, S: core::ops::DerefMut<Target=Vec<V>> + VolSize<V>, M> Chunk<V, S, M> {
     }
 
     #[inline(always)]
-    fn grp_idx(pos: Vec3<i32>) -> u32 {
+    pub fn grp_idx(pos: Vec3<i32>) -> u32 {
         let grp_pos = pos.map2(Self::GROUP_SIZE, |e, s| e as u32 / s);
-        (grp_pos.x * (Self::GROUP_COUNT.y * Self::GROUP_COUNT.z))
-            + (grp_pos.y * Self::GROUP_COUNT.z)
-            + (grp_pos.z)
+        (grp_pos.z * (Self::GROUP_COUNT.y * Self::GROUP_COUNT.x))
+            + (grp_pos.y * Self::GROUP_COUNT.x)
+            + (grp_pos.x)
     }
 
     #[inline(always)]
-    fn rel_idx(pos: Vec3<i32>) -> u32 {
+    pub fn rel_idx(pos: Vec3<i32>) -> u32 {
         let rel_pos = pos.map2(Self::GROUP_SIZE, |e, s| e as u32 % s);
-        (rel_pos.x * (Self::GROUP_SIZE.y * Self::GROUP_SIZE.z))
-            + (rel_pos.y * Self::GROUP_SIZE.z)
-            + (rel_pos.z)
+        (rel_pos.z * (Self::GROUP_SIZE.y * Self::GROUP_SIZE.x))
+            + (rel_pos.y * Self::GROUP_SIZE.x)
+            + (rel_pos.x)
     }
 
     #[inline(always)]
@@ -384,7 +451,7 @@ impl<V, S: VolSize<V>, M> ChunkPosIter<V, S, M> {
 impl<V, S: VolSize<V>, M> Iterator for ChunkPosIter<V, S, M> {
     type Item = Vec3<i32>;
 
-    #[inline(always)]
+    /* #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         if self.pos.x >= self.ub.x {
             return None;
@@ -433,9 +500,9 @@ impl<V, S: VolSize<V>, M> Iterator for ChunkPosIter<V, S, M> {
         self.pos.x = (self.pos.x | (Chunk::<V, S, M>::GROUP_SIZE.x as i32 - 1)) + 1;
 
         res
-    }
+    } */
 
-    /* fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self) -> Option<Self::Item> {
         if self.pos.z >= self.ub.z {
             return None;
         }
@@ -483,7 +550,7 @@ impl<V, S: VolSize<V>, M> Iterator for ChunkPosIter<V, S, M> {
         self.pos.z = (self.pos.z | (Chunk::<V, S, M>::GROUP_SIZE.z as i32 - 1)) + 1;
 
         res
-    } */
+    }
 }
 
 pub struct ChunkVolIter<'a, V, S: VolSize<V>, M> {

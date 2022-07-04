@@ -94,6 +94,87 @@ impl<V, Storage: core::ops::DerefMut<Target=Vec<V>>, S: RectVolSize, M: Clone> C
         self.z_offset + (self.sub_chunks.len() as u32 * SubChunkSize::<V, Storage, S>::SIZE.z) as i32
     }
 
+    /// Flattened version of this chonk.
+    ///
+    /// It's not acutally flat, it just skips the indirection through the index.  The idea is to
+    /// use a constant stride for row access so the prefetcher can process it more easily.
+    pub fn make_flat<'a>(&'a self, below_slice: &'a [V], above_slice: &'a [V]) -> Vec<&'a [V]>
+        where
+            V: Copy + Eq,
+            [(); SubChunk::<V, Storage, S, M>::GROUP_VOLUME as usize]:,
+    {
+        let mut flat = Vec::with_capacity(self.sub_chunks.len() * /*SubChunkSize::<V, Storage, S>::SIZE.z as usize **/
+                                     /* SubChunk::<V, Storage, S, M>::VOLUME as usize */
+                                          SubChunk::<V, Storage, S, M>::GROUP_COUNT_TOTAL as usize);
+        self.sub_chunks.iter().enumerate().for_each(|(idx, sub_chunk)| {
+            let slice = if sub_chunk.default() == &self.below {
+                below_slice
+            } else {
+                above_slice
+            };
+            sub_chunk.push_flat(&mut flat, slice);
+        });
+        flat
+    }
+
+    #[inline]
+    /// Approximate max z.
+    ///
+    /// NOTE: Column must be in range; results are undefined otherwise.
+    // #[allow(unsafe_code)]
+    pub fn get_max_z_col(&self, col: Vec2<i32>) -> i32
+        where V: Eq,
+    {
+        self.get_max_z()
+        /* let group_size = SubChunk::<V, Storage, S, M>::GROUP_SIZE;
+        let group_count = SubChunk::<V, Storage, S, M>::GROUP_COUNT;
+        let col = (col.as_::<u32>() % Self::RECT_SIZE);
+        // FIXME: Make abstract.
+        let grp_pos = col.map2(group_size.xy(), |e, s| e / s);
+        let grp_idx_2d = grp_pos.x * (group_count.y * group_count.z)
+            + (grp_pos.y * group_count.z);
+        /* dbg!(col, group_size, group_count, grp_pos, grp_idx_2d); */
+
+        /* let grp_idx: [u8; SubChunk<V, Storage, S, M>::GROUP_SIZE.z] =
+            [grp_idx_2d, grp_idx_2d + 1, grp_idx_2d + 2, grp_idx_2d + 3]; */
+        // let grp_idx = Chunk::grp_idx(col.with_z(0));
+        let grp_idx_2d = grp_idx_2d as u8;
+        let grp_idx0 = grp_idx_2d as usize;
+        let grp_idx1 = (grp_idx_2d + 1) as usize;
+        let grp_idx2 = (grp_idx_2d + 2) as usize;
+        let grp_idx3 = (grp_idx_2d + 3) as usize;
+        // Find first subchunk with either a different default from our above, or whose group at
+        // the relevant index is not the default.
+        let group_offset_z = self.sub_chunks.iter().enumerate().rev().find_map(|(sub_chunk_idx, sub_chunk)| {
+            if sub_chunk.default() != &self.above {
+                return Some((sub_chunk_idx + 1) * 4);
+            }
+            let num_groups = sub_chunk.num_groups() as u8;
+            let indices = /*&*/sub_chunk.indices()/*[0..256]*/;
+            unsafe {
+                let idx0 = *indices.get_unchecked(grp_idx0);
+                let idx1 = *indices.get_unchecked(grp_idx2);
+                let idx2 = *indices.get_unchecked(grp_idx1);
+                let idx3 = *indices.get_unchecked(grp_idx3);
+                if idx3 >= num_groups {
+                    return Some(sub_chunk_idx * 4 + grp_idx3);
+                }
+                if idx2 >= num_groups {
+                    return Some(sub_chunk_idx * 4 + grp_idx2);
+                }
+                if idx1 >= num_groups {
+                    return Some(sub_chunk_idx * 4 + grp_idx1);
+                }
+                if idx0 >= num_groups {
+                    return Some(sub_chunk_idx * 4 + grp_idx0);
+                }
+            }
+            return None;
+        }).unwrap_or(0);
+        let offset: u32 = group_offset_z as u32 * SubChunk::<V, Storage, S, M>::GROUP_SIZE.z;
+        self.get_min_z() + offset as i32 */
+    }
+
     pub fn sub_chunks_len(&self) -> usize { self.sub_chunks.len() }
 
     pub fn sub_chunk_groups(&self) -> usize {

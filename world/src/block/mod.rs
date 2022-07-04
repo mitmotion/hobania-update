@@ -66,7 +66,7 @@ impl<'a> BlockGen<'a> {
             surface_color,
             sub_surface_color,
             stone_col,
-            snow_cover,
+            /* snow_cover, */
             cliff_offset,
             cliff_height,
             ice_depth,
@@ -131,10 +131,10 @@ impl<'a> BlockGen<'a> {
                 let col = Lerp::lerp(sub_surface_color, surface_color, grass_factor);
                 if grass_factor < 0.7 {
                     Block::new(BlockKind::Earth, col.map(|e| (e * 255.0) as u8))
-                } else if snow_cover {
+                }/* else if snow_cover {
                     //if temp < CONFIG.snow_temp + 0.031 {
                     Block::new(BlockKind::Snow, col.map(|e| (e * 255.0) as u8))
-                } else {
+                }*/ else {
                     Block::new(BlockKind::Grass, col.map(|e| (e * 255.0) as u8))
                 }
             })

@@ -91,7 +91,7 @@ pub fn apply_rocks_to(canvas: &mut Canvas, _dynamic_rng: &mut impl Rng) {
                 continue;
             }
 
-            let mut is_top = true;
+            /* let mut is_top = true; */
             let mut last_block = Block::empty();
             for z in (bounds.min.z..bounds.max.z).rev() {
                 let wpos = Vec3::new(wpos2d.x, wpos2d.y, rock.wpos.z + z);
@@ -104,14 +104,14 @@ pub fn apply_rocks_to(canvas: &mut Canvas, _dynamic_rng: &mut impl Rng) {
                 rock.kind
                     .take_sample(model_pos, rock.seed, last_block, col)
                     .map(|block| {
-                        if col.snow_cover && is_top && block.is_filled() {
+                        /* if col.snow_cover && is_top && block.is_filled() {
                             canvas.set(
                                 wpos + Vec3::unit_z(),
                                 Block::new(BlockKind::Snow, Rgb::new(210, 210, 255)),
                             );
-                        }
+                        } */
                         canvas.set(wpos, block);
-                        is_top = false;
+                        /* is_top = false; */
                         last_block = block;
                     });
             }

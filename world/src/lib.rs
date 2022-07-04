@@ -63,7 +63,7 @@ use common::{
     terrain::{
         Block, BlockKind, SpriteKind, TerrainChunk, TerrainChunkMeta, TerrainChunkSize, TerrainGrid,
     },
-    vol::{ReadVol, RectVolSize, WriteVol},
+    vol::{IntoPosIterator, ReadVol, RectVolSize, WriteVol},
 };
 use common_net::msg::{world_msg, WorldMapMsg};
 use rand::{prelude::*, Rng};
@@ -343,6 +343,7 @@ impl World {
         let mut delta2 = 0;
         let mut delta3 = 0;
         let mut delta4 = 0;
+        let mut has_snow = false;
         for y in 0..TerrainChunkSize::RECT_SIZE.y as i32 {
             for x in 0..TerrainChunkSize::RECT_SIZE.x as i32 {
                 if should_continue() {
@@ -357,6 +358,8 @@ impl World {
                         ZCache { sample/*, calendar*/ },
                     _ => continue,
                 };
+
+                has_snow |= z_cache.sample.snow_cover;
 
                 // dbg!(chunk_pos, x, y, z_cache.get_z_limits());
                 let (min_z, max_z) = z_cache.get_z_limits();
@@ -538,6 +541,66 @@ impl World {
                 site.id(),
             )
         });
+
+        // Apply snow cover.
+        if has_snow {
+            let snow = Block::new(BlockKind::Snow, Rgb::new(210, 210, 255));
+            // NOTE: We assume throughout Veloren that u32 fits in usize (we need to make this a static
+            // assertion).  RECT_SIZE.product() is statically valid.
+            let mut snow_blocks = Vec::with_capacity(TerrainChunkSize::RECT_SIZE.product() as usize * 3);
+            let air_slice = [air; common::terrain::TerrainSubChunk::GROUP_VOLUME as usize];
+            let stone_slice = [stone; common::terrain::TerrainSubChunk::GROUP_VOLUME as usize];
+            let flat = chunk.make_flat(&stone_slice, &air_slice);
+            zcache_grid.iter()
+                .filter(|(_, col_sample)| col_sample.snow_cover)
+                .for_each(|(wpos_delta, col_sample)| {
+                    let wpos2d = /*chunk_wpos2d + */wpos_delta;
+                    let iter = /*chunk.pos_iter(wpos2d.with_z(chunk.get_min_z()), wpos2d.with_z(chunk.get_max_z()))*/
+                        (0..chunk.get_max_z_col(wpos_delta) - chunk.get_min_z());
+                    // dbg!(wpos_delta, &iter);
+                    let mut above_block_is_air = true;
+                    for z in iter.rev() {
+                        let mut pos = wpos2d.with_z(z);
+                        let grp_id = common::terrain::TerrainSubChunk::grp_idx(pos) as usize;
+                        let rel_id = common::terrain::TerrainSubChunk::rel_idx(pos) as usize;
+                        let block = flat[grp_id][rel_id];
+                        let kind = block.kind();
+                        // dbg!(pos, block, above_block_is_air, kind.is_filled());
+                        if above_block_is_air && kind.is_filled() {
+                            // Place a block above this one.
+                            pos.z += chunk.get_min_z() + 1;
+                            snow_blocks.push(pos);
+                        }
+                        let is_air = kind.is_air();
+                        above_block_is_air = is_air;
+                        if !(is_air || kind == BlockKind::Leaves) {
+                            break;
+                        }
+                    }
+                    /* for z in iter.rev() {
+                        let mut pos = wpos2d.with_z(z);
+                        let grp_id = common::terrain::TerrainSubChunk::grp_idx(pos) as usize;
+                        let rel_id = common::terrain::TerrainSubChunk::rel_idx(pos) as usize;
+                        let block = flat[grp_id][rel_id];
+                        let kind = block.kind();
+                        // dbg!(pos, block, above_block_is_air, kind.is_filled());
+                        if kind.is_filled() {
+                            // Place a block above this one.
+                            pos.z += chunk.get_min_z() + 1;
+                            snow_blocks.push(pos);
+                            break;
+                        }
+                        let is_air = kind.is_air();
+                        if !is_air {
+                            break;
+                        }
+                    } */
+                });
+
+            snow_blocks.into_iter().for_each(|pos| {
+                let _ = chunk.set(pos, snow);
+            });
+        }
 
         // Finally, defragment to minimize space consumption.
         chunk.defragment();
