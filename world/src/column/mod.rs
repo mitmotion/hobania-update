@@ -1,6 +1,6 @@
 use crate::{
     all::ForestKind,
-    sim::{local_cells, Cave, Path, RiverKind, SimChunk, WorldSim},
+    sim::{local_cells, Cave, Path, RiverData, RiverKind, SimChunk, WorldSim},
     site::SpawnRules,
     util::{RandomField, Sampler},
     IndexRef, CONFIG,
@@ -76,6 +76,9 @@ pub struct ColumnGen<'a> {
 
     /// Chunk data
     pub(crate) sim_chunk: &'a SimChunk,
+    pub(crate) catmull_rom_gen: SplineGen2D<&'a SimChunk>,
+    pub(crate) neighbor_river_data: Vec<(Vec2<i32>, &'a SimChunk, &'a RiverData)>,
+    pub(crate) homogeneous_water_level: Option<f32>,
     // pub(crate) spawn_rules: SpawnRules,
 }
 
@@ -530,6 +533,31 @@ impl<'a> ColumnGen<'a> {
             .map(|site| index.sites[*site].spawn_rules(wpos))
             .fold(SpawnRules::default(), |a, b| a.combine(b)); */
 
+        let my_chunk_idx = vec2_as_uniform_idx(sim.map_size_lg(), chunk_pos);
+        let neighbor_river_data =
+            local_cells(sim.map_size_lg(), my_chunk_idx).filter_map(|neighbor_idx: usize| {
+                let neighbor_pos = uniform_idx_as_vec2(sim.map_size_lg(), neighbor_idx);
+                let neighbor_chunk = sim.get(neighbor_pos)?;
+                neighbor_chunk.river.river_kind.and(
+                    Some((neighbor_pos, neighbor_chunk, &neighbor_chunk.river))
+                )
+            }).collect::<Vec<_>>();
+        let river_kind = sim_chunk.river.river_kind;
+        let homogeneous_water_level = neighbor_river_data
+            .iter()
+            .all(|(pos, chunk, river)| river.river_kind == river_kind ||
+                 chunk.water_alt == sim_chunk.water_alt);
+        let base_sea_level = CONFIG.sea_level - 1.0 + 0.01;
+        let homogeneous_water_level = if homogeneous_water_level {
+            match river_kind {
+                None | Some(RiverKind::Ocean) => Some(base_sea_level),
+                Some(RiverKind::Lake { .. }) => Some(sim_chunk.water_alt),
+                _ => None,
+            }
+        } else {
+            None
+        };
+
         Some(Self {
             sim,
             chunk_pos,
@@ -554,6 +582,9 @@ impl<'a> ColumnGen<'a> {
             cliff_height_spline,
 
             sim_chunk,
+            catmull_rom_gen,
+            neighbor_river_data,
+            homogeneous_water_level,
             // spawn_rules,
         })
     }
@@ -611,6 +642,8 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
             index,
             /* calendar, */
             sim_chunk,
+            homogeneous_water_level,
+            ref neighbor_river_data,
            ..
         } = parent;
 
@@ -661,10 +694,12 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
         let neighbor_coef = TerrainChunkSize::RECT_SIZE.map(|e| e as f64);
         let my_chunk_idx = vec2_as_uniform_idx(sim.map_size_lg(), chunk_pos);
         /* let neighbor_river_data =
-            local_cells(self.sim.map_size_lg(), my_chunk_idx).filter_map(|neighbor_idx: usize| {
-                let neighbor_pos = uniform_idx_as_vec2(self.sim.map_size_lg(), neighbor_idx);
+            local_cells(sim.map_size_lg(), my_chunk_idx).filter_map(|neighbor_idx: usize| {
+                let neighbor_pos = uniform_idx_as_vec2(sim.map_size_lg(), neighbor_idx);
                 let neighbor_chunk = sim.get(neighbor_pos)?;
-                Some((neighbor_pos, neighbor_chunk, &neighbor_chunk.river))
+                neighbor_chunk.river.river_kind.and(
+                    Some((neighbor_pos, neighbor_chunk, &neighbor_chunk.river))
+                )
             }); */
 
         const SAMP_RES: i32 = 8;
@@ -712,8 +747,18 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
             .add(marble_mid.sub(0.5).mul(0.5))
             .add(marble_small.sub(0.5).mul(0.25));
 
+        // Use this to temporarily alter the sea level
+        let base_sea_level = CONFIG.sea_level - 1.0 + 0.01;
+
+        let riverless_alt = alt;
+        let (alt, water_level, water_dist) = if let Some(water_level) = homogeneous_water_level {
+            (alt, water_level, None::<f32>)
+        } else {
+            (alt, base_sea_level, None::<f32>)
         /* let lake_width = (TerrainChunkSize::RECT_SIZE.x as f64 * 2.0f64.sqrt()) + 6.0;
         let neighbor_river_data = neighbor_river_data
+            .iter()
+            .copied()
             .map(|(posj, chunkj, river)| {
                 let kind = match river.river_kind {
                     Some(kind) => kind,
@@ -944,7 +989,7 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
             })
             .collect::<Vec<_>>();
 
-        debug_assert!(sim_chunk.water_alt >= CONFIG.sea_level); */
+        debug_assert!(sim_chunk.water_alt >= CONFIG.sea_level);
 
         /// A type that makes managing surface altitude weighting much simpler.
         #[derive(Default)]
@@ -1035,10 +1080,7 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
             Lerp::lerp(a, b, t)
         }
 
-        // Use this to temporarily alter the sea level
-        let base_sea_level = CONFIG.sea_level - 1.0 + 0.01;
-
-        /* // What's going on here?
+        // What's going on here?
         //
         // We're iterating over nearby bodies of water and calculating a weighted sum
         // for the river water level, the lake water level, and the 'unbounded
@@ -1207,11 +1249,7 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
             (Some(r), Some(l)) => r.max(l),
             (r, l) => r.or(l).unwrap_or(base_sea_level).max(unbounded_water_level),
         }
-        .max(base_sea_level); */
-        let water_level = sim_chunk.water_alt;
-        let water_dist = None::<f32>;
-
-        let riverless_alt = alt;
+        .max(base_sea_level);
 
         // What's going on here?
         //
@@ -1237,7 +1275,7 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
         // has been carefully designed to handle innumeral edge cases. Please
         // test any changes to this code extremely well to avoid regressions: some
         // edge cases are very rare indeed!
-        /* let alt = neighbor_river_data.into_iter().fold(
+        let alt = neighbor_river_data.into_iter().fold(
             WeightedSum::default().with(riverless_alt, 1.0),
             |alt, (river_chunk_idx, river_chunk, river, dist_info)| match (
                 river.river_kind,
@@ -1387,7 +1425,10 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
                 base_sea_level + 0.5
             } else {
                 f32::MIN
-            }); */
+            });
+
+            (alt, water_level, water_dist) */
+        };
 
         let riverless_alt_delta = small_nz(wposf_turb.div(200.0 * (32.0 / TerrainChunkSize::RECT_SIZE.x as f64)))
             .min(1.0)
