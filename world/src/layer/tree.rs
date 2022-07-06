@@ -132,7 +132,7 @@ pub fn apply_trees_to(
 
     /*canvas.foreach_col(|canvas, wpos2d, col| {*/
     info.chunks()
-        .get_area_trees(render_area.min, render_area.max)
+        .get_area_trees(render_area.min + 15, render_area.max + 16)
         .filter_map(|attr| {
             info.col_or_gen(attr.pos)
                 .filter(|col| tree_valid_at(col, attr.seed))
