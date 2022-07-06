@@ -305,8 +305,8 @@ fn dungeon(c: &mut Criterion) {
         // let chunk_pos = Vec2::new(842, 839);
         // let chunk_pos = Vec2::new(24507/32, 20682/32);
         // let chunk_pos = Vec2::new(19638/32, 19621/32);
-        let chunk_pos = Vec2::new(21488/32, 13584/32);
-        // let chunk_pos = Vec2::new(21488/32 + 5, 13584/32 + 5);
+        // let chunk_pos = Vec2::new(21488/32, 13584/32);
+        let chunk_pos = Vec2::new(21488/32 + 5, 13584/32 + 5);
         b.iter(|| {
             black_box(world.generate_chunk(index.as_index_ref(), chunk_pos, || false, None));
         });
@@ -319,8 +319,8 @@ fn dungeon(c: &mut Criterion) {
         // let chunk_pos = Vec2::new(842, 839);
         // let chunk_pos = Vec2::new(24507/32, 20682/32);
         // let chunk_pos = Vec2::new(19638/32, 19621/32);
-        let chunk_pos = Vec2::new(21488/32, 13584/32);
-        // let chunk_pos = Vec2::new(21488/32 + 5, 13584/32 + 5);
+        // let chunk_pos = Vec2::new(21488/32, 13584/32);
+        let chunk_pos = Vec2::new(21488/32 + 5, 13584/32 + 5);
         let chunk = world.generate_chunk(index.as_index_ref(), chunk_pos, || false, None).unwrap().0;
         /* println!("{:?}", chunk.sub_chunks_len());
         let chunk = chunk.sub_chunks().next().unwrap(); */

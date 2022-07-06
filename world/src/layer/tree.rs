@@ -122,17 +122,27 @@ pub fn apply_trees_to(
     let calendar = info.calendar();
     /* let mut tree_cache = StructureGenCache::new(info.chunks().gen_ctx.structure_gen.clone()); */
 
+    let area_size = Vec2::from(info.area().size().map(|e| e as i32));
+
     // Get all the trees in range.
     let render_area = Aabr {
         min: info.wpos(),
-        max: info.wpos() + Vec2::from(info.area().size().map(|e| e as i32)),
+        max: info.wpos() + area_size,
+    };
+
+    // Maximum area we have to check for tree origins.
+    let witness_area = Aabr {
+        min: info.wpos() - area_size,
+        max: info.wpos() + Vec2::from(info.area().size().map(|e| e as i32)) + area_size,
     };
 
     let mut arena = bumpalo::Bump::new();
 
     /*canvas.foreach_col(|canvas, wpos2d, col| {*/
     info.chunks()
-        .get_area_trees(render_area.min + 15, render_area.max + 16)
+        // TODO: These should be in terms of some combination of frequency and chunk size.
+        .get_area_trees(render_area.min - 8, render_area.max + 16)
+        .filter(|attr| witness_area.contains_point(attr.pos))
         .filter_map(|attr| {
             info.col_or_gen(attr.pos)
                 .filter(|col| tree_valid_at(col, attr.seed))
