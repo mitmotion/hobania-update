@@ -8,6 +8,7 @@ pub mod lod_object;
 pub mod lod_terrain;
 pub mod particle;
 pub mod postprocess;
+pub mod rain_occlusion;
 pub mod shadow;
 pub mod skybox;
 pub mod sprite;
@@ -50,7 +51,9 @@ pub struct Globals {
     /// aligned.
     view_distance: [f32; 4],
     time_of_day: [f32; 4], // TODO: Make this f64.
+    /// Direction of sunlight.
     sun_dir: [f32; 4],
+    /// Direction of moonlight.
     moon_dir: [f32; 4],
     tick: [f32; 4],
     /// x, y represent the resolution of the screen;
@@ -64,9 +67,11 @@ pub struct Globals {
     ambiance: f32,
     cam_mode: u32,
     sprite_render_distance: f32,
-    /// To keep 16-byte-aligned.
-    globals_dummy: f32,
+    // To keep 16-byte-aligned.
+    globals_dummy: [f32; 1],
 }
+/// Make sure Globals is 16-byte-aligned.
+const _: () = assert!(core::mem::size_of::<Globals>() % 16 == 0);
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Zeroable, Pod)]
@@ -154,7 +159,7 @@ impl Globals {
             ambiance: ambiance.clamped(0.0, 1.0),
             cam_mode: cam_mode as u32,
             sprite_render_distance,
-            globals_dummy: 0.0,
+            globals_dummy: [0.0; 1],
         }
     }
 
@@ -163,11 +168,13 @@ impl Globals {
         time_of_day as f32 * TIME_FACTOR
     }
 
+    /// Computes the direction of light from the sun based on the time of day.
     pub fn get_sun_dir(time_of_day: f64) -> Vec3<f32> {
         let angle_rad = Self::get_angle_rad(time_of_day);
         Vec3::new(-angle_rad.sin(), 0.0, angle_rad.cos())
     }
 
+    /// Computes the direction of light from the moon based on the time of day.
     pub fn get_moon_dir(time_of_day: f64) -> Vec3<f32> {
         let angle_rad = Self::get_angle_rad(time_of_day);
         -Vec3::new(-angle_rad.sin(), 0.0, angle_rad.cos() - 0.5).normalized()
@@ -246,6 +253,7 @@ pub struct GlobalModel {
     pub lights: Consts<Light>,
     pub shadows: Consts<Shadow>,
     pub shadow_mats: shadow::BoundLocals,
+    pub rain_occlusion_mats: rain_occlusion::BoundLocals,
     pub point_light_matrices: Box<[shadow::PointLightMatrix; 126]>,
 }
 
@@ -397,6 +405,37 @@ impl GlobalsLayouts {
                 },
                 count: None,
             },
+            // clouds t_weather
+            wgpu::BindGroupLayoutEntry {
+                binding: 12,
+                visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 13,
+                visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                ty: wgpu::BindingType::Sampler {
+                    filtering: true,
+                    comparison: false,
+                },
+                count: None,
+            },
+            // rain occlusion
+            wgpu::BindGroupLayoutEntry {
+                binding: 14,
+                visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
         ]
     }
 
@@ -468,6 +507,26 @@ impl GlobalsLayouts {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 3,
+                    visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler {
+                        filtering: true,
+                        comparison: true,
+                    },
+                    count: None,
+                },
+                // Rain occlusion maps
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Depth,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 5,
                     visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
                     ty: wgpu::BindingType::Sampler {
                         filtering: true,
@@ -548,6 +607,19 @@ impl GlobalsLayouts {
                 binding: 11,
                 resource: wgpu::BindingResource::Sampler(&lod_data.map.sampler),
             },
+            wgpu::BindGroupEntry {
+                binding: 12,
+                resource: wgpu::BindingResource::TextureView(&lod_data.weather.view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 13,
+                resource: wgpu::BindingResource::Sampler(&lod_data.weather.sampler),
+            },
+            // rain occlusion
+            wgpu::BindGroupEntry {
+                binding: 14,
+                resource: global_model.rain_occlusion_mats.buf().as_entire_binding(),
+            },
         ]
     }
 
@@ -572,6 +644,7 @@ impl GlobalsLayouts {
         device: &wgpu::Device,
         point_shadow_map: &Texture,
         directed_shadow_map: &Texture,
+        rain_occlusion_map: &Texture,
     ) -> ShadowTexturesBindGroup {
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
@@ -592,6 +665,14 @@ impl GlobalsLayouts {
                 wgpu::BindGroupEntry {
                     binding: 3,
                     resource: wgpu::BindingResource::Sampler(&directed_shadow_map.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::TextureView(&rain_occlusion_map.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: wgpu::BindingResource::Sampler(&rain_occlusion_map.sampler),
                 },
             ],
         });

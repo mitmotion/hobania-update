@@ -15,6 +15,7 @@ use common::{
     combat::DamageContributor,
     comp::{
         self,
+        item::MaterialStatManifest,
         skills::{GeneralSkill, Skill},
         Group, Inventory, Item, Poise,
     },
@@ -55,7 +56,7 @@ pub trait StateExt {
     ) -> EcsEntityBuilder;
     /// Build a static object entity
     fn create_object(&mut self, pos: comp::Pos, object: comp::object::Body) -> EcsEntityBuilder;
-    fn create_item_drop(&mut self, pos: comp::Pos, item: &Item) -> EcsEntityBuilder;
+    fn create_item_drop(&mut self, pos: comp::Pos, item: Item) -> EcsEntityBuilder;
     fn create_ship<F: FnOnce(comp::ship::Body) -> comp::Collider>(
         &mut self,
         pos: comp::Pos,
@@ -127,6 +128,7 @@ pub trait StateExt {
 
 impl StateExt for State {
     fn apply_effect(&self, entity: EcsEntity, effects: Effect, source: Option<Uid>) {
+        let msm = self.ecs().read_resource::<MaterialStatManifest>();
         match effects {
             Effect::Health(change) => {
                 self.ecs()
@@ -150,12 +152,14 @@ impl StateExt for State {
                         Some(damage),
                         inventories.get(entity),
                         stats.get(entity),
+                        &msm,
                     ),
                     damage_contributor,
                     false,
                     0.0,
                     1.0,
                     *time,
+                    rand::random(),
                 );
                 self.ecs()
                     .write_storage::<comp::Health>()
@@ -164,7 +168,7 @@ impl StateExt for State {
             },
             Effect::Poise(poise) => {
                 let inventories = self.ecs().read_storage::<Inventory>();
-                let change = Poise::apply_poise_reduction(poise, inventories.get(entity));
+                let change = Poise::apply_poise_reduction(poise, inventories.get(entity), &msm);
                 // Check to make sure the entity is not already stunned
                 if let Some(character_state) = self
                     .ecs()
@@ -271,11 +275,12 @@ impl StateExt for State {
             .with(body)
     }
 
-    fn create_item_drop(&mut self, pos: comp::Pos, item: &Item) -> EcsEntityBuilder {
-        let item_drop = comp::item_drop::Body::from(item);
+    fn create_item_drop(&mut self, pos: comp::Pos, item: Item) -> EcsEntityBuilder {
+        let item_drop = comp::item_drop::Body::from(&item);
         let body = comp::Body::ItemDrop(item_drop);
         self.ecs_mut()
             .create_entity_synced()
+            .with(item)
             .with(pos)
             .with(comp::Vel(Vec3::zero()))
             .with(item_drop.orientation(&mut thread_rng()))
@@ -305,7 +310,7 @@ impl StateExt for State {
             .with(body)
             .with(comp::Scale(comp::ship::AIRSHIP_SCALE))
             .with(comp::Controller::default())
-            .with(comp::inventory::Inventory::new_empty())
+            .with(comp::inventory::Inventory::with_empty())
             .with(comp::CharacterState::default())
             // TODO: some of these are required in order for the character_behavior system to
             // recognize a possesed airship; that system should be refactored to use `.maybe()`
@@ -418,7 +423,7 @@ impl StateExt for State {
             .with(comp::Ori::default())
             .with(capsule(&object.into()))
             .with(comp::Body::Object(object))
-            .with(comp::Mass(10.0))
+            .with(comp::Mass(100.0))
             // .with(comp::Sticky)
             .with(wiring_element)
             .with(comp::LightEmitter {
@@ -596,7 +601,7 @@ impl StateExt for State {
                             comp::SkillSet::default(),
                             Some(comp::Health::new(body, DEFAULT_PET_HEALTH_LEVEL)),
                             Poise::new(body),
-                            Inventory::new_empty(),
+                            Inventory::with_empty(),
                             body,
                         )
                         .with(comp::Scale(1.0))
@@ -631,7 +636,7 @@ impl StateExt for State {
                     // but without this code, character gets battle_mode from
                     // another character on this account.
                     let settings = self.ecs().read_resource::<Settings>();
-                    let mode = settings.battle_mode.default_mode();
+                    let mode = settings.gameplay.battle_mode.default_mode();
                     if let Some(mut player_info) = players.get_mut(entity) {
                         player_info.battle_mode = mode;
                         player_info.last_battlemode_change = None;

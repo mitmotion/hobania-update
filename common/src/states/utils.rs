@@ -4,8 +4,8 @@ use crate::{
     comp::{
         arthropod, biped_large, biped_small,
         character_state::OutputEvents,
-        inventory::slot::{EquipSlot, Slot},
-        item::{Hands, ItemKind, ToolKind},
+        inventory::slot::{ArmorSlot, EquipSlot, Slot},
+        item::{armor::Friction, Hands, ItemKind, ToolKind},
         quadruped_low, quadruped_medium, quadruped_small,
         skills::{Skill, SwimSkill, SKILL_MODIFIERS},
         theropod, Body, CharacterAbility, CharacterState, Density, InputAttr, InputKind,
@@ -14,7 +14,7 @@ use crate::{
     consts::{FRIC_GROUND, GRAVITY, MAX_PICKUP_RANGE},
     event::{LocalEvent, ServerEvent},
     outcome::Outcome,
-    states::{behavior::JoinData, *},
+    states::{behavior::JoinData, utils::CharacterState::Idle, *},
     util::Dir,
     vol::ReadVol,
 };
@@ -301,6 +301,35 @@ impl Body {
     }
 }
 
+/// set footwear in idle data and potential state change to Skate
+pub fn handle_skating(data: &JoinData, update: &mut StateUpdate) {
+    if let Idle(crate::states::idle::Data {
+        is_sneaking,
+        mut footwear,
+    }) = data.character
+    {
+        if footwear.is_none() {
+            footwear = data.inventory.and_then(|inv| {
+                inv.equipped(EquipSlot::Armor(ArmorSlot::Feet))
+                    .map(|armor| match armor.kind().as_ref() {
+                        ItemKind::Armor(a) => a.stats(data.msm).ground_contact,
+                        _ => crate::comp::inventory::item::armor::Friction::Normal,
+                    })
+            });
+            update.character = Idle(crate::states::idle::Data {
+                is_sneaking: *is_sneaking,
+                footwear,
+            });
+        }
+        if data.physics.skating_active {
+            update.character = CharacterState::Skate(crate::states::skate::Data::new(
+                data,
+                footwear.unwrap_or(Friction::Normal),
+            ));
+        }
+    }
+}
+
 /// Handles updating `Components` to move player based on state of `JoinData`
 pub fn handle_move(data: &JoinData<'_>, update: &mut StateUpdate, efficiency: f32) {
     let submersion = data
@@ -423,6 +452,19 @@ pub fn handle_orientation(
     efficiency: f32,
     dir_override: Option<Dir>,
 ) {
+    /// first check for horizontal
+    fn to_horizontal_fast(ori: &crate::comp::Ori) -> crate::comp::Ori {
+        if ori.to_quat().into_vec4().xy().is_approx_zero() {
+            *ori
+        } else {
+            ori.to_horizontal()
+        }
+    }
+    /// compute an upper limit for the difference of two orientations
+    fn ori_absdiff(a: &crate::comp::Ori, b: &crate::comp::Ori) -> f32 {
+        (a.to_quat().into_vec4() - b.to_quat().into_vec4()).reduce(|a, b| a.abs() + b.abs())
+    }
+
     // Direction is set to the override if one is provided, else if entity is
     // strafing or attacking the horiontal component of the look direction is used,
     // else the current horizontal movement direction is used
@@ -436,24 +478,34 @@ pub fn handle_orientation(
             .into()
     } else {
         Dir::from_unnormalized(data.inputs.move_dir.into())
-            .map_or_else(|| data.ori.to_horizontal(), |dir| dir.into())
+            .map_or_else(|| to_horizontal_fast(data.ori), |dir| dir.into())
     };
-    let rate = {
-        // Angle factor used to keep turning rate approximately constant by
-        // counteracting slerp turning more with a larger angle
-        let angle_factor = 2.0 / (1.0 - update.ori.dot(target_ori)).sqrt();
-        data.body.base_ori_rate()
-            * efficiency
-            * angle_factor
-            * if data.physics.on_ground.is_some() {
-                1.0
-            } else {
-                0.2
-            }
+    // unit is multiples of 180°
+    let half_turns_per_tick = data.body.base_ori_rate()
+        * efficiency
+        * if data.physics.on_ground.is_some() {
+            1.0
+        } else {
+            0.2
+        }
+        * data.dt.0;
+    // very rough guess
+    let ticks_from_target_guess = ori_absdiff(&update.ori, &target_ori) / half_turns_per_tick;
+    let instantaneous = ticks_from_target_guess < 1.0;
+    update.ori = if instantaneous {
+        target_ori
+    } else {
+        let target_fraction = {
+            // Angle factor used to keep turning rate approximately constant by
+            // counteracting slerp turning more with a larger angle
+            let angle_factor = 2.0 / (1.0 - update.ori.dot(target_ori)).sqrt();
+
+            half_turns_per_tick * angle_factor
+        };
+        update
+            .ori
+            .slerped_towards(target_ori, target_fraction.min(1.0))
     };
-    update.ori = update
-        .ori
-        .slerped_towards(target_ori, (data.dt.0 * rate).min(1.0));
 }
 
 /// Updates components to move player as if theyre swimming
@@ -635,7 +687,10 @@ pub fn attempt_talk(data: &JoinData<'_>, update: &mut StateUpdate) {
 
 pub fn attempt_sneak(data: &JoinData<'_>, update: &mut StateUpdate) {
     if data.physics.on_ground.is_some() && data.body.is_humanoid() {
-        update.character = CharacterState::Idle(idle::Data { is_sneaking: true });
+        update.character = CharacterState::Idle(idle::Data {
+            is_sneaking: true,
+            footwear: data.character.footwear(),
+        });
     }
 }
 
@@ -1052,7 +1107,7 @@ pub fn get_crit_data(data: &JoinData<'_>, ai: AbilityInfo) -> (f32, f32) {
         })
         .unwrap_or(DEFAULT_CRIT_CHANCE);
 
-    let crit_mult = combat::compute_crit_mult(data.inventory);
+    let crit_mult = combat::compute_crit_mult(data.inventory, data.msm);
 
     (crit_chance, crit_mult)
 }

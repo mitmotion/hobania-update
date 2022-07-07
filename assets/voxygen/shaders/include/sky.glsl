@@ -5,6 +5,7 @@
 #include <srgb.glsl>
 #include <shadows.glsl>
 #include <globals.glsl>
+#include <rain_occlusion.glsl>
 
 // Information about an approximately directional light, like the sun or moon.
 struct DirectionalLight {
@@ -17,6 +18,12 @@ struct DirectionalLight {
 };
 
 const float PI = 3.141592;
+
+const vec3 SKY_DAWN_TOP = vec3(0.10, 0.1, 0.10);
+const vec3 SKY_DAWN_MID = vec3(1.2, 0.3, 0.2);
+const vec3 SKY_DAWN_BOT = vec3(0.0, 0.1, 0.23);
+const vec3 DAWN_LIGHT   = vec3(5.0, 2.0, 1.15);
+const vec3 SUN_HALO_DAWN = vec3(8.2, 3.0, 2.1);
 
 const vec3 SKY_DAY_TOP = vec3(0.1, 0.5, 0.9);
 const vec3 SKY_DAY_MID = vec3(0.02, 0.28, 0.8);
@@ -91,10 +98,31 @@ vec2 wind_offset = vec2(time_of_day.x * wind_speed);
 
 float cloud_scale = view_distance.z / 150.0;
 
-float cloud_tendency_at(vec2 pos) {
-    float nz = textureLod(sampler2D(t_noise, s_noise), (pos + wind_offset) / 60000.0 / cloud_scale, 0).x - 0.3;
-    nz = pow(clamp(nz, 0, 1), 3);
-    return nz;
+layout(set = 0, binding = 5) uniform texture2D t_alt;
+layout(set = 0, binding = 6) uniform sampler s_alt;
+
+// Transforms coordinate in the range 0..WORLD_SIZE to 0..1
+vec2 wpos_to_uv(vec2 wpos) {
+    // Want: (pixel + 0.5) / W
+    vec2 texSize = textureSize(sampler2D(t_alt, s_alt), 0);
+    vec2 uv_pos = (wpos + 16) / (32.0 * texSize);
+    return vec2(uv_pos.x, /*1.0 - */uv_pos.y);
+}
+
+// Weather texture
+layout(set = 0, binding = 12) uniform texture2D t_weather;
+layout(set = 0, binding = 13) uniform sampler s_weather;
+
+vec4 sample_weather(vec2 wpos) {
+    return textureLod(sampler2D(t_weather, s_weather), wpos_to_uv(wpos), 0);
+}
+
+float cloud_tendency_at(vec2 wpos) {
+    return sample_weather(wpos).r;
+}
+
+float rain_density_at(vec2 wpos) {
+    return sample_weather(wpos).g;
 }
 
 float cloud_shadow(vec3 pos, vec3 light_dir) {
@@ -143,9 +171,11 @@ float get_moon_brightness(/*vec3 moon_dir*/) {
 }
 
 vec3 get_sun_color(/*vec3 sun_dir*/) {
+    vec3 light = (sun_dir.x > 0) ? DUSK_LIGHT : DAWN_LIGHT;
+
     return mix(
         mix(
-            DUSK_LIGHT * magnetosphere_tint,
+            light * magnetosphere_tint,
             NIGHT_LIGHT,
             max(sun_dir.z, 0)
         ),
@@ -450,9 +480,22 @@ vec3 get_sky_light(vec3 dir, float time_of_day, bool with_stars) {
         star = is_star_at(star_dir);
     }
 
+    vec3 sky_twilight_top = vec3(0.0, 0.0, 0.0);
+    vec3 sky_twilight_mid = vec3(0.0, 0.0, 0.0);
+    vec3 sky_twilight_bot = vec3(0.0, 0.0, 0.0);
+    if (sun_dir.x > 0) {
+      sky_twilight_top = SKY_DUSK_TOP;
+      sky_twilight_mid = SKY_DUSK_MID;
+      sky_twilight_bot = SKY_DUSK_BOT;
+    } else {
+      sky_twilight_top = SKY_DAWN_TOP;
+      sky_twilight_mid = SKY_DAWN_MID;
+      sky_twilight_bot = SKY_DAWN_BOT;
+    }
+
     vec3 sky_top = mix(
         mix(
-            SKY_DUSK_TOP * magnetosphere_tint,
+            sky_twilight_top * magnetosphere_tint,
             SKY_NIGHT_TOP,
             pow(max(sun_dir.z, 0.0), 0.2)
         ) + star,
@@ -462,7 +505,7 @@ vec3 get_sky_light(vec3 dir, float time_of_day, bool with_stars) {
 
     vec3 sky_mid = mix(
         mix(
-            SKY_DUSK_MID * magnetosphere_tint,
+            sky_twilight_mid * magnetosphere_tint,
             SKY_NIGHT_MID,
             pow(max(sun_dir.z, 0.0), 0.1)
         ),
@@ -472,7 +515,7 @@ vec3 get_sky_light(vec3 dir, float time_of_day, bool with_stars) {
 
     vec3 sky_bot = mix(
         mix(
-            SKY_DUSK_BOT * magnetosphere_tint,
+            sky_twilight_bot * magnetosphere_tint,
             SKY_NIGHT_BOT,
             pow(max(sun_dir.z, 0.0), 0.2)
         ),
@@ -507,7 +550,7 @@ vec3 get_sky_color(vec3 dir, float time_of_day, vec3 origin, vec3 f_pos, float q
     const vec3 SUN_SURF_COLOR = vec3(1.5, 0.9, 0.35) * 50.0;
 
     vec3 sun_halo_color = mix(
-        SUN_HALO_DUSK * magnetosphere_tint,
+        (sun_dir.x > 0 ? SUN_HALO_DUSK : SUN_HALO_DAWN)* magnetosphere_tint,
         SUN_HALO_DAY,
         pow(max(-sun_dir.z, 0.0), 0.5)
     );

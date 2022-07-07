@@ -2,6 +2,10 @@
 #![deny(clippy::clone_on_ref_ptr)]
 #![feature(bool_to_option)]
 
+#[cfg(all(target_os = "windows", target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 /// `server-cli` interface commands not to be confused with the commands sent
 /// from the client to the server
 mod cli;
@@ -32,6 +36,9 @@ lazy_static::lazy_static! {
 const TPS: u64 = 30;
 
 fn main() -> io::Result<()> {
+    #[cfg(feature = "tracy")]
+    common_base::tracy_client::Client::start();
+
     use clap::Parser;
     let app = ArgvApp::parse();
 
@@ -268,7 +275,7 @@ fn main() -> io::Result<()> {
         // Wait for the next tick.
         clock.tick();
         #[cfg(feature = "tracy")]
-        common_base::tracy_client::finish_continuous_frame!();
+        common_base::tracy_client::frame_mark();
     }
 
     Ok(())

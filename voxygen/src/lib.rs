@@ -10,13 +10,16 @@
     once_cell,
     trait_alias,
     option_get_or_insert_default,
-    map_try_insert
+    map_try_insert,
+    slice_as_chunks,
+    unzip_option
 )]
 #![recursion_limit = "2048"]
 
 #[macro_use]
 pub mod ui;
 pub mod audio;
+pub mod cmd;
 pub mod controller;
 mod credits;
 mod ecs;

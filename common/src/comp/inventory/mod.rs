@@ -8,11 +8,13 @@ use vek::Vec3;
 
 use crate::{
     comp::{
+        body::Body,
         inventory::{
             item::{tool::AbilityMap, ItemDef, ItemKind, MaterialStatManifest, TagExampleInfo},
             loadout::Loadout,
             slot::{EquipSlot, Slot, SlotError},
         },
+        loot_owner::LootOwnerKind,
         slot::{InvSlotId, SlotId},
         Item,
     },
@@ -80,13 +82,31 @@ impl InventorySortOrder {
 /// that contains items etc) must first ensure items are unloaded from the item.
 /// This is handled in `inventory\slot.rs`
 impl Inventory {
-    pub fn new_empty() -> Inventory { Self::new_with_loadout(LoadoutBuilder::empty().build()) }
+    pub fn with_empty() -> Inventory {
+        Self::with_loadout_humanoid(LoadoutBuilder::empty().build())
+    }
 
-    pub fn new_with_loadout(loadout: Loadout) -> Inventory {
+    pub fn with_loadout(loadout: Loadout, body: Body) -> Inventory {
+        if let Body::Humanoid(_) = body {
+            Self::with_loadout_humanoid(loadout)
+        } else {
+            Self::with_loadout_animal(loadout)
+        }
+    }
+
+    pub fn with_loadout_humanoid(loadout: Loadout) -> Inventory {
         Inventory {
             next_sort_order: InventorySortOrder::Name,
             loadout,
             slots: vec![None; DEFAULT_INVENTORY_SLOTS],
+        }
+    }
+
+    pub fn with_loadout_animal(loadout: Loadout) -> Inventory {
+        Inventory {
+            next_sort_order: InventorySortOrder::Name,
+            loadout,
+            slots: vec![None; 1],
         }
     }
 
@@ -789,7 +809,7 @@ impl Inventory {
     pub fn persistence_update_all_item_states(
         &mut self,
         ability_map: &item::tool::AbilityMap,
-        msm: &item::tool::MaterialStatManifest,
+        msm: &item::MaterialStatManifest,
     ) {
         self.slots_mut().for_each(|slot| {
             if let Some(item) = slot {
@@ -803,6 +823,15 @@ impl Component for Inventory {
     type Storage = DerefFlaggedStorage<Self, IdvStorage<Self>>;
 }
 
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+pub enum CollectFailedReason {
+    InventoryFull,
+    LootOwned {
+        owner: LootOwnerKind,
+        expiry_secs: u64,
+    },
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum InventoryUpdateEvent {
     Init,
@@ -813,8 +842,14 @@ pub enum InventoryUpdateEvent {
     Swapped,
     Dropped,
     Collected(Item),
-    BlockCollectFailed(Vec3<i32>),
-    EntityCollectFailed(Uid),
+    BlockCollectFailed {
+        pos: Vec3<i32>,
+        reason: CollectFailedReason,
+    },
+    EntityCollectFailed {
+        entity: Uid,
+        reason: CollectFailedReason,
+    },
     Possession,
     Debug,
     Craft,

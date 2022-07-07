@@ -18,8 +18,8 @@ use common::{
         inventory::slot::{EquipSlot, Slot},
         invite::InviteKind,
         item::{
-            tool::{AbilityMap, MaterialStatManifest, ToolKind},
-            ItemDesc,
+            tool::{AbilityMap, ToolKind},
+            ItemDesc, MaterialStatManifest,
         },
         ChatMsg, ChatType, InputKind, InventoryUpdateEvent, Pos, Stats, UtteranceKind, Vel,
     },
@@ -41,9 +41,13 @@ use common_net::{
 
 use crate::{
     audio::sfx::SfxEvent,
+    cmd::run_command,
     error::Error,
     game_input::GameInput,
-    hud::{DebugInfo, Event as HudEvent, Hud, HudInfo, LootMessage, PromptDialogSettings},
+    hud::{
+        DebugInfo, Event as HudEvent, Hud, HudCollectFailedReason, HudInfo, LootMessage,
+        PromptDialogSettings,
+    },
     key_state::KeyState,
     menu::char_selection::CharSelectionState,
     render::{Drawer, GlobalsBindGroup},
@@ -171,6 +175,21 @@ impl SessionState {
         self.scene
             .maintain_debug_hitboxes(&client, &global_state.settings, &mut self.hitboxes);
 
+        // All this camera code is just to determine if it's underwater for the sfx
+        // filter
+        let camera = self.scene.camera_mut();
+        camera.compute_dependents(&*client.state().terrain());
+        let camera::Dependents { cam_pos, .. } = self.scene.camera().dependents();
+        let focus_pos = self.scene.camera().get_focus_pos();
+        let focus_off = focus_pos.map(|e| e.trunc());
+        let cam_pos = cam_pos + focus_off;
+        let underwater = client
+            .state()
+            .terrain()
+            .get(cam_pos.map(|e| e.floor() as i32))
+            .map(|b| b.is_liquid())
+            .unwrap_or(false);
+
         #[cfg(not(target_os = "macos"))]
         {
             // Update mumble positional audio
@@ -241,15 +260,47 @@ impl SessionState {
                     let sfx_triggers = self.scene.sfx_mgr.triggers.read();
 
                     let sfx_trigger_item = sfx_triggers.get_key_value(&SfxEvent::from(&inv_event));
-                    global_state.audio.emit_sfx_item(sfx_trigger_item);
 
                     match inv_event {
-                        InventoryUpdateEvent::BlockCollectFailed(pos) => {
-                            self.hud.add_failed_block_pickup(pos);
+                        InventoryUpdateEvent::Dropped
+                        | InventoryUpdateEvent::Swapped
+                        | InventoryUpdateEvent::Given
+                        | InventoryUpdateEvent::Collected(_)
+                        | InventoryUpdateEvent::EntityCollectFailed { .. }
+                        | InventoryUpdateEvent::BlockCollectFailed { .. }
+                        | InventoryUpdateEvent::Craft => {
+                            global_state.audio.emit_ui_sfx(sfx_trigger_item, Some(1.0));
                         },
-                        InventoryUpdateEvent::EntityCollectFailed(uid) => {
+                        _ => global_state.audio.emit_sfx(
+                            sfx_trigger_item,
+                            client.position().unwrap_or_default(),
+                            Some(1.0),
+                            underwater,
+                        ),
+                    }
+
+                    match inv_event {
+                        InventoryUpdateEvent::BlockCollectFailed { pos, reason } => {
+                            self.hud.add_failed_block_pickup(
+                                pos,
+                                HudCollectFailedReason::from_server_reason(
+                                    &reason,
+                                    client.state().ecs(),
+                                ),
+                            );
+                        },
+                        InventoryUpdateEvent::EntityCollectFailed {
+                            entity: uid,
+                            reason,
+                        } => {
                             if let Some(entity) = client.state().ecs().entity_from_uid(uid.into()) {
-                                self.hud.add_failed_entity_pickup(entity);
+                                self.hud.add_failed_entity_pickup(
+                                    entity,
+                                    HudCollectFailedReason::from_server_reason(
+                                        &reason,
+                                        client.state().ecs(),
+                                    ),
+                                );
                             }
                         },
                         InventoryUpdateEvent::Collected(item) => {
@@ -339,6 +390,7 @@ impl PlayState for SessionState {
             let client = self.client.borrow();
             (client.presence(), client.registered())
         };
+
         if client_presence.is_some() {
             let camera = self.scene.camera_mut();
 
@@ -354,17 +406,21 @@ impl PlayState for SessionState {
             let client = self.client.borrow();
             let player_entity = client.entity();
 
-            let mut fov_scaling = 1.0;
-            if let Some(comp::CharacterState::ChargedRanged(cr)) = client
-                .state()
-                .read_storage::<comp::CharacterState>()
-                .get(player_entity)
-            {
-                if cr.charge_frac() > 0.5 {
-                    fov_scaling -= 3.0 * cr.charge_frac() / 5.0;
+            if global_state.settings.gameplay.bow_zoom {
+                let mut fov_scaling = 1.0;
+                if let Some(comp::CharacterState::ChargedRanged(cr)) = client
+                    .state()
+                    .read_storage::<comp::CharacterState>()
+                    .get(player_entity)
+                {
+                    if cr.charge_frac() > 0.5 {
+                        fov_scaling -= 3.0 * cr.charge_frac() / 5.0;
+                    }
                 }
+                camera.set_fixate(fov_scaling);
+            } else {
+                camera.set_fixate(1.0);
             }
-            camera.set_fixate(fov_scaling);
 
             // Compute camera data
             camera.compute_dependents(&*self.client.borrow().state().terrain());
@@ -1137,14 +1193,27 @@ impl PlayState for SessionState {
                         self.client.borrow_mut().send_chat(msg);
                     },
                     HudEvent::SendCommand(name, args) => {
-                        self.client.borrow_mut().send_command(name, args);
+                        match run_command(&mut self.client.borrow_mut(), global_state, &name, args)
+                        {
+                            Ok(Some(info)) => {
+                                self.hud.new_message(ChatType::CommandInfo.chat_msg(&info))
+                            },
+                            Ok(None) => {}, // Server will provide an info message
+                            Err(error) => {
+                                self.hud.new_message(ChatType::CommandError.chat_msg(error))
+                            },
+                        };
                     },
                     HudEvent::CharacterSelection => {
                         self.client.borrow_mut().request_remove_character()
                     },
                     HudEvent::Logout => {
                         self.client.borrow_mut().logout();
+                        // Stop all sounds
+                        // TODO: Abstract this behavior to all instances of PlayStateResult::Pop
+                        // somehow
                         global_state.audio.stop_ambient_sounds();
+                        global_state.audio.stop_all_sfx();
                         return PlayStateResult::Pop;
                     },
                     HudEvent::Quit => {
@@ -1549,9 +1618,15 @@ impl PlayState for SessionState {
 
                     // Process outcomes from client
                     for outcome in outcomes {
-                        self.scene
-                            .handle_outcome(&outcome, &scene_data, &mut global_state.audio);
-                        self.hud.handle_outcome(&outcome);
+                        self.scene.handle_outcome(
+                            &outcome,
+                            &scene_data,
+                            &mut global_state.audio,
+                            client.state(),
+                            cam_pos,
+                        );
+                        self.hud
+                            .handle_outcome(&outcome, scene_data.client, global_state);
                     }
                 }
             }

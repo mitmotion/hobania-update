@@ -48,6 +48,7 @@ use client::Client;
 use common::{
     assets::{self, AssetExt, AssetHandle},
     terrain::{BiomeKind, SitesKind},
+    weather::WeatherKind,
 };
 use common_state::State;
 use hashbrown::HashMap;
@@ -78,6 +79,8 @@ pub struct SoundtrackItem {
     length: f32,
     /// Whether this track should play during day or night
     timing: Option<DayPeriod>,
+    /// Whether this track should play during a certain weather
+    weather: Option<WeatherKind>,
     /// What biomes this track should play in with chance of play
     biomes: Vec<(BiomeKind, u8)>,
     /// Whether this track should play in a specific site
@@ -98,6 +101,7 @@ enum RawSoundtrackItem {
     Segmented {
         title: String,
         timing: Option<DayPeriod>,
+        weather: Option<WeatherKind>,
         biomes: Vec<(BiomeKind, u8)>,
         site: Option<SitesKind>,
         segments: Vec<(String, f32, MusicState, Option<MusicActivity>)>,
@@ -224,6 +228,11 @@ impl MusicMgr {
 
         use common::comp::{group::ENEMY, Group, Health, Pos};
         use specs::{Join, WorldExt};
+        // Checks if the music volume is set to zero or audio is disabled
+        // This prevents us from running all the following code unnecessarily
+        if !audio.music_enabled() {
+            return;
+        }
 
         let mut activity_state = MusicActivity::Explore;
 
@@ -281,6 +290,7 @@ impl MusicMgr {
 
         // TODO: Instead of a constant tick, make this a timer that starts only when
         // combat might end, providing a proper "buffer".
+        // interrupt_delay dictates the time between attempted interrupts
         let interrupt = matches!(music_state, MusicState::Transition(_, _))
             && self.last_interrupt.elapsed().as_secs_f32() > mtm.interrupt_delay;
 
@@ -322,12 +332,18 @@ impl MusicMgr {
                 rng.gen_range(100.0..130.0)
             } else if matches!(music_state, MusicState::Activity(MusicActivity::Explore)) {
                 rng.gen_range(90.0..180.0)
+            } else if matches!(
+                music_state,
+                MusicState::Activity(MusicActivity::Combat(_)) | MusicState::Transition(_, _)
+            ) {
+                0.0
             } else {
                 rng.gen_range(30.0..60.0)
             };
 
         let is_dark = (state.get_day_period().is_dark()) as bool;
         let current_period_of_day = Self::get_current_day_period(is_dark);
+        let current_weather = client.weather_at_player();
         let current_biome = client.current_biome();
         let current_site = client.current_site();
 
@@ -348,6 +364,9 @@ impl MusicMgr {
                 }) && match &track.site {
                     Some(site) => site == &current_site,
                     None => true,
+                } && match &track.weather {
+                    Some(weather) => weather == &current_weather.get_kind(),
+                    None => true,
                 }
             })
             .filter(|track| {
@@ -360,13 +379,14 @@ impl MusicMgr {
         }
         // Second, prevent playing the last track (when not in combat, because then it
         // needs to loop)
-        if music_state == &MusicState::Activity(MusicActivity::Combat(CombatIntensity::High))
-            || music_state
-                == &MusicState::Transition(
+        if matches!(
+            music_state,
+            &MusicState::Activity(MusicActivity::Combat(CombatIntensity::High))
+                | &MusicState::Transition(
                     MusicActivity::Combat(CombatIntensity::High),
-                    MusicActivity::Explore,
+                    MusicActivity::Explore
                 )
-        {
+        ) {
             let filtered_tracks: Vec<_> = maybe_tracks
                 .iter()
                 .filter(|track| track.title.eq(&self.last_track))
@@ -446,10 +466,7 @@ impl assets::Asset for SoundtrackCollection<RawSoundtrackItem> {
 }
 
 impl assets::Compound for SoundtrackCollection<SoundtrackItem> {
-    fn load<S: assets::source::Source + ?Sized>(
-        _: &assets::AssetCache<S>,
-        id: &str,
-    ) -> Result<Self, assets::BoxedError> {
+    fn load(_: assets::AnyCache, id: &str) -> Result<Self, assets::BoxedError> {
         let inner = || -> Result<_, assets::Error> {
             let manifest: AssetHandle<SoundtrackCollection<RawSoundtrackItem>> =
                 AssetExt::load(id)?;
@@ -460,6 +477,7 @@ impl assets::Compound for SoundtrackCollection<SoundtrackItem> {
                     RawSoundtrackItem::Segmented {
                         title,
                         timing,
+                        weather,
                         biomes,
                         site,
                         segments,
@@ -470,6 +488,7 @@ impl assets::Compound for SoundtrackCollection<SoundtrackItem> {
                                 path,
                                 length,
                                 timing: timing.clone(),
+                                weather,
                                 biomes: biomes.clone(),
                                 site,
                                 music_state,

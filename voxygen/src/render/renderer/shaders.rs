@@ -24,10 +24,7 @@ pub struct Shaders {
 impl assets::Compound for Shaders {
     // TODO: Taking the specifier argument as a base for shaders specifiers
     // would allow to use several shaders groups easily
-    fn load<S: assets::source::Source + ?Sized>(
-        _: &assets::AssetCache<S>,
-        _: &str,
-    ) -> Result<Shaders, assets::BoxedError> {
+    fn load(_: assets::AnyCache, _: &str) -> Result<Shaders, assets::BoxedError> {
         let shaders = [
             "include.constants",
             "include.globals",
@@ -37,6 +34,7 @@ impl assets::Compound for Shaders {
             "include.random",
             "include.lod",
             "include.shadows",
+            "include.rain_occlusion",
             "include.point_glow",
             "antialias.none",
             "antialias.fxaa",
@@ -48,6 +46,8 @@ impl assets::Compound for Shaders {
             "figure-vert",
             "light-shadows-figure-vert",
             "light-shadows-directed-vert",
+            "rain-occlusion-figure-vert",
+            "rain-occlusion-directed-vert",
             "point-light-shadows-vert",
             "skybox-vert",
             "skybox-frag",

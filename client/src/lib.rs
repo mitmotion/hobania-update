@@ -3,7 +3,6 @@
 #![feature(label_break_value, option_zip)]
 
 pub mod addr;
-pub mod cmd;
 pub mod error;
 
 // Reexports
@@ -49,7 +48,9 @@ use common::{
     trade::{PendingTrade, SitePrices, TradeAction, TradeId, TradeResult},
     uid::{Uid, UidAllocator},
     vol::RectVolSize,
+    weather::{Weather, WeatherGrid},
 };
+#[cfg(feature = "tracy")] use common_base::plot;
 use common_base::{prof_span, span};
 use common_net::{
     msg::{
@@ -80,16 +81,6 @@ use std::{
 use tokio::runtime::Runtime;
 use tracing::{debug, error, trace, warn};
 use vek::*;
-
-#[cfg(feature = "tracy")]
-mod tracy_plots {
-    use common_base::tracy_client::{create_plot, Plot};
-    pub static TERRAIN_SENDS: Plot = create_plot!("terrain_sends");
-    pub static TERRAIN_RECVS: Plot = create_plot!("terrain_recvs");
-    pub static INGAME_SENDS: Plot = create_plot!("ingame_sends");
-    pub static INGAME_RECVS: Plot = create_plot!("ingame_recvs");
-}
-#[cfg(feature = "tracy")] use tracy_plots::*;
 
 const PING_ROLLING_AVERAGE_SECS: usize = 10;
 
@@ -161,12 +152,60 @@ pub struct SiteInfoRich {
     pub economy: Option<EconomyInfo>,
 }
 
+struct WeatherLerp {
+    old: (WeatherGrid, Instant),
+    new: (WeatherGrid, Instant),
+}
+
+impl WeatherLerp {
+    fn weather_update(&mut self, weather: WeatherGrid) {
+        self.old = mem::replace(&mut self.new, (weather, Instant::now()));
+    }
+
+    // TODO: Make impprovements to this interpolation, it's main issue is assuming
+    // that updates come at regular intervals.
+    fn update(&mut self, to_update: &mut WeatherGrid) {
+        prof_span!("WeatherLerp::update");
+        let old = &self.old.0;
+        let new = &self.new.0;
+        if new.size() == Vec2::zero() {
+            return;
+        }
+        if to_update.size() != new.size() {
+            *to_update = new.clone();
+        }
+        if old.size() == new.size() {
+            // Assumes updates are regular
+            let t = (self.new.1.elapsed().as_secs_f32()
+                / self.new.1.duration_since(self.old.1).as_secs_f32())
+            .clamp(0.0, 1.0);
+
+            to_update
+                .iter_mut()
+                .zip(old.iter().zip(new.iter()))
+                .for_each(|((_, current), ((_, old), (_, new)))| {
+                    *current = Weather::lerp_unclamped(old, new, t);
+                });
+        }
+    }
+}
+
+impl Default for WeatherLerp {
+    fn default() -> Self {
+        Self {
+            old: (WeatherGrid::new(Vec2::zero()), Instant::now()),
+            new: (WeatherGrid::new(Vec2::zero()), Instant::now()),
+        }
+    }
+}
+
 pub struct Client {
     registered: bool,
     presence: Option<PresenceKind>,
     runtime: Arc<Runtime>,
     server_info: ServerInfo,
     world_data: WorldData,
+    weather: WeatherLerp,
     player_list: HashMap<Uid, PlayerInfo>,
     character_list: CharacterList,
     sites: HashMap<SiteId, SiteInfoRich>,
@@ -618,6 +657,7 @@ impl Client {
                 lod_horizon,
                 map: world_map,
             },
+            weather: WeatherLerp::default(),
             player_list: HashMap::new(),
             character_list: CharacterList::default(),
             sites: sites
@@ -799,8 +839,8 @@ impl Client {
                 };
                 #[cfg(feature = "tracy")]
                 {
-                    INGAME_SENDS.point(ingame);
-                    TERRAIN_SENDS.point(terrain);
+                    plot!("ingame_sends", ingame);
+                    plot!("terrain_sends", terrain);
                 }
                 stream.send(msg)
             },
@@ -1423,6 +1463,13 @@ impl Client {
             .map(|v| v.0)
     }
 
+    /// Returns Weather::default if no player position exists.
+    pub fn weather_at_player(&self) -> Weather {
+        self.position()
+            .map(|wpos| self.state.weather_at(wpos.xy()))
+            .unwrap_or_default()
+    }
+
     pub fn current_chunk(&self) -> Option<Arc<TerrainChunk>> {
         let chunk_pos = Vec2::from(self.position()?)
             .map2(TerrainChunkSize::RECT_SIZE, |e: f32, sz| {
@@ -1640,6 +1687,9 @@ impl Client {
         {
             self.invite = None;
         }
+
+        // Lerp the clientside weather.
+        self.weather.update(&mut self.state.weather_grid_mut());
 
         // Lerp towards the target time of day - this ensures a smooth transition for
         // large jumps in TimeOfDay such as when using /time
@@ -2142,8 +2192,8 @@ impl Client {
             },
             ServerGeneral::InventoryUpdate(inventory, event) => {
                 match event {
-                    InventoryUpdateEvent::BlockCollectFailed(_) => {},
-                    InventoryUpdateEvent::EntityCollectFailed(_) => {},
+                    InventoryUpdateEvent::BlockCollectFailed { .. } => {},
+                    InventoryUpdateEvent::EntityCollectFailed { .. } => {},
                     _ => {
                         // Push the updated inventory component to the client
                         // FIXME: Figure out whether this error can happen under normal gameplay,
@@ -2202,6 +2252,9 @@ impl Client {
             },
             ServerGeneral::MapMarker(event) => {
                 frontend_events.push(Event::MapMarker(event));
+            },
+            ServerGeneral::WeatherUpdate(weather) => {
+                self.weather.weather_update(weather);
             },
             _ => unreachable!("Not a in_game message"),
         }
@@ -2336,8 +2389,8 @@ impl Client {
             if cnt_start == cnt {
                 #[cfg(feature = "tracy")]
                 {
-                    TERRAIN_RECVS.point(terrain_cnt as f64);
-                    INGAME_RECVS.point(ingame_cnt as f64);
+                    plot!("terrain_recvs", terrain_cnt as f64);
+                    plot!("ingame_recvs", ingame_cnt as f64);
                 }
                 return Ok(cnt);
             }
@@ -2374,6 +2427,11 @@ impl Client {
             && self.state.get_time() - self.last_server_pong > self.client_timeout.as_secs() as f64
         {
             return Err(Error::ServerTimeout);
+        }
+
+        // ignore network events
+        while let Some(Ok(Some(event))) = self.participant.as_ref().map(|p| p.try_fetch_event()) {
+            trace!(?event, "received network event");
         }
 
         Ok(frontend_events)

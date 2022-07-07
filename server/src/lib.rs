@@ -2,14 +2,15 @@
 #![allow(clippy::option_map_unit_fn)]
 #![deny(clippy::clone_on_ref_ptr)]
 #![feature(
-    box_patterns,
-    label_break_value,
     bool_to_option,
+    box_patterns,
     drain_filter,
+    label_break_value,
+    let_chains,
+    let_else,
     never_type,
     option_zip,
-    unwrap_infallible,
-    let_else
+    unwrap_infallible
 )]
 #![cfg_attr(not(feature = "worldgen"), feature(const_panic))]
 
@@ -38,6 +39,7 @@ pub mod sys;
 #[cfg(feature = "persistent_world")]
 pub mod terrain_persistence;
 #[cfg(not(feature = "worldgen"))] mod test_world;
+mod weather;
 pub mod wiring;
 
 // Reexports
@@ -72,7 +74,7 @@ use common::{
     assets::AssetExt,
     calendar::Calendar,
     character::CharacterId,
-    cmd::ChatCommand,
+    cmd::ServerChatCommand,
     comp,
     event::{EventBus, ServerEvent},
     recipe::{default_component_recipe_book, default_recipe_book},
@@ -236,6 +238,8 @@ impl Server {
         let ecs_system_metrics = EcsSystemMetrics::new(&registry).unwrap();
         let tick_metrics = TickMetrics::new(&registry).unwrap();
         let physics_metrics = PhysicsMetrics::new(&registry).unwrap();
+        let server_event_metrics = metrics::ServerEventMetrics::new(&registry).unwrap();
+
         let battlemode_buffer = BattleModeBuffer::default();
 
         let mut state = State::server();
@@ -267,6 +271,7 @@ impl Server {
         state.ecs_mut().insert(ecs_system_metrics);
         state.ecs_mut().insert(tick_metrics);
         state.ecs_mut().insert(physics_metrics);
+        state.ecs_mut().insert(server_event_metrics);
         if settings.experimental_terrain_persistence {
             #[cfg(feature = "persistent_world")]
             {
@@ -565,6 +570,8 @@ impl Server {
         #[cfg(not(feature = "worldgen"))]
         rtsim::init(&mut state);
 
+        weather::init(&mut state, &world);
+
         let this = Self {
             state,
             world,
@@ -703,6 +710,7 @@ impl Server {
                 sys::add_server_systems(dispatcher_builder);
                 #[cfg(feature = "worldgen")]
                 rtsim::add_server_systems(dispatcher_builder);
+                weather::add_server_systems(dispatcher_builder);
             },
             false,
         );
@@ -1091,7 +1099,7 @@ impl Server {
                 material_stats: (&*self
                     .state
                     .ecs()
-                    .read_resource::<comp::item::tool::MaterialStatManifest>())
+                    .read_resource::<comp::item::MaterialStatManifest>())
                     .clone(),
                 ability_map: (&*self
                     .state
@@ -1209,7 +1217,7 @@ impl Server {
 
     fn process_command(&mut self, entity: EcsEntity, name: String, args: Vec<String>) {
         // Find the command object and run its handler.
-        if let Ok(command) = name.parse::<ChatCommand>() {
+        if let Ok(command) = name.parse::<ServerChatCommand>() {
             command.execute(self, entity, args);
         } else {
             #[cfg(feature = "plugins")]

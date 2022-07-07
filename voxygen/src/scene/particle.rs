@@ -5,6 +5,7 @@ use crate::{
         pipelines::particle::ParticleMode, Instances, Light, Model, ParticleDrawer,
         ParticleInstance, ParticleVertex, Renderer,
     },
+    scene::terrain::FireplaceType,
 };
 use common::{
     assets::{AssetExt, DotVoxAsset},
@@ -283,7 +284,7 @@ impl ParticleMgr {
             | Outcome::ExpChange { .. }
             | Outcome::SkillPointGain { .. }
             | Outcome::ComboChange { .. }
-            | Outcome::Damage { .. }
+            | Outcome::HealthChange { .. }
             | Outcome::PoiseChange { .. }
             | Outcome::Utterance { .. }
             | Outcome::Glider { .. } => {},
@@ -1182,14 +1183,6 @@ impl ParticleMgr {
                 cond: |_| true,
             },
             BlockParticles {
-                blocks: |boi| &boi.smokers,
-                range: 8,
-                rate: 3.0,
-                lifetime: 40.0,
-                mode: ParticleMode::CampfireSmoke,
-                cond: |_| true,
-            },
-            BlockParticles {
                 blocks: |boi| &boi.fireflies,
                 range: 6,
                 rate: 0.004,
@@ -1252,6 +1245,88 @@ impl ParticleMgr {
                                 block_pos.map(|e: i32| e as f32 + rng.gen::<f32>()),
                             )
                         })
+                });
+            }
+        }
+        // smoke is more complex as it comes with varying rate and color
+        {
+            struct SmokeProperties {
+                position: Vec3<i32>,
+                strength: f32,
+                dry_chance: f32,
+            }
+
+            let range = 8_usize;
+            let rate = 3.0 / 128.0;
+            let lifetime = 40.0;
+            let time_of_day = scene_data
+                .state
+                .get_time_of_day()
+                .rem_euclid(24.0 * 60.0 * 60.0) as f32;
+
+            for offset in Spiral2d::new().take((range * 2 + 1).pow(2)) {
+                let chunk_pos = player_chunk + offset;
+
+                terrain.get(chunk_pos).map(|chunk_data| {
+                    let blocks = &chunk_data.blocks_of_interest.smokers;
+                    let mut smoke_properties: Vec<SmokeProperties> = Vec::new();
+                    let block_pos =
+                        Vec3::from(chunk_pos * TerrainChunk::RECT_SIZE.map(|e| e as i32));
+                    let mut sum = 0.0_f32;
+                    for smoker in blocks.iter() {
+                        let position = block_pos + smoker.position;
+                        let (strength, dry_chance) = {
+                            match smoker.kind {
+                                FireplaceType::House => {
+                                    let prop = crate::scene::smoke_cycle::smoke_at_time(
+                                        position,
+                                        chunk_data.blocks_of_interest.temperature,
+                                        time_of_day,
+                                    );
+                                    (
+                                        prop.0,
+                                        if prop.1 {
+                                            // fire started, dark smoke
+                                            0.8 - chunk_data.blocks_of_interest.humidity
+                                        } else {
+                                            // fire continues, light smoke
+                                            1.2 - chunk_data.blocks_of_interest.humidity
+                                        },
+                                    )
+                                },
+                                FireplaceType::Workshop => (128.0, 1.0),
+                            }
+                        };
+                        sum += strength;
+                        smoke_properties.push(SmokeProperties {
+                            position,
+                            strength,
+                            dry_chance,
+                        });
+                    }
+                    let avg_particles = dt * sum as f32 * rate;
+
+                    let particle_count = avg_particles.trunc() as usize
+                        + (rng.gen::<f32>() < avg_particles.fract()) as usize;
+                    let chosen = smoke_properties.choose_multiple_weighted(
+                        &mut rng,
+                        particle_count,
+                        |smoker| smoker.strength,
+                    );
+                    if let Ok(chosen) = chosen {
+                        self.particles.extend(chosen.map(|smoker| {
+                            Particle::new(
+                                Duration::from_secs_f32(lifetime),
+                                time,
+                                if rng.gen::<f32>() > smoker.dry_chance {
+                                    ParticleMode::BlackSmoke
+                                } else {
+                                    ParticleMode::CampfireSmoke
+                                },
+                                smoker.position.map(|e: i32| e as f32 + rng.gen::<f32>()),
+                            )
+                        }));
+                    }
                 });
             }
         }
@@ -1524,8 +1599,8 @@ fn default_cache(renderer: &mut Renderer) -> HashMap<&'static str, Model<Particl
         // NOTE: If we add texturing we may eventually try to share it among all
         // particles in a single atlas.
         let max_texture_size = renderer.max_texture_size();
-        let max_size = guillotiere::Size::new(max_texture_size as i32, max_texture_size as i32);
-        let mut greedy = GreedyMesh::new(max_size);
+        let max_size = Vec2::from(u16::try_from(max_texture_size).unwrap_or(u16::MAX));
+        let mut greedy = GreedyMesh::new(max_size, crate::mesh::greedy::general_config());
 
         let segment = Segment::from(&vox.read().0);
         let segment_size = segment.size();

@@ -231,6 +231,39 @@ void main() {
     vec3 k_d = vec3(1.0);
     vec3 k_s = vec3(R_s);
 
+    // Toggle to see rain_occlusion
+    // tgt_color = vec4(rain_occlusion_at(f_pos.xyz), 0.0, 0.0, 1.0);
+    // return;
+    #if (CLOUD_MODE != CLOUD_MODE_NONE)
+        if (rain_density > 0 && !faces_fluid && f_norm.z > 0.5) {
+            vec3 pos = f_pos + focus_off.xyz;
+            vec3 drop_density = vec3(2, 2, 2);
+            vec3 drop_pos = pos + vec3(pos.zz, 0) + vec3(0, 0, -tick.x * 1.0);
+            drop_pos.z += noise_2d(floor(drop_pos.xy * drop_density.xy) * 13.1) * 10;
+            vec2 cell2d = floor(drop_pos.xy * drop_density.xy);
+            drop_pos.z *= 0.5 + hash_fast(uvec3(cell2d, 0));
+            vec3 cell = vec3(cell2d, floor(drop_pos.z * drop_density.z));
+
+            if (fract(hash(fract(vec4(cell, 0) * 0.01))) < rain_density * rain_occlusion_at(f_pos.xyz) * 50.0) {
+                vec3 off = vec3(hash_fast(uvec3(cell * 13)), hash_fast(uvec3(cell * 5)), 0);
+                vec3 near_cell = (cell + 0.5 + (off - 0.5) * 0.5) / drop_density;
+
+                float dist = length((drop_pos - near_cell) / vec3(1, 1, 2));
+                float drop_rad = 0.1;
+                float distort = max(1.0 - abs(dist - drop_rad) * 100, 0) * 1.5 * max(drop_pos.z - near_cell.z, 0);
+                k_a += distort;
+                k_d += distort;
+                k_s += distort;
+                f_norm.xy += (drop_pos - near_cell).xy
+                    * max(1.0 - abs(dist - drop_rad) * 30, 0)
+                    * 500.0
+                    * max(drop_pos.z - near_cell.z, 0)
+                    * sign(dist - drop_rad)
+                    * max(drop_pos.z - near_cell.z, 0);
+            }
+        }
+    #endif
+
     // float sun_light = get_sun_brightness(sun_dir);
     // float moon_light = get_moon_brightness(moon_dir);
     /* float sun_shade_frac = horizon_at(f_pos, sun_dir);
@@ -257,6 +290,37 @@ void main() {
     DirectionalLight sun_info = get_sun_info(sun_dir, point_shadow * sun_shade_frac, /*sun_pos*/f_pos);
     DirectionalLight moon_info = get_moon_info(moon_dir, point_shadow * moon_shade_frac/*, light_pos*/);
 
+    #ifdef EXPERIMENTAL_DIRECTIONALSHADOWMAPTEXELGRID
+        float offset_scale = 0.5;
+        vec3 offset_one = dFdx(f_pos) * offset_scale;
+        vec3 offset_two = dFdy(f_pos) * offset_scale;
+        vec3 one_up = f_pos + offset_one;
+        vec3 one_down = f_pos - offset_one;
+        vec3 two_up = f_pos + offset_two;
+        vec3 two_down = f_pos - offset_two;
+
+        // Adjust this to change the size of the grid cells relative to the
+        // number of shadow texels 
+        float grid_cell_to_texel_ratio = 32.0;
+
+        vec2 shadowTexSize = textureSize(sampler2D(t_directed_shadow_maps, s_directed_shadow_maps), 0) / grid_cell_to_texel_ratio;
+
+        vec4 one_up_shadow_tex = texture_mat * vec4(one_up, 1.0);
+        vec2 oust_snap = floor(one_up_shadow_tex.xy * shadowTexSize / one_up_shadow_tex.w);
+        vec4 one_down_shadow_tex = texture_mat * vec4(one_down, 1.0);
+        vec2 odst_snap = floor(one_down_shadow_tex.xy * shadowTexSize / one_down_shadow_tex.w);
+        vec4 two_up_shadow_tex = texture_mat * vec4(two_up, 1.0);
+        vec2 tust_snap = floor(two_up_shadow_tex.xy * shadowTexSize / two_up_shadow_tex.w);
+        vec4 two_down_shadow_tex = texture_mat * vec4(two_down, 1.0);
+        vec2 tdst_snap = floor(two_down_shadow_tex.xy * shadowTexSize / two_down_shadow_tex.w);
+        float border = length(max(abs(oust_snap - odst_snap), abs(tust_snap - tdst_snap)));
+
+        if (border != 0.0) {
+            tgt_color = vec4(vec3(0.0, 0.7, 0.2), 1.0);
+            return;
+        }
+    #endif
+     
     float max_light = 0.0;
 
     // After shadows are computed, we use a refracted sun and moon direction.

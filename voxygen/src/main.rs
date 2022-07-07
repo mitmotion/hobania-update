@@ -2,6 +2,15 @@
 #![feature(bool_to_option)]
 #![recursion_limit = "2048"]
 
+#[cfg(all(
+    target_os = "windows",
+    target_env = "msvc",
+    not(feature = "tracy-memory"),
+    not(feature = "hot-egui")
+))]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 // Allow profiling allocations with Tracy
 #[cfg_attr(feature = "tracy-memory", global_allocator)]
 #[cfg(feature = "tracy-memory")]
@@ -29,6 +38,9 @@ use tracing::{error, info, warn};
 use veloren_voxygen::ui::egui::EguiState;
 
 fn main() {
+    #[cfg(feature = "tracy")]
+    common_base::tracy_client::Client::start();
+
     let userdata_dir = common_base::userdata_dir_workspace!();
 
     // Determine where Voxygen's logs should go
@@ -212,13 +224,17 @@ fn main() {
     // Setup audio
     let mut audio = match settings.audio.output {
         AudioOutput::Off => AudioFrontend::no_audio(),
-        AudioOutput::Automatic => AudioFrontend::new(settings.audio.num_sfx_channels),
+        AudioOutput::Automatic => AudioFrontend::new(
+            settings.audio.num_sfx_channels,
+            settings.audio.num_ui_channels,
+        ),
         //    AudioOutput::Device(ref dev) => Some(dev.clone()),
     };
 
     audio.set_master_volume(settings.audio.master_volume);
     audio.set_music_volume(settings.audio.music_volume);
     audio.set_sfx_volume(settings.audio.sfx_volume);
+    audio.set_ambience_volume(settings.audio.ambience_volume);
 
     // Load the profile.
     let profile = Profile::load(&config_dir);

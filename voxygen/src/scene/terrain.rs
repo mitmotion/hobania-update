@@ -1,10 +1,10 @@
 mod watcher;
 
-pub use self::watcher::{BlocksOfInterest, Interaction};
+pub use self::watcher::{BlocksOfInterest, FireplaceType, Interaction};
 
 use crate::{
     mesh::{
-        greedy::GreedyMesh,
+        greedy::{GreedyMesh, SpriteAtlasAllocator},
         segment::generate_mesh_base_vol_sprite,
         terrain::{generate_mesh, SUNLIGHT},
     },
@@ -18,17 +18,17 @@ use crate::{
 
 use super::{
     camera::{self, Camera},
-    math, SceneData,
+    math, SceneData, RAIN_THRESHOLD,
 };
 use common::{
     assets::{self, AssetExt, DotVoxAsset},
     figure::Segment,
     spiral::Spiral2d,
-    terrain::{sprite, Block, SpriteKind, TerrainChunk},
+    terrain::{Block, SpriteKind, TerrainChunk},
     vol::{BaseVol, ReadVol, RectRasterableVol, SampleVol},
     volumes::vol_grid_2d::{VolGrid2d, VolGrid2dError},
 };
-use common_base::span;
+use common_base::{prof_span, span};
 use core::{f32, fmt::Debug, i32, marker::PhantomData, time::Duration};
 use crossbeam_channel as channel;
 use enum_iterator::IntoEnumIterator;
@@ -45,6 +45,10 @@ use vek::*;
 
 const SPRITE_SCALE: Vec3<f32> = Vec3::new(1.0 / 11.0, 1.0 / 11.0, 1.0 / 11.0);
 const SPRITE_LOD_LEVELS: usize = 5;
+
+// For rain occlusion we only need to render the closest chunks.
+/// How many chunks are maximally rendered for rain occlusion.
+pub const RAIN_OCCLUSION_CHUNKS: usize = 9;
 
 #[derive(Clone, Copy, Debug)]
 struct Visibility {
@@ -152,12 +156,63 @@ struct SpriteConfig<Model> {
     wind_sway: f32,
 }
 
+// TODO: reduce llvm IR lines from this
 /// Configuration data for all sprite models.
 ///
 /// NOTE: Model is an asset path to the appropriate sprite .vox model.
 #[derive(Deserialize)]
-#[serde(transparent)]
-struct SpriteSpec(sprite::sprite_kind::PureCases<Option<SpriteConfig<String>>>);
+#[serde(try_from = "HashMap<SpriteKind, Option<SpriteConfig<String>>>")]
+struct SpriteSpec([Option<SpriteConfig<String>>; 256]);
+
+impl SpriteSpec {
+    fn get(&self, kind: SpriteKind) -> Option<&SpriteConfig<String>> {
+        const _: () = assert!(core::mem::size_of::<SpriteKind>() == 1);
+        // NOTE: This will never be out of bounds since `SpriteKind` is `repr(u8)`
+        self.0[kind as usize].as_ref()
+    }
+}
+
+/// Conversion of SpriteSpec from a hashmap failed because some sprites were
+/// missing.
+struct SpritesMissing(Vec<SpriteKind>);
+
+use core::fmt;
+
+impl fmt::Display for SpritesMissing {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(
+            f,
+            "Missing entries in the sprite manifest for these sprites: {:?}",
+            &self.0,
+        )
+    }
+}
+
+// Here we ensure all variants have an entry in the config.
+impl TryFrom<HashMap<SpriteKind, Option<SpriteConfig<String>>>> for SpriteSpec {
+    type Error = SpritesMissing;
+
+    fn try_from(
+        mut map: HashMap<SpriteKind, Option<SpriteConfig<String>>>,
+    ) -> Result<Self, Self::Error> {
+        let mut array = [(); 256].map(|()| None);
+        let sprites_missing = SpriteKind::into_enum_iter()
+            .filter(|kind| match map.remove(kind) {
+                Some(config) => {
+                    array[*kind as usize] = config;
+                    false
+                },
+                None => true,
+            })
+            .collect::<Vec<_>>();
+
+        if sprites_missing.is_empty() {
+            Ok(Self(array))
+        } else {
+            Err(SpritesMissing(sprites_missing))
+        }
+    }
+}
 
 impl assets::Asset for SpriteSpec {
     type Loader = assets::RonLoader;
@@ -216,7 +271,7 @@ fn mesh_worker<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + '
         pos,
         // Extract sprite locations from volume
         sprite_instances: {
-            span!(_guard, "extract sprite_instances");
+            prof_span!("extract sprite_instances");
             let mut instances = [(); SPRITE_LOD_LEVELS].map(|()| Vec::new());
 
             for x in 0..V::RECT_SIZE.x as i32 {
@@ -236,7 +291,7 @@ fn mesh_worker<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + '
                             continue;
                         };
 
-                        if let Some(cfg) = sprite.elim_case_pure(&sprite_config.0) {
+                        if let Some(cfg) = sprite_config.get(sprite) {
                             let seed = wpos.x as u64 * 3
                                 + wpos.y as u64 * 7
                                 + wpos.x as u64 * wpos.y as u64; // Awful PRNG
@@ -395,17 +450,20 @@ impl SpriteRenderContext {
         }
 
         let join_handle = std::thread::spawn(move || {
+            prof_span!("mesh all sprites");
             // Load all the sprite config data.
             let sprite_config =
                 Arc::<SpriteSpec>::load_expect("voxygen.voxel.sprite_manifest").cloned();
 
-            let max_size = guillotiere::Size::new(max_texture_size as i32, max_texture_size as i32);
-            let mut greedy = GreedyMesh::new(max_size);
+            let max_size = Vec2::from(u16::try_from(max_texture_size).unwrap_or(u16::MAX));
+            let mut greedy = GreedyMesh::<SpriteAtlasAllocator>::new(
+                max_size,
+                crate::mesh::greedy::sprite_config(),
+            );
             let mut sprite_mesh = Mesh::new();
-            let sprite_config_ = &sprite_config;
             // NOTE: Tracks the start vertex of the next model to be meshed.
             let sprite_data: HashMap<(SpriteKind, usize), _> = SpriteKind::into_enum_iter()
-                .filter_map(|kind| Some((kind, kind.elim_case_pure(&sprite_config_.0).as_ref()?)))
+                .filter_map(|kind| Some((kind, sprite_config.get(kind)?)))
                 .flat_map(|(kind, sprite_config)| {
                     sprite_config.variations.iter().enumerate().map(
                         move |(
@@ -443,7 +501,9 @@ impl SpriteRenderContext {
                                         scale
                                     }
                                 });
-                            move |greedy: &mut GreedyMesh, sprite_mesh: &mut Mesh<SpriteVertex>| {
+                            move |greedy: &mut GreedyMesh<SpriteAtlasAllocator>,
+                                  sprite_mesh: &mut Mesh<SpriteVertex>| {
+                                prof_span!("mesh sprite");
                                 let lod_sprite_data = scaled.map(|lod_scale_orig| {
                                     let lod_scale = model_scale
                                         * if lod_scale_orig == 1.0 {
@@ -490,7 +550,10 @@ impl SpriteRenderContext {
                 .map(|f| f(&mut greedy, &mut sprite_mesh))
                 .collect();
 
-            let sprite_col_lights = greedy.finalize();
+            let sprite_col_lights = {
+                prof_span!("finalize");
+                greedy.finalize()
+            };
 
             SpriteWorkerResponse {
                 sprite_config,
@@ -761,10 +824,17 @@ impl<V: RectRasterableVol> Terrain<V> {
         focus_pos: Vec3<f32>,
         loaded_distance: f32,
         camera: &Camera,
-    ) -> (Aabb<f32>, Vec<math::Vec3<f32>>, math::Aabr<f32>) {
+    ) -> (
+        Aabb<f32>,
+        Vec<math::Vec3<f32>>,
+        math::Aabr<f32>,
+        Vec<math::Vec3<f32>>,
+        math::Aabr<f32>,
+    ) {
         let camera::Dependents {
             view_mat,
             proj_mat_treeculler,
+            cam_pos,
             ..
         } = camera.dependents();
 
@@ -1250,6 +1320,10 @@ impl<V: RectRasterableVol> Terrain<V> {
             min: focus_pos - 2.0,
             max: focus_pos + 2.0,
         });
+        let inv_proj_view =
+            math::Mat4::from_col_arrays((proj_mat_treeculler * view_mat).into_col_arrays())
+                .as_::<f64>()
+                .inverted();
 
         // PSCs: Potential shadow casters
         let ray_direction = scene_data.get_sun_dir();
@@ -1261,6 +1335,7 @@ impl<V: RectRasterableVol> Terrain<V> {
             #[cfg(not(feature = "simd"))]
             return min.partial_cmple(&max).reduce_and();
         };
+
         let (visible_light_volume, visible_psr_bounds) = if ray_direction.z < 0.0
             && renderer.pipeline_modes().shadow.is_map()
         {
@@ -1270,10 +1345,6 @@ impl<V: RectRasterableVol> Terrain<V> {
             };
             let focus_off = math::Vec3::from(focus_off);
             let visible_bounds_fine = visible_bounding_box.as_::<f64>();
-            let inv_proj_view =
-                math::Mat4::from_col_arrays((proj_mat_treeculler * view_mat).into_col_arrays())
-                    .as_::<f64>()
-                    .inverted();
             let ray_direction = math::Vec3::<f32>::from(ray_direction);
             // NOTE: We use proj_mat_treeculler here because
             // calc_focused_light_volume_points makes the assumption that the
@@ -1287,9 +1358,8 @@ impl<V: RectRasterableVol> Terrain<V> {
             .map(|v| v.as_::<f32>())
             .collect::<Vec<_>>();
 
-            let cam_pos = math::Vec4::from(view_mat.inverted() * Vec4::unit_w()).xyz();
             let up: math::Vec3<f32> = { math::Vec3::unit_y() };
-
+            let cam_pos = math::Vec3::from(cam_pos);
             let ray_mat = math::Mat4::look_at_rh(cam_pos, cam_pos + ray_direction, up);
             let visible_bounds = math::Aabr::from(math::fit_psr(
                 ray_mat,
@@ -1356,11 +1426,55 @@ impl<V: RectRasterableVol> Terrain<V> {
             })
         };
         drop(guard);
+        span!(guard, "Rain occlusion magic");
+        // Check if there is rain near the camera
+        let max_weather = scene_data
+            .state
+            .max_weather_near(focus_off.xy() + cam_pos.xy());
+        let (visible_occlusion_volume, visible_por_bounds) = if max_weather.rain > RAIN_THRESHOLD {
+            let visible_bounding_box = math::Aabb::<f32> {
+                min: math::Vec3::from(visible_bounding_box.min - focus_off),
+                max: math::Vec3::from(visible_bounding_box.max - focus_off),
+            };
+            let visible_bounds_fine = math::Aabb {
+                min: visible_bounding_box.min.as_::<f64>(),
+                max: visible_bounding_box.max.as_::<f64>(),
+            };
+            let weather = scene_data.state.weather_at(focus_off.xy() + cam_pos.xy());
+            let ray_direction = math::Vec3::<f32>::from(weather.rain_vel().normalized());
 
+            // NOTE: We use proj_mat_treeculler here because
+            // calc_focused_light_volume_points makes the assumption that the
+            // near plane lies before the far plane.
+            let visible_volume = math::calc_focused_light_volume_points(
+                inv_proj_view,
+                ray_direction.as_::<f64>(),
+                visible_bounds_fine,
+                1e-6,
+            )
+            .map(|v| v.as_::<f32>())
+            .collect::<Vec<_>>();
+            let cam_pos = math::Vec3::from(cam_pos);
+            let ray_mat =
+                math::Mat4::look_at_rh(cam_pos, cam_pos + ray_direction, math::Vec3::unit_y());
+            let visible_bounds = math::Aabr::from(math::fit_psr(
+                ray_mat,
+                visible_volume.iter().copied(),
+                |p| p,
+            ));
+
+            (visible_volume, visible_bounds)
+        } else {
+            (Vec::new(), math::Aabr::default())
+        };
+
+        drop(guard);
         (
             visible_bounding_box,
             visible_light_volume,
             visible_psr_bounds,
+            visible_occlusion_volume,
+            visible_por_bounds,
         )
     }
 
@@ -1404,6 +1518,34 @@ impl<V: RectRasterableVol> Terrain<V> {
         chunk_iter
             .filter(|chunk| chunk.can_shadow_sun())
             .chain(self.shadow_chunks.iter().map(|(_, chunk)| chunk))
+            .filter_map(|chunk| {
+                chunk
+                    .opaque_model
+                    .as_ref()
+                    .map(|model| (model, &chunk.locals))
+            })
+            .for_each(|(model, locals)| drawer.draw(model, locals));
+    }
+
+    pub fn render_rain_occlusion<'a>(
+        &'a self,
+        drawer: &mut TerrainShadowDrawer<'_, 'a>,
+        focus_pos: Vec3<f32>,
+    ) {
+        span!(_guard, "render_occlusion", "Terrain::render_occlusion");
+        let focus_chunk = Vec2::from(focus_pos).map2(TerrainChunk::RECT_SIZE, |e: f32, sz| {
+            (e as i32).div_euclid(sz as i32)
+        });
+        let chunk_iter = Spiral2d::new()
+            .filter_map(|rpos| {
+                let pos = focus_chunk + rpos;
+                self.chunks.get(&pos)
+            })
+            .take(self.chunks.len().min(RAIN_OCCLUSION_CHUNKS));
+
+        chunk_iter
+            // Find a way to keep this?
+            // .filter(|chunk| chunk.can_shadow_sun())
             .filter_map(|chunk| {
                 chunk
                     .opaque_model

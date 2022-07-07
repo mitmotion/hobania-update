@@ -37,6 +37,7 @@ use common::{
             tool::{AbilitySpec, ToolKind},
             ConsumableKind, Item, ItemDesc, ItemKind,
         },
+        item_drop,
         projectile::ProjectileConstructor,
         Agent, Alignment, BehaviorState, Body, CharacterState, ControlAction, ControlEvent,
         Controller, Health, HealthChange, InputKind, InventoryAction, InventoryEvent, Pos, Scale,
@@ -235,6 +236,7 @@ impl<'a> System<'a> for Sys {
                         char_state,
                         active_abilities,
                         cached_spatial_grid: &read_data.cached_spatial_grid,
+                        msm: &read_data.msm,
                     };
                     ///////////////////////////////////////////////////////////
                     // Behavior tree
@@ -746,7 +748,17 @@ impl<'a> AgentData<'a> {
             }
         };
 
-        if self.damage < IDLE_HEALING_ITEM_THRESHOLD && self.heal_self(agent, controller, true) {
+        if let Some(body) = self.body {
+            let attempt_heal = if matches!(body, Body::Humanoid(_)) {
+                self.damage < IDLE_HEALING_ITEM_THRESHOLD
+            } else {
+                true
+            };
+            if attempt_heal && self.heal_self(agent, controller, true) {
+                agent.action_state.timer = 0.01;
+                return;
+            }
+        } else {
             agent.action_state.timer = 0.01;
             return;
         }
@@ -1601,7 +1613,34 @@ impl<'a> AgentData<'a> {
             }
         };
         let is_valid_target = |entity: EcsEntity| match read_data.bodies.get(entity) {
-            Some(Body::ItemDrop(_)) => Some((entity, false)),
+            Some(Body::ItemDrop(item)) => {
+                //If the agent is humanoid, it will pick up all kinds of itemdrops. If the
+                // agent isn't humanoid, it will pick up only consumable itemdrops.
+                let wants_pickup = matches!(self.body, Some(Body::Humanoid(_)))
+                    || matches!(item, item_drop::Body::Consumable);
+
+                // The agent will attempt to pickup the item if it wants to pick it up and is
+                // allowed to
+                let attempt_pickup = wants_pickup
+                    && read_data
+                        .loot_owners
+                        .get(entity)
+                        .map_or(true, |loot_owner| {
+                            loot_owner.can_pickup(
+                                *self.uid,
+                                read_data.groups.get(entity),
+                                self.alignment,
+                                self.body,
+                                None,
+                            )
+                        });
+
+                if attempt_pickup {
+                    Some((entity, false))
+                } else {
+                    None
+                }
+            },
             _ => {
                 if read_data.healths.get(entity).map_or(false, |health| {
                     !health.is_dead && !is_invulnerable(entity, read_data)
@@ -2477,7 +2516,7 @@ impl<'a> AgentData<'a> {
             let other_inventory = read_data.inventories.get(other);
             let other_char_state = read_data.char_states.get(other);
 
-            perception_dist_multiplier_from_stealth(other_inventory, other_char_state)
+            perception_dist_multiplier_from_stealth(other_inventory, other_char_state, self.msm)
         };
 
         let within_sight_dist = {

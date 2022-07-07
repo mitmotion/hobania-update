@@ -1,4 +1,4 @@
-use crate::api::NetworkConnectError;
+use crate::api::{ConnectAddr, NetworkConnectError};
 use async_trait::async_trait;
 use bytes::BytesMut;
 use futures_util::FutureExt;
@@ -65,6 +65,7 @@ pub(crate) type C2cMpscConnect = (
     mpsc::Sender<MpscMsg>,
     oneshot::Sender<mpsc::Sender<MpscMsg>>,
 );
+pub(crate) type C2sProtocol = (Protocols, ConnectAddr, Cid);
 
 impl Protocols {
     const MPSC_CHANNEL_BOUND: usize = 1000;
@@ -92,7 +93,7 @@ impl Protocols {
         cids: Arc<AtomicU64>,
         metrics: Arc<ProtocolMetrics>,
         s2s_stop_listening_r: oneshot::Receiver<()>,
-        c2s_protocol_s: mpsc::UnboundedSender<(Self, Cid)>,
+        c2s_protocol_s: mpsc::UnboundedSender<C2sProtocol>,
     ) -> std::io::Result<()> {
         use socket2::{Domain, Socket, Type};
         let domain = Domain::for_address(addr);
@@ -132,7 +133,11 @@ impl Protocols {
                 let cid = cids.fetch_add(1, Ordering::Relaxed);
                 info!(?remote_addr, ?cid, "Accepting Tcp from");
                 let metrics = ProtocolMetricCache::new(&cid.to_string(), Arc::clone(&metrics));
-                let _ = c2s_protocol_s.send((Self::new_tcp(stream, metrics.clone()), cid));
+                let _ = c2s_protocol_s.send((
+                    Self::new_tcp(stream, metrics.clone()),
+                    ConnectAddr::Tcp(remote_addr),
+                    cid,
+                ));
             }
         });
         Ok(())
@@ -192,8 +197,8 @@ impl Protocols {
         cids: Arc<AtomicU64>,
         metrics: Arc<ProtocolMetrics>,
         s2s_stop_listening_r: oneshot::Receiver<()>,
-        c2s_protocol_s: mpsc::UnboundedSender<(Self, Cid)>,
-    ) -> std::io::Result<()> {
+        c2s_protocol_s: mpsc::UnboundedSender<C2sProtocol>,
+    ) -> io::Result<()> {
         let (mpsc_s, mut mpsc_r) = mpsc::unbounded_channel();
         MPSC_POOL.lock().await.insert(addr, mpsc_s);
         trace!(?addr, "Mpsc Listener bound");
@@ -214,6 +219,7 @@ impl Protocols {
                 let metrics = ProtocolMetricCache::new(&cid.to_string(), Arc::clone(&metrics));
                 let _ = c2s_protocol_s.send((
                     Self::new_mpsc(local_to_remote_s, remote_to_local_r, metrics.clone()),
+                    ConnectAddr::Mpsc(addr),
                     cid,
                 ));
             }
@@ -255,26 +261,17 @@ impl Protocols {
         info!("Connecting Quic to: {}", &addr);
         let connecting = endpoint.connect_with(config, addr, &name).map_err(|e| {
             trace!(?e, "error setting up quic");
-            NetworkConnectError::Io(std::io::Error::new(
-                std::io::ErrorKind::ConnectionAborted,
-                e,
-            ))
+            NetworkConnectError::Io(io::Error::new(io::ErrorKind::ConnectionAborted, e))
         })?;
         let connection = connecting.await.map_err(|e| {
             trace!(?e, "error with quic connection");
-            NetworkConnectError::Io(std::io::Error::new(
-                std::io::ErrorKind::ConnectionAborted,
-                e,
-            ))
+            NetworkConnectError::Io(io::Error::new(io::ErrorKind::ConnectionAborted, e))
         })?;
         Self::new_quic(connection, false, metrics)
             .await
             .map_err(|e| {
                 trace!(?e, "error with quic");
-                NetworkConnectError::Io(std::io::Error::new(
-                    std::io::ErrorKind::ConnectionAborted,
-                    e,
-                ))
+                NetworkConnectError::Io(io::Error::new(io::ErrorKind::ConnectionAborted, e))
             })
     }
 
@@ -285,8 +282,8 @@ impl Protocols {
         cids: Arc<AtomicU64>,
         metrics: Arc<ProtocolMetrics>,
         s2s_stop_listening_r: oneshot::Receiver<()>,
-        c2s_protocol_s: mpsc::UnboundedSender<(Self, Cid)>,
-    ) -> std::io::Result<()> {
+        c2s_protocol_s: mpsc::UnboundedSender<C2sProtocol>,
+    ) -> io::Result<()> {
         let (_endpoint, mut listener) = match quinn::Endpoint::server(server_config, addr) {
             Ok(v) => v,
             Err(e) => return Err(e),
@@ -312,7 +309,16 @@ impl Protocols {
                 let metrics = ProtocolMetricCache::new(&cid.to_string(), Arc::clone(&metrics));
                 match Protocols::new_quic(connection, true, metrics).await {
                     Ok(quic) => {
-                        let _ = c2s_protocol_s.send((quic, cid));
+                        // TODO: we cannot guess the client hostname in quic server here.
+                        // though we need it for the certificate to be validated, in the future
+                        // this will either go away with new auth, or we have to do something like
+                        // a reverse DNS lookup
+                        let connect_addr = ConnectAddr::Quic(
+                            addr,
+                            quinn::ClientConfig::with_native_roots(),
+                            "TODO_remote_hostname".to_string(),
+                        );
+                        let _ = c2s_protocol_s.send((quic, connect_addr, cid));
                     },
                     Err(e) => {
                         trace!(?e, "failed to start quic");
@@ -378,12 +384,14 @@ impl Protocols {
 
 #[async_trait]
 impl network_protocol::InitProtocol for Protocols {
+    type CustomErr = ProtocolsError;
+
     async fn initialize(
         &mut self,
         initializer: bool,
         local_pid: Pid,
         secret: u128,
-    ) -> Result<(Pid, Sid, u128), InitProtocolError> {
+    ) -> Result<(Pid, Sid, u128), InitProtocolError<Self::CustomErr>> {
         match self {
             Protocols::Tcp(p) => p.initialize(initializer, local_pid, secret).await,
             Protocols::Mpsc(p) => p.initialize(initializer, local_pid, secret).await,
@@ -395,6 +403,8 @@ impl network_protocol::InitProtocol for Protocols {
 
 #[async_trait]
 impl network_protocol::SendProtocol for SendProtocols {
+    type CustomErr = ProtocolsError;
+
     fn notify_from_recv(&mut self, event: ProtocolEvent) {
         match self {
             SendProtocols::Tcp(s) => s.notify_from_recv(event),
@@ -404,7 +414,7 @@ impl network_protocol::SendProtocol for SendProtocols {
         }
     }
 
-    async fn send(&mut self, event: ProtocolEvent) -> Result<(), ProtocolError> {
+    async fn send(&mut self, event: ProtocolEvent) -> Result<(), ProtocolError<Self::CustomErr>> {
         match self {
             SendProtocols::Tcp(s) => s.send(event).await,
             SendProtocols::Mpsc(s) => s.send(event).await,
@@ -417,7 +427,7 @@ impl network_protocol::SendProtocol for SendProtocols {
         &mut self,
         bandwidth: Bandwidth,
         dt: Duration,
-    ) -> Result<Bandwidth, ProtocolError> {
+    ) -> Result<Bandwidth, ProtocolError<Self::CustomErr>> {
         match self {
             SendProtocols::Tcp(s) => s.flush(bandwidth, dt).await,
             SendProtocols::Mpsc(s) => s.flush(bandwidth, dt).await,
@@ -429,7 +439,9 @@ impl network_protocol::SendProtocol for SendProtocols {
 
 #[async_trait]
 impl network_protocol::RecvProtocol for RecvProtocols {
-    async fn recv(&mut self) -> Result<ProtocolEvent, ProtocolError> {
+    type CustomErr = ProtocolsError;
+
+    async fn recv(&mut self) -> Result<ProtocolEvent, ProtocolError<Self::CustomErr>> {
         match self {
             RecvProtocols::Tcp(r) => r.recv().await,
             RecvProtocols::Mpsc(r) => r.recv().await,
@@ -437,6 +449,32 @@ impl network_protocol::RecvProtocol for RecvProtocols {
             RecvProtocols::Quic(r) => r.recv().await,
         }
     }
+}
+
+#[derive(Debug)]
+pub enum MpscError {
+    Send(tokio::sync::mpsc::error::SendError<network_protocol::MpscMsg>),
+    Recv,
+}
+
+#[cfg(feature = "quic")]
+#[derive(Debug)]
+pub enum QuicError {
+    Send(std::io::Error),
+    Connection(quinn::ConnectionError),
+    Write(quinn::WriteError),
+    Read(quinn::ReadError),
+    InternalMpsc,
+}
+
+/// Error types for Protocols
+#[derive(Debug)]
+pub enum ProtocolsError {
+    Tcp(std::io::Error),
+    Udp(std::io::Error),
+    #[cfg(feature = "quic")]
+    Quic(QuicError),
+    Mpsc(MpscError),
 }
 
 ///////////////////////////////////////
@@ -454,26 +492,33 @@ pub struct TcpSink {
 
 #[async_trait]
 impl UnreliableDrain for TcpDrain {
+    type CustomErr = ProtocolsError;
     type DataFormat = BytesMut;
 
-    async fn send(&mut self, data: Self::DataFormat) -> Result<(), ProtocolError> {
-        match self.half.write_all(&data).await {
-            Ok(()) => Ok(()),
-            Err(_) => Err(ProtocolError::Closed),
-        }
+    async fn send(&mut self, data: Self::DataFormat) -> Result<(), ProtocolError<Self::CustomErr>> {
+        self.half
+            .write_all(&data)
+            .await
+            .map_err(|e| ProtocolError::Custom(ProtocolsError::Tcp(e)))
     }
 }
 
 #[async_trait]
 impl UnreliableSink for TcpSink {
+    type CustomErr = ProtocolsError;
     type DataFormat = BytesMut;
 
-    async fn recv(&mut self) -> Result<Self::DataFormat, ProtocolError> {
-        self.buffer.resize(1500, 0u8);
-        match self.half.read(&mut self.buffer).await {
-            Ok(0) => Err(ProtocolError::Closed),
-            Ok(n) => Ok(self.buffer.split_to(n)),
-            Err(_) => Err(ProtocolError::Closed),
+    async fn recv(&mut self) -> Result<Self::DataFormat, ProtocolError<Self::CustomErr>> {
+        if self.buffer.capacity() < 1500 {
+            self.buffer.reserve(1500 * 4); // reserve multiple, so that we alloc less often
+        }
+        match self.half.read_buf(&mut self.buffer).await {
+            Ok(0) => Err(ProtocolError::Custom(ProtocolsError::Tcp(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "read returned 0 bytes",
+            )))),
+            Ok(_) => Ok(self.buffer.split()),
+            Err(e) => Err(ProtocolError::Custom(ProtocolsError::Tcp(e))),
         }
     }
 }
@@ -492,22 +537,27 @@ pub struct MpscSink {
 
 #[async_trait]
 impl UnreliableDrain for MpscDrain {
+    type CustomErr = ProtocolsError;
     type DataFormat = MpscMsg;
 
-    async fn send(&mut self, data: Self::DataFormat) -> Result<(), ProtocolError> {
+    async fn send(&mut self, data: Self::DataFormat) -> Result<(), ProtocolError<Self::CustomErr>> {
         self.sender
             .send(data)
             .await
-            .map_err(|_| ProtocolError::Closed)
+            .map_err(|e| ProtocolError::Custom(ProtocolsError::Mpsc(MpscError::Send(e))))
     }
 }
 
 #[async_trait]
 impl UnreliableSink for MpscSink {
+    type CustomErr = ProtocolsError;
     type DataFormat = MpscMsg;
 
-    async fn recv(&mut self) -> Result<Self::DataFormat, ProtocolError> {
-        self.receiver.recv().await.ok_or(ProtocolError::Closed)
+    async fn recv(&mut self) -> Result<Self::DataFormat, ProtocolError<Self::CustomErr>> {
+        self.receiver
+            .recv()
+            .await
+            .ok_or(ProtocolError::Custom(ProtocolsError::Mpsc(MpscError::Recv)))
     }
 }
 
@@ -560,10 +610,11 @@ fn spawn_new(
 #[cfg(feature = "quic")]
 #[async_trait]
 impl UnreliableDrain for QuicDrain {
+    type CustomErr = ProtocolsError;
     type DataFormat = QuicDataFormat;
 
-    async fn send(&mut self, data: Self::DataFormat) -> Result<(), ProtocolError> {
-        match match data.stream {
+    async fn send(&mut self, data: Self::DataFormat) -> Result<(), ProtocolError<Self::CustomErr>> {
+        match data.stream {
             QuicDataFormatStream::Main => self.main.write_all(&data.data).await,
             QuicDataFormatStream::Unreliable => unimplemented!(),
             QuicDataFormatStream::Reliable(sid) => {
@@ -575,41 +626,43 @@ impl UnreliableDrain for QuicDrain {
                         // IF the buffer is empty this was created localy and WE are allowed to
                         // open_bi(), if not, we NEED to block on sendstreams_r
                         if data.data.is_empty() {
-                            match self.con.open_bi().await {
-                                Ok((mut sendstream, recvstream)) => {
-                                    // send SID as first msg
-                                    if sendstream.write_u64(sid.get_u64()).await.is_err() {
-                                        return Err(ProtocolError::Closed);
-                                    }
-                                    spawn_new(recvstream, Some(sid), &self.recvstreams_s);
-                                    vacant.insert(sendstream).write_all(&data.data).await
-                                },
-                                Err(_) => return Err(ProtocolError::Closed),
-                            }
+                            let (mut sendstream, recvstream) =
+                                self.con.open_bi().await.map_err(|e| {
+                                    ProtocolError::Custom(ProtocolsError::Quic(
+                                        QuicError::Connection(e),
+                                    ))
+                                })?;
+                            // send SID as first msg
+                            sendstream.write_u64(sid.get_u64()).await.map_err(|e| {
+                                ProtocolError::Custom(ProtocolsError::Quic(QuicError::Send(e)))
+                            })?;
+                            spawn_new(recvstream, Some(sid), &self.recvstreams_s);
+                            vacant.insert(sendstream).write_all(&data.data).await
                         } else {
-                            let sendstream = self
-                                .sendstreams_r
-                                .recv()
-                                .await
-                                .ok_or(ProtocolError::Closed)?;
+                            let sendstream =
+                                self.sendstreams_r
+                                    .recv()
+                                    .await
+                                    .ok_or(ProtocolError::Custom(ProtocolsError::Quic(
+                                        QuicError::InternalMpsc,
+                                    )))?;
                             vacant.insert(sendstream).write_all(&data.data).await
                         }
                     },
                 }
             },
-        } {
-            Ok(()) => Ok(()),
-            Err(_) => Err(ProtocolError::Closed),
         }
+        .map_err(|e| ProtocolError::Custom(ProtocolsError::Quic(QuicError::Write(e))))
     }
 }
 
 #[cfg(feature = "quic")]
 #[async_trait]
 impl UnreliableSink for QuicSink {
+    type CustomErr = ProtocolsError;
     type DataFormat = QuicDataFormat;
 
-    async fn recv(&mut self) -> Result<Self::DataFormat, ProtocolError> {
+    async fn recv(&mut self) -> Result<Self::DataFormat, ProtocolError<Self::CustomErr>> {
         let (mut buffer, result, mut recvstream, id) = loop {
             use futures_util::FutureExt;
             // first handle all bi streams!
@@ -620,20 +673,20 @@ impl UnreliableSink for QuicSink {
             };
 
             if let Some(remote_stream) = a {
-                match remote_stream {
-                    Ok((sendstream, mut recvstream)) => {
-                        let sid = match recvstream.read_u64().await {
-                            Ok(u64::MAX) => None, //unreliable
-                            Ok(sid) => Some(Sid::new(sid)),
-                            Err(_) => return Err(ProtocolError::Violated),
-                        };
-                        if self.sendstreams_s.send(sendstream).is_err() {
-                            return Err(ProtocolError::Closed);
-                        }
-                        spawn_new(recvstream, sid, &self.recvstreams_s);
-                    },
-                    Err(_) => return Err(ProtocolError::Closed),
+                let (sendstream, mut recvstream) = remote_stream.map_err(|e| {
+                    ProtocolError::Custom(ProtocolsError::Quic(QuicError::Connection(e)))
+                })?;
+                let sid = match recvstream.read_u64().await {
+                    Ok(u64::MAX) => None, //unreliable
+                    Ok(sid) => Some(Sid::new(sid)),
+                    Err(_) => return Err(ProtocolError::Violated),
+                };
+                if self.sendstreams_s.send(sendstream).is_err() {
+                    return Err(ProtocolError::Custom(ProtocolsError::Quic(
+                        QuicError::InternalMpsc,
+                    )));
                 }
+                spawn_new(recvstream, sid, &self.recvstreams_s);
             }
 
             if let Some(data) = b {
@@ -642,7 +695,12 @@ impl UnreliableSink for QuicSink {
         };
 
         let r = match result {
-            Ok(Some(0)) => Err(ProtocolError::Closed),
+            Ok(Some(0)) => Err(ProtocolError::Custom(ProtocolsError::Quic(
+                QuicError::Send(io::Error::new(
+                    io::ErrorKind::BrokenPipe,
+                    "read returned 0 bytes",
+                )),
+            ))),
             Ok(Some(n)) => Ok(QuicDataFormat {
                 stream: match id {
                     Some(id) => QuicDataFormatStream::Reliable(id),
@@ -650,8 +708,15 @@ impl UnreliableSink for QuicSink {
                 },
                 data: buffer.split_to(n),
             }),
-            Ok(None) => Err(ProtocolError::Closed),
-            Err(_) => Err(ProtocolError::Closed),
+            Ok(None) => Err(ProtocolError::Custom(ProtocolsError::Quic(
+                QuicError::Send(io::Error::new(
+                    io::ErrorKind::BrokenPipe,
+                    "read returned None",
+                )),
+            ))),
+            Err(e) => Err(ProtocolError::Custom(ProtocolsError::Quic(
+                QuicError::Read(e),
+            ))),
         }?;
 
         let streams_s_clone = self.recvstreams_s.clone();
@@ -739,6 +804,15 @@ mod tests {
         drop(s);
         let e = e.await.unwrap();
         assert!(e.is_err());
-        assert_eq!(e.unwrap_err(), ProtocolError::Closed);
+        assert!(matches!(e, Err(..)));
+        let e = e.unwrap_err();
+        assert!(matches!(e, ProtocolError::Custom(..)));
+        assert!(matches!(e, ProtocolError::Custom(ProtocolsError::Tcp(_))));
+        match e {
+            ProtocolError::Custom(ProtocolsError::Tcp(e)) => {
+                assert_eq!(e.kind(), io::ErrorKind::BrokenPipe)
+            },
+            _ => panic!("invalid error"),
+        }
     }
 }

@@ -14,6 +14,8 @@ use common::{
     terrain::{Block, TerrainChunk, TerrainChunkMeta, TerrainChunkSize},
     trade::{PendingTrade, SitePrices, TradeId, TradeResult},
     uid::Uid,
+    uuid::Uuid,
+    weather::WeatherGrid,
 };
 use core::marker::PhantomData;
 use hashbrown::HashMap;
@@ -201,6 +203,7 @@ pub enum ServerGeneral<'a> {
     /// Economic information about sites
     SiteEconomy(EconomyInfo),
     MapMarker(comp::MapMarkerUpdate),
+    WeatherUpdate(WeatherGrid),
 }
 
 impl ServerGeneral<'_> {
@@ -234,6 +237,7 @@ pub struct PlayerInfo {
     pub is_online: bool,
     pub player_alias: String,
     pub character: Option<CharacterInfo>,
+    pub uuid: Uuid,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -312,7 +316,8 @@ impl ServerMsg<'_> {
                         | ServerGeneral::UpdatePendingTrade(_, _, _)
                         | ServerGeneral::FinishedTrade(_)
                         | ServerGeneral::SiteEconomy(_)
-                        | ServerGeneral::MapMarker(_) => {
+                        | ServerGeneral::MapMarker(_)
+                        | ServerGeneral::WeatherUpdate(_) => {
                             c_type == ClientType::Game && presence.is_some()
                         },
                         // Always possible

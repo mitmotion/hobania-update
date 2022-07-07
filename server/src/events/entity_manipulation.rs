@@ -3,6 +3,7 @@ use crate::{
     comp::{
         ability,
         agent::{Agent, AgentEvent, Sound, SoundKind},
+        loot_owner::LootOwner,
         skillset::SkillGroupKind,
         BuffKind, BuffSource, PhysicsState,
     },
@@ -17,11 +18,12 @@ use common::{
         self, aura, buff,
         chat::{KillSource, KillType},
         inventory::item::MaterialStatManifest,
+        loot_owner::LootOwnerKind,
         Alignment, Auras, Body, CharacterState, Energy, Group, Health, HealthChange, Inventory,
         Player, Poise, Pos, SkillSet, Stats,
     },
     event::{EventBus, ServerEvent},
-    outcome::Outcome,
+    outcome::{HealthChangeInfo, Outcome},
     resources::Time,
     rtsim::RtSimEntity,
     terrain::{Block, BlockKind, TerrainGrid},
@@ -34,7 +36,8 @@ use common_net::{msg::ServerGeneral, sync::WorldSyncExt};
 use common_state::BlockChange;
 use comp::chat::GenericChatMsg;
 use hashbrown::HashSet;
-use rand::Rng;
+use rand::{distributions::WeightedIndex, Rng};
+use rand_distr::Distribution;
 use specs::{
     join::Join, saveload::MarkerAllocator, Builder, Entity as EcsEntity, Entity, WorldExt,
 };
@@ -52,24 +55,11 @@ enum DamageContrib {
 pub fn handle_poise(server: &Server, entity: EcsEntity, change: comp::PoiseChange) {
     let ecs = &server.state.ecs();
     if let Some(character_state) = ecs.read_storage::<CharacterState>().get(entity) {
-        // Entity is invincible to poise change during stunned/staggered character
-        // state, but the mitigated poise damage is converted to health damage instead
-        if let CharacterState::Stunned(data) = character_state {
-            let health_change = change.amount * data.static_data.poise_state.damage_multiplier();
-            let time = ecs.read_resource::<Time>();
-            let health_change = HealthChange {
-                amount: health_change,
-                by: None,
-                cause: None,
-                time: *time,
-            };
-            let server_eventbus = ecs.read_resource::<EventBus<ServerEvent>>();
-            server_eventbus.emit_now(ServerEvent::HealthChange {
-                entity,
-                change: health_change,
-            });
-        } else if let Some(mut poise) = ecs.write_storage::<Poise>().get_mut(entity) {
-            poise.change(change);
+        // Entity is invincible to poise change during stunned character state
+        if !matches!(character_state, CharacterState::Stunned(_)) {
+            if let Some(mut poise) = ecs.write_storage::<Poise>().get_mut(entity) {
+                poise.change(change);
+            }
         }
     }
 }
@@ -77,12 +67,31 @@ pub fn handle_poise(server: &Server, entity: EcsEntity, change: comp::PoiseChang
 pub fn handle_health_change(server: &Server, entity: EcsEntity, change: HealthChange) {
     let ecs = &server.state.ecs();
     if let Some(mut health) = ecs.write_storage::<Health>().get_mut(entity) {
-        health.change_by(change);
+        // If the change amount was not zero
+        let changed = health.change_by(change);
+        if let (Some(pos), Some(uid)) = (
+            ecs.read_storage::<Pos>().get(entity),
+            ecs.read_storage::<Uid>().get(entity),
+        ) {
+            if changed {
+                let outcomes = ecs.write_resource::<EventBus<Outcome>>();
+                outcomes.emit_now(Outcome::HealthChange {
+                    pos: pos.0,
+                    info: HealthChangeInfo {
+                        amount: change.amount,
+                        by: change.by,
+                        target: *uid,
+                        crit: change.crit,
+                        instance: change.instance,
+                    },
+                });
+            }
+        }
     }
     // This if statement filters out anything under 5 damage, for DOT ticks
     // TODO: Find a better way to separate direct damage from DOT here
     let damage = -change.amount;
-    if damage > -5.0 {
+    if damage > 5.0 {
         if let Some(agent) = ecs.write_storage::<Agent>().get_mut(entity) {
             agent.inbox.push_front(AgentEvent::Hurt);
         }
@@ -203,6 +212,7 @@ pub fn handle_destroy(server: &mut Server, entity: EcsEntity, last_change: Healt
         }
     }
 
+    let mut exp_awards = Vec::<(Entity, f32, Option<Group>)>::new();
     // Award EXP to damage contributors
     //
     // NOTE: Debug logging is disabled by default for this module - to enable it add
@@ -313,7 +323,7 @@ pub fn handle_destroy(server: &mut Server, entity: EcsEntity, last_change: Healt
         // Iterate through all contributors of damage for the killed entity, calculating
         // how much EXP each contributor should be awarded based on their
         // percentage of damage contribution
-        damage_contributors.iter().filter_map(|(damage_contributor, (_, damage_percent))| {
+        exp_awards = damage_contributors.iter().filter_map(|(damage_contributor, (_, damage_percent))| {
             let contributor_exp = exp_reward * damage_percent;
             match damage_contributor {
                 DamageContrib::Solo(attacker) => {
@@ -324,7 +334,7 @@ pub fn handle_destroy(server: &mut Server, entity: EcsEntity, last_change: Healt
                     positions.get(*attacker).and_then(|attacker_pos| {
                         if within_range(attacker_pos) {
                             debug!("Awarding {} exp to individual {:?} who contributed {}% damage to the kill of {:?}", contributor_exp, attacker, *damage_percent * 100.0, entity);
-                            Some(iter::once((*attacker, contributor_exp)).collect())
+                            Some(iter::once((*attacker, contributor_exp, None)).collect())
                         } else {
                             None
                         }
@@ -358,27 +368,27 @@ pub fn handle_destroy(server: &mut Server, entity: EcsEntity, last_change: Healt
                     let exp_per_member = contributor_exp / (members_in_range.len() as f32).sqrt();
 
                     debug!("Awarding {} exp per member of group ID {:?} with {} members which contributed {}% damage to the kill of {:?}", exp_per_member, group, members_in_range.len(), *damage_percent * 100.0, entity);
-                    Some(members_in_range.into_iter().map(|entity| (entity, exp_per_member)).collect::<Vec<(Entity, f32)>>())
+                    Some(members_in_range.into_iter().map(|entity| (entity, exp_per_member, Some(*group))).collect::<Vec<(Entity, f32, Option<Group>)>>())
                 },
                 DamageContrib::NotFound => {
                     // Discard exp for dead/offline individual damage contributors
                     None
                 }
             }
-        }).flatten().for_each(|(attacker, exp_reward)| {
+        }).flatten().collect::<Vec<(Entity, f32, Option<Group>)>>();
+
+        exp_awards.iter().for_each(|(attacker, exp_reward, _)| {
             // Process the calculated EXP rewards
-            if let (Some(mut attacker_skill_set), Some(attacker_uid), Some(attacker_inventory), Some(pos)) = (
-                skill_sets.get_mut(attacker),
-                uids.get(attacker),
-                inventories.get(attacker),
-                positions.get(attacker),
+            if let (Some(mut attacker_skill_set), Some(attacker_uid), Some(attacker_inventory)) = (
+                skill_sets.get_mut(*attacker),
+                uids.get(*attacker),
+                inventories.get(*attacker),
             ) {
                 handle_exp_gain(
-                    exp_reward,
+                    *exp_reward,
                     attacker_inventory,
                     &mut attacker_skill_set,
                     attacker_uid,
-                    pos,
                     &mut outcomes,
                 );
             }
@@ -437,14 +447,64 @@ pub fn handle_destroy(server: &mut Server, entity: EcsEntity, last_change: Healt
             let pos = state.ecs().read_storage::<comp::Pos>().get(entity).cloned();
             let vel = state.ecs().read_storage::<comp::Vel>().get(entity).cloned();
             if let Some(pos) = pos {
-                // TODO: This should only be temporary as you'd eventually want to actually
-                // render the items on the ground, rather than changing the texture depending on
-                // the body type
-                let _ = state
-                    .create_item_drop(comp::Pos(pos.0 + Vec3::unit_z() * 0.25), &item)
+                // Remove entries where zero exp was awarded - this happens because some
+                // entities like Object bodies don't give EXP.
+                let _ = exp_awards.drain_filter(|(_, exp, _)| *exp < f32::EPSILON);
+
+                let winner = if exp_awards.is_empty() {
+                    None
+                } else {
+                    // Use the awarded exp per entity as the weight distribution for drop chance
+                    // Creating the WeightedIndex can only fail if there are weights <= 0 or no
+                    // weights, which shouldn't ever happen
+                    let dist = WeightedIndex::new(exp_awards.iter().map(|x| x.1))
+                        .expect("Failed to create WeightedIndex for loot drop chance");
+                    let mut rng = rand::thread_rng();
+                    let winner = exp_awards
+                        .get(dist.sample(&mut rng))
+                        .expect("Loot distribution failed to find a winner");
+                    let (winner, group) = (winner.0, winner.2);
+
+                    if let Some(group) = group {
+                        Some(LootOwnerKind::Group(group))
+                    } else {
+                        let uid = state
+                            .ecs()
+                            .read_storage::<comp::Body>()
+                            .get(winner)
+                            .and_then(|body| {
+                                // Only humanoids are awarded loot ownership - if the winner
+                                // was a
+                                // non-humanoid NPC the loot will be free-for-all
+                                if matches!(body, Body::Humanoid(_)) {
+                                    Some(state.ecs().read_storage::<Uid>().get(winner).cloned())
+                                } else {
+                                    None
+                                }
+                            })
+                            .flatten();
+
+                        uid.map(LootOwnerKind::Player)
+                    }
+                };
+
+                let item_drop_entity = state
+                    .create_item_drop(comp::Pos(pos.0 + Vec3::unit_z() * 0.25), item)
                     .maybe_with(vel)
-                    .with(item)
                     .build();
+
+                // If there was a loot winner, assign them as the owner of the loot. There will
+                // not be a loot winner when an entity dies to environment damage and such so
+                // the loot will be free-for-all.
+                if let Some(uid) = winner {
+                    debug!("Assigned UID {:?} as the winner for the loot drop", uid);
+
+                    state
+                        .ecs()
+                        .write_storage::<comp::LootOwner>()
+                        .insert(item_drop_entity, LootOwner::new(uid))
+                        .unwrap();
+                }
             } else {
                 error!(
                     ?entity,
@@ -509,7 +569,8 @@ pub fn handle_land_on_ground(server: &Server, entity: EcsEntity, vel: Vec3<f32>)
 
         let inventories = ecs.read_storage::<Inventory>();
         let stats = ecs.read_storage::<Stats>();
-        let time = server.state.ecs().read_resource::<Time>();
+        let time = ecs.read_resource::<Time>();
+        let msm = ecs.read_resource::<MaterialStatManifest>();
 
         // Handle health change
         if let Some(mut health) = ecs.write_storage::<comp::Health>().get_mut(entity) {
@@ -522,15 +583,27 @@ pub fn handle_land_on_ground(server: &Server, entity: EcsEntity, vel: Vec3<f32>)
                 Some(damage),
                 inventories.get(entity),
                 stats.get(entity),
+                &msm,
             );
-            let change =
-                damage.calculate_health_change(damage_reduction, None, false, 0.0, 1.0, *time);
+            let change = damage.calculate_health_change(
+                damage_reduction,
+                None,
+                false,
+                0.0,
+                1.0,
+                *time,
+                rand::random(),
+            );
             health.change_by(change);
+            let server_eventbus = ecs.read_resource::<EventBus<ServerEvent>>();
+            server_eventbus.emit_now(ServerEvent::HealthChange { entity, change });
         }
+
         // Handle poise change
         if let Some(mut poise) = ecs.write_storage::<comp::Poise>().get_mut(entity) {
             let poise_damage = -(mass.0 * vel.magnitude_squared() / 1500.0);
-            let poise_change = Poise::apply_poise_reduction(poise_damage, inventories.get(entity));
+            let poise_change =
+                Poise::apply_poise_reduction(poise_damage, inventories.get(entity), &msm);
             let poise_change = comp::PoiseChange {
                 amount: poise_change,
                 impulse: Vec3::unit_z(),
@@ -590,6 +663,7 @@ pub fn handle_respawn(server: &Server, entity: EcsEntity) {
 pub fn handle_explosion(server: &Server, pos: Vec3<f32>, explosion: Explosion, owner: Option<Uid>) {
     // Go through all other entities
     let ecs = &server.state.ecs();
+    let settings = server.settings();
     let server_eventbus = ecs.read_resource::<EventBus<ServerEvent>>();
     let time = ecs.read_resource::<Time>();
     let owner_entity = owner.and_then(|uid| {
@@ -716,7 +790,9 @@ pub fn handle_explosion(server: &Server, pos: Vec3<f32>, explosion: Explosion, o
                 let mut block_change = ecs.write_resource::<BlockChange>();
                 for block_pos in touched_blocks {
                     if let Ok(block) = terrain.get(block_pos) {
-                        if !matches!(block.kind(), BlockKind::Lava | BlockKind::GlowingRock) {
+                        if !matches!(block.kind(), BlockKind::Lava | BlockKind::GlowingRock)
+                            && settings.gameplay.explosion_burn_marks
+                        {
                             let diff2 = block_pos.map(|b| b as f32).distance_squared(pos);
                             let fade = (1.0 - diff2 / color_range.powi(2)).max(0.0);
                             if let Some(mut color) = block.get_color() {
@@ -1095,7 +1171,6 @@ fn handle_exp_gain(
     inventory: &Inventory,
     skill_set: &mut SkillSet,
     uid: &Uid,
-    pos: &Pos,
     outcomes: &mut EventBus<Outcome>,
 ) {
     use comp::inventory::{item::ItemKind, slot::EquipSlot};
@@ -1136,7 +1211,6 @@ fn handle_exp_gain(
                 uid: *uid,
                 skill_tree: *pool,
                 total_points: level_outcome,
-                pos: pos.0,
             });
         }
     }

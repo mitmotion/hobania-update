@@ -8,14 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-
+- Chat commands to mute and unmute players
 - Waypoints saved between sessions and shared with group members.
 - New rocks
 - Weapon trails
 - Hostile agent will now abort pursuing their target based on multiple metrics
 - Admin command to reload all chunks on the server
 - Furniture and waypoints in site2 towns
-- text input for trading
+- Text input for trading
 - Themed Site CliffTown, hoodoo/arabic inspired stone structures inhabited by mountaineer NPCs.
 - NPCs now have rudimentary personalities
 - Added Belarusian translation
@@ -24,6 +24,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add stealth stat on Bag UI
 - Water caves
 - Modular weapons
+- Added Thai translation
+- Skiing and ice skating
+- Added loot ownership for NPC drops
+- Bamboo collectibles now spawn near rivers
+- Chest sprites can longer be exploded
+- Smoke varies by temperature, humidity, time of day and house
+- Added loot ownership for drops from mining
+- Added an option for experience number accumulation.
+- Added an option for damage number rounding (when greater than or equal to 1.0).
+- Added sliders for incoming/non-incoming damage accumulation duration.
+- New ambience sounds
+- Slider for ambience volume
+- Weather generated on server is sent to clients, and seen on clients as rain/clouds.
+- Updated Brazilian Portuguese Translation
 
 ### Changed
 
@@ -33,8 +47,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enable new giant trees, changed what entities spawn at them
 - Stealth is now shown as a percentage in Stats Diary UI
 - Stealth effects from sneaking and armor are evaluated independently. Armor now has effects even when not sneaking
+- Zoom-in effect when aiming bow is now optional
+- Non-Humanoid NPCs now pick up consumables when less than full health and use them to heal up.
+- Changed module component modifier costs to the following scheme, based on base material: 1 -> 2 -> 5 -> 10 -> 15 -> 25
+- Damage from the same source dealt in the same tick will now be grouped up.
+- Critical hits are now shown differently in the damage numbers.
+- Fall damage and some (extra) buffs/debuffs now show up in the damage numbers. 
+- Optimized sprite processing decreasing the startup time of voxygen (and long freezes when trying
+  to enter the world when this hasn't finished).
+- Metadata added to music files. Listen to the soundtrack more easily!
 
 ### Removed
+- Removed the options for single and cumulated damage.
 
 ### Fixed
 - Fixed bug that would sometimes cause taking a screenshot to panic because a buffer was mapped at the wrong time.
@@ -46,6 +70,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed an error where '{amount} Exp' floater did not use existing localizations
 - Fix villagers seeing cultists and familiar enemies through objects.
 - Menacing agents are now less spammy with their menacing messages
+- Fixed the title screen FPS cap not applying when the background FPS limit was set higher than 60 FPS 
+- Fixed an issue where the hurt animation would "jump" whenever you lost/gained health.
+- Fixed a bug where multiple damage sources in the same tick would show up as a singular attack.
+- Fixed an issue where, if the same amount of healing and damage was received in the same tick, nothing would be shown.
+- UI sfx now play from UI instead of from camera (allowing stereo sfx)
+- Most sfx now correctly play when camera is underwater
+- All sounds now stop upon quitting to main menu
+- Combat music now loops and ends properly
 
 ## [0.12.0] - 2022-02-19
 

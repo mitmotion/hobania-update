@@ -80,17 +80,12 @@ struct Language {
 
 impl Language {
     /// Get a localized text from the given key
-    pub fn get<'a>(&'a self, key: &'a str) -> Option<&str> {
-        self.string_map.get(key).map(String::as_str)
-    }
+    pub fn get(&self, key: &str) -> Option<&str> { self.string_map.get(key).map(String::as_str) }
 
     /// Get a variation of localized text from the given key
     ///
     /// `index` should be a random number from `0` to `u16::max()`
-    ///
-    /// If the key is not present in the localization object
-    /// then the key is returned.
-    pub fn get_variation<'a>(&'a self, key: &'a str, index: u16) -> Option<&str> {
+    pub fn get_variation(&self, key: &str, index: u16) -> Option<&str> {
         self.vector_map.get(key).and_then(|v| {
             if v.is_empty() {
                 None
@@ -102,8 +97,8 @@ impl Language {
 }
 
 impl common_assets::Compound for Language {
-    fn load<S: common_assets::source::Source + ?Sized>(
-        cache: &common_assets::AssetCache<S>,
+    fn load(
+        cache: common_assets::AnyCache,
         asset_key: &str,
     ) -> Result<Self, common_assets::BoxedError> {
         let manifest = cache
@@ -167,15 +162,26 @@ impl LocalizationGuard {
     ///
     /// First lookup is done in the active language, second in
     /// the fallback (if present).
+    pub fn get_opt<'a>(&'a self, key: &str) -> Option<&'a str> {
+        self.active
+            .get(key)
+            .or_else(|| self.fallback.as_ref().and_then(|f| f.get(key)))
+    }
+
+    /// Get a localized text from the given key
+    ///
+    /// First lookup is done in the active language, second in
+    /// the fallback (if present).
     /// If the key is not present in the localization object
     /// then the key is returned.
-    pub fn get<'a>(&'a self, key: &'a str) -> &str {
-        self.active.get(key).unwrap_or_else(|| {
-            self.fallback
-                .as_ref()
-                .and_then(|f| f.get(key))
-                .unwrap_or(key)
-        })
+    pub fn get<'a>(&'a self, key: &'a str) -> &str { self.get_opt(key).unwrap_or(key) }
+
+    /// Get a localized text from the given key
+    ///
+    /// First lookup is done in the active language, second in
+    /// the fallback (if present).
+    pub fn get_or(&self, key: &str, fallback_key: &str) -> Option<&str> {
+        self.get_opt(key).or_else(|| self.get_opt(fallback_key))
     }
 
     /// Get a variation of localized text from the given key
@@ -282,15 +288,6 @@ impl LocalizationHandle {
 
 struct FindManifests;
 
-impl common_assets::Compound for FindManifests {
-    fn load<S: common_assets::Source + ?Sized>(
-        _: &common_assets::AssetCache<S>,
-        _: &str,
-    ) -> Result<Self, common_assets::BoxedError> {
-        Ok(Self)
-    }
-}
-
 impl common_assets::DirLoadable for FindManifests {
     fn select_ids<S: common_assets::Source + ?Sized>(
         source: &S,
@@ -315,8 +312,8 @@ impl common_assets::DirLoadable for FindManifests {
 struct LocalizationList(Vec<LanguageMetadata>);
 
 impl common_assets::Compound for LocalizationList {
-    fn load<S: common_assets::Source + ?Sized>(
-        cache: &common_assets::AssetCache<S>,
+    fn load(
+        cache: common_assets::AnyCache,
         specifier: &str,
     ) -> Result<Self, common_assets::BoxedError> {
         // List language directories

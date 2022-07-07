@@ -1,8 +1,9 @@
 use crate::rtsim::Entity as RtSimData;
 use common::{
     comp::{
-        buff::Buffs, group, ActiveAbilities, Alignment, Body, CharacterState, Combo, Energy,
-        Health, Inventory, LightEmitter, Ori, PhysicsState, Pos, Scale, SkillSet, Stats, Vel,
+        buff::Buffs, group, item::MaterialStatManifest, ActiveAbilities, Alignment, Body,
+        CharacterState, Combo, Energy, Health, Inventory, LightEmitter, LootOwner, Ori,
+        PhysicsState, Pos, Scale, SkillSet, Stats, Vel,
     },
     link::Is,
     mounting::Mount,
@@ -42,6 +43,7 @@ pub struct AgentData<'a> {
     pub char_state: &'a CharacterState,
     pub active_abilities: &'a ActiveAbilities,
     pub cached_spatial_grid: &'a common::CachedSpatialGrid,
+    pub msm: &'a MaterialStatManifest,
 }
 
 pub struct TargetData<'a> {
@@ -152,6 +154,8 @@ pub struct ReadData<'a> {
     pub buffs: ReadStorage<'a, Buffs>,
     pub combos: ReadStorage<'a, Combo>,
     pub active_abilities: ReadStorage<'a, ActiveAbilities>,
+    pub loot_owners: ReadStorage<'a, LootOwner>,
+    pub msm: ReadExpect<'a, MaterialStatManifest>,
 }
 
 pub enum Path {

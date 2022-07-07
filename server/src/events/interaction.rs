@@ -8,8 +8,9 @@ use common::{
         agent::{AgentEvent, Sound, SoundKind},
         dialogue::Subject,
         inventory::slot::EquipSlot,
+        loot_owner::LootOwnerKind,
         tool::ToolKind,
-        Inventory, Pos, SkillGroupKind,
+        Inventory, LootOwner, Pos, SkillGroupKind,
     },
     consts::{MAX_MOUNT_RANGE, SOUND_TRAVEL_DIST_PER_VOLUME},
     event::EventBus,
@@ -169,6 +170,8 @@ pub fn handle_mine_block(
         if let Some(block) = block.filter(|b| b.mine_tool().map_or(false, |t| Some(t) == tool)) {
             // Drop item if one is recoverable from the block
             if let Some(mut item) = comp::Item::try_reclaim_from_block(block) {
+                let maybe_uid = state.ecs().uid_from_entity(entity);
+
                 if let Some(mut skillset) = state
                     .ecs()
                     .write_storage::<comp::SkillSet>()
@@ -176,23 +179,20 @@ pub fn handle_mine_block(
                 {
                     if let (Some(tool), Some(uid), Some(exp_reward)) = (
                         tool,
-                        state.ecs().uid_from_entity(entity),
+                        maybe_uid,
                         item.item_definition_id()
                             .itemdef_id()
                             .and_then(|id| RESOURCE_EXPERIENCE_MANIFEST.read().0.get(id).copied()),
                     ) {
                         let skill_group = SkillGroupKind::Weapon(tool);
                         let outcome_bus = state.ecs().read_resource::<EventBus<Outcome>>();
-                        let positions = state.ecs().read_component::<comp::Pos>();
-                        if let (Some(level_outcome), Some(pos)) = (
-                            skillset.add_experience(skill_group, exp_reward),
-                            positions.get(entity),
-                        ) {
+                        if let Some(level_outcome) =
+                            skillset.add_experience(skill_group, exp_reward)
+                        {
                             outcome_bus.emit_now(Outcome::SkillPointGain {
                                 uid,
                                 skill_tree: skill_group,
                                 total_points: level_outcome,
-                                pos: pos.0,
                             });
                         }
                         outcome_bus.emit_now(Outcome::ExpChange {
@@ -232,11 +232,15 @@ pub fn handle_mine_block(
                         let _ = item.increase_amount(1);
                     }
                 }
-                state
-                    .create_item_drop(Default::default(), &item)
-                    .with(comp::Pos(pos.map(|e| e as f32) + Vec3::new(0.5, 0.5, 0.0)))
-                    .with(item)
-                    .build();
+                let item_drop = state
+                    .create_item_drop(Default::default(), item)
+                    .with(comp::Pos(pos.map(|e| e as f32) + Vec3::new(0.5, 0.5, 0.0)));
+                if let Some(uid) = maybe_uid {
+                    item_drop.with(LootOwner::new(LootOwnerKind::Player(uid)))
+                } else {
+                    item_drop
+                }
+                .build();
             }
 
             state.set_block(pos, block.into_vacant());

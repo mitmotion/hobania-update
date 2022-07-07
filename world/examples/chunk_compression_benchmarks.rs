@@ -15,7 +15,7 @@ use common_net::msg::compression::{
 };
 use core::marker::PhantomData;
 use hashbrown::HashMap;
-use image::ImageBuffer;
+use image::{ImageBuffer, ImageEncoder};
 use num_traits::cast::FromPrimitive;
 use rayon::ThreadPoolBuilder;
 use serde::{Deserialize, Serialize};
@@ -201,7 +201,7 @@ impl VoxelImageEncoding for PngEncoding {
             CompressionType::Rle,
             FilterType::Up,
         );
-        png.encode(
+        png.write_image(
             &*ws.as_raw(),
             ws.width(),
             ws.height(),
@@ -301,7 +301,7 @@ impl VoxelImageEncoding for MixedEncoding {
                 CompressionType::Rle,
                 FilterType::Up,
             );
-            png.encode(&*x.as_raw(), x.width(), x.height(), image::ColorType::L8)
+            png.write_image(&*x.as_raw(), x.width(), x.height(), image::ColorType::L8)
                 .ok()?;
             indices[i] = buf.len();
             Some(())
@@ -407,7 +407,7 @@ impl VoxelImageEncoding for MixedEncodingSparseSprites {
             CompressionType::Fast,
             FilterType::Up,
         );
-        png.encode(
+        png.write_image(
             &*ws.0.as_raw(),
             ws.0.width(),
             ws.0.height(),
@@ -472,7 +472,7 @@ impl VoxelImageEncoding for MixedEncodingDenseSprites {
                 CompressionType::Fast,
                 FilterType::Up,
             );
-            png.encode(&*x.as_raw(), x.width(), x.height(), image::ColorType::L8)
+            png.write_image(&*x.as_raw(), x.width(), x.height(), image::ColorType::L8)
                 .ok()?;
             indices[i] = buf.len();
             Some(())
@@ -638,7 +638,7 @@ impl<'a, NN: NearestNeighbor, const N: u32> VoxelImageEncoding for PaletteEncodi
                 CompressionType::Rle,
                 FilterType::Up,
             );
-            png.encode(&*x.as_raw(), x.width(), x.height(), image::ColorType::L8)
+            png.write_image(&*x.as_raw(), x.width(), x.height(), image::ColorType::L8)
                 .ok()?;
             indices[i] = buf.len();
             Some(())

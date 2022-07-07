@@ -1,8 +1,17 @@
-use crate::{comp, uid::Uid};
+use crate::{combat::DamageContributor, comp, uid::Uid};
 use comp::{beam, item::Reagent, poise::PoiseState, skillset::SkillGroupKind, UtteranceKind};
 use hashbrown::HashSet;
 use serde::{Deserialize, Serialize};
 use vek::*;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct HealthChangeInfo {
+    pub amount: f32,
+    pub crit: bool,
+    pub target: Uid,
+    pub by: Option<DamageContributor>,
+    pub instance: u64,
+}
 
 /// An outcome represents the final result of an instantaneous event. It implies
 /// that said event has already occurred. It is not a request for that event to
@@ -43,8 +52,6 @@ pub enum Outcome {
         uid: Uid,
         skill_tree: comp::skillset::SkillGroupKind,
         total_points: u16,
-        // TODO: Access ECS to get position from Uid to conserve bandwidth
-        pos: Vec3<f32>,
     },
     ComboChange {
         uid: Uid,
@@ -58,8 +65,9 @@ pub enum Outcome {
         pos: Vec3<f32>,
         body: comp::Body,
     },
-    Damage {
+    HealthChange {
         pos: Vec3<f32>,
+        info: HealthChangeInfo,
     },
     Death {
         pos: Vec3<f32>,
@@ -94,9 +102,8 @@ impl Outcome {
             | Outcome::ProjectileShot { pos, .. }
             | Outcome::ProjectileHit { pos, .. }
             | Outcome::Beam { pos, .. }
-            | Outcome::SkillPointGain { pos, .. }
             | Outcome::SummonedCreature { pos, .. }
-            | Outcome::Damage { pos, .. }
+            | Outcome::HealthChange { pos, .. }
             | Outcome::Death { pos, .. }
             | Outcome::Block { pos, .. }
             | Outcome::PoiseChange { pos, .. }
@@ -104,7 +111,9 @@ impl Outcome {
             | Outcome::Utterance { pos, .. }
             | Outcome::Glider { pos, .. } => Some(*pos),
             Outcome::BreakBlock { pos, .. } => Some(pos.map(|e| e as f32 + 0.5)),
-            Outcome::ExpChange { .. } | Outcome::ComboChange { .. } => None,
+            Outcome::ExpChange { .. }
+            | Outcome::ComboChange { .. }
+            | Outcome::SkillPointGain { .. } => None,
         }
     }
 }

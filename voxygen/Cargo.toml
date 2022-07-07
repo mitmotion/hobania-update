@@ -35,7 +35,9 @@ shaderc-from-source = ["shaderc/build-from-source"]
 
 # We don't ship egui with published release builds so a separate feature is required that excludes it.
 default-publish = ["singleplayer", "native-dialog", "plugins", "simd"]
-default = ["default-publish", "egui-ui", "hot-reloading", "shaderc-from-source"]
+# Temp for bug on current wgpu version that has access violation in vulkan when constructing egui pipeline
+default-no-egui = ["default-publish", "hot-reloading", "shaderc-from-source"]
+default = ["default-no-egui", "egui-ui"]
 
 [dependencies]
 client = {package = "veloren-client", path = "../client"}
@@ -77,8 +79,8 @@ egui_wgpu_backend = {git = "https://github.com/hasenbanck/egui_wgpu_backend.git"
 egui_winit_platform = {version = "0.8", optional = true }
 
 # ECS
-specs = {git = "https://github.com/amethyst/specs.git", rev = "f985bec5d456f7b0dd8aae99848f9473c2cd9d46"}
-specs-idvs = { git = "https://gitlab.com/veloren/specs-idvs.git", rev = "8be2abcddf8f524cb5876e8dd20a7e47cfaf7573" }
+specs = { version = "0.18", features = ["serde", "storage-event-control", "derive"] }
+specs-idvs = { git = "https://gitlab.com/veloren/specs-idvs.git", rev = "c17abc638f23ef221ce7384c7dd77eef757b82f4" }
 
 # Mathematics
 vek = {version = "0.15.8", features = ["serde"]}
@@ -90,7 +92,7 @@ gilrs = {version = "0.8.0", features = ["serde-serialize"]}
 server = { package = "veloren-server", path = "../server", optional = true, default-features = false, features = ["worldgen"] }
 
 # Utility
-assets_manager = {version = "0.7", features = ["ab_glyph"]}
+assets_manager = {version = "0.8", features = ["ab_glyph"]}
 backtrace = "0.3.40"
 bincode = "1.3.1"
 chrono = { version = "0.4.19", features = ["serde"] }
@@ -103,13 +105,14 @@ crossbeam-channel = "0.5"
 directories-next = "2.0"
 dot_vox = "4.0"
 enum-iterator = "0.7"
-guillotiere = "0.6"
-hashbrown = {version = "0.11", features = ["rayon", "serde", "nightly"]}
-image = {version = "0.23.12", default-features = false, features = ["ico", "png"]}
+guillotiere = "0.6.2"
+etagere = "0.2.7"
+hashbrown = {version = "0.12", features = ["rayon", "serde", "nightly"]}
+image = {version = "0.24", default-features = false, features = ["ico", "png"]}
 lazy_static = "1.4.0"
 native-dialog = { version = "0.6.3", optional = true }
 num = "0.4"
-ordered-float = { version = "2.0.1", default-features = false }
+ordered-float = { version = "3", default-features = false }
 rand = "0.8"
 rand_chacha = "0.3"
 rayon = "1.5"
@@ -127,13 +130,16 @@ itertools = "0.10.0"
 
 # Tracy
 tracing = "0.1"
-profiling = { version = "1.0.1", default-features = false, optional = true }
+profiling = { version = "1.0.6", default-features = false, optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 dispatch = "0.1.4"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
+
+[target.'cfg(all(windows, target_env="msvc"))'.dependencies]
+mimalloc = "0.1.29"
 
 # Mumble
 [target.'cfg(not(target_os="macos"))'.dependencies]

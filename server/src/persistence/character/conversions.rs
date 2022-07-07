@@ -209,6 +209,10 @@ pub fn convert_body_to_database_json(
             "quadruped_small",
             serde_json::to_string(&GenericBody::from(body))?,
         ),
+        common::comp::Body::BirdMedium(body) => (
+            "bird_medium",
+            serde_json::to_string(&GenericBody::from(body))?,
+        ),
         _ => {
             return Err(PersistenceError::ConversionError(format!(
                 "Unsupported body type for persistence: {:?}",
@@ -345,7 +349,7 @@ pub fn convert_inventory_from_database_items(
     // inventory at the correct position.
     //
     let loadout = convert_loadout_from_database_items(loadout_container_id, loadout_items)?;
-    let mut inventory = Inventory::new_with_loadout(loadout);
+    let mut inventory = Inventory::with_loadout_humanoid(loadout);
     let mut item_indices = HashMap::new();
 
     // In order to items with components to properly load, it is important that this
@@ -576,6 +580,9 @@ pub fn convert_body_from_database(
         },
         "quadruped_small" => {
             deserialize_body!(body_data, QuadrupedSmall, quadruped_small)
+        },
+        "bird_medium" => {
+            deserialize_body!(body_data, BirdMedium, bird_medium)
         },
         _ => {
             return Err(PersistenceError::ConversionError(format!(

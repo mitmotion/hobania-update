@@ -1,6 +1,9 @@
 use super::{Fluid, Ori};
 use crate::{
-    comp::body::ship::figuredata::VoxelCollider, consts::WATER_DENSITY, terrain::Block, uid::Uid,
+    comp::{body::ship::figuredata::VoxelCollider, inventory::item::armor::Friction},
+    consts::WATER_DENSITY,
+    terrain::Block,
+    uid::Uid,
 };
 use hashbrown::HashSet;
 use serde::{Deserialize, Serialize};
@@ -81,7 +84,7 @@ impl Component for Scale {
 }
 
 // Mass
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Mass(pub f32);
 
 impl Default for Mass {
@@ -182,6 +185,9 @@ pub struct PhysicsState {
     pub touch_entities: HashSet<Uid>,
     pub in_fluid: Option<Fluid>,
     pub ground_vel: Vec3<f32>,
+    pub footwear: Friction,
+    pub skating_last_height: f32,
+    pub skating_active: bool,
 }
 
 impl PhysicsState {

@@ -4,8 +4,8 @@ pub mod modular;
 pub mod tool;
 
 // Reexports
-pub use modular::{ModularBase, ModularComponent};
-pub use tool::{AbilitySet, AbilitySpec, Hands, MaterialStatManifest, Tool, ToolKind};
+pub use modular::{MaterialStatManifest, ModularBase, ModularComponent};
+pub use tool::{AbilitySet, AbilitySpec, Hands, Tool, ToolKind};
 
 use crate::{
     assets::{self, AssetExt, BoxedError, Error},
@@ -656,10 +656,7 @@ impl PartialEq for Item {
 }
 
 impl assets::Compound for ItemDef {
-    fn load<S: assets::source::Source + ?Sized>(
-        cache: &assets::AssetCache<S>,
-        specifier: &str,
-    ) -> Result<Self, BoxedError> {
+    fn load(cache: assets::AnyCache, specifier: &str) -> Result<Self, BoxedError> {
         if specifier.starts_with("veloren.core.") {
             return Err(format!(
                 "Attempted to load an asset from a specifier reserved for core veloren functions. \
