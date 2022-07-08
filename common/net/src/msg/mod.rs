@@ -8,7 +8,7 @@ pub mod world_msg;
 pub use self::{
     client::{ClientGeneral, ClientMsg, ClientRegister, ClientType},
     compression::{
-        CompressedData, GridLtrPacking, PackingFormula, QuadPngEncoding, TriPngEncoding,
+        CompressedData, DecodeError, GridLtrPacking, PackingFormula, QuadPngEncoding, TriPngEncoding,
         VoxelImageEncoding, WidePacking, WireChonk,
     },
     ecs_packet::EcsCompPacket,

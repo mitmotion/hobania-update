@@ -1,4 +1,5 @@
 use authc::AuthClientError;
+use common_net::msg::DecodeError;
 pub use network::{InitProtocolError, NetworkConnectError, NetworkError};
 use network::{ParticipantError, StreamError};
 use specs::error::Error as SpecsError;
@@ -24,6 +25,7 @@ pub enum Error {
     //TODO: InvalidAlias,
     Other(String),
     SpecsErr(SpecsError),
+    CompressionError(DecodeError),
 }
 
 impl From<SpecsError> for Error {
@@ -44,6 +46,15 @@ impl From<StreamError> for Error {
 
 impl From<bincode::Error> for Error {
     fn from(err: bincode::Error) -> Self { Self::StreamErr(StreamError::Deserialize(err)) }
+}
+
+impl From<DecodeError> for Error {
+    fn from(err: DecodeError) -> Self {
+        match err {
+            DecodeError::Deserialize(err) => Self::StreamErr(StreamError::Deserialize(err)),
+            _ => Self::CompressionError(err),
+        }
+    }
 }
 
 impl From<AuthClientError> for Error {

@@ -4,18 +4,54 @@ use common::{
     volumes::vol_grid_2d::VolGrid2d,
 };
 use hashbrown::HashMap;
-use image::{ImageBuffer, ImageDecoder, ImageEncoder, Pixel};
+use image::{ImageBuffer, ImageDecoder, ImageEncoder, ImageError, Pixel};
 use num_traits::cast::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
     fmt::Debug,
-    io::{Read, Write},
+    io::{Error as IoError, Read, Write},
     marker::PhantomData,
 };
 use serde_with::{serde_as, Bytes};
 use tracing::warn;
 use vek::*;
+
+/// Errors that can occur during decoding.
+#[derive(Debug)]
+pub enum DecodeError {
+    Deserialize(bincode::Error),
+    Image(ImageError),
+    Io(IoError)
+}
+
+impl ToString for DecodeError {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Deserialize(error) => error.to_string(),
+            Self::Image(error) => error.to_string(),
+            Self::Io(error) => error.to_string(),
+        }
+    }
+}
+
+impl From<ImageError> for DecodeError {
+    fn from(error: ImageError) -> Self {
+        Self::Image(error)
+    }
+}
+
+impl From<IoError> for DecodeError {
+    fn from(error: IoError) -> Self {
+        Self::Io(error)
+    }
+}
+
+impl From<bincode::Error> for DecodeError {
+    fn from(error: bincode::Error) -> Self {
+        Self::Deserialize(error)
+    }
+}
 
 /// Wrapper for compressed, serialized data (for stuff that doesn't use the
 /// default lz4 compression)
@@ -59,15 +95,14 @@ impl<'a, T: Serialize> CompressedData<'a, T> {
 }
 
 impl<T: for<'a> Deserialize<'a>> CompressedData<'_, T> {
-    pub fn decompress(&self) -> Option<T> {
+    pub fn decompress(&self) -> Result<T, DecodeError> {
         if self.compressed {
             let mut uncompressed = Vec::with_capacity(self.data.len());
             flate2::read::DeflateDecoder::new(&*self.data)
-                .read_to_end(&mut uncompressed)
-                .ok()?;
-            bincode::deserialize(&*uncompressed).ok()
+                .read_to_end(&mut uncompressed)?;
+            Ok(bincode::deserialize(&*uncompressed)?)
         } else {
-            bincode::deserialize(&*self.data).ok()
+            Ok(bincode::deserialize(&*self.data)?)
         }
     }
 }
@@ -129,6 +164,8 @@ impl PackingFormula for GridLtrPacking {
 pub trait VoxelImageEncoding {
     type Workspace;
     type Output;
+    type EncodeError;
+
     fn create(width: u32, height: u32) -> Self::Workspace;
     fn put_solid(&self, ws: &mut Self::Workspace, x: u32, y: u32, kind: BlockKind, rgb: Rgb<u8>);
     fn put_sprite(
@@ -140,25 +177,31 @@ pub trait VoxelImageEncoding {
         sprite: SpriteKind,
         ori: Option<u8>,
     );
-    fn finish(ws: &Self::Workspace) -> Option<Self::Output>;
+    fn finish(ws: &Self::Workspace) -> Result<Self::Output, Self::EncodeError>;
 }
 
 pub trait VoxelImageDecoding: VoxelImageEncoding {
-    fn start(ws: &Self::Output) -> Option<Self::Workspace>;
+    fn start(ws: &Self::Output) -> Result<Self::Workspace, DecodeError>;
     fn get_block(ws: &Self::Workspace, x: u32, y: u32, is_border: bool) -> Block;
 }
 
 pub fn image_from_bytes<'a, I: ImageDecoder<'a>, P: 'static + Pixel<Subpixel = u8>>(
     decoder: I,
-) -> Option<ImageBuffer<P, Vec<u8>>> {
+) -> Result<ImageBuffer<P, Vec<u8>>, ImageError> {
     let (w, h) = decoder.dimensions();
     let mut buf = vec![0; decoder.total_bytes() as usize];
-    decoder.read_image(&mut buf).ok()?;
-    ImageBuffer::from_raw(w, h, buf)
+    decoder.read_image(&mut buf)?;
+    Ok(ImageBuffer::from_raw(w, h, buf).ok_or_else(|| {
+        IoError::new(
+            std::io::ErrorKind::WriteZero,
+            "Could not write full image to buffer; maybe out of memory?"
+        )
+    })?)
 }
 
 impl<'a, VIE: VoxelImageEncoding> VoxelImageEncoding for &'a VIE {
     type Output = VIE::Output;
+    type EncodeError = VIE::EncodeError;
     type Workspace = VIE::Workspace;
 
     fn create(width: u32, height: u32) -> Self::Workspace { VIE::create(width, height) }
@@ -179,11 +222,11 @@ impl<'a, VIE: VoxelImageEncoding> VoxelImageEncoding for &'a VIE {
         (*self).put_sprite(ws, x, y, kind, sprite, ori)
     }
 
-    fn finish(ws: &Self::Workspace) -> Option<Self::Output> { VIE::finish(ws) }
+    fn finish(ws: &Self::Workspace) -> Result<Self::Output, VIE::EncodeError> { VIE::finish(ws) }
 }
 
 impl<'a, VIE: VoxelImageDecoding> VoxelImageDecoding for &'a VIE {
-    fn start(ws: &Self::Output) -> Option<Self::Workspace> { VIE::start(ws) }
+    fn start(ws: &Self::Output) -> Result<Self::Workspace, DecodeError> { VIE::start(ws) }
 
     fn get_block(ws: &Self::Workspace, x: u32, y: u32, is_border: bool) -> Block {
         VIE::get_block(ws, x, y, is_border)
@@ -195,6 +238,7 @@ pub struct QuadPngEncoding<'a, const RESOLUTION_DIVIDER: u32>(pub PhantomData<&'
 
 impl<'a, const N: u32> VoxelImageEncoding for QuadPngEncoding<'a, N> {
     type Output = CompressedData<'a, (Vec<u8>, [usize; 3])>;
+    type EncodeError = ImageError;
     type Workspace = (
         ImageBuffer<image::Luma<u8>, Vec<u8>>,
         ImageBuffer<image::Luma<u8>, Vec<u8>>,
@@ -232,20 +276,19 @@ impl<'a, const N: u32> VoxelImageEncoding for QuadPngEncoding<'a, N> {
         ws.2.put_pixel(x, y, image::Luma([ori.unwrap_or(0)]));
     }
 
-    fn finish(ws: &Self::Workspace) -> Option<Self::Output> {
+    fn finish(ws: &Self::Workspace) -> Result<Self::Output, Self::EncodeError> {
         let mut buf = Vec::new();
         use image::codecs::png::{CompressionType, FilterType};
         let mut indices = [0; 3];
-        let mut f = |x: &ImageBuffer<_, Vec<u8>>, i| {
+        let mut f = |x: &ImageBuffer<_, Vec<u8>>, i| -> Result<_, Self::EncodeError> {
             let png = image::codecs::png::PngEncoder::new_with_quality(
                 &mut buf,
                 CompressionType::Rle,
                 FilterType::Up,
             );
-            png.write_image(&*x.as_raw(), x.width(), x.height(), image::ColorType::L8)
-                .ok()?;
+            png.write_image(&*x.as_raw(), x.width(), x.height(), image::ColorType::L8)?;
             indices[i] = buf.len();
-            Some(())
+            Ok(())
         };
         f(&ws.0, 0)?;
         f(&ws.1, 1)?;
@@ -262,11 +305,10 @@ impl<'a, const N: u32> VoxelImageEncoding for QuadPngEncoding<'a, N> {
                 ws.3.width(),
                 ws.3.height(),
                 image::ColorType::Rgb8,
-            )
-            .ok()?;
+            )?;
         }
 
-        Some(CompressedData::compress(&(buf, indices), 4))
+        Ok(CompressedData::compress(&(buf, indices), 4))
     }
 }
 
@@ -323,7 +365,7 @@ const fn gen_lanczos_lookup<const N: u32, const R: u32>(
 }
 
 impl<const N: u32> VoxelImageDecoding for QuadPngEncoding<'_, N> {
-    fn start(data: &Self::Output) -> Option<Self::Workspace> {
+    fn start(data: &Self::Output) -> Result<Self::Workspace, DecodeError> {
         use image::codecs::png::PngDecoder;
         let (quad, indices) = data.decompress()?;
         let ranges: [_; 4] = [
@@ -332,11 +374,11 @@ impl<const N: u32> VoxelImageDecoding for QuadPngEncoding<'_, N> {
             indices[1]..indices[2],
             indices[2]..quad.len(),
         ];
-        let a = image_from_bytes(PngDecoder::new(&quad[ranges[0].clone()]).ok()?)?;
-        let b = image_from_bytes(PngDecoder::new(&quad[ranges[1].clone()]).ok()?)?;
-        let c = image_from_bytes(PngDecoder::new(&quad[ranges[2].clone()]).ok()?)?;
-        let d = image_from_bytes(PngDecoder::new(&quad[ranges[3].clone()]).ok()?)?;
-        Some((a, b, c, d))
+        let a = image_from_bytes(PngDecoder::new(&quad[ranges[0].clone()])?)?;
+        let b = image_from_bytes(PngDecoder::new(&quad[ranges[1].clone()])?)?;
+        let c = image_from_bytes(PngDecoder::new(&quad[ranges[2].clone()])?)?;
+        let d = image_from_bytes(PngDecoder::new(&quad[ranges[3].clone()])?)?;
+        Ok((a, b, c, d))
     }
 
     fn get_block(ws: &Self::Workspace, x: u32, y: u32, is_border: bool) -> Block {
@@ -469,6 +511,7 @@ pub struct TriPngEncoding<'a, const AVERAGE_PALETTE: bool>(pub PhantomData<&'a (
 
 impl<'a, const AVERAGE_PALETTE: bool> VoxelImageEncoding for TriPngEncoding<'a, AVERAGE_PALETTE> {
     type Output = CompressedData<'a, (Vec<u8>, Vec<Rgb<u8>>, [usize; 3])>;
+    type EncodeError = ImageError;
     type Workspace = (
         ImageBuffer<image::Luma<u8>, Vec<u8>>,
         ImageBuffer<image::Luma<u8>, Vec<u8>>,
@@ -508,20 +551,19 @@ impl<'a, const AVERAGE_PALETTE: bool> VoxelImageEncoding for TriPngEncoding<'a, 
         ws.2.put_pixel(x, y, image::Luma([ori.unwrap_or(0)]));
     }
 
-    fn finish(ws: &Self::Workspace) -> Option<Self::Output> {
+    fn finish(ws: &Self::Workspace) -> Result<Self::Output, Self::EncodeError> {
         let mut buf = Vec::new();
         use image::codecs::png::{CompressionType, FilterType};
         let mut indices = [0; 3];
-        let mut f = |x: &ImageBuffer<_, Vec<u8>>, i| {
+        let mut f = |x: &ImageBuffer<_, Vec<u8>>, i| -> Result<_, Self::EncodeError> {
             let png = image::codecs::png::PngEncoder::new_with_quality(
                 &mut buf,
                 CompressionType::Rle,
                 FilterType::Up,
             );
-            png.write_image(&*x.as_raw(), x.width(), x.height(), image::ColorType::L8)
-                .ok()?;
+            png.write_image(&*x.as_raw(), x.width(), x.height(), image::ColorType::L8)?;
             indices[i] = buf.len();
-            Some(())
+            Ok(())
         };
         f(&ws.0, 0)?;
         f(&ws.1, 1)?;
@@ -550,12 +592,12 @@ impl<'a, const AVERAGE_PALETTE: bool> VoxelImageEncoding for TriPngEncoding<'a, 
             Vec::new()
         };
 
-        Some(CompressedData::compress(&(buf, palette, indices), 4))
+        Ok(CompressedData::compress(&(buf, palette, indices), 4))
     }
 }
 
 impl<const AVERAGE_PALETTE: bool> VoxelImageDecoding for TriPngEncoding<'_, AVERAGE_PALETTE> {
-    fn start(data: &Self::Output) -> Option<Self::Workspace> {
+    fn start(data: &Self::Output) -> Result<Self::Workspace, DecodeError> {
         use image::codecs::png::PngDecoder;
         let (quad, palette, indices) = data.decompress()?;
         let ranges: [_; 3] = [
@@ -563,9 +605,9 @@ impl<const AVERAGE_PALETTE: bool> VoxelImageDecoding for TriPngEncoding<'_, AVER
             indices[0]..indices[1],
             indices[1]..indices[2],
         ];
-        let a = image_from_bytes(PngDecoder::new(&quad[ranges[0].clone()]).ok()?)?;
-        let b = image_from_bytes(PngDecoder::new(&quad[ranges[1].clone()]).ok()?)?;
-        let c = image_from_bytes(PngDecoder::new(&quad[ranges[2].clone()]).ok()?)?;
+        let a = image_from_bytes(PngDecoder::new(&quad[ranges[0].clone()])?)?;
+        let b = image_from_bytes(PngDecoder::new(&quad[ranges[1].clone()])?)?;
+        let c = image_from_bytes(PngDecoder::new(&quad[ranges[2].clone()])?)?;
         let mut d: HashMap<_, HashMap<_, _>> = HashMap::new();
         if AVERAGE_PALETTE {
             for i in 0..=255 {
@@ -578,7 +620,7 @@ impl<const AVERAGE_PALETTE: bool> VoxelImageDecoding for TriPngEncoding<'_, AVER
             }
         }
 
-        Some((a, b, c, d))
+        Ok((a, b, c, d))
     }
 
     fn get_block(ws: &Self::Workspace, x: u32, y: u32, _: bool) -> Block {
@@ -681,7 +723,7 @@ pub fn image_terrain_chonk<S: RectVolSize, Storage: core::ops::DerefMut<Target=V
     vie: &VIE,
     packing: P,
     chonk: &Chonk<Block, Storage, S, M>,
-) -> Option<VIE::Output> {
+) -> Result<VIE::Output, VIE::EncodeError> {
     image_terrain(
         vie,
         packing,
@@ -701,7 +743,7 @@ pub fn image_terrain_volgrid<
     vie: &VIE,
     packing: P,
     volgrid: &VolGrid2d<Chonk<Block, Storage, S, M>>,
-) -> Option<VIE::Output> {
+) -> Result<VIE::Output, VIE::EncodeError> {
     let mut lo = Vec3::broadcast(i32::MAX);
     let mut hi = Vec3::broadcast(i32::MIN);
     for (pos, chonk) in volgrid.iter() {
@@ -727,7 +769,7 @@ pub fn image_terrain<
     vol: &V,
     lo: Vec3<u32>,
     hi: Vec3<u32>,
-) -> Option<VIE::Output> {
+) -> Result<VIE::Output, VIE::EncodeError> {
     let dims = Vec3::new(
         hi.x.wrapping_sub(lo.x),
         hi.y.wrapping_sub(lo.y),
@@ -782,7 +824,7 @@ pub fn write_image_terrain<
     data: &VIE::Output,
     lo: Vec3<u32>,
     hi: Vec3<u32>,
-) -> Option<()> {
+) -> Result<(), DecodeError> {
     let ws = VIE::start(data)?;
     let dims = Vec3::new(
         hi.x.wrapping_sub(lo.x),
@@ -805,7 +847,7 @@ pub fn write_image_terrain<
             }
         }
     }
-    Some(())
+    Ok(())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -824,16 +866,14 @@ pub struct WireChonk<VIE: VoxelImageEncoding, P: PackingFormula, M: Clone, S: Re
 impl<VIE: VoxelImageEncoding + VoxelImageDecoding, P: PackingFormula, M: Clone, S: RectVolSize>
     WireChonk<VIE, P, M, S>
 {
-    pub fn from_chonk<Storage: core::ops::DerefMut<Target=Vec<Block>>>(vie: VIE, packing: P, chonk: &Chonk<Block, Storage, S, M>) -> Option<Self> {
+    pub fn from_chonk<Storage: core::ops::DerefMut<Target=Vec<Block>>>(vie: VIE, packing: P, chonk: &Chonk<Block, Storage, S, M>) -> Result<Self, VIE::EncodeError> {
         let data = image_terrain_chonk(&vie, packing, chonk)?;
-        Some(Self {
+        Ok(Self {
             zmin: chonk.get_min_z(),
             zmax: chonk.get_max_z(),
             data,
-            below: *chonk
-                .get(Vec3::new(0, 0, chonk.get_min_z().saturating_sub(1)))
-                .ok()?,
-            above: *chonk.get(Vec3::new(0, 0, chonk.get_max_z() + 1)).ok()?,
+            below: *chonk.below(),
+            above: *chonk.above(),
             meta: chonk.meta().clone(),
             vie,
             packing,
@@ -841,7 +881,7 @@ impl<VIE: VoxelImageEncoding + VoxelImageDecoding, P: PackingFormula, M: Clone, 
         })
     }
 
-    pub fn to_chonk<Storage: Clone + core::ops::DerefMut<Target=Vec<Block>> + From<Vec<Block>>>(&self) -> Option<Chonk<Block, Storage, S, M>> {
+    pub fn to_chonk<Storage: Clone + core::ops::DerefMut<Target=Vec<Block>> + From<Vec<Block>>>(&self) -> Result<Chonk<Block, Storage, S, M>, DecodeError> {
         let mut chonk = Chonk::new(self.zmin, self.below, self.above, self.meta.clone());
         write_image_terrain(
             &self.vie,
@@ -851,6 +891,6 @@ impl<VIE: VoxelImageEncoding + VoxelImageDecoding, P: PackingFormula, M: Clone, 
             Vec3::new(0, 0, self.zmin as u32),
             Vec3::new(S::RECT_SIZE.x, S::RECT_SIZE.y, self.zmax as u32),
         )?;
-        Some(chonk)
+        Ok(chonk)
     }
 }

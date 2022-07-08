@@ -432,6 +432,7 @@ fn get_client_msg_error(
                 localization.get("main.login.authentication_error"),
                 e
             ),
+            Error::CompressionError(e) => net_error(e.to_string(), mismatched_server_info),
             Error::Kicked(e) => e,
             Error::TooManyPlayers => localization.get("main.login.server_full").into(),
             Error::AuthServerNotTrusted => {

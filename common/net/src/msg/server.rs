@@ -1,5 +1,5 @@
 use super::{
-    world_msg::EconomyInfo, ClientType, CompressedData, EcsCompPacket, PingMsg, QuadPngEncoding,
+    world_msg::EconomyInfo, ClientType, CompressedData, DecodeError, EcsCompPacket, PingMsg, QuadPngEncoding,
     TriPngEncoding, WidePacking, WireChonk,
 };
 use crate::sync;
@@ -104,24 +104,26 @@ impl SerializedTerrainChunk<'_> {
     }
 
     pub fn quadpng(chunk: &TerrainChunk) -> Self {
-        if let Some(wc) = WireChonk::from_chonk(QuadPngEncoding(PhantomData), WidePacking(), chunk) {
-            Self::QuadPng(wc)
-        } else {
-            warn!("Image encoding failure occurred, falling back to deflate");
-            Self::deflate(chunk)
+        match WireChonk::from_chonk(QuadPngEncoding(PhantomData), WidePacking(), chunk) {
+            Ok(wc) => Self::QuadPng(wc),
+            Err(err) => {
+                warn!("Image encoding failure occurred, falling back to deflate: {}", err);
+                Self::deflate(chunk)
+            }
         }
     }
 
     pub fn tripng(chunk: &TerrainChunk) -> Self {
-        if let Some(wc) = WireChonk::from_chonk(TriPngEncoding(PhantomData), WidePacking(), chunk) {
-            Self::TriPng(wc)
-        } else {
-            warn!("Image encoding failure occurred, falling back to deflate");
-            Self::deflate(chunk)
+        match WireChonk::from_chonk(TriPngEncoding(PhantomData), WidePacking(), chunk) {
+            Ok(wc) => Self::TriPng(wc),
+            Err(err) => {
+                warn!("Image encoding failure occurred, falling back to deflate: {}", err);
+                Self::deflate(chunk)
+            },
         }
     }
 
-    pub fn to_chunk(&self) -> Option<TerrainChunk> {
+    pub fn to_chunk(&self) -> Result<TerrainChunk, DecodeError> {
         match self {
             Self::DeflatedChonk(chonk) => chonk.decompress(),
             Self::QuadPng(wc) => wc.to_chonk(),

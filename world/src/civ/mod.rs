@@ -1347,7 +1347,7 @@ impl SiteKind {
                 },
                 SiteKind::Citadel => (-0.3..0.7).contains(&chunk.temp) && chunk.tree_density < 0.4,
                 SiteKind::GiantTree/* | SiteKind::Tree*/ => {
-                    chunk.tree_density > 0.4 && (-0.3..0.4).contains(&chunk.temp)
+                    chunk.tree_density > 0.4/* && (-0.3..0.4).contains(&chunk.temp) */
                 },
                 SiteKind::CliffTown => {
                     (-0.6..0.4).contains(&chunk.temp)

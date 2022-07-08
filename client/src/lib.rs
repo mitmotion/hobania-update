@@ -40,6 +40,7 @@ use common::{
     outcome::Outcome,
     recipe::{ComponentRecipeBook, RecipeBook},
     resources::{PlayerEntity, TimeOfDay},
+    slowjob::SlowJobPool,
     spiral::Spiral2d,
     terrain::{
         block::Block, map::MapConfig, neighbors, BiomeKind, SitesKind, SpriteKind, TerrainChunk,
@@ -66,6 +67,7 @@ use common_net::{
 use common_state::State;
 use common_systems::add_local_systems;
 use comp::BuffKind;
+use crossbeam_channel as mpsc;
 use hashbrown::{HashMap, HashSet};
 use image::DynamicImage;
 use network::{ConnectAddr, Network, Participant, Pid, Stream};
@@ -199,6 +201,19 @@ impl Default for WeatherLerp {
     }
 }
 
+/// Deserialized and decompressed terrain updates.
+enum TerrainUpdate {
+    Chunk {
+        key: Vec2<i32>,
+        chunk: Option<Arc<TerrainChunk>>,
+    },
+    LodZone {
+        key: Vec2<i32>,
+        zone: lod::Zone,
+    },
+    Block(HashMap<Vec3<i32>, Block>),
+}
+
 pub struct Client {
     registered: bool,
     presence: Option<PresenceKind>,
@@ -251,6 +266,8 @@ pub struct Client {
     // TODO: move into voxygen
     loaded_distance: f32,
 
+    terrain_tx: mpsc::Sender<Result<TerrainUpdate, Error>>,
+    terrain_rx: mpsc::Receiver<Result<TerrainUpdate, Error>>,
     pending_chunks: HashMap<Vec2<i32>, Instant>,
     target_time_of_day: Option<TimeOfDay>,
 }
@@ -262,6 +279,8 @@ pub struct CharacterList {
     pub characters: Vec<CharacterItem>,
     pub loading: bool,
 }
+
+const TOTAL_PENDING_CHUNKS_LIMIT: usize = 1024;
 
 impl Client {
     pub async fn new(
@@ -355,6 +374,8 @@ impl Client {
                 let mut state = State::client();
                 // Client-only components
                 state.ecs_mut().register::<comp::Last<CharacterState>>();
+                state.ecs_mut().write_resource::<SlowJobPool>()
+                    .configure("TERRAIN_DESERIALIZING", |n| n / 2);
 
                 let entity = state.ecs_mut().apply_entity_package(entity_package);
                 *state.ecs_mut().write_resource() = time_of_day;
@@ -646,6 +667,8 @@ impl Client {
 
         debug!("Initial sync done");
 
+        let (terrain_tx, terrain_rx) = mpsc::bounded(TOTAL_PENDING_CHUNKS_LIMIT);
+
         Ok(Self {
             registered: false,
             presence: None,
@@ -707,6 +730,8 @@ impl Client {
             lod_distance: 4.0,
             loaded_distance: 0.0,
 
+            terrain_tx,
+            terrain_rx,
             pending_chunks: HashMap::new(),
             target_time_of_day: None,
         })
@@ -1827,7 +1852,6 @@ impl Client {
                     for key in keys.iter() {
                         if self.state.terrain().get_key(*key).is_none() {
                             if !skip_mode && !self.pending_chunks.contains_key(key) {
-                                const TOTAL_PENDING_CHUNKS_LIMIT: usize = 1024;
                                 const CURRENT_TICK_PENDING_CHUNKS_LIMIT: usize = 8 * 4;
                                 if self.pending_chunks.len() < TOTAL_PENDING_CHUNKS_LIMIT
                                     && current_tick_send_chunk_requests
@@ -2261,29 +2285,47 @@ impl Client {
         Ok(())
     }
 
-    fn handle_server_terrain_msg(&mut self, msg: ServerGeneral) -> Result<(), Error> {
+    fn handle_server_terrain_msg(msg: ServerGeneral) -> Result<TerrainUpdate, Error> {
         prof_span!("handle_server_terrain_mgs");
         match msg {
             ServerGeneral::TerrainChunkUpdate { key, chunk } => {
-                if let Some(chunk) = chunk.ok().and_then(|c| c.to_chunk()) {
-                    self.state.insert_chunk(key, Arc::new(chunk));
+                let chunk = chunk
+                    .ok()
+                    .map(|c| c.to_chunk())
+                    .transpose()?
+                    .map(Arc::new);
+                return Ok(TerrainUpdate::Chunk { key, chunk });
+            },
+            ServerGeneral::LodZoneUpdate { key, zone } => {
+                return Ok(TerrainUpdate::LodZone { key, zone });
+            },
+            ServerGeneral::TerrainBlockUpdates(blocks) => {
+                let blocks = blocks.decompress()?;
+                return Ok(TerrainUpdate::Block(blocks));
+            },
+            _ => {},
+        }
+        return Err(Error::Other("Invalid terrain message".into()));
+    }
+
+    fn handle_terrain_msg(&mut self, msg: TerrainUpdate) {
+        match msg {
+            TerrainUpdate::Chunk { key, chunk } => {
+                if let Some(chunk) = chunk {
+                    self.state.insert_chunk(key, chunk);
                 }
                 self.pending_chunks.remove(&key);
             },
-            ServerGeneral::LodZoneUpdate { key, zone } => {
+            TerrainUpdate::LodZone { key, zone } => {
                 self.lod_zones.insert(key, zone);
                 self.lod_last_requested = None;
             },
-            ServerGeneral::TerrainBlockUpdates(blocks) => {
-                if let Some(mut blocks) = blocks.decompress() {
-                    blocks.drain().for_each(|(pos, block)| {
-                        self.state.set_block(pos, block);
-                    });
-                }
-            },
-            _ => unreachable!("Not a terrain message"),
+            TerrainUpdate::Block(blocks) => {
+                blocks.into_iter().for_each(|(pos, block)| {
+                    self.state.set_block(pos, block);
+                });
+            }
         }
-        Ok(())
     }
 
     fn handle_server_character_screen_msg(
@@ -2375,15 +2417,28 @@ impl Client {
             }
             while let Some(msg) = self.terrain_stream.try_recv_raw()? {
                 cnt += 1;
-                let msg = msg.decompress()?;
-                let msg = bincode::deserialize(&msg)?;
+                let terrain_tx = self.terrain_tx.clone();
+                self
+                    .state
+                    .slow_job_pool()
+                    .spawn("TERRAIN_DESERIALIZING", move || {
+                        let handle_msg = || {
+                            let msg = msg.decompress()?;
+                            let msg = bincode::deserialize(&msg)?;
+                            Self::handle_server_terrain_msg(msg)
+                        };
+                        terrain_tx.send(handle_msg());
+                    });
+            }
+            while let Ok(msg) = self.terrain_rx.try_recv() {
+                let msg = msg?;
                 #[cfg(feature = "tracy")]
                 {
-                    if let ServerGeneral::TerrainChunkUpdate { chunk, .. } = &msg {
+                    if let TerrainUpdate::Chunk { chunk, .. } = &msg {
                         terrain_cnt += chunk.as_ref().map(|x| x.approx_len()).unwrap_or(0);
                     }
                 }
-                self.handle_server_terrain_msg(msg)?;
+                self.handle_terrain_msg(msg);
             }
 
             if cnt_start == cnt {

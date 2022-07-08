@@ -84,6 +84,10 @@ impl<V, Storage: core::ops::DerefMut<Target=Vec<V>>, S: RectVolSize, M: Clone> C
         }
     }
 
+    pub fn below(&self) -> &V { &self.below }
+
+    pub fn above(&self) -> &V { &self.above }
+
     pub fn meta(&self) -> &M { &self.meta }
 
     #[inline]

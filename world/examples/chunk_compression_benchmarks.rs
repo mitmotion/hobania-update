@@ -9,13 +9,13 @@ use common::{
     },
 };
 use common_net::msg::compression::{
-    image_from_bytes, image_terrain_chonk, image_terrain_volgrid, CompressedData, GridLtrPacking,
+    image_from_bytes, image_terrain_chonk, image_terrain_volgrid, CompressedData, DecodeError, GridLtrPacking,
     PackingFormula, QuadPngEncoding, TriPngEncoding, VoxelImageDecoding, VoxelImageEncoding,
     WidePacking,
 };
 use core::marker::PhantomData;
 use hashbrown::HashMap;
-use image::{ImageBuffer, ImageEncoder};
+use image::{ImageBuffer, ImageEncoder, ImageError};
 use num_traits::cast::FromPrimitive;
 use rayon::ThreadPoolBuilder;
 use serde::{Deserialize, Serialize};
@@ -166,6 +166,7 @@ pub struct PngEncoding;
 
 impl VoxelImageEncoding for PngEncoding {
     type Output = Vec<u8>;
+    type EncodeError = ImageError;
     type Workspace = ImageBuffer<image::Rgba<u8>, Vec<u8>>;
 
     fn create(width: u32, height: u32) -> Self::Workspace {
@@ -193,7 +194,7 @@ impl VoxelImageEncoding for PngEncoding {
         );
     }
 
-    fn finish(ws: &Self::Workspace) -> Option<Self::Output> {
+    fn finish(ws: &Self::Workspace) -> Result<Self::Output, Self::EncodeError> {
         use image::codecs::png::{CompressionType, FilterType};
         let mut buf = Vec::new();
         let png = image::codecs::png::PngEncoder::new_with_quality(
@@ -206,9 +207,8 @@ impl VoxelImageEncoding for PngEncoding {
             ws.width(),
             ws.height(),
             image::ColorType::Rgba8,
-        )
-        .ok()?;
-        Some(buf)
+        )?;
+        Ok(buf)
     }
 }
 
@@ -217,6 +217,7 @@ pub struct JpegEncoding;
 
 impl VoxelImageEncoding for JpegEncoding {
     type Output = Vec<u8>;
+    type EncodeError = ImageError;
     type Workspace = ImageBuffer<image::Rgba<u8>, Vec<u8>>;
 
     fn create(width: u32, height: u32) -> Self::Workspace {
@@ -240,11 +241,11 @@ impl VoxelImageEncoding for JpegEncoding {
         ws.put_pixel(x, y, image::Rgba([kind as u8, sprite as u8, 255, 255]));
     }
 
-    fn finish(ws: &Self::Workspace) -> Option<Self::Output> {
+    fn finish(ws: &Self::Workspace) -> Result<Self::Output, Self::EncodeError> {
         let mut buf = Vec::new();
         let mut jpeg = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, 1);
-        jpeg.encode_image(ws).ok()?;
-        Some(buf)
+        jpeg.encode_image(ws)?;
+        Ok(buf)
     }
 }
 
@@ -253,6 +254,7 @@ pub struct MixedEncoding;
 
 impl VoxelImageEncoding for MixedEncoding {
     type Output = (Vec<u8>, [usize; 3]);
+    type EncodeError = ImageError;
     type Workspace = (
         ImageBuffer<image::Luma<u8>, Vec<u8>>,
         ImageBuffer<image::Luma<u8>, Vec<u8>>,
@@ -291,33 +293,32 @@ impl VoxelImageEncoding for MixedEncoding {
         ws.3.put_pixel(x, y, image::Rgb([0; 3]));
     }
 
-    fn finish(ws: &Self::Workspace) -> Option<Self::Output> {
+    fn finish(ws: &Self::Workspace) -> Result<Self::Output, Self::EncodeError> {
         let mut buf = Vec::new();
         use image::codecs::png::{CompressionType, FilterType};
         let mut indices = [0; 3];
-        let mut f = |x: &ImageBuffer<_, Vec<u8>>, i| {
+        let mut f = |x: &ImageBuffer<_, Vec<u8>>, i| -> Result<_, Self::EncodeError> {
             let png = image::codecs::png::PngEncoder::new_with_quality(
                 &mut buf,
                 CompressionType::Rle,
                 FilterType::Up,
             );
-            png.write_image(&*x.as_raw(), x.width(), x.height(), image::ColorType::L8)
-                .ok()?;
+            png.write_image(&*x.as_raw(), x.width(), x.height(), image::ColorType::L8)?;
             indices[i] = buf.len();
-            Some(())
+            Ok(())
         };
         f(&ws.0, 0)?;
         f(&ws.1, 1)?;
         f(&ws.2, 2)?;
 
         let mut jpeg = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, 10);
-        jpeg.encode_image(&ws.3).ok()?;
-        Some((buf, indices))
+        jpeg.encode_image(&ws.3)?;
+        Ok((buf, indices))
     }
 }
 
 impl VoxelImageDecoding for MixedEncoding {
-    fn start((quad, indices): &Self::Output) -> Option<Self::Workspace> {
+    fn start((quad, indices): &Self::Output) -> Result<Self::Workspace, DecodeError> {
         use image::codecs::{jpeg::JpegDecoder, png::PngDecoder};
         let ranges: [_; 4] = [
             0..indices[0],
@@ -325,11 +326,11 @@ impl VoxelImageDecoding for MixedEncoding {
             indices[1]..indices[2],
             indices[2]..quad.len(),
         ];
-        let a = image_from_bytes(PngDecoder::new(&quad[ranges[0].clone()]).ok()?)?;
-        let b = image_from_bytes(PngDecoder::new(&quad[ranges[1].clone()]).ok()?)?;
-        let c = image_from_bytes(PngDecoder::new(&quad[ranges[2].clone()]).ok()?)?;
-        let d = image_from_bytes(JpegDecoder::new(&quad[ranges[3].clone()]).ok()?)?;
-        Some((a, b, c, d))
+        let a = image_from_bytes(PngDecoder::new(&quad[ranges[0].clone()])?)?;
+        let b = image_from_bytes(PngDecoder::new(&quad[ranges[1].clone()])?)?;
+        let c = image_from_bytes(PngDecoder::new(&quad[ranges[2].clone()])?)?;
+        let d = image_from_bytes(JpegDecoder::new(&quad[ranges[3].clone()])?)?;
+        Ok((a, b, c, d))
     }
 
     fn get_block(ws: &Self::Workspace, x: u32, y: u32, _: bool) -> Block {
@@ -366,6 +367,7 @@ impl VoxelImageEncoding for MixedEncodingSparseSprites {
         usize,
         CompressedData<'static, HashMap<Vec2<u32>, (SpriteKind, u8)>>,
     );
+    type EncodeError = ImageError;
     type Workspace = (
         image::ImageBuffer<image::Luma<u8>, Vec<u8>>,
         image::ImageBuffer<image::Rgb<u8>, Vec<u8>>,
@@ -399,7 +401,7 @@ impl VoxelImageEncoding for MixedEncodingSparseSprites {
         ws.2.insert(Vec2::new(x, y), (sprite, ori.unwrap_or(0)));
     }
 
-    fn finish(ws: &Self::Workspace) -> Option<Self::Output> {
+    fn finish(ws: &Self::Workspace) -> Result<Self::Output, Self::EncodeError> {
         let mut buf = Vec::new();
         use image::codecs::png::{CompressionType, FilterType};
         let png = image::codecs::png::PngEncoder::new_with_quality(
@@ -412,12 +414,11 @@ impl VoxelImageEncoding for MixedEncodingSparseSprites {
             ws.0.width(),
             ws.0.height(),
             image::ColorType::L8,
-        )
-        .ok()?;
+        )?;
         let index = buf.len();
         let mut jpeg = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, 1);
-        jpeg.encode_image(&ws.1).ok()?;
-        Some((buf, index, CompressedData::compress(&ws.2, 4)))
+        jpeg.encode_image(&ws.1)?;
+        Ok((buf, index, CompressedData::compress(&ws.2, 4)))
     }
 }
 
@@ -426,6 +427,7 @@ pub struct MixedEncodingDenseSprites;
 
 impl VoxelImageEncoding for MixedEncodingDenseSprites {
     type Output = (Vec<u8>, [usize; 3]);
+    type EncodeError = ImageError;
     type Workspace = (
         ImageBuffer<image::Luma<u8>, Vec<u8>>,
         Vec<u8>,
@@ -462,20 +464,19 @@ impl VoxelImageEncoding for MixedEncodingDenseSprites {
         ws.3.put_pixel(x, y, image::Rgb([0; 3]));
     }
 
-    fn finish(ws: &Self::Workspace) -> Option<Self::Output> {
+    fn finish(ws: &Self::Workspace) -> Result<Self::Output, Self::EncodeError> {
         let mut buf = Vec::new();
         use image::codecs::png::{CompressionType, FilterType};
         let mut indices = [0; 3];
-        let mut f = |x: &ImageBuffer<_, Vec<u8>>, i| {
+        let mut f = |x: &ImageBuffer<_, Vec<u8>>, i| -> Result<_, Self::EncodeError> {
             let png = image::codecs::png::PngEncoder::new_with_quality(
                 &mut buf,
                 CompressionType::Fast,
                 FilterType::Up,
             );
-            png.write_image(&*x.as_raw(), x.width(), x.height(), image::ColorType::L8)
-                .ok()?;
+            png.write_image(&*x.as_raw(), x.width(), x.height(), image::ColorType::L8)?;
             indices[i] = buf.len();
-            Some(())
+            Ok(())
         };
         f(&ws.0, 0)?;
         let mut g = |x: &[u8], i| {
@@ -487,8 +488,8 @@ impl VoxelImageEncoding for MixedEncodingDenseSprites {
         g(&ws.2, 2);
 
         let mut jpeg = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, 1);
-        jpeg.encode_image(&ws.3).ok()?;
-        Some((buf, indices))
+        jpeg.encode_image(&ws.3)?;
+        Ok((buf, indices))
     }
 }
 
@@ -592,6 +593,7 @@ pub struct PaletteEncoding<'a, NN: NearestNeighbor, const N: u32>(&'a HashMap<Bl
 
 impl<'a, NN: NearestNeighbor, const N: u32> VoxelImageEncoding for PaletteEncoding<'a, NN, N> {
     type Output = CompressedData<'a, (Vec<u8>, [usize; 4])>;
+    type EncodeError = ImageError;
     type Workspace = (
         ImageBuffer<image::Luma<u8>, Vec<u8>>,
         ImageBuffer<image::Luma<u8>, Vec<u8>>,
@@ -628,27 +630,26 @@ impl<'a, NN: NearestNeighbor, const N: u32> VoxelImageEncoding for PaletteEncodi
         ws.2.put_pixel(x, y, image::Luma([ori.unwrap_or(0)]));
     }
 
-    fn finish(ws: &Self::Workspace) -> Option<Self::Output> {
+    fn finish(ws: &Self::Workspace) -> Result<Self::Output, Self::EncodeError> {
         let mut buf = Vec::new();
         use image::codecs::png::{CompressionType, FilterType};
         let mut indices = [0; 4];
-        let mut f = |x: &ImageBuffer<_, Vec<u8>>, i| {
+        let mut f = |x: &ImageBuffer<_, Vec<u8>>, i| -> Result<_, Self::EncodeError> {
             let png = image::codecs::png::PngEncoder::new_with_quality(
                 &mut buf,
                 CompressionType::Rle,
                 FilterType::Up,
             );
-            png.write_image(&*x.as_raw(), x.width(), x.height(), image::ColorType::L8)
-                .ok()?;
+            png.write_image(&*x.as_raw(), x.width(), x.height(), image::ColorType::L8)?;
             indices[i] = buf.len();
-            Some(())
+            Ok(())
         };
         f(&ws.0, 0)?;
         f(&ws.1, 1)?;
         f(&ws.2, 2)?;
         f(&ws.3, 3)?;
 
-        Some(CompressedData::compress(&(buf, indices), 1))
+        Ok(CompressedData::compress(&(buf, indices), 1))
     }
 }
 
