@@ -70,7 +70,7 @@ use comp::BuffKind;
 use crossbeam_channel as mpsc;
 use hashbrown::{HashMap, HashSet};
 use image::DynamicImage;
-use network::{ConnectAddr, Network, Participant, Pid, Stream};
+use network::{ConnectAddr, Message, Network, Participant, Pid, Stream};
 use num::traits::FloatConst;
 use rayon::prelude::*;
 use specs::Component;
@@ -266,7 +266,7 @@ pub struct Client {
     // TODO: move into voxygen
     loaded_distance: f32,
 
-    terrain_tx: mpsc::Sender<Result<TerrainUpdate, Error>>,
+    terrain_tx: mpsc::Sender</*Result<TerrainUpdate, Error>*/Message>,
     terrain_rx: mpsc::Receiver<Result<TerrainUpdate, Error>>,
     pending_chunks: HashMap<Vec2<i32>, Instant>,
     target_time_of_day: Option<TimeOfDay>,
@@ -341,6 +341,29 @@ impl Client {
 
         // Wait for initial sync
         let mut ping_interval = tokio::time::interval(core::time::Duration::from_secs(1));
+        let (terrain_tx_, terrain_rx) = mpsc::bounded(TOTAL_PENDING_CHUNKS_LIMIT);
+        let (terrain_tx, terrain_rx_): (mpsc::Sender<Message>, _) = mpsc::bounded(TOTAL_PENDING_CHUNKS_LIMIT);
+        // Spawn the thread that handles terrain update deserialization.
+        //
+        // We do this instead of using a thread pool in order to guarantee in-order
+        // processing of the updates.  There are several better ways to do this (e.g. if
+        // thingbuf gets the ability to take owned references to slots), but it's probably
+        // not worth spending too much time on it since (1) deserialization should still be
+        // fairly cheap in practice (just not cheap enough that we want to do it on the
+        // main thread), and (2) the correct solution should allow us to not rely on
+        // in-order processing of terrain chunks at all, which would require a versioning
+        // scheme on the chunks.
+        std::thread::spawn(move || {
+            while let Ok(msg) = terrain_rx_.recv() {
+                let handle_msg = || {
+                    let msg = msg.decompress()?;
+                    let msg = bincode::deserialize(&msg)?;
+                    Self::handle_server_terrain_msg(msg)
+                };
+                terrain_tx_.send(handle_msg());
+            }
+        });
+
         let (
             state,
             lod_base,
@@ -374,9 +397,8 @@ impl Client {
                 let mut state = State::client();
                 // Client-only components
                 state.ecs_mut().register::<comp::Last<CharacterState>>();
-                state.ecs_mut().write_resource::<SlowJobPool>()
-                    .configure("TERRAIN_DESERIALIZING", |n| n / 2);
-
+                /* state.ecs_mut().write_resource::<SlowJobPool>()
+                    .configure("TERRAIN_DESERIALIZING", |n| n / 2); */
                 let entity = state.ecs_mut().apply_entity_package(entity_package);
                 *state.ecs_mut().write_resource() = time_of_day;
                 *state.ecs_mut().write_resource() = PlayerEntity(Some(entity));
@@ -666,8 +688,6 @@ impl Client {
         ping_stream.send(PingMsg::Ping)?;
 
         debug!("Initial sync done");
-
-        let (terrain_tx, terrain_rx) = mpsc::bounded(TOTAL_PENDING_CHUNKS_LIMIT);
 
         Ok(Self {
             registered: false,
@@ -2416,28 +2436,21 @@ impl Client {
                 self.handle_server_in_game_msg(frontend_events, bincode::deserialize(&msg.decompress()?)?)?;
             }
 
-            // Batch up terrain updates for deserialization.
-            let mut terrain_messages = Vec::new();
+            /* // Batch up terrain updates for deserialization.
+            let mut terrain_messages = Vec::new(); */
             while let Some(msg) = self.terrain_stream.try_recv_raw()? {
-                terrain_messages.push(msg);
+                cnt += 1;
+                self.terrain_tx.send(msg);
             }
-            if !terrain_messages.is_empty() {
+            /* if !terrain_messages.is_empty() {
                 cnt += terrain_messages.len() as u64;
                 let terrain_tx = self.terrain_tx.clone();
                 self
                     .state
                     .slow_job_pool()
                     .spawn("TERRAIN_DESERIALIZING", move || {
-                        terrain_messages.into_iter().for_each(|msg| {
-                            let handle_msg = || {
-                                let msg = msg.decompress()?;
-                                let msg = bincode::deserialize(&msg)?;
-                                Self::handle_server_terrain_msg(msg)
-                            };
-                            terrain_tx.send(handle_msg());
-                        });
                     });
-            }
+            } */
 
             while let Ok(msg) = self.terrain_rx.try_recv() {
                 let msg = msg?;
