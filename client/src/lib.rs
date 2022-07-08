@@ -2415,21 +2415,30 @@ impl Client {
                 }
                 self.handle_server_in_game_msg(frontend_events, bincode::deserialize(&msg.decompress()?)?)?;
             }
+
+            // Batch up terrain updates for deserialization.
+            let mut terrain_messages = Vec::new();
             while let Some(msg) = self.terrain_stream.try_recv_raw()? {
-                cnt += 1;
+                terrain_messages.push(msg);
+            }
+            if !terrain_messages.is_empty() {
+                cnt += terrain_messages.len() as u64;
                 let terrain_tx = self.terrain_tx.clone();
                 self
                     .state
                     .slow_job_pool()
                     .spawn("TERRAIN_DESERIALIZING", move || {
-                        let handle_msg = || {
-                            let msg = msg.decompress()?;
-                            let msg = bincode::deserialize(&msg)?;
-                            Self::handle_server_terrain_msg(msg)
-                        };
-                        terrain_tx.send(handle_msg());
+                        terrain_messages.into_iter().for_each(|msg| {
+                            let handle_msg = || {
+                                let msg = msg.decompress()?;
+                                let msg = bincode::deserialize(&msg)?;
+                                Self::handle_server_terrain_msg(msg)
+                            };
+                            terrain_tx.send(handle_msg());
+                        });
                     });
             }
+
             while let Ok(msg) = self.terrain_rx.try_recv() {
                 let msg = msg?;
                 #[cfg(feature = "tracy")]
