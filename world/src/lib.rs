@@ -543,15 +543,17 @@ impl World {
             )
         });
 
-        // Apply snow cover.
+        // Defragment to minimize space consumption.
+        chunk.defragment();
+
+        // Apply snow cover (we do this after defragmentation to benefit from faster iteration over
+        // air underground).
         if has_snow {
             let snow = Block::new(BlockKind::Snow, Rgb::new(210, 210, 255));
             // NOTE: We assume throughout Veloren that u32 fits in usize (we need to make this a static
             // assertion).  RECT_SIZE.product() is statically valid.
             let mut snow_blocks = Vec::with_capacity(TerrainChunkSize::RECT_SIZE.product() as usize * 3);
-            let air_slice = [air; common::terrain::TerrainSubChunk::GROUP_VOLUME as usize];
-            let stone_slice = [stone; common::terrain::TerrainSubChunk::GROUP_VOLUME as usize];
-            let flat = chunk.make_flat(&stone_slice, &air_slice);
+            let flat = chunk.make_flat(/*&stone_slice, &air_slice, */&arena);
             zcache_grid.iter()
                 .filter(|(_, col_sample)| col_sample.snow_cover)
                 .for_each(|(wpos_delta, col_sample)| {
@@ -597,14 +599,21 @@ impl World {
                         }
                     } */
                 });
+            arena.reset();
 
             snow_blocks.into_iter().for_each(|pos| {
-                let _ = chunk.set(pos, snow);
+                // Make sure not to replace sprites.
+                //
+                // Note that we don't check this in the inner loop above because we want snow to
+                // fall through sprites, and in practice the block.is_air() check is pretty
+                // effective.
+                let _ = chunk.map(pos, |block| if block == Block::empty() {
+                    snow
+                } else {
+                    block
+                });
             });
         }
-
-        // Finally, defragment to minimize space consumption.
-        chunk.defragment();
 
         Ok((chunk, supplement))
     }

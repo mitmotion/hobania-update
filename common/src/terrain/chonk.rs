@@ -6,6 +6,7 @@ use crate::{
     volumes::chunk::{Chunk, ChunkError, ChunkPosIter, ChunkVolIter},
 };
 use core::{hash::Hash, marker::PhantomData};
+use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 use vek::*;
 
@@ -102,20 +103,22 @@ impl<V, Storage: core::ops::DerefMut<Target=Vec<V>>, S: RectVolSize, M: Clone> C
     ///
     /// It's not acutally flat, it just skips the indirection through the index.  The idea is to
     /// use a constant stride for row access so the prefetcher can process it more easily.
-    pub fn make_flat<'a>(&'a self, below_slice: &'a [V], above_slice: &'a [V]) -> Vec<&'a [V]>
+    pub fn make_flat<'a>(&'a self, arena: &'a bumpalo::Bump) -> Vec<&'a [V]>
         where
-            V: Copy + Eq,
+            V: Copy + Hash + Eq,
             [(); SubChunk::<V, Storage, S, M>::GROUP_VOLUME as usize]:,
     {
+        // Cache of slices per block type to maximize cacheline reuse.
+        let mut default_slices = HashMap::new();
         let mut flat = Vec::with_capacity(self.sub_chunks.len() * /*SubChunkSize::<V, Storage, S>::SIZE.z as usize **/
                                      /* SubChunk::<V, Storage, S, M>::VOLUME as usize */
                                           SubChunk::<V, Storage, S, M>::GROUP_COUNT_TOTAL as usize);
         self.sub_chunks.iter().enumerate().for_each(|(idx, sub_chunk)| {
-            let slice = if sub_chunk.default() == &self.below {
-                below_slice
-            } else {
-                above_slice
-            };
+            let default = *sub_chunk.default();
+            let slice = *default_slices.entry(default)
+                .or_insert_with(move || {
+                    &*arena.alloc_slice_fill_copy(SubChunk::<V, Storage, S, M>::GROUP_VOLUME as usize, default)
+                });
             sub_chunk.push_flat(&mut flat, slice);
         });
         flat
