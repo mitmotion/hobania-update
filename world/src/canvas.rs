@@ -234,7 +234,7 @@ impl<'a> Canvas<'a> {
             let rpos2d = wpos2d - origin.xy();
             let rpos2d = units.x * rpos2d.x + units.y * rpos2d.y;
 
-            let mut above = true;
+            // let mut above = true;
             for z in (structure.get_bounds().min.z..structure.get_bounds().max.z).rev() {
                 if let Ok(sblock) = structure.get(rpos2d.with_z(z)) {
                     /* let mut add_snow = false; */
@@ -249,12 +249,12 @@ impl<'a> Canvas<'a> {
                             |sprite| block.with_sprite(sprite),
                             info.calendar(),
                         ) {
-                            if !new_block.is_air() {
+                            /* if !new_block.is_air() {
                                 /* if with_snow && col.snow_cover && above {
                                     add_snow = true;
                                 } */
                                 above = false;
-                            }
+                            } */
                             new_block
                         } else {
                             block

@@ -5,7 +5,7 @@
     caverns: false, // TODO: Disabled by default until cave overhaul
     caves: true,
     rocks: true,
-    shrubs: false,
+    shrubs: true,
     trees: true,
     scatter: false,
     paths: true,
