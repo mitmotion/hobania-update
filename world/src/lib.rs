@@ -548,7 +548,7 @@ impl World {
 
         // Apply snow cover (we do this after defragmentation to benefit from faster iteration over
         // air underground).
-        if has_snow {
+        if index.features.snow && has_snow {
             let snow = Block::new(BlockKind::Snow, Rgb::new(210, 210, 255));
             // NOTE: We assume throughout Veloren that u32 fits in usize (we need to make this a static
             // assertion).  RECT_SIZE.product() is statically valid.

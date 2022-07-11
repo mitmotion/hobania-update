@@ -126,6 +126,7 @@ pub(crate) struct GenCtx {
     pub _region_gen: StructureGen2d,
 
     // pub _fast_turb_x_nz: FastNoise,
+    pub rock_gen: StructureGen2d,
     pub _fast_turb_y_nz: FastNoise,
 
     pub _town_gen: StructureGen2d,
@@ -578,8 +579,8 @@ impl WorldSim {
                 .set_seed(rng.gen()),
 
             // _fast_turb_x_nz: FastNoise::new(rng.gen()),
-            fast_hill_nz: Value::new()
-                .set_seed({ let _ = rng.gen::<u32>(); hill_nz_seed }),
+            rock_gen: StructureGen2d::new(rng.gen(), 24, 10),
+            fast_hill_nz: Value::new().set_seed(hill_nz_seed),
             _fast_turb_y_nz: FastNoise::new(rng.gen()),
 
             _town_gen: StructureGen2d::new(rng.gen(), 2048, 1024),

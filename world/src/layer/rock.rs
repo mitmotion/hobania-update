@@ -14,92 +14,132 @@ use vek::*;
 struct Rock {
     wpos: Vec3<i32>,
     seed: u32,
-    units: Vec2<Vec2<i32>>,
+    // units: Vec2<Vec2<i32>>,
     kind: RockKind,
 }
 
 pub fn apply_rocks_to(canvas: &mut Canvas, _dynamic_rng: &mut impl Rng) {
-    let mut rock_gen = StructureGenCache::new(StructureGen2d::new(canvas.index().seed, 24, 10));
+    // let mut rock_gen = StructureGenCache::new(StructureGen2d::new(canvas.index().seed, 24, 10));
 
     let info = canvas.info();
-    canvas.foreach_col(|canvas, wpos2d, col| {
-        let rocks = rock_gen.get(wpos2d, |wpos, seed| {
-            let col = info.col_or_gen(wpos)?;
+
+    let area_size = Vec2::from(info.area().size().map(|e| e as i32));
+    let render_area = Aabr {
+        min: info.wpos(),
+        max: info.wpos() + area_size,
+    };
+
+    let info = canvas.info();
+    info.chunks()
+        .gen_ctx
+        .rock_gen
+        .iter(render_area.min, render_area.max)
+        .for_each(|(wpos, seed)| {
+    /*canvas.foreach_col(|canvas, wpos2d, col| {
+        let rocks = rock_gen.get(wpos2d, |wpos, seed| {*/
+            let col = if let Some(col) = info.col_or_gen(wpos) {
+                col
+            } else {
+                return;
+            };
 
             let mut rng = ChaChaRng::from_seed(seed_expan::rng_state(seed));
 
             const BASE_ROCK_DENSITY: f64 = 0.15;
-            if rng.gen_bool((BASE_ROCK_DENSITY * col.rock_density as f64).clamped(0.0, 1.0))
+            let rock = if rng.gen_bool((BASE_ROCK_DENSITY * col.rock_density as f64).clamped(0.0, 1.0))
                 && col.path.map_or(true, |(d, _, _, _)| d > 6.0)
             {
-                match (
+                let kind = match (
                     (col.alt - CONFIG.sea_level) as i32,
                     (col.alt - col.water_level) as i32,
                     col.water_dist.map_or(i32::MAX, |d| d as i32),
                 ) {
                     (-3..=2, _, _) => {
                         if rng.gen_bool(0.3) {
-                            Some(RockKind::Rauk(Pillar::generate(&mut rng)))
+                            /*Some(*/RockKind::Rauk(Pillar::generate(&mut rng))/*)*/
                         } else {
-                            Some(RockKind::Rock(VoronoiCell::generate(
+                            /*Some(*/RockKind::Rock(VoronoiCell::generate(
                                 rng.gen_range(1.0..3.0),
                                 &mut rng,
-                            )))
+                            ))/*)*/
                         }
                     },
-                    (_, -15..=3, _) => Some(RockKind::Rock(VoronoiCell::generate(
+                    (_, -15..=3, _) => /*Some(*/RockKind::Rock(VoronoiCell::generate(
                         rng.gen_range(1.0..4.0),
                         &mut rng,
-                    ))),
+                    ))/*)*/,
                     (5..=i32::MAX, _, 0..=i32::MAX) => {
                         if col.temp > CONFIG.desert_temp - 0.1
                             && col.humidity < CONFIG.desert_hum + 0.1
                         {
-                            Some(RockKind::Sandstone(VoronoiCell::generate(
+                            /*Some(*/RockKind::Sandstone(VoronoiCell::generate(
                                 rng.gen_range(2.0..20.0 - 10.0 * col.tree_density),
                                 &mut rng,
-                            )))
+                            ))/*)*/
                         } else {
-                            Some(RockKind::Rock(VoronoiCell::generate(
+                            /*Some(*/RockKind::Rock(VoronoiCell::generate(
                                 rng.gen_range(2.0..20.0 - 10.0 * col.tree_density),
                                 &mut rng,
-                            )))
+                            ))/*)*/
                         }
                     },
-                    _ => None,
-                }
-                .map(|kind| Rock {
+                    _ => /*None*/return,
+                };
+                /*.map(|kind| */Rock {
                     wpos: wpos.with_z(col.alt as i32),
                     seed,
-                    units: UnitChooser::new(seed).get(seed).into(),
+                    // units: UnitChooser::new(seed).get(seed).into(),
                     kind,
-                })
+                }/*)*/
             } else {
-                None
-            }
-        });
+                /* None */return
+            };
+        /*});
 
-        for rock in rocks {
+        for rock in rocks {*/
             let bounds = rock.kind.get_bounds();
+            let mut aabb = Aabb {
+                min: rock.wpos + bounds.min.as_(),
+                max: rock.wpos + bounds.max.as_(),
+            };
+            if !aabb.is_valid() {
+                // Negative-size rock somehow?
+                return;
+            }
 
-            let rpos2d = (wpos2d - rock.wpos.xy())
+            aabb.intersect(Aabb {
+                min: render_area.min.with_z(aabb.min.z),
+                max: render_area.max.with_z(aabb.max.z),
+            });
+
+            /* let rpos2d = (wpos2d - rock.wpos.xy())
                 .map2(rock.units, |p, unit| unit * p)
                 .sum();
 
             if !Aabr::from(bounds).contains_point(rpos2d) {
                 // Skip this column
                 continue;
-            }
+            } */
 
             /* let mut is_top = true; */
             let mut last_block = Block::empty();
-            for z in (bounds.min.z..bounds.max.z).rev() {
-                let wpos = Vec3::new(wpos2d.x, wpos2d.y, rock.wpos.z + z);
-                let model_pos = (wpos - rock.wpos)
+            (/*bounds*/aabb.min.x../*bounds*/aabb.max.x).for_each(|x| {
+            (/*bounds*/aabb.min.y../*bounds*/aabb.max.y).for_each(|y| {
+            let col = if let Some(col) = info.col(Vec2::new(x, y)) {
+                col
+            } else {
+                // NOTE: Should never happen as we're always within the render area.
+                return;
+            };
+            for z in (/*bounds*/aabb.min.z../*bounds*/aabb.max.z).rev() {
+                let wpos = Vec3::new(x, y, z);
+                let model_pos = wpos - rock.wpos;
+                // let wpos = Vec3::new(wpos2d.x, wpos2d.y, rock.wpos.z + z);
+                /* let model_pos = (wpos - rock.wpos)
                     .xy()
                     .map2(rock.units, |rpos, unit| unit * rpos)
                     .sum()
-                    .with_z(wpos.z - rock.wpos.z);
+                    .with_z(wpos.z - rock.wpos.z); */
 
                 rock.kind
                     .take_sample(model_pos, rock.seed, last_block, col)
@@ -114,9 +154,9 @@ pub fn apply_rocks_to(canvas: &mut Canvas, _dynamic_rng: &mut impl Rng) {
                         /* is_top = false; */
                         last_block = block;
                     });
-            }
-        }
-    });
+            }});});
+        /*}
+    }*/});
 }
 
 struct VoronoiCell {
