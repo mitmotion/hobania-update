@@ -18,8 +18,6 @@ fn main() {
 
     let index = index.as_index_ref();
 
-    let sampler = world.sample_columns();
-
     let mut win =
         minifb::Window::new("World Viewer", W, H, minifb::WindowOptions::default()).unwrap();
 
@@ -34,12 +32,13 @@ fn main() {
             for j in 0..H {
                 let pos = focus + Vec2::new(i as i32, j as i32) * scale;
 
+                let sampler = world.sample_blocks(pos >> common::terrain::TERRAIN_CHUNK_BLOCKS_LG as i32, index);
                 let (alt, place) = sampler
-                    .get((pos, index, None))
-                    .map(|sample| {
+                    .map(|sampler| {
+                        let sample = sampler.column_gen.get(pos);
                         (
                             sample.alt.sub(64.0).add(gain).mul(0.7).max(0.0).min(255.0) as u8,
-                            sample.chunk.place,
+                            sampler.column_gen.sim_chunk.place,
                         )
                     })
                     .unwrap_or((0, None));

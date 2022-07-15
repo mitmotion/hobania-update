@@ -60,16 +60,17 @@ fn main() {
     let map_size_lg = sampler.map_size_lg();
 
     let samples_data = {
-        let column_sample = world.sample_columns();
         (0..map_size_lg.chunks_len())
             .into_par_iter()
             .map(|posi| {
-                column_sample.get((
-                    uniform_idx_as_vec2(map_size_lg, posi)
-                        * TerrainChunkSize::RECT_SIZE.map(|e| e as i32),
-                    index,
-                    None,
-                ))
+                let chunk_pos = uniform_idx_as_vec2(map_size_lg, posi);
+                world.sample_columns(chunk_pos, index)
+                    .map(|column_sample| {
+                        column_sample.get(
+                            chunk_pos
+                                * TerrainChunkSize::RECT_SIZE.map(|e| e as i32)
+                        )
+                    })
             })
             .collect::<Vec<_>>()
             .into_boxed_slice()

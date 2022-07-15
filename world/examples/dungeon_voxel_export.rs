@@ -6,6 +6,7 @@ use std::{
 type Result = std::io::Result<()>;
 
 use common::{
+    generation::EntityInfo,
     terrain::{Block, BlockKind, SpriteKind},
     vol::{BaseVol, ReadVol, RectSizedVol, WriteVol},
 };
@@ -13,7 +14,7 @@ use rayon::ThreadPoolBuilder;
 use vek::{Vec2, Vec3};
 use veloren_world::{
     sim::{FileOpts, WorldOpts, DEFAULT_WORLD_MAP},
-    site2::{plot::PlotKind, Fill, Structure},
+    site2::{plot::PlotKind, Fill, Filler, Structure},
     CanvasInfo, Land, World,
 };
 
@@ -41,12 +42,16 @@ fn main() -> Result {
     let wpos = volume.size_xy().map(|p| p as i32 / 2);
     let site =
         veloren_world::site2::Site::generate_dungeon(&Land::empty(), &mut rand::thread_rng(), wpos);
-    CanvasInfo::with_mock_canvas_info(index.as_index_ref(), world.sim(), |canvas| {
+    let mut arena = bumpalo::Bump::new();
+    CanvasInfo::with_mock_canvas_info(index.as_index_ref(), world.sim(), |&canvas| {
         for plot in site.plots() {
+            let render_area = plot.find_bounds();
             if let PlotKind::Dungeon(dungeon) = plot.kind() {
-                let (prim_tree, fills, _entities) = dungeon.render_collect(&site, canvas);
+                /*let (prim_tree, fills, _entities) = */
+                (dungeon as &dyn Structure<_>).render_collect(&site, &mut arena, canvas, render_area, &mut volume);
+                arena.reset();
 
-                for (prim, fill) in fills {
+                /* for (prim, fill) in fills {
                     let aabb = Fill::get_bounds(&prim_tree, prim);
 
                     for x in aabb.min.x..aabb.max.x {
@@ -66,7 +71,7 @@ fn main() -> Result {
                             }
                         }
                     }
-                }
+                } */
             }
         }
     });
@@ -257,5 +262,17 @@ impl WriteVol for ExportVol {
                 _ => 5,
             }]);
         Ok(vox)
+    }
+}
+
+impl Filler for ExportVol {
+    #[inline]
+    fn map<F: Fill>(&mut self, pos: Vec3<i32>, f: F) {
+        let _ = WriteVol::map(self, pos, |block| f.sample_at(pos, block).unwrap_or(block));
+    }
+
+    #[inline]
+    fn spawn(&mut self, _entity: EntityInfo) {
+        // No-op
     }
 }

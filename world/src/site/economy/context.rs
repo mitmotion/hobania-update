@@ -428,8 +428,8 @@ mod tests {
                             ))
                         },
                         // common::terrain::site::SitesKind::Settlement |
-                        _ => crate::site::Site::settlement(crate::site::Settlement::generate(
-                            wpos, None, &mut rng,
+                        _ => crate::site::Site::refactor(crate::site2::Site::generate_city(
+                            &crate::Land::empty(), &mut rng, wpos,
                         )),
                     };
                     for g in i.resources.iter() {
@@ -467,9 +467,11 @@ mod tests {
         rng: ChaChaRng,
         targets: HashMap<Id<crate::site::Site>, f32>,
         names: HashMap<Id<crate::site::Site>, String>,
+        sim: sim::WorldSim,
     }
 
     #[test]
+    #[ignore]
     /// test whether a site in moderate climate can survive on its own
     fn test_economy_moderate_standalone() {
         fn add_settlement(
@@ -479,10 +481,8 @@ mod tests {
             resources: &[(Good, f32)],
         ) -> Id<crate::site::Site> {
             let wpos = Vec2 { x: 42, y: 42 };
-            let mut settlement = crate::site::Site::settlement(crate::site::Settlement::generate(
-                wpos,
-                None,
-                &mut env.rng,
+            let mut settlement = crate::site::Site::refactor(crate::site2::Site::generate_city(
+                &crate::Land::empty(), &mut env.rng, wpos,
             ));
             for (good, amount) in resources.iter() {
                 settlement.economy.natural_resources.chunks_per_resource
@@ -507,7 +507,7 @@ mod tests {
             };
             let index = crate::index::Index::new(seed);
             info!("Index created");
-            let mut sim = sim::WorldSim::generate(seed, opts, &threadpool);
+            let sim = sim::WorldSim::generate(seed, opts, &threadpool);
             info!("World loaded");
             let rng = ChaChaRng::from_seed(seed_expan::rng_state(seed));
             let mut env = Simenv {
@@ -515,6 +515,7 @@ mod tests {
                 rng,
                 targets: HashMap::new(),
                 names: HashMap::new(),
+                sim,
             };
             add_settlement(&mut env, "Forest", 5000.0, &[(
                 Good::Terrain(BiomeKind::Forest),
@@ -560,7 +561,7 @@ mod tests {
                         .add_neighbor(center, i as usize);
                 });
             }
-            crate::sim2::simulate(&mut env.index, &mut sim);
+            crate::sim2::simulate(&mut env.index, &mut env.sim);
             show_economy(&env.index.sites, &Some(env.names));
             // check population (shrinks if economy gets broken)
             for (id, site) in env.index.sites.iter() {

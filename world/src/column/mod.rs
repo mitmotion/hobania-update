@@ -75,7 +75,7 @@ pub struct ColumnGen<'a> {
     pub(crate) cliff_height_spline: CatmullRom2D<f32>,
 
     /// Chunk data
-    pub(crate) sim_chunk: &'a SimChunk,
+    pub sim_chunk: &'a SimChunk,
     pub(crate) catmull_rom_gen: SplineGen2D<&'a SimChunk>,
     pub(crate) neighbor_river_data: Vec<(Vec2<i32>, &'a SimChunk, &'a RiverData)>,
     pub(crate) homogeneous_water_level: Option<f32>,
