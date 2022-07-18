@@ -122,7 +122,6 @@ pub fn apply_rocks_to(canvas: &mut Canvas, _dynamic_rng: &mut impl Rng) {
             } */
 
             /* let mut is_top = true; */
-            let mut last_block = Block::empty();
             (/*bounds*/aabb.min.x../*bounds*/aabb.max.x).for_each(|x| {
             (/*bounds*/aabb.min.y../*bounds*/aabb.max.y).for_each(|y| {
             let col = if let Some(col) = info.col(Vec2::new(x, y)) {
@@ -131,6 +130,7 @@ pub fn apply_rocks_to(canvas: &mut Canvas, _dynamic_rng: &mut impl Rng) {
                 // NOTE: Should never happen as we're always within the render area.
                 return;
             };
+            let mut last_block = Block::empty();
             for z in (/*bounds*/aabb.min.z../*bounds*/aabb.max.z).rev() {
                 let wpos = Vec3::new(x, y, z);
                 let model_pos = wpos - rock.wpos;
