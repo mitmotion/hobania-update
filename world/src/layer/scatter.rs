@@ -1132,7 +1132,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                 // FIXME: Justify conversion (threshold limits?)
                 // spread = (sizei / threshold)
                 // NOTE: Safe conversion because it was a positive i32.
-                let spread = (wavelen as f32 / 32.0/* / threshold*/) as u32;
+                let spread = (wavelen as f32 / 32.0/* / threshold*/).ceil() as u32;
                 // freq = spread * 2
                 let freq = spread << 1;
                 let scatter_gen = StructureGen2d::new(i, freq, spread);
@@ -1155,7 +1155,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         // size = wavelen / 16
                         //
                         // FIXME: Justify conversion (maybe limit spread to a u16?).
-                        let sizei = (wavelen as f32 / 24.0/* * size_factor*/) as i32;
+                        let sizei = (wavelen as f32 / 24.0/* * size_factor*/).ceil() as i32;
                         // FIXME: Justify no overflow (maybe limit spread to a u16?).
                         let size2 = sizei * sizei;
 
