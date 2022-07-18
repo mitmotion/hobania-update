@@ -1,4 +1,4 @@
-use crate::{column::ColumnSample, sim::SimChunk, Canvas, CONFIG};
+use crate::{column::ColumnSample, sim::SimChunk, util::{RandomPerm, Sampler, StructureGen2d}, Canvas, CONFIG};
 use common::terrain::{Block, BlockKind, SpriteKind};
 use noise::NoiseFn;
 use rand::prelude::*;
@@ -25,18 +25,21 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
     struct ScatterConfig {
         kind: SpriteKind,
         water_mode: WaterMode,
+        /// (base_density_proportion, wavelen, threshold)
+        patch: Option<(f32, u32, f32)>,
         permit: fn(BlockKind) -> bool,
-        f: fn(&SimChunk, &ColumnSample) -> (f32, Option<(f32, f32, f32)>),
+        /// (chunk, col) -> density
+        f: fn(&SimChunk, &ColumnSample) -> (f32,),
     }
 
     // TODO: Add back all sprites we had before
     let scatter: &[ScatterConfig] = &[
-        // (density, Option<(base_density_proportion, wavelen, threshold)>)
         // Flowers
         ScatterConfig {
             kind: BlueFlower,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 256, 0.25)),
             f: |_, col| {
                 (
                     close(col.temp, CONFIG.temperate_temp, 0.7).min(close(
@@ -46,7 +49,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                     )) * col.tree_density
                         * MUSH_FACT
                         * 256.0,
-                    Some((0.0, 256.0, 0.25)),
                 )
             },
         },
@@ -54,13 +56,13 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: PinkFlower,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 100, 0.1)),
             f: |_, col| {
                 (
                     close(col.temp, 0.0, 0.7).min(close(col.humidity, CONFIG.jungle_hum, 0.4))
                         * col.tree_density
                         * MUSH_FACT
                         * 350.0,
-                    Some((0.0, 100.0, 0.1)),
                 )
             },
         },
@@ -68,6 +70,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: PurpleFlower,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 100, 0.1)),
             f: |_, col| {
                 (
                     close(col.temp, CONFIG.temperate_temp, 0.7).min(close(
@@ -77,7 +80,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                     )) * col.tree_density
                         * MUSH_FACT
                         * 350.0,
-                    Some((0.0, 100.0, 0.1)),
                 )
             },
         },
@@ -85,6 +87,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: RedFlower,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 100, 0.1)),
             f: |_, col| {
                 (
                     close(col.temp, CONFIG.tropical_temp, 0.7).min(close(
@@ -94,7 +97,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                     )) * col.tree_density
                         * MUSH_FACT
                         * 350.0,
-                    Some((0.0, 100.0, 0.1)),
                 )
             },
         },
@@ -102,13 +104,13 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: WhiteFlower,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 100, 0.1)),
             f: |_, col| {
                 (
                     close(col.temp, 0.0, 0.7).min(close(col.humidity, CONFIG.jungle_hum, 0.4))
                         * col.tree_density
                         * MUSH_FACT
                         * 350.0,
-                    Some((0.0, 100.0, 0.1)),
                 )
             },
         },
@@ -116,13 +118,13 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: YellowFlower,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 100, 0.1)),
             f: |_, col| {
                 (
                     close(col.temp, 0.0, 0.7).min(close(col.humidity, CONFIG.jungle_hum, 0.4))
                         * col.tree_density
                         * MUSH_FACT
                         * 350.0,
-                    Some((0.0, 100.0, 0.1)),
                 )
             },
         },
@@ -130,6 +132,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: Cotton,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 256, 0.25)),
             f: |_, col| {
                 (
                     close(col.temp, CONFIG.temperate_temp, 0.7).min(close(
@@ -139,7 +142,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                     )) * col.tree_density
                         * MUSH_FACT
                         * 75.0,
-                    Some((0.0, 256.0, 0.25)),
                 )
             },
         },
@@ -147,13 +149,13 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: Sunflower,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 100, 0.15)),
             f: |_, col| {
                 (
                     close(col.temp, 0.0, 0.7).min(close(col.humidity, CONFIG.jungle_hum, 0.4))
                         * col.tree_density
                         * MUSH_FACT
                         * 350.0,
-                    Some((0.0, 100.0, 0.15)),
                 )
             },
         },
@@ -161,13 +163,13 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: WildFlax,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 100, 0.15)),
             f: |_, col| {
                 (
                     close(col.temp, 0.0, 0.7).min(close(col.humidity, CONFIG.jungle_hum, 0.4))
                         * col.tree_density
                         * MUSH_FACT
                         * 600.0,
-                    Some((0.0, 100.0, 0.15)),
                 )
             },
         },
@@ -176,12 +178,12 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: LingonBerry,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: None,
             f: |_, col| {
                 (
                     close(col.temp, 0.3, 0.4).min(close(col.humidity, CONFIG.jungle_hum, 0.5))
                         * MUSH_FACT
                         * 2.5,
-                    None,
                 )
             },
         },
@@ -189,12 +191,12 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: LeafyPlant,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: None,
             f: |_, col| {
                 (
                     close(col.temp, 0.3, 0.4).min(close(col.humidity, CONFIG.jungle_hum, 0.3))
                         * GRASS_FACT
                         * 4.0,
-                    None,
                 )
             },
         },
@@ -202,12 +204,12 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: JungleLeafyPlant,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.15, 64, 0.2)),
             f: |_, col| {
                 (
                     close(col.temp, 0.3, 0.4).min(close(col.humidity, CONFIG.jungle_hum, 0.4))
                         * GRASS_FACT
                         * 32.0,
-                    Some((0.15, 64.0, 0.2)),
                 )
             },
         },
@@ -215,12 +217,12 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: Fern,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 64, 0.2)),
             f: |_, col| {
                 (
                     close(col.temp, 0.3, 0.4).min(close(col.humidity, CONFIG.forest_hum, 0.5))
                         * GRASS_FACT
                         * 0.25,
-                    Some((0.0, 64.0, 0.2)),
                 )
             },
         },
@@ -228,13 +230,13 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: JungleFern,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 84, 0.35)),
             f: |_, col| {
                 (
                     close(col.temp, 0.3, 0.4).min(close(col.humidity, CONFIG.jungle_hum, 0.4))
                         * col.tree_density
                         * MUSH_FACT
                         * 200.0,
-                    Some((0.0, 84.0, 0.35)),
                 )
             },
         },
@@ -242,6 +244,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: Blueberry,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: None,
             f: |_, col| {
                 (
                     close(col.temp, CONFIG.temperate_temp, 0.5).min(close(
@@ -250,7 +253,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         0.5,
                     )) * MUSH_FACT
                         * 0.3,
-                    None,
                 )
             },
         },
@@ -258,6 +260,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: Pumpkin,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 512, 0.05)),
             f: |_, col| {
                 (
                     close(col.temp, CONFIG.temperate_temp, 0.5).min(close(
@@ -266,7 +269,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         0.5,
                     )) * MUSH_FACT
                         * 500.0,
-                    Some((0.0, 512.0, 0.05)),
                 )
             },
         },
@@ -276,10 +278,10 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: Twigs,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: None,
             f: |_, col| {
                 (
                     (col.tree_density * 1.25 - 0.25).powf(0.5).max(0.0) * 0.75e-3,
-                    None,
                 )
             },
         },
@@ -288,10 +290,10 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: Wood,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: None,
             f: |_, col| {
                 (
                     (col.tree_density * 1.25 - 0.25).powf(0.5).max(0.0) * 0.15e-3,
-                    None,
                 )
             },
         },
@@ -304,7 +306,8 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                     BlockKind::Earth | BlockKind::Grass | BlockKind::Rock | BlockKind::Sand
                 )
             },
-            f: |chunk, _| ((chunk.rockiness - 0.5).max(0.025) * 1.0e-3, None),
+            patch: None,
+            f: |chunk, _| ((chunk.rockiness - 0.5).max(0.025) * 1.0e-3,),
         },
         ScatterConfig {
             kind: Copper,
@@ -315,7 +318,8 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                     BlockKind::Earth | BlockKind::Grass | BlockKind::Rock | BlockKind::Sand
                 )
             },
-            f: |chunk, _| ((chunk.rockiness - 0.5).max(0.0) * 1.5e-3, None),
+            patch: None,
+            f: |chunk, _| ((chunk.rockiness - 0.5).max(0.0) * 1.5e-3,),
         },
         ScatterConfig {
             kind: Tin,
@@ -326,18 +330,19 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                     BlockKind::Earth | BlockKind::Grass | BlockKind::Rock | BlockKind::Sand
                 )
             },
-            f: |chunk, _| ((chunk.rockiness - 0.5).max(0.0) * 1.5e-3, None),
+            patch: None,
+            f: |chunk, _| ((chunk.rockiness - 0.5).max(0.0) * 1.5e-3,),
         },
         // Don't spawn Mushrooms in snowy regions
         ScatterConfig {
             kind: Mushroom,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: None,
             f: |_, col| {
                 (
                     close(col.temp, 0.3, 0.4).min(close(col.humidity, CONFIG.forest_hum, 0.35))
                         * MUSH_FACT,
-                    None,
                 )
             },
         },
@@ -346,12 +351,12 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: ShortGrass,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.3, 64, 0.3)),
             f: |_, col| {
                 (
                     close(col.temp, 0.2, 0.75).min(close(col.humidity, CONFIG.jungle_hum, 0.4))
                         * GRASS_FACT
                         * 150.0,
-                    Some((0.3, 64.0, 0.3)),
                 )
             },
         },
@@ -359,12 +364,12 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: MediumGrass,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.3, 64, 0.3)),
             f: |_, col| {
                 (
                     close(col.temp, 0.2, 0.6).min(close(col.humidity, CONFIG.jungle_hum, 0.4))
                         * GRASS_FACT
                         * 120.0,
-                    Some((0.3, 64.0, 0.3)),
                 )
             },
         },
@@ -372,12 +377,12 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: LongGrass,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.1, 48, 0.3)),
             f: |_, col| {
                 (
                     close(col.temp, 0.3, 0.35).min(close(col.humidity, CONFIG.jungle_hum, 0.3))
                         * GRASS_FACT
                         * 150.0,
-                    Some((0.1, 48.0, 0.3)),
                 )
             },
         },
@@ -385,13 +390,13 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: JungleRedGrass,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 128, 0.25)),
             f: |_, col| {
                 (
                     close(col.temp, 0.3, 0.4).min(close(col.humidity, CONFIG.jungle_hum, 0.4))
                         * col.tree_density
                         * MUSH_FACT
                         * 350.0,
-                    Some((0.0, 128.0, 0.25)),
                 )
             },
         },
@@ -403,7 +408,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
         //             CONFIG.jungle_hum,
         //             0.6,
         //         )) * 0.08,
-        //         Some((0.0, 60.0, 5.0)),
+        //         Some((0.0, 60, 5.0)),
         //     )
         // }),
         /*(WheatGreen, Ground, |c, col| {
@@ -418,6 +423,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: GrassSnow,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 48, 0.2)),
             f: |_, col| {
                 (
                     close(col.temp, CONFIG.snow_temp - 0.2, 0.4).min(close(
@@ -426,7 +432,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         0.5,
                     )) * GRASS_FACT
                         * 100.0,
-                    Some((0.0, 48.0, 0.2)),
                 )
             },
         },
@@ -434,6 +439,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: Moonbell,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 48, 0.2)),
             f: |_, col| {
                 (
                     close(col.temp, CONFIG.snow_temp - 0.2, 0.4).min(close(
@@ -441,7 +447,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         CONFIG.forest_hum,
                         0.5,
                     )) * 0.003,
-                    Some((0.0, 48.0, 0.2)),
                 )
             },
         },
@@ -450,6 +455,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: SavannaGrass,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.15, 64, 0.2)),
             f: |_, col| {
                 (
                     {
@@ -457,7 +463,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         let desert = close(col.temp, 1.0, 0.25) * close(col.humidity, 0.0, 0.1);
                         (savanna - desert * 5.0).max(0.0) * GRASS_FACT * 250.0
                     },
-                    Some((0.15, 64.0, 0.2)),
                 )
             },
         },
@@ -465,6 +470,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: TallSavannaGrass,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.1, 48, 0.2)),
             f: |_, col| {
                 (
                     {
@@ -472,7 +478,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         let desert = close(col.temp, 1.0, 0.25) * close(col.humidity, 0.0, 0.1);
                         (savanna - desert * 5.0).max(0.0) * GRASS_FACT * 150.0
                     },
-                    Some((0.1, 48.0, 0.2)),
                 )
             },
         },
@@ -480,6 +485,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: RedSavannaGrass,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.15, 48, 0.25)),
             f: |_, col| {
                 (
                     {
@@ -487,7 +493,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         let desert = close(col.temp, 1.0, 0.25) * close(col.humidity, 0.0, 0.1);
                         (savanna - desert * 5.0).max(0.0) * GRASS_FACT * 120.0
                     },
-                    Some((0.15, 48.0, 0.25)),
                 )
             },
         },
@@ -495,6 +500,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: SavannaBush,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.1, 96, 0.15)),
             f: |_, col| {
                 (
                     {
@@ -502,7 +508,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         let desert = close(col.temp, 1.0, 0.25) * close(col.humidity, 0.0, 0.1);
                         (savanna - desert * 5.0).max(0.0) * GRASS_FACT * 40.0
                     },
-                    Some((0.1, 96.0, 0.15)),
                 )
             },
         },
@@ -511,10 +516,10 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: DeadBush,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: None,
             f: |_, col| {
                 (
                     close(col.temp, 1.0, 0.95).min(close(col.humidity, 0.0, 0.3)) * MUSH_FACT * 7.5,
-                    None,
                 )
             },
         },
@@ -522,12 +527,12 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: Pyrebloom,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: None,
             f: |_, col| {
                 (
                     close(col.temp, 1.0, 0.95).min(close(col.humidity, 0.0, 0.3))
                         * MUSH_FACT
                         * 0.35,
-                    None,
                 )
             },
         },
@@ -535,10 +540,10 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: LargeCactus,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: None,
             f: |_, col| {
                 (
                     close(col.temp, 1.0, 0.25).min(close(col.humidity, 0.0, 0.1)) * MUSH_FACT * 1.5,
-                    None,
                 )
             },
         },
@@ -546,10 +551,10 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: RoundCactus,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: None,
             f: |_, col| {
                 (
                     close(col.temp, 1.0, 0.25).min(close(col.humidity, 0.0, 0.1)) * MUSH_FACT * 2.5,
-                    None,
                 )
             },
         },
@@ -557,10 +562,10 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: ShortCactus,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: None,
             f: |_, col| {
                 (
                     close(col.temp, 1.0, 0.25).min(close(col.humidity, 0.0, 0.1)) * MUSH_FACT * 2.5,
-                    None,
                 )
             },
         },
@@ -568,10 +573,10 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: MedFlatCactus,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: None,
             f: |_, col| {
                 (
                     close(col.temp, 1.0, 0.25).min(close(col.humidity, 0.0, 0.1)) * MUSH_FACT * 2.5,
-                    None,
                 )
             },
         },
@@ -579,10 +584,10 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: ShortFlatCactus,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: None,
             f: |_, col| {
                 (
                     close(col.temp, 1.0, 0.25).min(close(col.humidity, 0.0, 0.1)) * MUSH_FACT * 2.5,
-                    None,
                 )
             },
         },
@@ -591,6 +596,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: ChestBuried,
             water_mode: Underwater,
             permit: |b| matches!(b, BlockKind::Earth | BlockKind::Sand),
+            patch: None,
             f: |_, col| {
                 (
                     MUSH_FACT
@@ -600,7 +606,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         } else {
                             0.0
                         },
-                    None,
                 )
             },
         },
@@ -609,6 +614,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: Mud,
             water_mode: Underwater,
             permit: |b| matches!(b, BlockKind::Earth),
+            patch: None,
             f: |_, col| {
                 (
                     MUSH_FACT
@@ -618,7 +624,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         } else {
                             0.0
                         },
-                    None,
                 )
             },
         },
@@ -627,6 +632,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: GrassBlue,
             water_mode: Underwater,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 100, 0.15)),
             f: |_, col| {
                 (
                     MUSH_FACT
@@ -636,7 +642,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         } else {
                             0.0
                         },
-                    Some((0.0, 100.0, 0.15)),
                 )
             },
         },
@@ -645,6 +650,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: Seagrass,
             water_mode: Underwater,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 150, 0.3)),
             f: |_, col| {
                 (
                     close(col.temp, CONFIG.temperate_temp, 0.8)
@@ -657,7 +663,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         } else {
                             0.0
                         },
-                    Some((0.0, 150.0, 0.3)),
                 )
             },
         },
@@ -666,6 +671,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: Seagrass,
             water_mode: Underwater,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 150, 0.4)),
             f: |_, col| {
                 (
                     MUSH_FACT
@@ -677,7 +683,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         } else {
                             0.0
                         },
-                    Some((0.0, 150.0, 0.4)),
                 )
             },
         },
@@ -686,6 +691,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: SeaweedTemperate,
             water_mode: Underwater,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 500, 0.75)),
             f: |_, col| {
                 (
                     close(col.temp, CONFIG.temperate_temp, 0.8)
@@ -698,7 +704,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         } else {
                             0.0
                         },
-                    Some((0.0, 500.0, 0.75)),
                 )
             },
         },
@@ -707,6 +712,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: SeaweedTropical,
             water_mode: Underwater,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.0, 500, 0.75)),
             f: |_, col| {
                 (
                     close(col.temp, 1.0, 0.95)
@@ -719,7 +725,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         } else {
                             0.0
                         },
-                    Some((0.0, 500.0, 0.75)),
                 )
             },
         },
@@ -728,6 +733,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: SeaGrapes,
             water_mode: Underwater,
             permit: |b| matches!(b, BlockKind::Earth),
+            patch: Some((0.0, 100, 0.15)),
             f: |_, col| {
                 (
                     MUSH_FACT
@@ -739,7 +745,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         } else {
                             0.0
                         },
-                    Some((0.0, 100.0, 0.15)),
                 )
             },
         },
@@ -748,6 +753,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: WavyAlgae,
             water_mode: Underwater,
             permit: |b| matches!(b, BlockKind::Earth),
+            patch: Some((0.0, 100, 0.15)),
             f: |_, col| {
                 (
                     MUSH_FACT
@@ -759,7 +765,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         } else {
                             0.0
                         },
-                    Some((0.0, 100.0, 0.15)),
                 )
             },
         },
@@ -768,6 +773,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: MermaidsFan,
             water_mode: Underwater,
             permit: |b| matches!(b, BlockKind::Earth),
+            patch: Some((0.0, 50, 0.10)),
             f: |_, col| {
                 (
                     close(col.temp, 1.0, 0.95)
@@ -780,7 +786,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         } else {
                             0.0
                         },
-                    Some((0.0, 50.0, 0.10)),
                 )
             },
         },
@@ -789,6 +794,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: SeaAnemone,
             water_mode: Underwater,
             permit: |b| matches!(b, BlockKind::Earth),
+            patch: Some((0.0, 100, 0.3)),
             f: |_, col| {
                 (
                     close(col.temp, CONFIG.temperate_temp, 0.8)
@@ -801,7 +807,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         } else {
                             0.0
                         },
-                    Some((0.0, 100.0, 0.3)),
                 )
             },
         },
@@ -810,6 +815,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: GiantKelp,
             water_mode: Underwater,
             permit: |b| matches!(b, BlockKind::Earth),
+            patch: Some((0.0, 200, 0.4)),
             f: |_, col| {
                 (
                     close(col.temp, CONFIG.temperate_temp, 0.8)
@@ -822,7 +828,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         } else {
                             0.0
                         },
-                    Some((0.0, 200.0, 0.4)),
                 )
             },
         },
@@ -831,6 +836,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: BullKelp,
             water_mode: Underwater,
             permit: |b| matches!(b, BlockKind::Earth),
+            patch: Some((0.0, 75, 0.3)),
             f: |_, col| {
                 (
                     close(col.temp, CONFIG.temperate_temp, 0.7)
@@ -843,7 +849,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         } else {
                             0.0
                         },
-                    Some((0.0, 75.0, 0.3)),
                 )
             },
         },
@@ -852,6 +857,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: StonyCoral,
             water_mode: Underwater,
             permit: |b| matches!(b, BlockKind::Earth),
+            patch: Some((0.0, 120, 0.4)),
             f: |_, col| {
                 (
                     close(col.temp, 1.0, 0.9)
@@ -864,7 +870,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         } else {
                             0.0
                         },
-                    Some((0.0, 120.0, 0.4)),
                 )
             },
         },
@@ -873,6 +878,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: SoftCoral,
             water_mode: Underwater,
             permit: |b| matches!(b, BlockKind::Earth),
+            patch: Some((0.0, 120, 0.4)),
             f: |_, col| {
                 (
                     close(col.temp, 1.0, 0.9)
@@ -885,7 +891,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         } else {
                             0.0
                         },
-                    Some((0.0, 120.0, 0.4)),
                 )
             },
         },
@@ -894,6 +899,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: Seashells,
             water_mode: Underwater,
             permit: |b| matches!(b, BlockKind::Earth),
+            patch: None,
             f: |c, col| {
                 (
                     (c.rockiness - 0.5).max(0.0)
@@ -905,7 +911,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         } else {
                             0.0
                         },
-                    None,
                 )
             },
         },
@@ -913,6 +918,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: Stones,
             water_mode: Underwater,
             permit: |b| matches!(b, BlockKind::Earth),
+            patch: None,
             f: |c, col| {
                 (
                     (c.rockiness - 0.5).max(0.0)
@@ -922,7 +928,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         } else {
                             0.0
                         },
-                    None,
                 )
             },
         },
@@ -931,6 +936,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: LillyPads,
             water_mode: Floating,
             permit: |_| true,
+            patch: Some((0.0, 128, 0.35)),
             f: |_, col| {
                 (
                     close(col.temp, 0.2, 0.6).min(close(col.humidity, CONFIG.jungle_hum, 0.4))
@@ -940,7 +946,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         * col
                             .water_dist
                             .map_or(0.0, |d| 1.0 / (1.0 + (d.abs() * 0.4).powi(2))),
-                    Some((0.0, 128.0, 0.35)),
                 )
             },
         },
@@ -948,6 +953,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: Reed,
             water_mode: Underwater,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.2, 128, 0.5)),
             f: |_, col| {
                 (
                     close(col.temp, 0.2, 0.6).min(close(col.humidity, CONFIG.jungle_hum, 0.4))
@@ -957,7 +963,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                         * col
                             .water_dist
                             .map_or(0.0, |d| 1.0 / (1.0 + (d.abs() * 0.40).powi(2))),
-                    Some((0.2, 128.0, 0.5)),
                 )
             },
         },
@@ -965,6 +970,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: Reed,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.2, 128, 0.5)),
             f: |_, col| {
                 (
                     close(col.humidity, CONFIG.jungle_hum, 0.9)
@@ -973,7 +979,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                             .map(|wd| Lerp::lerp(0.2, 0.0, (wd / 8.0).clamped(0.0, 1.0)))
                             .unwrap_or(0.0)
                         * ((col.alt - CONFIG.sea_level) / 12.0).clamped(0.0, 1.0),
-                    Some((0.2, 128.0, 0.5)),
                 )
             },
         },
@@ -981,6 +986,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: Bamboo,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
+            patch: Some((0.2, 128, 0.5)),
             f: |_, col| {
                 (
                     0.014
@@ -990,16 +996,60 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                             .map(|wd| Lerp::lerp(0.2, 0.0, (wd / 8.0).clamped(0.0, 1.0)))
                             .unwrap_or(0.0)
                         * ((col.alt - CONFIG.sea_level) / 12.0).clamped(0.0, 1.0),
-                    Some((0.2, 128.0, 0.5)),
                 )
             },
         },
     ];
 
-    canvas.foreach_col(|canvas, wpos2d, col| {
+    let canvas_area = canvas.area();
+    let canvas_size = canvas.column_grid.size() - 1;
+    if canvas_size.reduce_partial_min() < 0 {
+        return;
+    }
+    let corner_cols = [
+        canvas.column_grid.get(Vec2::new(0, 0)).expect("Definitely in bounds"),
+        canvas.column_grid.get(Vec2::new(canvas_size.x, 0)).expect("Definitely in bounds"),
+        canvas.column_grid.get(Vec2::new(0, canvas_size.y)).expect("Definitely in bounds"),
+        canvas.column_grid.get(canvas_size).expect("Definitely in bounds"),
+    ];
+    let chunk = canvas.chunk();
+    scatter.iter().enumerate().for_each(
+        |(
+            i,
+            config,
+        )| {
+            // NOTE: We know the number of sprite kinds can't exceed u32::MAX, because that's
+            // the maximum amount of information contained in a Block (in practice, for many
+            // reasons we don't have anywhere close to that many unique sprite kinds).  Since
+            // we don't have more scatter configs than sprite kinds (currently at least),
+            // this cast from usize to u32 must therefore always be valid.
+            let i = i as u32;
+
+            let corner_densities = corner_cols.map(|col| (config.f)(chunk, col).0);
+            // NOTE: Hack to try to rule out sprites in the chunk by just looking at the corners.
+            if corner_densities == [0.0; 4] {
+                return;
+            }
+
+            fn draw_sprites(
+                canvas: &mut Canvas,
+                rng: &mut impl Rng,
+                ScatterConfig {
+                    kind,
+                    water_mode,
+                    permit,
+                    ..
+                }: &ScatterConfig,
+                corner_densities: &[f32; 4],
+                aabr: Aabr<i32>,
+                mut f: impl FnMut(&ColumnSample) -> f32,
+                mut filter: impl FnMut(Vec2<i32>) -> bool,
+            ) {
+
+    canvas.foreach_col_area(aabr, /*Aabr { min: canvas.wpos(), max: canvas.wpos() + 1 }, */|canvas, wpos2d, col| {
         let underwater = col.water_level.floor() > col.alt;
 
-        let kind = scatter.iter().enumerate().find_map(
+        let /*kind*/(kind, water_mode) = /* scatter.iter().enumerate().find_map(
             |(
                 i,
                 ScatterConfig {
@@ -1008,15 +1058,18 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                     permit,
                     f,
                 },
-            )| {
+            )| */{
                 let block_kind = canvas
                     .get(Vec3::new(wpos2d.x, wpos2d.y, col.alt as i32))
                     .kind();
                 if !permit(block_kind) {
-                    return None;
+                    return;
                 }
-                let (density, patch) = f(canvas.chunk(), col);
-                let density = patch
+                if !filter(wpos2d) {
+                    return;
+                }
+                let density = f(col);
+                /* let density = patch
                     .map(|(base_density_prop, wavelen, threshold)| {
                         if canvas
                             .index()
@@ -1035,19 +1088,19 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                             density * base_density_prop
                         }
                     })
-                    .unwrap_or(density);
+                    .unwrap_or(density); */
                 if density > 0.0
                     && rng.gen::<f32>() < density //RandomField::new(i as u32).chance(Vec3::new(wpos2d.x, wpos2d.y, 0), density)
                     && matches!(&water_mode, Underwater | Floating) == underwater
                 {
-                    Some((*kind, water_mode))
+                    (*kind, water_mode)
                 } else {
-                    None
+                    return;
                 }
-            },
-        );
+            }/*,
+        )*/;
 
-        if let Some((kind, water_mode)) = kind {
+        /*if let Some((kind, water_mode)) = kind */{
             let (alt, is_under): (_, fn(Block) -> bool) = match water_mode {
                 Ground | Underwater => (col.alt as i32, |block| block.is_solid()),
                 Floating => (col.water_level as i32, |block| !block.is_air()),
@@ -1069,4 +1122,94 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             }
         }
     });
+            }
+
+            let base_density_prop = if let Some((base_density_prop, wavelen, threshold)) = config.patch {
+                // Compute GenStructure2D for this sprite kind, and iterate over each patch, with:
+                //
+                // seed = i
+                //
+                // FIXME: Justify conversion (threshold limits?)
+                // spread = (sizei / threshold)
+                // NOTE: Safe conversion because it was a positive i32.
+                let spread = (wavelen as f32 / 32.0/* / threshold*/) as u32;
+                // freq = spread * 2
+                let freq = spread << 1;
+                let scatter_gen = StructureGen2d::new(i, freq, spread);
+                /* let perm = RandomPerm::new(seed); */
+                let scatter_nz = /*RandomPerm::new(seed)*/&canvas.index().noise.scatter_nz;
+
+                /* let probability = threshold * threshold; */
+                scatter_gen
+                    .iter(canvas_area.min, canvas_area.max)
+                    // NOTE: Rejection sample against threshold to determine whether to draw this
+                    // patch at all.
+                    .filter(|&(wpos, _)| {
+                        let wposf = wpos.as_::<f64>() / wavelen as f64 + i as f64 * 43.0;
+                        scatter_nz.get(wposf) > 1.0 - threshold
+                    })
+                    // TODO: Consider checking against the threshold to decide whether to draw
+                    // the scatter field at all.
+                    .for_each(|(wpos, seed)| {
+                        /* let size_factor = RandomPerm::new(i).get_f32(1); */
+                        // size = wavelen / 16
+                        //
+                        // FIXME: Justify conversion (maybe limit spread to a u16?).
+                        let sizei = (wavelen as f32 / 24.0/* * size_factor*/) as i32;
+                        // FIXME: Justify no overflow (maybe limit spread to a u16?).
+                        let size2 = sizei * sizei;
+
+                        // Sample within the aabb surrounding the structure.
+                        let mut aabr = Aabr {
+                            min: wpos - sizei,
+                            max: wpos + sizei,
+                        };
+                        aabr.intersect(canvas_area);
+                        /* let scatter_nz = /*RandomField::new(seed)*/
+                                &canvas
+                                    .index()
+                                    .noise
+                                    .scatter_nz; */
+                        draw_sprites(
+                            canvas, rng, config, &corner_densities, aabr,
+                            |col| (config.f)(chunk, col).0,
+                            |pos| {
+                                let dist2 = pos.distance_squared(wpos);
+                                dist2 < size2/* && /*scatter_nz.chance(Vec3::new(pos.x, pos.y, 0), threshold)*/
+                                /*canvas
+                                    .index()
+                                    .noise
+                                    .*/scatter_nz
+                                    .get(
+                                        /*wpos2d*/pos
+                                            .map(|e| e as f64 / wavelen as f64 + i as f64 * 43.0)
+                                            .into_array(),
+                                    )
+                                    .abs()
+                                    > 1.0 - threshold as f64*/
+                            },
+                        );
+                    });
+                // Return the non-scatter density multiplier
+                base_density_prop
+            } else {
+                // There is no GenStructure2D to further restrict the sprite's bounds, so we sample
+                // over the whole chunk using a 1.0 density multiplier.
+                1.0
+            };
+            if base_density_prop == 0.0 {
+                // Sprite doesn't get drawn outside of its patches.
+                return;
+            }
+            // TODO: Draw sprites at the base density over the whole chunk.
+            //
+            // NOTE: This could be very expensive, would we consider just not doing this?
+            /* let scatter_nz = RandomField::new(i); */
+            draw_sprites(
+                canvas, rng, config, &corner_densities, canvas_area,
+                |col| base_density_prop * (config.f)(chunk, col).0,
+                |pos| /*scatter_nz.chance(Vec3::new(pos.x, pos.y, 0), threshold)*/true,
+            );
+    });
+
 }

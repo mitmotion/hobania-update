@@ -7,7 +7,7 @@
     rocks: true,
     shrubs: true,
     trees: true,
-    scatter: false,
+    scatter: true,
     paths: true,
     spots: true,
     snow: true,

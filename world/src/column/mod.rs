@@ -78,7 +78,7 @@ pub struct ColumnGen<'a> {
     pub sim_chunk: &'a SimChunk,
     pub(crate) catmull_rom_gen: SplineGen2D<&'a SimChunk>,
     pub(crate) neighbor_river_data: Vec<(Vec2<i32>, &'a SimChunk, &'a RiverData)>,
-    pub(crate) homogeneous_water_level: Option<f32>,
+    pub(crate) homogeneous_water_level: Option<Option<f32>>,
     // pub(crate) spawn_rules: SpawnRules,
 }
 
@@ -545,13 +545,15 @@ impl<'a> ColumnGen<'a> {
         let river_kind = sim_chunk.river.river_kind;
         let homogeneous_water_level = neighbor_river_data
             .iter()
+            .filter(|(pos, _, _)| (pos - chunk_pos).map(i32::abs).reduce_max() <= 1)
             .all(|(pos, chunk, river)| river.river_kind == river_kind ||
                  chunk.water_alt == sim_chunk.water_alt);
         let base_sea_level = CONFIG.sea_level - 1.0 + 0.01;
         let homogeneous_water_level = if homogeneous_water_level {
             match river_kind {
-                None | Some(RiverKind::Ocean) => Some(base_sea_level),
-                Some(RiverKind::Lake { .. }) => Some(sim_chunk.water_alt),
+                None => Some(None),
+                Some(RiverKind::Ocean) => Some(Some(base_sea_level)),
+                Some(RiverKind::Lake { .. }) => Some(Some(sim_chunk.water_alt)),
                 _ => None,
             }
         } else {
@@ -751,10 +753,10 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
         let base_sea_level = CONFIG.sea_level - 1.0 + 0.01;
 
         let riverless_alt = alt;
-        let (alt, water_level, water_dist) = if let Some(water_level) = homogeneous_water_level {
-            (alt, water_level, None::<f32>)
+        let (alt, water_level, water_dist, water_dist_) = if let Some(water_level) = homogeneous_water_level {
+            (alt, water_level.unwrap_or(base_sea_level), water_level.and(Some(0.0)), None::<f32>)
         } else {
-            (alt, base_sea_level, None::<f32>)
+            (alt, base_sea_level, None::<f32>, None::<f32>)
         /* let lake_width = (TerrainChunkSize::RECT_SIZE.x as f64 * 2.0f64.sqrt()) + 6.0;
         let neighbor_river_data = neighbor_river_data
             .iter()
@@ -1462,7 +1464,7 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
         let cliff_offset = cliff * cliff_height;
         let riverless_alt_delta = riverless_alt_delta + (cliff - 0.5) * cliff_height;
 
-        let warp_factor = water_dist.map_or(1.0, |d| ((d - 0.0) / 64.0).clamped(0.0, 1.0));
+        let warp_factor = water_dist_.map_or(1.0, |d| ((d - 0.0) / 64.0).clamped(0.0, 1.0));
 
         // NOTE: To disable warp, uncomment this line.
         // let warp_factor = 0.0;

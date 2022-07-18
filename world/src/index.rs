@@ -1,6 +1,7 @@
 use crate::{
     layer::wildlife::{self, DensityFn, SpawnEntry},
     site::{economy::TradeInformation, Site},
+    util::FastNoise2d,
     Colors, Features,
 };
 use common::{
@@ -135,14 +136,14 @@ impl IndexOwned {
 
 pub struct Noise {
     pub cave_nz: SuperSimplex,
-    pub scatter_nz: SuperSimplex,
+    pub scatter_nz: /*SuperSimplex*/FastNoise2d,
 }
 
 impl Noise {
     fn new(seed: u32) -> Self {
         Self {
             cave_nz: SuperSimplex::new().set_seed(seed + 0),
-            scatter_nz: SuperSimplex::new().set_seed(seed + 1),
+            scatter_nz: /*SuperSimplex::new().set_seed(seed + 1)*/FastNoise2d::new(seed + 1),
         }
     }
 }

@@ -289,7 +289,7 @@ pub fn apply_trees_to(
 
             /* criterion::black_box(tree); */
         /*for tree in trees {*/
-            /* 
+            /*
     arena: &'b bumpalo::Bump,
     canvas_info: CanvasInfo<'c>,
     render_area: Aabr<i32>,
