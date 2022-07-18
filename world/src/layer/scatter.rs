@@ -1002,7 +1002,9 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
     ];
 
     let canvas_area = canvas.area();
-    let canvas_size = canvas.column_grid.size() - 1;
+    let canvas_center = canvas_area.center();
+    let canvas_real_size = canvas.column_grid.size();
+    let canvas_size = canvas_real_size - 1;
     if canvas_size.reduce_partial_min() < 0 {
         return;
     }
@@ -1012,7 +1014,12 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
         canvas.column_grid.get(Vec2::new(0, canvas_size.y)).expect("Definitely in bounds"),
         canvas.column_grid.get(canvas_size).expect("Definitely in bounds"),
     ];
+
     let chunk = canvas.chunk();
+    let canvas_inv_x = (canvas_real_size.x as f32).recip();
+    let canvas_inv_y = (canvas_real_size.y as f32).recip();
+    let canvas_wpos = canvas.wpos();
+
     scatter.iter().enumerate().for_each(
         |(
             i,
@@ -1042,7 +1049,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                 }: &ScatterConfig,
                 corner_densities: &[f32; 4],
                 aabr: Aabr<i32>,
-                mut f: impl FnMut(&ColumnSample) -> f32,
+                mut f: impl FnMut(Vec2<i32>, &ColumnSample) -> f32,
                 mut filter: impl FnMut(Vec2<i32>) -> bool,
             ) {
 
@@ -1068,7 +1075,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                 if !filter(wpos2d) {
                     return;
                 }
-                let density = f(col);
+                let density = f(wpos2d, col);
                 /* let density = patch
                     .map(|(base_density_prop, wavelen, threshold)| {
                         if canvas
@@ -1124,6 +1131,30 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
     });
             }
 
+            // Spase density estimate.
+            let density_estimate_sparse = |wpos2d: Vec2<i32>, col: &ColumnSample| {
+                let nearest_y = (wpos2d.y - canvas_center.y >= 0) as usize;
+                let nearest_x = (wpos2d.x - canvas_center.x >= 0) as usize;
+                // NOTE: Definitely in bounds because casts from bool to usize can
+                // return only 0 or 1.
+                corner_densities[((nearest_y << 1) + nearest_x)]
+                /* (config.f)(chunk, col).0 */
+            };
+
+            // Dense density estimate.
+            let density_estimate_dense = |wpos2d: Vec2<i32>, col: &ColumnSample| {
+                let wpos2d_delta = wpos2d - canvas_wpos;
+                let wposf_x = wpos2d_delta.x as f32 * canvas_inv_x;
+                let wposf_y = wpos2d_delta.y as f32 * canvas_inv_y;
+                // NOTE: Both wpos_x and wpos_y are definitely in [0, 1] since we only sample
+                // within the canvas.
+                // TODO: Choose triangle, then barycentric coordinates.
+                let density_y0 = Lerp::lerp_unclamped(corner_densities[0], corner_densities[1], wposf_x);
+                let density_y1 = Lerp::lerp_unclamped(corner_densities[2], corner_densities[3], wposf_x);
+                Lerp::lerp_unclamped(density_y0, density_y1, wposf_y)
+                /* (config.f)(chunk, col).0 */
+            };
+
             let base_density_prop = if let Some((base_density_prop, wavelen, threshold)) = config.patch {
                 // Compute GenStructure2D for this sprite kind, and iterate over each patch, with:
                 //
@@ -1172,7 +1203,9 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                                     .scatter_nz; */
                         draw_sprites(
                             canvas, rng, config, &corner_densities, aabr,
-                            |col| (config.f)(chunk, col).0,
+                            |wpos2d, col| {
+                                density_estimate_sparse(wpos2d, col)
+                            },
                             |pos| {
                                 let dist2 = pos.distance_squared(wpos);
                                 dist2 < size2/* && /*scatter_nz.chance(Vec3::new(pos.x, pos.y, 0), threshold)*/
@@ -1207,7 +1240,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             /* let scatter_nz = RandomField::new(i); */
             draw_sprites(
                 canvas, rng, config, &corner_densities, canvas_area,
-                |col| base_density_prop * (config.f)(chunk, col).0,
+                |wpos2d, col| base_density_prop * /*(config.f)(chunk, col).0*/density_estimate_dense(wpos2d, col),
                 |pos| /*scatter_nz.chance(Vec3::new(pos.x, pos.y, 0), threshold)*/true,
             );
     });
