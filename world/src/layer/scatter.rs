@@ -6,7 +6,10 @@ use std::f32;
 use vek::*;
 
 fn close(x: f32, tgt: f32, falloff: f32) -> f32 {
-    (1.0 - (x - tgt).abs() / falloff).max(0.0).powf(0.125)
+    /* (1.0 - (x - tgt).abs() / falloff).max(0.0).powf(0.125) */
+    let y = (x - tgt) / falloff;
+    let y2 = y * y;
+    (1.0 - y2 * y2).max(0.0)
 }
 
 const MUSH_FACT: f32 = 1.0e-4; // To balance things around the mushroom spawning rate
@@ -1049,10 +1052,14 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                 }: &ScatterConfig,
                 corner_densities: &[f32; 4],
                 aabr: Aabr<i32>,
-                mut f: impl FnMut(Vec2<i32>, &ColumnSample) -> f32,
+                mut f: impl FnMut(Vec2<i32>/*, &ColumnSample*/) -> f32,
                 mut filter: impl FnMut(Vec2<i32>) -> bool,
             ) {
 
+    /* let aabr = Aabr {
+        min: aabr.min,
+        max: aabr.min + 1,
+    }; */
     canvas.foreach_col_area(aabr, /*Aabr { min: canvas.wpos(), max: canvas.wpos() + 1 }, */|canvas, wpos2d, col| {
         let underwater = col.water_level.floor() > col.alt;
 
@@ -1066,16 +1073,10 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                     f,
                 },
             )| */{
-                let block_kind = canvas
-                    .get(Vec3::new(wpos2d.x, wpos2d.y, col.alt as i32))
-                    .kind();
-                if !permit(block_kind) {
-                    return;
-                }
                 if !filter(wpos2d) {
                     return;
                 }
-                let density = f(wpos2d, col);
+                let density = f(wpos2d/*, col*/);
                 /* let density = patch
                     .map(|(base_density_prop, wavelen, threshold)| {
                         if canvas
@@ -1100,6 +1101,12 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                     && rng.gen::<f32>() < density //RandomField::new(i as u32).chance(Vec3::new(wpos2d.x, wpos2d.y, 0), density)
                     && matches!(&water_mode, Underwater | Floating) == underwater
                 {
+                    let block_kind = canvas
+                        .get(Vec3::new(wpos2d.x, wpos2d.y, col.alt as i32))
+                        .kind();
+                    if !permit(block_kind) {
+                        return;
+                    }
                     (*kind, water_mode)
                 } else {
                     return;
@@ -1132,7 +1139,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             }
 
             // Spase density estimate.
-            let density_estimate_sparse = |wpos2d: Vec2<i32>, col: &ColumnSample| {
+            let density_estimate_sparse = |wpos2d: Vec2<i32>/*, col: &ColumnSample*/| {
                 let nearest_y = (wpos2d.y - canvas_center.y >= 0) as usize;
                 let nearest_x = (wpos2d.x - canvas_center.x >= 0) as usize;
                 // NOTE: Definitely in bounds because casts from bool to usize can
@@ -1142,7 +1149,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             };
 
             // Dense density estimate.
-            let density_estimate_dense = |wpos2d: Vec2<i32>, col: &ColumnSample| {
+            let density_estimate_dense = |wpos2d: Vec2<i32>/*, col: &ColumnSample*/| {
                 let wpos2d_delta = wpos2d - canvas_wpos;
                 let wposf_x = wpos2d_delta.x as f32 * canvas_inv_x;
                 let wposf_y = wpos2d_delta.y as f32 * canvas_inv_y;
@@ -1203,9 +1210,9 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                                     .scatter_nz; */
                         draw_sprites(
                             canvas, rng, config, &corner_densities, aabr,
-                            |wpos2d, col| {
+                            /* |wpos2d, col| {
                                 density_estimate_sparse(wpos2d, col)
-                            },
+                            } */density_estimate_sparse,
                             |pos| {
                                 let dist2 = pos.distance_squared(wpos);
                                 dist2 < size2/* && /*scatter_nz.chance(Vec3::new(pos.x, pos.y, 0), threshold)*/
@@ -1240,7 +1247,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             /* let scatter_nz = RandomField::new(i); */
             draw_sprites(
                 canvas, rng, config, &corner_densities, canvas_area,
-                |wpos2d, col| base_density_prop * /*(config.f)(chunk, col).0*/density_estimate_dense(wpos2d, col),
+                |wpos2d/*, col*/| base_density_prop * /*(config.f)(chunk, col).0*/density_estimate_dense(wpos2d/*, col*/),
                 |pos| /*scatter_nz.chance(Vec3::new(pos.x, pos.y, 0), threshold)*/true,
             );
     });
