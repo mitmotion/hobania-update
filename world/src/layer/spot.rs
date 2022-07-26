@@ -558,7 +558,7 @@ pub fn apply_spots_to(canvas: &mut Canvas, _dynamic_rng: &mut impl Rng) {
         };
         // Blit base structure
         if let Some(base_structures) = spot_config.base_structures {
-            let structures = Structure::load_group(base_structures).read();
+            let structures = Structure::load_group(base_structures).get();
             let structure = structures.choose(&mut rng).unwrap();
             let origin = spot_wpos2d.with_z(
                 canvas

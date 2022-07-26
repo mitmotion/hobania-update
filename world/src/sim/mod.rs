@@ -33,7 +33,7 @@ use crate::{
     layer::spot::Spot,
     site::Site,
     util::{
-        seed_expan, DHashSet, FastNoise, FastNoise2d, RandomField, Sampler, StructureGen2d,
+        seed_expan, DHashSet, FastNoise, FastNoise2d, RandomField, Sampler, SamplerMut, StructureGen2d,
         CARDINALS, LOCALITY, NEIGHBORS,
     },
     IndexRef, CONFIG,
@@ -136,6 +136,7 @@ pub(crate) struct GenCtx {
     pub uplift_nz: Worley,
 
     pub fast_hill_nz: Value,
+    pub fast_small_nz: /*FastNoise2d*/Value,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -536,6 +537,7 @@ impl WorldSim {
         let uplift_scale = 128.0;
         let uplift_turb_scale = uplift_scale / 4.0;
         let hill_nz_seed;
+        let small_nz_seed;
 
         // NOTE: Changing order will significantly change WorldGen, so try not to!
         let gen_ctx = GenCtx {
@@ -561,7 +563,7 @@ impl WorldSim {
                 .set_lacunarity(2.0)
                 .set_seed(rng.gen()),
 
-            small_nz: BasicMulti::new().set_octaves(2).set_seed(rng.gen()),
+            small_nz: BasicMulti::new().set_octaves(2).set_seed( { small_nz_seed = rng.gen(); small_nz_seed }),
             rock_nz: HybridMulti::new().set_persistence(0.3).set_seed(rng.gen()),
             tree_nz: BasicMulti::new()
                 .set_octaves(12)
@@ -572,6 +574,7 @@ impl WorldSim {
 
             structure_gen: StructureGen2d::new(rng.gen(), 24, 10),
             _big_structure_gen: StructureGen2d::new(rng.gen(), 768, 512),
+            fast_small_nz: Value::new().set_seed(small_nz_seed)/*FastNoise2d::new(small_nz_seed)*/,
             _region_gen: StructureGen2d::new(rng.gen(), 400, 96),
             humid_nz: Billow::new()
                 .set_octaves(9)
@@ -1835,7 +1838,7 @@ impl WorldSim {
         }
     }
 
-    pub fn get_base_z(&self, chunk_pos: Vec2<i32>) -> Option<f32> {
+    /* pub fn get_base_z(&self, chunk_pos: Vec2<i32>) -> Option<f32> {
         let in_bounds = chunk_pos
             .map2(self.map_size_lg().chunks(), |e, sz| {
                 e > 0 && e < sz as i32 - 2
@@ -1859,7 +1862,7 @@ impl WorldSim {
                 }
             })
             .fold(None, |a: Option<f32>, x| a.map(|a| a.min(x)).or(Some(x)))
-    }
+    } */
 
     pub fn get_interpolated<T, F>(&self, pos: Vec2<i32>, mut f: F) -> Option<T>
     where
@@ -2309,7 +2312,7 @@ impl SimChunk {
             Some(
                 uniform_idx_as_vec2(map_size_lg, downhill_pre as usize)
                     * TerrainChunkSize::RECT_SIZE.map(|e| e as i32)
-                    + TerrainChunkSize::RECT_SIZE.map(|e| e as i32 / 2),
+                    /* + TerrainChunkSize::RECT_SIZE.map(|e| e as i32 / 2) */,
             )
         };
 
@@ -2483,7 +2486,7 @@ impl SimChunk {
         self.water_alt > self.alt || self.river.river_kind.is_some()
     }
 
-    pub fn get_base_z(&self) -> f32 { self.alt/* - self.chaos * 16.0 - self.cliff_height.max(0.0) * /*3.125.powf(1.5)*/5.625 - 4.0/*/* * 50.0 - 16.0 */- 7.5*/*/ - 6.0 }
+    /* pub fn get_base_z(&self) -> f32 { self.alt/* - self.chaos * 16.0 - self.cliff_height.max(0.0) * /*3.125.powf(1.5)*/5.625 - 4.0/*/* * 50.0 - 16.0 */- 7.5*/*/ - 6.0 } */
 
     pub fn get_biome(&self) -> BiomeKind {
         let savannah_hum_temp = [0.05..0.55, 0.3..1.6];

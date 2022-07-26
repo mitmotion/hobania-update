@@ -150,6 +150,114 @@ impl Entity {
         }
     }
 
+    fn merchant_loadout(
+        loadout_builder: LoadoutBuilder,
+        economy: Option<&trade::SiteInformation>,
+    ) -> LoadoutBuilder {
+        use common::comp::{
+            inventory::{
+                slot::ArmorSlot,
+                trade_pricing::TradePricing,
+            },
+            Item,
+        };
+        use hashbrown::HashMap;
+        use trade::Good;
+
+        fn sort_wares(bag: &mut [Item]) {
+            use common::comp::item::TagExampleInfo;
+
+            bag.sort_by(|a, b| {
+                a.quality()
+                    .cmp(&b.quality())
+                // sort by kind
+                .then(
+                    Ord::cmp(
+                        a.tags().first().map_or("", |tag| tag.name()),
+                        b.tags().first().map_or("", |tag| tag.name()),
+                    )
+                )
+                // sort by name
+                .then(Ord::cmp(&a.name(), &b.name()))
+            });
+        }
+
+        fn transfer(wares: &mut Vec<Item>, bag: &mut Item) {
+            let capacity = bag.slots().len();
+            for (s, w) in bag
+                .slots_mut()
+                .iter_mut()
+                .zip(wares.drain(0..wares.len().min(capacity)))
+            {
+                *s = Some(w);
+            }
+        }
+
+        let rng = &mut rand::thread_rng();
+
+        let mut backpack = Item::new_from_asset_expect("common.items.armor.misc.back.backpack");
+        let mut bag1 = Item::new_from_asset_expect("common.items.armor.misc.bag.sturdy_red_backpack");
+        let mut bag2 = Item::new_from_asset_expect("common.items.armor.misc.bag.sturdy_red_backpack");
+        let mut bag3 = Item::new_from_asset_expect("common.items.armor.misc.bag.sturdy_red_backpack");
+        let mut bag4 = Item::new_from_asset_expect("common.items.armor.misc.bag.sturdy_red_backpack");
+        let slots = backpack.slots().len() + 4 * bag1.slots().len();
+        let mut stockmap: HashMap<Good, f32> = economy
+            .map(|e| e.unconsumed_stock.clone())
+            .unwrap_or_default();
+        // modify stock for better gameplay
+
+        // TODO: currently econsim spends all its food on population, resulting in none
+        // for the players to buy; the `.max` is temporary to ensure that there's some
+        // food for sale at every site, to be used until we have some solution like NPC
+        // houses as a limit on econsim population growth
+        stockmap
+            .entry(Good::Food)
+            .and_modify(|e| *e = e.max(10_000.0))
+            .or_insert(10_000.0);
+        // Reduce amount of potions so merchants do not oversupply potions.
+        // TODO: Maybe remove when merchants and their inventories are rtsim?
+        // Note: Likely without effect now that potions are counted as food
+        stockmap
+            .entry(Good::Potions)
+            .and_modify(|e| *e = e.powf(0.25));
+        // It's safe to truncate here, because coins clamped to 3000 max
+        // also we don't really want negative values here
+        stockmap
+            .entry(Good::Coin)
+            .and_modify(|e| *e = e.min(rng.gen_range(1000.0..3000.0)));
+        // assume roughly 10 merchants sharing a town's stock (other logic for coins)
+        stockmap
+            .iter_mut()
+            .filter(|(good, _amount)| **good != Good::Coin)
+            .for_each(|(_good, amount)| *amount *= 0.1);
+        // Fill bags with stuff according to unclaimed stock
+        let mut wares: Vec<Item> =
+            TradePricing::random_items(&mut stockmap, slots as u32, true, true, 16)
+                .iter()
+                .map(|(n, a)| {
+                    let mut i = Item::new_from_asset_expect(n);
+                    i.set_amount(*a)
+                        .map_err(|_| tracing::error!("merchant loadout amount failure"))
+                        .ok();
+                    i
+                })
+                .collect();
+        sort_wares(&mut wares);
+        transfer(&mut wares, &mut backpack);
+        transfer(&mut wares, &mut bag1);
+        transfer(&mut wares, &mut bag2);
+        transfer(&mut wares, &mut bag3);
+        transfer(&mut wares, &mut bag4);
+
+        loadout_builder
+            .with_asset_expect("common.loadout.village.merchant", rng)
+            .back(Some(backpack))
+            .bag(ArmorSlot::Bag1, Some(bag1))
+            .bag(ArmorSlot::Bag2, Some(bag2))
+            .bag(ArmorSlot::Bag3, Some(bag3))
+            .bag(ArmorSlot::Bag4, Some(bag4))
+    }
+
     /// Escape hatch for runtime creation of loadout not covered by entity
     /// config.
     // NOTE: Signature is part of interface of EntityInfo
@@ -159,7 +267,7 @@ impl Entity {
         let kind = self.kind;
 
         if let RtSimEntityKind::Merchant = kind {
-            |l, trade| l.with_creator(world::site::settlement::merchant_loadout, trade)
+            |l, trade| l.with_creator(/*world::site::settlement*/Self::merchant_loadout, trade)
         } else {
             |l, _| l
         }
@@ -174,7 +282,7 @@ impl Entity {
                             .civs()
                             .sites
                             .iter()
-                            .filter(|s| s.1.is_settlement() || s.1.is_castle())
+                            .filter(|s| s.1.is_settlement()/* || s.1.is_castle() */)
                             .min_by_key(|(_, site)| {
                                 let wpos = site.center.map2(TerrainChunk::RECT_SIZE, |e, sz| {
                                     e * sz as i32 + sz as i32 / 2
@@ -332,7 +440,7 @@ impl Entity {
                     .civs()
                     .sites
                     .iter()
-                    .filter(|s| s.1.is_settlement() | s.1.is_castle())
+                    .filter(|s| s.1.is_settlement()/* | s.1.is_castle() */)
                     .filter(|_| thread_rng().gen_range(0i32..4) == 0)
                     .min_by_key(|(_, site)| {
                         let wpos = site.center.map2(TerrainChunk::RECT_SIZE, |e, sz| {

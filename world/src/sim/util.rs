@@ -215,8 +215,8 @@ pub fn uniform_noise<F: Float + Send>(
 pub fn local_cells(map_size_lg: MapSizeLg, posi: usize) -> impl Clone + Iterator<Item = usize> {
     let pos = uniform_idx_as_vec2(map_size_lg, posi);
     // NOTE: want to keep this such that the chunk index is in ascending order!
-    let grid_size = 3i32;
-    let grid_bounds = 2 * grid_size + 1;
+    let grid_size = 2i32;
+    let grid_bounds = 2 * (grid_size + 1)/* + 1*/;
     (0..grid_bounds * grid_bounds)
         .into_iter()
         .map(move |index| {

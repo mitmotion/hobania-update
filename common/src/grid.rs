@@ -8,6 +8,14 @@ pub struct Grid<T> {
     size: Vec2<i32>, // TODO: use u32
 }
 
+pub trait RowGen<'a>/*<'a, 'b: 'a>*/ {
+    type Row<'b> where Self: 'b;
+    type Col;
+
+    fn row_gen<'b>(&'b mut self, yoff: i32) -> Self::Row<'b>;
+    fn col_gen<'b>(row: &mut Self::Row<'b>, xoff: i32) -> Self::Col where Self: 'b;
+}
+
 impl<T> Grid<T> {
     pub fn from_raw(size: Vec2<i32>, raw: impl Into<Vec<T>>) -> Self {
         let cells = raw.into();
@@ -26,18 +34,24 @@ impl<T> Grid<T> {
     }
 
     #[inline]
-    pub fn populate_by_row<Row: FnMut(i32) -> Col, Col: FnMut(i32) -> T, const X: u32, const Y: u32>(
-        mut row: Row,
+    pub fn populate_by_row<'c, Gen/*, Row*//*, Col*/, const X: u32, const Y: u32>(
+        gen: &mut Gen,
+        /* mut row_gen: Row, */
+        /* mut col_gen: Col, */
     ) -> Self
         where
             T: Clone + Default,
+            /* for<'a> Gen: RowGen<'a, 'c>, */
+            Gen: RowGen<'c, Col=T>,
+            /* for<'a> Row: FnMut(&'a mut Gen, i32) -> <Gen as RowGen<'c>/*<'a, 'c>*/>::Row<'a>, */
+            // for<'a, 'b> Col: FnMut(&'b mut <Gen as RowGen<'c>/*<'a, 'c>*/>::Row<'a>, i32) -> T,
             [(); {X as usize}]:
     {
         let mut cells = vec![T::default(); {X as usize * Y as usize}];
         cells.array_chunks_mut::<{X as usize}>().enumerate().for_each(|(y, cells)| {
-            let mut col = row(y as i32);
+            let mut row = gen.row_gen(y as i32);
             cells.iter_mut().enumerate().for_each(|(x, cell)| {
-                *cell = col(x as i32);
+                *cell = Gen::col_gen(&mut row, x as i32);
             });
         });
         Self {

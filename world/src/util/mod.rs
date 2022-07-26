@@ -21,7 +21,7 @@ pub use self::{
     unit_chooser::UnitChooser,
 };
 
-pub use common::grid::Grid;
+pub use common::grid::{Grid, RowGen};
 
 use fxhash::FxHasher32;
 use hashbrown::{HashMap, HashSet};

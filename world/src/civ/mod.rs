@@ -5,7 +5,7 @@ mod econ;
 use crate::{
     config::CONFIG,
     sim::WorldSim,
-    site::{namegen::NameGen, Castle, /*Settlement, */Site as WorldSite/*, Tree */},
+    site::{namegen::NameGen, /*Castle, *//*Settlement, */Site as WorldSite/*, Tree */},
     site2,
     util::{attempt, seed_expan, DHashMap, NEIGHBORS},
     Index, Land,
@@ -117,7 +117,8 @@ impl Civs {
         for _ in 0..initial_civ_count * 3 {
             attempt(5, || {
                 let (kind, avoid) = match ctx.rng.gen_range(0..64) {
-                    0..=5 => (SiteKind::Castle, (&castle_enemies, 40)),
+                    /* 0..=5 => (SiteKind::Castle, (&castle_enemies, 40)), */
+                    // 0..=5 => (SiteKind::Citadel, (&castle_enemies, 20)),
                     28..=31 => {
                         /*if index.features().site2_giant_trees */{
                             (SiteKind::GiantTree, (&tree_enemies, 40))
@@ -126,17 +127,16 @@ impl Civs {
                         }*/
                     },
                     32..=37 => (SiteKind::Gnarling, (&gnarling_enemies, 40)),
-                    // 32..=37 => (SiteKind::Citadel, 5, (&castle_enemies, 20)),
                     _ => (SiteKind::Dungeon, (&dungeon_enemies, 40)),
                 };
                 let loc = find_site_loc(&mut ctx, avoid, kind)?;
                 match kind {
-                    SiteKind::Castle => {
+                    /* SiteKind::Castle => {
                         gnarling_enemies.push(loc);
                         dungeon_enemies.push(loc);
                         tree_enemies.push(loc);
                         castle_enemies.push(loc);
-                    },
+                    }, */
                     SiteKind::Gnarling => {
                         castle_enemies.push(loc);
                         dungeon_enemies.push(loc);
@@ -168,7 +168,7 @@ impl Civs {
             let (radius, flatten_radius) = match &site.kind {
                 /* SiteKind::Settlement => (32i32, 10.0f32), */
                 SiteKind::Dungeon => (8i32, 3.0f32),
-                SiteKind::Castle => (16i32, 5.0),
+                /* SiteKind::Castle => (16i32, 5.0), */
                 SiteKind::Refactor => (32i32, 10.0),
                 SiteKind::CliffTown => (32i32, 10.0),
                 /* SiteKind::Tree => (12i32, 8.0), */
@@ -177,9 +177,9 @@ impl Civs {
                 SiteKind::Citadel => (16i32, 0.0),
             };
 
-            let (raise, raise_dist, make_waypoint): (f32, i32, bool) = match &site.kind {
+            /* let (raise, raise_dist, make_waypoint): (f32, i32, bool) = match &site.kind {
                 /* SiteKind::Settlement => (10.0, 6, true), */
-                SiteKind::Castle => (0.0, 6, true),
+                /* SiteKind::Castle => (0.0, 6, true), */
                 _ => (0.0, 0, false),
             };
 
@@ -220,7 +220,7 @@ impl Civs {
                             }
                         });
                 }
-            }
+            } */
         }
 
         // Place sites in world
@@ -243,9 +243,9 @@ impl Civs {
                     &mut rng,
                     wpos,
                 )),
-                SiteKind::Castle => {
+                /* SiteKind::Castle => {
                     WorldSite::castle(Castle::generate(wpos, Some(ctx.sim), &mut rng))
-                },
+                }, */
                 SiteKind::Refactor => WorldSite::refactor(site2::Site::generate_city(
                     &Land::from_sim(ctx.sim),
                     &mut rng,
@@ -976,7 +976,7 @@ impl Civs {
                     SiteKind::Refactor
                         /* | SiteKind::Settlement */
                         | SiteKind::CliffTown
-                        | SiteKind::Castle
+                        /* | SiteKind::Castle */
                 )
             })
             .map(|(id, p)| (id, (p.center.distance_squared(loc) as f32).sqrt()))
@@ -984,7 +984,7 @@ impl Civs {
             .collect::<Vec<_>>();
         nearby.sort_by_key(|(_, dist)| *dist as i32);
 
-        if let SiteKind::Refactor | /* SiteKind::Settlement | */SiteKind::CliffTown | SiteKind::Castle =
+        if let SiteKind::Refactor | /* SiteKind::Settlement | */SiteKind::CliffTown/* | SiteKind::Castle*/ =
             self.sites[site].kind
         {
             for (nearby, _) in nearby.into_iter().take(5) {
@@ -1234,7 +1234,7 @@ impl fmt::Display for Site {
 pub enum SiteKind {
     /* Settlement, */
     Dungeon,
-    Castle,
+    /* Castle, */
     Refactor,
     CliffTown,
     /* Tree, */
@@ -1354,7 +1354,7 @@ impl SiteKind {
                         && chunk.near_cliffs()
                         && suitable_for_town(4.0)
                 },
-                SiteKind::Castle => {
+                /* SiteKind::Castle => {
                     if chunk.tree_density > 0.4 || chunk.river.near_water() || chunk.near_cliffs() {
                         return false;
                     }
@@ -1380,7 +1380,7 @@ impl SiteKind {
                         }
                     }
                     true
-                },
+                }, */
                 SiteKind::Refactor/* | SiteKind::Settlement*/ => suitable_for_town(6.7),
                 _ => true,
             }
@@ -1405,7 +1405,7 @@ impl Site {
         matches!(self.kind, /*SiteKind::Settlement | */SiteKind::Refactor)
     }
 
-    pub fn is_castle(&self) -> bool { matches!(self.kind, SiteKind::Castle) }
+    /* pub fn is_castle(&self) -> bool { matches!(self.kind, SiteKind::Castle) } */
 }
 
 #[derive(PartialEq, Debug, Clone)]

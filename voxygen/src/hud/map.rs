@@ -547,42 +547,44 @@ impl<'a> Widget for Map<'a> {
             .color(TEXT_COLOR)
             .set(state.ids.show_towns_text, ui);
         // Castles
-        Image::new(self.imgs.mmap_site_castle)
-            .down_from(state.ids.show_towns_img, 10.0)
-            .w_h(20.0, 20.0)
-            .set(state.ids.show_castles_img, ui);
-        if Button::image(if show_castles {
-            self.imgs.checkbox_checked
-        } else {
-            self.imgs.checkbox
-        })
-        .w_h(18.0, 18.0)
-        .hover_image(if show_castles {
-            self.imgs.checkbox_checked_mo
-        } else {
-            self.imgs.checkbox_mo
-        })
-        .press_image(if show_castles {
-            self.imgs.checkbox_checked
-        } else {
-            self.imgs.checkbox_press
-        })
-        .right_from(state.ids.show_castles_img, 10.0)
-        .set(state.ids.show_castles_box, ui)
-        .was_clicked()
-        {
-            events.push(Event::SettingsChange(MapShowCastles(!show_castles)));
+        if false {
+            Image::new(self.imgs.mmap_site_castle)
+                .down_from(state.ids.show_towns_img, 10.0)
+                .w_h(20.0, 20.0)
+                .set(state.ids.show_castles_img, ui);
+            if Button::image(if show_castles {
+                self.imgs.checkbox_checked
+            } else {
+                self.imgs.checkbox
+            })
+            .w_h(18.0, 18.0)
+            .hover_image(if show_castles {
+                self.imgs.checkbox_checked_mo
+            } else {
+                self.imgs.checkbox_mo
+            })
+            .press_image(if show_castles {
+                self.imgs.checkbox_checked
+            } else {
+                self.imgs.checkbox_press
+            })
+            .right_from(state.ids.show_castles_img, 10.0)
+            .set(state.ids.show_castles_box, ui)
+            .was_clicked()
+            {
+                events.push(Event::SettingsChange(MapShowCastles(!show_castles)));
+            }
+            Text::new(i18n.get("hud.map.castles"))
+                .right_from(state.ids.show_castles_box, 10.0)
+                .font_size(self.fonts.cyri.scale(14))
+                .font_id(self.fonts.cyri.conrod_id)
+                .graphics_for(state.ids.show_castles_box)
+                .color(TEXT_COLOR)
+                .set(state.ids.show_castles_text, ui);
         }
-        Text::new(i18n.get("hud.map.castles"))
-            .right_from(state.ids.show_castles_box, 10.0)
-            .font_size(self.fonts.cyri.scale(14))
-            .font_id(self.fonts.cyri.conrod_id)
-            .graphics_for(state.ids.show_castles_box)
-            .color(TEXT_COLOR)
-            .set(state.ids.show_castles_text, ui);
         // Dungeons
         Image::new(self.imgs.mmap_site_dungeon)
-            .down_from(state.ids.show_castles_img, 10.0)
+            .down_from(state.ids.show_towns_img, 10.0)
             .w_h(20.0, 20.0)
             .set(state.ids.show_dungeons_img, ui);
         if Button::image(if show_dungeons {

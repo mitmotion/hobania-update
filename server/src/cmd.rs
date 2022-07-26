@@ -62,7 +62,7 @@ use specs::{
 use std::{str::FromStr, sync::Arc};
 use vek::*;
 use wiring::{Circuit, Wire, WireNode, WiringAction, WiringActionEffect, WiringElement};
-use world::util::Sampler;
+use world::util::SamplerMut;
 
 use common::comp::Alignment;
 use tracing::{error, info, warn};
@@ -2722,7 +2722,7 @@ fn handle_debug_column(
     };
     let chunk_pos = wpos.map2(TerrainChunkSize::RECT_SIZE, |e, sz: u32| e / sz as i32);
     let msg_generator = |/*calendar*/| {
-        let sampler = server.world.sample_columns(chunk_pos, server.index.as_index_ref())?;
+        let mut sampler = server.world.sample_columns(chunk_pos, server.index.as_index_ref())?;
         let alt = sim.get_interpolated(wpos, |chunk| chunk.alt)?;
         let basement = sim.get_interpolated(wpos, |chunk| chunk.basement)?;
         let water_alt = sim.get_interpolated(wpos, |chunk| chunk.water_alt)?;

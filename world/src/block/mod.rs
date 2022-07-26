@@ -117,7 +117,7 @@ impl<'a> BlockGen<'a> {
             } else {
                 Some(Block::new(BlockKind::Earth, col))
             }
-        } else if wposf.z as i32 <= alt as i32 {
+        } else if wposf.z as i32 <= alt as i32/* && wposf.z as f32 >= water_level */{
             let grass_factor = (wposf.z as f32 - (alt - grass_depth))
                 .div(grass_depth)
                 .sqrt();
@@ -134,6 +134,7 @@ impl<'a> BlockGen<'a> {
                 }/* else if snow_cover {
                     //if temp < CONFIG.snow_temp + 0.031 {
                     Block::new(BlockKind::Snow, col.map(|e| (e * 255.0) as u8))
+                    //}
                 }*/ else {
                     Block::new(BlockKind::Grass, col.map(|e| (e * 255.0) as u8))
                 }

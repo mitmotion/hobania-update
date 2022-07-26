@@ -2,7 +2,7 @@ use crate::{
     all::ForestKind,
     sim::{local_cells, Cave, Path, RiverData, RiverKind, SimChunk, WorldSim},
     site::SpawnRules,
-    util::{RandomField, Sampler},
+    util::{RandomField, RowGen, Sampler, SamplerMut},
     IndexRef, CONFIG,
 };
 use common::{
@@ -25,7 +25,7 @@ use tracing::error;
 use vek::*;
 
 pub struct ColumnGen1D<'a, 'b> {
-    pub(crate) parent: &'b ColumnGen<'a>,
+    pub(crate) parent: &'b mut ColumnGen<'a>,
     wpos_row: i32,
     wposy: f32,
     cubic_y: Cubic<f32>,
@@ -80,7 +80,18 @@ pub struct ColumnGen<'a> {
     pub(crate) neighbor_river_data: Vec<(Vec2<i32>, &'a SimChunk, &'a RiverData)>,
     pub(crate) homogeneous_water_level: Option<Option<f32>>,
     // pub(crate) spawn_rules: SpawnRules,
+
+    /// Scratch data
+    river_scratch: /*[RiverScratchData<'a>; 7 * 7]*/Vec<RiverScratchData<'a>>,
 }
+
+type RiverScratchData<'a> =
+    (
+        Vec2<i32>,
+        &'a SimChunk,
+        &'a RiverData,
+        Option<(Vec2<f64>, Vec2<f64>, f64, (f64, (Vec2<f64>, Vec3<Vec2<f64>>), &'a SimChunk))>,
+    );
 
 #[derive(Deserialize)]
 pub struct Colors {
@@ -534,20 +545,43 @@ impl<'a> ColumnGen<'a> {
             .fold(SpawnRules::default(), |a, b| a.combine(b)); */
 
         let my_chunk_idx = vec2_as_uniform_idx(sim.map_size_lg(), chunk_pos);
+        let mut homogeneous_water_level = true;
+        let river_kind = sim_chunk.river.river_kind;
         let neighbor_river_data =
             local_cells(sim.map_size_lg(), my_chunk_idx).filter_map(|neighbor_idx: usize| {
                 let neighbor_pos = uniform_idx_as_vec2(sim.map_size_lg(), neighbor_idx);
                 let neighbor_chunk = sim.get(neighbor_pos)?;
+                match (neighbor_chunk.river.river_kind, river_kind) {
+                    (None, None) => {},
+                    /* (_, Some(RiverKind::Ocean)) => {}, */
+                    /* (_, Some(RiverKind::Lake { .. })) => {
+                        return None;
+                    }, */
+                    (_, Some(RiverKind::River { .. })) | (Some(RiverKind::River { .. }), _) => {
+                        homogeneous_water_level = false;
+                    },
+                    (_, _) if (2 * (neighbor_pos - chunk_pos) - 1).magnitude_squared() > 18/*(neighbor_pos - chunk_pos).map(i32::abs).reduce_max() > 2*/ => {
+                        return None;
+                    },
+                    /* (Some(RiverKind::Ocean), Some(RiverKind::Ocean)) => {}, */
+                    (Some(RiverKind::Lake { .. } | RiverKind::Ocean), Some(RiverKind::Lake { .. } | RiverKind::Ocean)) if neighbor_chunk.water_alt == sim_chunk.water_alt => {},
+                    (_, _) => {
+                        homogeneous_water_level = false;
+                    }
+                }
+                /* if /*(neighbor_pos - chunk_pos).map(i32::abs).reduce_max() <= 1 &&*/
+                    !(neighbor_chunk.river.river_kind.is_some() == river_kind.is_some() && neighbor_chunk.water_alt == sim_chunk.water_alt) {
+                    homogeneous_water_level = false;
+                } */
                 neighbor_chunk.river.river_kind.and(
                     Some((neighbor_pos, neighbor_chunk, &neighbor_chunk.river))
                 )
             }).collect::<Vec<_>>();
-        let river_kind = sim_chunk.river.river_kind;
-        let homogeneous_water_level = neighbor_river_data
+        /* let homogeneous_water_level = neighbor_river_data
             .iter()
             .filter(|(pos, _, _)| (pos - chunk_pos).map(i32::abs).reduce_max() <= 1)
             .all(|(pos, chunk, river)| river.river_kind == river_kind ||
-                 chunk.water_alt == sim_chunk.water_alt);
+                 chunk.water_alt == sim_chunk.water_alt); */
         let base_sea_level = CONFIG.sea_level - 1.0 + 0.01;
         let homogeneous_water_level = if homogeneous_water_level {
             match river_kind {
@@ -585,20 +619,20 @@ impl<'a> ColumnGen<'a> {
 
             sim_chunk,
             catmull_rom_gen,
+            river_scratch: Vec::with_capacity(neighbor_river_data.len()),
             neighbor_river_data,
             homogeneous_water_level,
             // spawn_rules,
         })
     }
 
-    pub fn eval_at_row<'b>(&'b self, wpos_row: i32) -> ColumnGen1D<'a, 'b> {
+    pub fn eval_at_row<'b>(&'b mut self, wpos_row: i32) -> ColumnGen1D<'a, 'b> {
         let rel_chunk_pos = wpos_row - self.chunk_pos.y * TerrainChunkSize::RECT_SIZE.y as i32;
         // let rel_chunk_pos = wpos_row - chunk_pos.y * TerrainChunkSize::RECT_SIZE.as_::<i32>();
         let wposy = rel_chunk_pos/*.y*/ as f32 / TerrainChunkSize::RECT_SIZE.y as f32;
         let cubic_y = cubic(wposy);
 
         ColumnGen1D {
-            parent: self,
             wpos_row,
             wposy,
             cubic_y,
@@ -620,25 +654,27 @@ impl<'a> ColumnGen<'a> {
             surface_veg_spline: self.surface_veg_spline.eval_at_row(cubic_y),
             cliff_height_spline: self.cliff_height_spline.eval_at_row(cubic_y),
             /* spawn_rules, */
+
+            parent: self,
         }
     }
 }
 
-impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
+impl<'a, 'b, 'c> SamplerMut<'a, 'c> for ColumnGen1D<'a, 'b> {
     type Index = /*(Vec2<i32>, IndexRef<'a>, Option<&'a Calendar>)*//*Vec2<i32>*/i32;
     type Sample = /*Option<*/ColumnSample/*<'a>*//*>*/;
 
     /// Precondition: wpos should be inside the chunk associated with self.chunk_pos.
-    fn get(&self, /*(wpos, index, calendar)*/wpos_col: Self::Index) -> ColumnSample/*<'a>*/ {
-        let &Self {
-            parent,
+    fn get(&'c mut self, /*(wpos, index, calendar)*/wpos_col: Self::Index) -> ColumnSample/*<'a>*/ {
+        let &mut Self {
+            parent: ref mut parent,
             wpos_row,
             wposy,
             cubic_y,
             ..
         } = self;
 
-        let &ColumnGen {
+        let &mut ColumnGen {
             sim,
             chunk_pos,
             index,
@@ -646,8 +682,9 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
             sim_chunk,
             homogeneous_water_level,
             ref neighbor_river_data,
+            ref mut river_scratch,
            ..
-        } = parent;
+        } = *parent;
 
         let wpos = Vec2::new(wpos_col, wpos_row);
         let wposf = wpos.map(|e| e as f64);
@@ -728,7 +765,11 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
         };
 
         let small_nz = |wposf: Vec2<f64>| {
-            sim.gen_ctx.small_nz.get(wposf.into_array()) as f32
+            sim.gen_ctx.fast_small_nz.get(wposf.into_array()) as f32
+            // 0.0f32
+        };
+        let small_nz_f64 = |wposf: Vec2<f64>| {
+            sim.gen_ctx.fast_small_nz.get(wposf.into_array())/* as f64*/
             // 0.0f32
         };
 
@@ -754,11 +795,15 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
 
         let riverless_alt = alt;
         let (alt, water_level, water_dist, water_dist_) = if let Some(water_level) = homogeneous_water_level {
-            (alt, water_level.unwrap_or(base_sea_level), water_level.and(Some(0.0)), None::<f32>)
+            (water_level.map(|water_level| alt.min(water_level - 1.0)).unwrap_or(alt), water_level.unwrap_or(base_sea_level), water_level.and(Some(0.0)), /*None::<f32>*/water_level.and(Some(0.0)))
         } else {
-            (alt, base_sea_level, None::<f32>, None::<f32>)
-        /* let lake_width = (TerrainChunkSize::RECT_SIZE.x as f64 * 2.0f64.sqrt()) + 6.0;
-        let neighbor_river_data = neighbor_river_data
+            /* let mut lake_inner = || */{
+            /* return (alt, base_sea_level, None::<f32>, None::<f32>); */
+        let lake_width = (TerrainChunkSize::RECT_SIZE.x as f64 * 2.0f64.sqrt()) + 6.0;
+        let lake_width_noise = small_nz_f64((wposf.map(|e| e as f64).div(32.0)));
+        river_scratch.clear();
+        river_scratch.extend(
+        /*let neighbor_river_data = */neighbor_river_data
             .iter()
             .copied()
             .map(|(posj, chunkj, river)| {
@@ -786,7 +831,7 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
                 let downhill_pos = downhill_pos.map2(TerrainChunkSize::RECT_SIZE, |e, sz: u32| {
                     e.div_euclid(sz as i32)
                 });
-                let neighbor_wpos = posj.map(|e| e as f64) * neighbor_coef + neighbor_coef * 0.5;
+                let neighbor_wpos = posj.map(|e| e as f64) * neighbor_coef/* + neighbor_coef * 0.5*/;
                 let direction = neighbor_wpos - downhill_wpos;
                 let river_width_min = if let RiverKind::River { cross_section } = kind {
                     cross_section.x as f64
@@ -858,7 +903,7 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
                             return (posj, chunkj, river, None);
                         }
                         let neighbor_pass_wpos =
-                            neighbor_pass_pos.map(|e| e as f64) + neighbor_coef * 0.5;
+                            neighbor_pass_pos.map(|e| e as f64)/* + neighbor_coef * 0.5*/;
                         let neighbor_pass_pos = neighbor_pass_pos
                             .map2(TerrainChunkSize::RECT_SIZE, |e, sz: u32| e / sz as i32);
                         let coeffs = river_spline_coeffs(
@@ -874,13 +919,9 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
                             Some(RiverKind::Lake { .. } | RiverKind::Ocean)
                         ) {
                             let water_chunk = posj.map(|e| e as f64);
-                            let lake_width_noise = sim
-                                .gen_ctx
-                                .small_nz
-                                .get((wposf.map(|e| e as f64).div(32.0)).into_array());
                             let water_aabr = Aabr {
-                                min: water_chunk * neighbor_coef + 4.0 - lake_width_noise * 8.0,
-                                max: (water_chunk + 1.0) * neighbor_coef - 4.0
+                                min: (water_chunk - 0.5) * neighbor_coef + 4.0 - lake_width_noise * 8.0,
+                                max: (water_chunk + 0.5) * neighbor_coef - 4.0
                                     + lake_width_noise * 8.0,
                             };
                             let pos = water_aabr.projected_point(wposf);
@@ -925,13 +966,9 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
                     },
                     RiverKind::Ocean => {
                         let water_chunk = posj.map(|e| e as f64);
-                        let lake_width_noise = sim
-                            .gen_ctx
-                            .small_nz
-                            .get((wposf.map(|e| e as f64).div(32.0)).into_array());
                         let water_aabr = Aabr {
-                            min: water_chunk * neighbor_coef + 4.0 - lake_width_noise * 8.0,
-                            max: (water_chunk + 1.0) * neighbor_coef - 4.0 + lake_width_noise * 8.0,
+                            min: (water_chunk - 0.5) * neighbor_coef + 4.0 - lake_width_noise * 8.0,
+                            max: (water_chunk + 0.5) * neighbor_coef - 4.0 + lake_width_noise * 8.0,
                         };
                         let pos = water_aabr.projected_point(wposf);
                         (
@@ -958,7 +995,7 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
                     lake_width * 0.5
                 };
                 let river_width_noise =
-                    (sim.gen_ctx.small_nz.get((river_pos.div(16.0)).into_array()))
+                    (small_nz_f64(river_pos.div(16.0)))
                         .max(-1.0)
                         .min(1.0)
                         .mul(0.5)
@@ -989,7 +1026,8 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
                     )),
                 )
             })
-            .collect::<Vec<_>>();
+            /*.collect::<Vec<_>>()*/);
+        let neighbor_river_data = &*river_scratch;
 
         debug_assert!(sim_chunk.water_alt >= CONFIG.sea_level);
 
@@ -1277,7 +1315,7 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
         // has been carefully designed to handle innumeral edge cases. Please
         // test any changes to this code extremely well to avoid regressions: some
         // edge cases are very rare indeed!
-        let alt = neighbor_river_data.into_iter().fold(
+        let alt = neighbor_river_data.into_iter().copied().fold(
             WeightedSum::default().with(riverless_alt, 1.0),
             |alt, (river_chunk_idx, river_chunk, river, dist_info)| match (
                 river.river_kind,
@@ -1429,7 +1467,9 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
                 f32::MIN
             });
 
-            (alt, water_level, water_dist) */
+            (alt, water_level, water_dist, water_dist)
+            }/*;
+            lake_inner()*/
         };
 
         let riverless_alt_delta = small_nz(wposf_turb.div(200.0 * (32.0 / TerrainChunkSize::RECT_SIZE.x as f64)))
@@ -1464,7 +1504,7 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
         let cliff_offset = cliff * cliff_height;
         let riverless_alt_delta = riverless_alt_delta + (cliff - 0.5) * cliff_height;
 
-        let warp_factor = water_dist_.map_or(1.0, |d| ((d - 0.0) / 64.0).clamped(0.0, 1.0));
+        let warp_factor = water_dist_.map_or(1.0, |d| ((d - 0.0) / 19.0).clamped(0.0, 1.0));
 
         // NOTE: To disable warp, uncomment this line.
         // let warp_factor = 0.0;
@@ -1832,14 +1872,29 @@ impl<'a, 'b> Sampler<'a, 'b> for ColumnGen1D<'a, 'b> {
     }
 }
 
-impl<'a, 'b> Sampler<'a, 'b> for ColumnGen<'a> {
+impl<'a, 'b> SamplerMut<'a, 'b> for ColumnGen<'a> {
     type Index = /*(Vec2<i32>, IndexRef<'a>, Option<&'a Calendar>)*/Vec2<i32>;
     type Sample = ColumnSample/*<'a>*/;
 
     /// Precondition: wpos should be inside the chunk associated with self.chunk_pos.
-    fn get(&self, /*(wpos, index, calendar)*/wpos: Self::Index) -> ColumnSample/*<'a>*/ {
-        let col = self.eval_at_row(wpos.y);
+    fn get(&'b mut self, /*(wpos, index, calendar)*/wpos: Self::Index) -> ColumnSample/*<'a>*/ {
+        let mut col = self.eval_at_row(wpos.y);
         col.get(wpos.x)
+    }
+}
+
+impl<'a/*: 'b, 'b*/> RowGen<'a> for ColumnGen<'a> {
+    type Row<'b> = ColumnGen1D<'a, 'b> where Self: 'b;
+    type Col = ColumnSample;
+
+    #[inline(always)]
+    fn row_gen<'b>(&'b mut self, offs_y: i32) -> Self::Row<'b> {
+        self.eval_at_row(/* - grid_border*/offs_y + self.chunk_pos.y * TerrainChunkSize::RECT_SIZE.y as i32)
+    }
+
+    #[inline(always)]
+    fn col_gen<'b>(row: &mut Self::Row<'b>, offs_x: i32) -> Self::Col where Self: 'b {
+        row.get(/* - grid_border + */offs_x + row.parent.chunk_pos.x * TerrainChunkSize::RECT_SIZE.y as i32)
     }
 }
 

@@ -11,6 +11,7 @@
     arbitrary_enum_discriminant,
     associated_const_equality,
     bool_to_option,
+    generic_associated_types,
     label_break_value,
     option_zip,
     portable_simd,
@@ -52,7 +53,7 @@ use crate::{
     index::Index,
     layer::spot::Spot,
     site::{SiteKind, SpawnRules},
-    util::{Grid, Sampler},
+    util::{Grid, Sampler, SamplerMut},
 };
 use common::{
     assets,
@@ -162,7 +163,7 @@ impl World {
                                         _ => 0,
                                     },
                                 },
-                                civ::SiteKind::Castle => world_msg::SiteKind::Castle,
+                                /* civ::SiteKind::Castle => world_msg::SiteKind::Castle, */
                                 /* civ::SiteKind::Tree | */civ::SiteKind::GiantTree => world_msg::SiteKind::Tree,
                                 // TODO: Maybe change?
                                 civ::SiteKind::Gnarling | civ::SiteKind::Citadel => world_msg::SiteKind::Gnarling,
@@ -198,7 +199,7 @@ impl World {
         chunk_pos: Vec2<i32>,
         index: IndexRef<'a>,
         /* calendar: Option<&'_ Calendar>, */
-    ) -> Option<impl for<'b> Sampler<'a, 'b,
+    ) -> Option<impl for<'b> SamplerMut<'a, 'b,
         Index = /*(Vec2<i32>, IndexRef, Option<&'_ Calendar>)*/Vec2<i32>,
         Sample = ColumnSample/*<'a>*/,
     > + 'a> {
@@ -227,9 +228,9 @@ impl World {
     }
 
     #[allow(clippy::result_unit_err)]
-    pub fn generate_chunk(
-        &self,
-        index: IndexRef,
+    pub fn generate_chunk<'a>(
+        &'a self,
+        index: IndexRef<'a>,
         chunk_pos: Vec2<i32>,
         // TODO: misleading name
         mut should_continue: impl FnMut() -> bool,
@@ -239,7 +240,8 @@ impl World {
         let calendar = self.sim.calendar.as_ref();
 
         // FIXME: Deal with this properly if it's not okay to exit early.
-        let sampler = self.sample_blocks(chunk_pos, index/*, calendar*/);
+        /* let mut sampler = self.sample_blocks(chunk_pos, index/*, calendar*/); */
+        let mut sampler = ColumnGen::new(&self.sim, chunk_pos, index/*, calendar*/).map(BlockGen::new);
         // dbg!(&sampler.column_gen.chaos_spline);
 
         let air = Block::air(SpriteKind::Empty);
@@ -272,18 +274,45 @@ impl World {
         let grid_border = /*4*/0;
         let chunk_wpos2d = chunk_pos * TerrainChunkSize::RECT_SIZE.map(|e| e as i32);
         let chunk_center_wpos2d = chunk_wpos2d + TerrainChunkSize::RECT_SIZE.map(|e| e as i32 / 2);
+        let column_gen = &mut sampler.column_gen;
+
+        /* #[inline(always)]
+        fn constrain_<'a>(chunk_wpos2d_y: i32) ->
+            impl for<'b> FnMut(&'b mut ColumnGen<'a>, i32) -> crate::column::ColumnGen1D<'a, 'b>
+        {
+            move |column_gen: &mut crate::column::ColumnGen<'a>, offs_y| {
+                column_gen.eval_at_row(chunk_wpos2d_y/* - grid_border*/ + offs_y)
+            }
+        } */
+
+        /* #[inline(always)]
+        fn constrain<'a>(chunk_wpos2d_x: i32) ->
+            impl for<'b> FnMut(&mut <crate::column::ColumnGen<'a> as crate::util::RowGen<'a>>::Row<'b>, i32) -> ColumnSample
+        {
+            move |column_gen, offs_x| {
+                column_gen.get(chunk_wpos2d_x/* - grid_border*/ + offs_x)
+            }
+        } */
+        /* fn constrain<'a, F, S, T>(f: F) -> F
+        where
+            F: for<'b, 'c> FnMut(&'c mut crate::column::ColumnGen1D<'a, 'b>, S) -> T,
+        {
+            f
+        } */
         let zcache_grid: Grid<ColumnSample> =
-            Grid::populate_by_row::<_, _, {TerrainChunkSize::RECT_SIZE.x}, {TerrainChunkSize::RECT_SIZE.y}>(
+            Grid::populate_by_row::<ColumnGen<'a>, /*_, */{TerrainChunkSize::RECT_SIZE.x}, {TerrainChunkSize::RECT_SIZE.y}>(
             /* TerrainChunkSize::RECT_SIZE.map(|e| e as i32) + grid_border * 2, */
-            |offs_y| {
-                let column_gen = sampler.column_gen.eval_at_row(chunk_wpos2d.y/* - grid_border*/ + offs_y);
-                move |offs_x| {
-                    /* ZCache {
-                        sample: */column_gen.get(chunk_wpos2d.x/* - grid_border*/ + offs_x)/*,
-                        calendar: column_gen.parent.sim.calendar.as_ref(),
-                    }*/
-                }
-            },
+            column_gen,
+            /*constrain_(chunk_wpos2d.y)
+            /*/*constrain_(*/move |column_gen: &mut crate::column::ColumnGen<'a>, offs_y| {
+                /*let mut column_gen = */column_gen.eval_at_row(chunk_wpos2d.y/* - grid_border*/ + offs_y)
+            }/*)*/*/,*/
+            /* /*constrain(*/move |column_gen: &mut crate::column::ColumnGen1D<'a, '_>, offs_x| {
+                /* ZCache {
+                    sample: */column_gen.get(chunk_wpos2d.x/* - grid_border*/ + offs_x)/*,
+                    calendar: column_gen.parent.sim.calendar.as_ref(),
+                }*/
+            }/*)*/*//*constrain(chunk_wpos2d.x),*/
             /* |offs| sampler.get_z_cache(chunk_wpos2d - grid_border + offs/*, index, calendar*/)/*None*/ */
         );
 

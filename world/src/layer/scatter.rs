@@ -1061,8 +1061,6 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
         max: aabr.min + 1,
     }; */
     canvas.foreach_col_area(aabr, /*Aabr { min: canvas.wpos(), max: canvas.wpos() + 1 }, */|canvas, wpos2d, col| {
-        let underwater = col.water_level.floor() > col.alt;
-
         let /*kind*/(kind, water_mode) = /* scatter.iter().enumerate().find_map(
             |(
                 i,
@@ -1099,7 +1097,7 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
                     .unwrap_or(density); */
                 if density > 0.0
                     && rng.gen::<f32>() < density //RandomField::new(i as u32).chance(Vec3::new(wpos2d.x, wpos2d.y, 0), density)
-                    && matches!(&water_mode, Underwater | Floating) == underwater
+                    && matches!(&water_mode, Underwater | Floating) == { col.water_level.floor() > col.alt }
                 {
                     let block_kind = canvas
                         .get(Vec3::new(wpos2d.x, wpos2d.y, col.alt as i32))

@@ -6,7 +6,7 @@ use crate::{
     land::Land,
     layer::spot::Spot,
     sim::{SimChunk, WorldSim},
-    util::{Grid, Sampler},
+    util::{Grid, SamplerMut},
     TerrainGrid,
 };
 use common::{
@@ -71,7 +71,7 @@ impl<'a> CanvasInfo<'a> {
     pub fn col_or_gen(&self, wpos: Vec2<i32>) -> Option<Cow<'a, ColumnSample>> {
         self.col_inner(wpos).map(Cow::Borrowed).or_else(|| {
             let chunk_pos = TerrainGrid::chunk_key(wpos);
-            let column_gen = ColumnGen::new(self.chunks(), chunk_pos, self.index())?;
+            let mut column_gen = ColumnGen::new(self.chunks(), chunk_pos, self.index())?;
 
             Some(Cow::Owned(column_gen.get((
                 wpos/* ,

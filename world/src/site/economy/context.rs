@@ -113,7 +113,7 @@ impl Environment {
         }
 
         {
-            let mut castles = EconStatistics::default();
+            /* let mut castles = EconStatistics::default(); */
             let mut towns = EconStatistics::default();
             let mut dungeons = EconStatistics::default();
             for site in index.sites.ids() {
@@ -123,7 +123,7 @@ impl Environment {
                         towns += site.economy.pop
                     },
                     SiteKind::Dungeon(_) => dungeons += site.economy.pop,
-                    SiteKind::Castle(_) => castles += site.economy.pop,
+                    /* SiteKind::Castle(_) => castles += site.economy.pop, */
                     /* SiteKind::Tree(_) => (), */
                     SiteKind::GiantTree(_) => (),
                     SiteKind::Gnarling(_) => {},
@@ -137,14 +137,14 @@ impl Environment {
                     towns.sum / (towns.count as f32)
                 );
             }
-            if castles.valid() {
+            /* if castles.valid() {
                 info!(
                     "Castles {:.0}-{:.0} avg {:.0}",
                     castles.min,
                     castles.max,
                     castles.sum / (castles.count as f32)
                 );
-            }
+            } */
             if dungeons.valid() {
                 info!(
                     "Dungeons {:.0}-{:.0} avg {:.0}",
@@ -389,9 +389,9 @@ mod tests {
                             crate::site::SiteKind::Dungeon(_) => {
                                 common::terrain::site::SitesKind::Dungeon
                             },
-                            crate::site::SiteKind::Castle(_) => {
+                            /* crate::site::SiteKind::Castle(_) => {
                                 common::terrain::site::SitesKind::Castle
-                            },
+                            }, */
                             _ => common::terrain::site::SitesKind::Void,
                         },
                     };
@@ -417,9 +417,9 @@ mod tests {
                     // loading on demand using the public API. There is no way to set
                     // the name, do we care?
                     let mut settlement = match i.kind {
-                        common::terrain::site::SitesKind::Castle => crate::site::Site::castle(
+                        /* common::terrain::site::SitesKind::Castle => crate::site::Site::castle(
                             crate::site::Castle::generate(wpos, None, &mut rng),
-                        ),
+                        ), */
                         common::terrain::site::SitesKind::Dungeon => {
                             crate::site::Site::dungeon(crate::site2::Site::generate_dungeon(
                                 &crate::Land::empty(),
