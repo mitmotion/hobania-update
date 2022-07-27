@@ -5,7 +5,7 @@ use common::{
         item::{
             armor::{Armor, ArmorKind, Protection},
             tool::{Hands, Tool, ToolKind},
-            ItemDesc, ItemKind, MaterialKind, MaterialStatManifest,
+            ItemDefinitionId, ItemDesc, ItemKind, MaterialKind, MaterialStatManifest,
         },
         BuffKind,
     },
@@ -18,11 +18,11 @@ use std::{borrow::Cow, fmt::Write};
 
 pub fn price_desc(
     prices: &Option<SitePrices>,
-    item_definition_id: &str,
+    item_definition_id: ItemDefinitionId<'_>,
     i18n: &Localization,
 ) -> Option<(String, String, f32)> {
     if let Some(prices) = prices {
-        if let Some(materials) = TradePricing::get_materials(item_definition_id) {
+        if let Some(materials) = TradePricing::get_materials(&item_definition_id) {
             let coinprice = prices.values.get(&Good::Coin).cloned().unwrap_or(1.0);
             let buyprice: f32 = materials
                 .iter()
@@ -358,7 +358,7 @@ pub fn ability_image(imgs: &img_ids::Imgs, ability_id: &str) -> image::Id {
 
 pub fn ability_description<'a>(
     ability_id: &'a str,
-    loc: &'a i18n::Localization,
+    loc: &'a Localization,
 ) -> (Cow<'a, str>, &'a str) {
     let (name, desc) = (
         format!("{}.name", ability_id),

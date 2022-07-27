@@ -92,9 +92,9 @@ void main() {
     // vec3 f_col = f_col_light.rgb;
     // float f_ao = f_col_light.a;
 
-    float f_ao, f_glow;
+    float f_ao;
     uint material = 0xFFu;
-    vec3 f_col = greedy_extract_col_light_attr(t_col_light, s_col_light, f_uv_pos, f_ao, f_glow, material);
+    vec3 f_col = greedy_extract_col_light_figure(t_col_light, s_col_light, f_uv_pos, f_ao, material);
 
     #ifdef EXPERIMENTAL_BAREMINIMUM
         tgt_color = vec4(simple_lighting(f_pos.xyz, f_col, f_ao), 1);
@@ -164,6 +164,17 @@ void main() {
     vec3 surf_color = /*srgb_to_linear*/f_col;
     float alpha = 1.0;
     const float n2 = 1.5;
+
+
+    // This is a silly hack. It's not true reflectance (see below for that), but gives the desired
+    // effect without breaking the entire lighting model until we come up with a better way of doing
+    // reflectivity that accounts for physical surroundings like the ground
+    if ((material & (1u << 1u)) > 0u) {
+        vec3 reflect_ray_dir = reflect(cam_to_frag, f_norm);
+        surf_color *= dot(vec3(1.0) - abs(fract(reflect_ray_dir * 1.5) * 2.0 - 1.0) * 0.85, vec3(1));
+        alpha = 0.1;
+    }
+
     const float R_s2s0 = pow((1.0 - n2) / (1.0 + n2), 2);
     const float R_s1s0 = pow((1.3325 - n2) / (1.3325 + n2), 2);
     const float R_s2s1 = pow((1.0 - 1.3325) / (1.0 + 1.3325), 2);
@@ -173,14 +184,6 @@ void main() {
     vec3 k_a = vec3(1.0);
     vec3 k_d = vec3(1.0);
     vec3 k_s = vec3(R_s);
-
-    // This is a silly hack. It's not true reflectance (see below for that), but gives the desired
-    // effect without breaking the entire lighting model until we come up with a better way of doing
-    // reflectivity that accounts for physical surroundings like the ground
-    if ((material & (1u << 1u)) > 0u) {
-        vec3 reflect_ray_dir = reflect(cam_to_frag, f_norm);
-        surf_color *= dot(vec3(1.0) - abs(fract(reflect_ray_dir * 1.5) * 2.0 - 1.0) * 0.85, vec3(1));
-    }
 
     vec3 emitted_light, reflected_light;
 
@@ -209,9 +212,15 @@ void main() {
             : compute_attenuation_point(f_pos, -view_dir, mu, fluid_alt, /*cam_pos.z <= fluid_alt ? cam_pos.xyz : f_pos*/cam_pos.xyz);
     #endif
 
+    // Prevent the sky affecting light when underground
+    float not_underground = clamp((f_pos.z - f_alt) / 128.0 + 1.0, 0.0, 1.0);
+
     max_light += get_sun_diffuse2(sun_info, moon_info, f_norm, view_dir, f_pos, mu, cam_attenuation, fluid_alt, k_a, k_d, k_s, alpha, f_norm, 1.0, emitted_light, reflected_light);
 
     max_light += lights_at(f_pos, f_norm, view_dir, mu, cam_attenuation, fluid_alt, k_a, k_d, k_s, alpha, f_norm, 1.0, emitted_light, reflected_light);
+
+    // TODO: Hack to add a small amount of underground ambient light to the scene
+    reflected_light += vec3(0.01, 0.02, 0.03) * (1.0 - not_underground);
 
     float ao = f_ao * sqrt(f_ao);//0.25 + f_ao * 0.75; ///*pow(f_ao, 0.5)*/f_ao * 0.85 + 0.15;
 

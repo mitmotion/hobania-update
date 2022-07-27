@@ -30,6 +30,7 @@ enum FaceKind {
 }
 
 pub const SUNLIGHT: u8 = 24;
+pub const SUNLIGHT_INV: f32 = 1.0 / SUNLIGHT as f32;
 pub const MAX_LIGHT_DIST: i32 = SUNLIGHT as i32;
 
 fn calc_light<V: RectRasterableVol<Vox = Block> + ReadVol + Debug>(
@@ -218,7 +219,7 @@ fn calc_light<V: RectRasterableVol<Vox = Block> + ReadVol + Debug>(
             .unwrap_or(default_light);
 
         if l != OPAQUE && l != UNKNOWN {
-            l as f32 / SUNLIGHT as f32
+            l as f32 * SUNLIGHT_INV
         } else {
             0.0
         } */
@@ -376,6 +377,9 @@ pub fn generate_mesh<'a, V: RectRasterableVol<Vox = Block> + ReadVol + Debug + '
             light(pos + range.min)
         }
     };
+    let get_ao = |_: &mut (), pos: Vec3<i32>| {
+        if flat_get(pos).is_opaque() { 0.0 } else { 1.0 }
+    };
     let get_glow = |_: &mut (), pos: Vec3<i32>| glow(pos + range.min);
     let get_color =
         |_: &mut (), pos: Vec3<i32>| flat_get(pos).get_color().unwrap_or_else(Rgb::zero);
@@ -389,10 +393,8 @@ pub fn generate_mesh<'a, V: RectRasterableVol<Vox = Block> + ReadVol + Debug + '
         |atlas_pos, pos, norm, meta| TerrainVertex::new(atlas_pos, pos + mesh_delta, norm, meta);
     let create_transparent = |_atlas_pos, pos, norm| FluidVertex::new(pos + mesh_delta, norm);
 
-    let mut greedy = GreedyMesh::<guillotiere::SimpleAtlasAllocator>::new(
-        max_size,
-        crate::mesh::greedy::general_config(),
-    );
+    let mut greedy =
+        GreedyMesh::<guillotiere::SimpleAtlasAllocator>::new(max_size, greedy::general_config());
     let mut opaque_mesh = Mesh::new();
     let mut fluid_mesh = Mesh::new();
     greedy.push(GreedyConfig {
@@ -400,6 +402,7 @@ pub fn generate_mesh<'a, V: RectRasterableVol<Vox = Block> + ReadVol + Debug + '
         draw_delta,
         greedy_size,
         greedy_size_cross,
+        get_ao,
         get_light,
         get_glow,
         get_opacity,
@@ -428,8 +431,8 @@ pub fn generate_mesh<'a, V: RectRasterableVol<Vox = Block> + ReadVol + Debug + '
                 ));
             },
         },
-        make_face_texel: |data: &mut (), pos, light, glow| {
-            TerrainVertex::make_col_light(light, glow, get_color(data, pos))
+        make_face_texel: |data: &mut (), pos, light, glow, ao| {
+            TerrainVertex::make_col_light(light, glow, get_color(data, pos), ao)
         },
     });
 

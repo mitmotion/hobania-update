@@ -444,8 +444,8 @@ impl<W: Positionable> Position for W {
 
 #[derive(Clone, Copy)]
 pub struct BuffInfo {
-    kind: comp::BuffKind,
-    data: comp::BuffData,
+    kind: BuffKind,
+    data: BuffData,
     is_buff: bool,
     dur: Option<Duration>,
 }
@@ -499,7 +499,7 @@ pub struct HudInfo {
     pub is_aiming: bool,
     pub is_first_person: bool,
     pub target_entity: Option<specs::Entity>,
-    pub selected_entity: Option<(specs::Entity, std::time::Instant)>,
+    pub selected_entity: Option<(specs::Entity, Instant)>,
 }
 
 #[derive(Clone)]
@@ -726,7 +726,7 @@ impl Show {
         if !self.esc_menu {
             self.bag = open;
             self.map = false;
-            self.want_grab = !open;
+            self.want_grab = !self.any_window_requires_cursor();
             self.crafting_fields.salvage = false;
 
             if !open {
@@ -740,7 +740,7 @@ impl Show {
             self.bag = open;
             self.trade = open;
             self.map = false;
-            self.want_grab = !open;
+            self.want_grab = !self.any_window_requires_cursor();
         }
     }
 
@@ -752,7 +752,7 @@ impl Show {
             self.crafting_fields.salvage = false;
             self.social = false;
             self.diary = false;
-            self.want_grab = !open;
+            self.want_grab = !self.any_window_requires_cursor();
         }
     }
 
@@ -764,7 +764,7 @@ impl Show {
             }
             self.social = open;
             self.diary = false;
-            self.want_grab = !open;
+            self.want_grab = !self.any_window_requires_cursor();
         }
     }
 
@@ -779,7 +779,7 @@ impl Show {
             self.crafting_fields.recipe_inputs = HashMap::new();
             self.bag = open;
             self.map = false;
-            self.want_grab = !open;
+            self.want_grab = !self.any_window_requires_cursor();
         }
     }
 
@@ -806,7 +806,7 @@ impl Show {
             self.map = false;
             self.diary_fields = diary::DiaryShow::default();
             self.diary = open;
-            self.want_grab = !open;
+            self.want_grab = !self.any_window_requires_cursor();
         }
     }
 
@@ -822,7 +822,7 @@ impl Show {
             self.crafting = false;
             self.crafting_fields.salvage = false;
             self.diary = false;
-            self.want_grab = !open;
+            self.want_grab = !self.any_window_requires_cursor();
         }
     }
 
@@ -860,8 +860,8 @@ impl Show {
     // TODO: Add self updating key-bindings element
     //fn toggle_help(&mut self) { self.help = !self.help }
 
-    fn toggle_windows(&mut self, global_state: &mut GlobalState) {
-        if self.bag
+    fn any_window_requires_cursor(&self) -> bool {
+        self.bag
             || self.trade
             || self.esc_menu
             || self.map
@@ -871,7 +871,10 @@ impl Show {
             || self.help
             || self.intro
             || !matches!(self.open_windows, Windows::None)
-        {
+    }
+
+    fn toggle_windows(&mut self, global_state: &mut GlobalState) {
+        if self.any_window_requires_cursor() {
             self.bag = false;
             self.trade = false;
             self.esc_menu = false;
@@ -1259,15 +1262,15 @@ impl Hud {
             let pos = ecs.read_storage::<comp::Pos>();
             let stats = ecs.read_storage::<comp::Stats>();
             let skill_sets = ecs.read_storage::<comp::SkillSet>();
-            let healths = ecs.read_storage::<comp::Health>();
+            let healths = ecs.read_storage::<Health>();
             let buffs = ecs.read_storage::<comp::Buffs>();
             let energy = ecs.read_storage::<comp::Energy>();
-            let mut hp_floater_lists = ecs.write_storage::<vcomp::HpFloaterList>();
+            let mut hp_floater_lists = ecs.write_storage::<HpFloaterList>();
             let uids = ecs.read_storage::<Uid>();
             let interpolated = ecs.read_storage::<vcomp::Interpolated>();
             let scales = ecs.read_storage::<comp::Scale>();
             let bodies = ecs.read_storage::<comp::Body>();
-            let items = ecs.read_storage::<comp::Item>();
+            let items = ecs.read_storage::<Item>();
             let inventories = ecs.read_storage::<comp::Inventory>();
             let players = ecs.read_storage::<comp::Player>();
             let msm = ecs.read_resource::<MaterialStatManifest>();
@@ -1797,7 +1800,7 @@ impl Hud {
             for (entity, pos, item, distance) in (&entities, &pos, &items)
                 .join()
                 .map(|(entity, pos, item)| (entity, pos, item, pos.0.distance_squared(player_pos)))
-                .filter(|(_, _, _, distance)| distance < &common::consts::MAX_PICKUP_RANGE.powi(2))
+                .filter(|(_, _, _, distance)| distance < &MAX_PICKUP_RANGE.powi(2))
             {
                 let overitem_id = overitem_walker.next(
                     &mut self.ids.overitems,
@@ -2192,7 +2195,8 @@ impl Hud {
                         let font_col = font_col(font_size, crit);
                         // Timer sets the widget offset
                         let y = if crit {
-                            ui_widgets.win_h * (floater.rand as f64 % 0.1) + ui_widgets.win_h * 0.05
+                            ui_widgets.win_h * (floater.rand as f64 % 0.075)
+                                + ui_widgets.win_h * 0.05
                         } else {
                             (floater.timer as f64 / crate::ecs::sys::floater::HP_SHOWTIME as f64
                                 * number_speed)
@@ -2684,7 +2688,7 @@ impl Hud {
         // Get player stats
         let ecs = client.state().ecs();
         let entity = client.entity();
-        let healths = ecs.read_storage::<comp::Health>();
+        let healths = ecs.read_storage::<Health>();
         let inventories = ecs.read_storage::<comp::Inventory>();
         let energies = ecs.read_storage::<comp::Energy>();
         let skillsets = ecs.read_storage::<comp::SkillSet>();
@@ -2851,7 +2855,7 @@ impl Hud {
         // Buffs
         let ecs = client.state().ecs();
         let entity = client.entity();
-        let health = ecs.read_storage::<comp::Health>();
+        let health = ecs.read_storage::<Health>();
         let energy = ecs.read_storage::<comp::Energy>();
         if let (Some(player_buffs), Some(health), Some(energy)) = (
             buffs.get(client.entity()),
@@ -3582,7 +3586,7 @@ impl Hud {
                                         events.push(Event::SwapEquippedWeapons);
                                     } else if let Some(slot) = inv.get_slot_from_hash(i) {
                                         events.push(Event::UseSlot {
-                                            slot: comp::slot::Slot::Inventory(slot),
+                                            slot: Slot::Inventory(slot),
                                             bypass_dialog: false,
                                         });
                                     }
@@ -3603,7 +3607,7 @@ impl Hud {
                 } => {
                     if let Some((_, trade, prices)) = client.pending_trade() {
                         let ecs = client.state().ecs();
-                        let inventories = ecs.read_component::<common::comp::Inventory>();
+                        let inventories = ecs.read_component::<comp::Inventory>();
                         let get_inventory = |uid: Uid| {
                             if let Some(entity) = ecs.entity_from_uid(uid.0) {
                                 inventories.get(entity)
@@ -3628,7 +3632,7 @@ impl Hud {
                             None => continue 'slot_events,
                         };
                         let do_auto_quantity =
-                            |inventory: &common::comp::Inventory,
+                            |inventory: &comp::Inventory,
                              slot,
                              ours,
                              remove,
@@ -3643,10 +3647,8 @@ impl Hud {
                                         false,
                                     );
                                     if let Some(item) = inventory.get(slot) {
-                                        if let Some(materials) = item
-                                            .item_definition_id()
-                                            .itemdef_id()
-                                            .and_then(TradePricing::get_materials)
+                                        if let Some(materials) =
+                                            TradePricing::get_materials(&item.item_definition_id())
                                         {
                                             let unit_price: f32 = materials
                                                 .iter()
@@ -4400,7 +4402,7 @@ impl Hud {
             },
             Outcome::HealthChange { info, .. } => {
                 let ecs = client.state().ecs();
-                let mut hp_floater_lists = ecs.write_storage::<vcomp::HpFloaterList>();
+                let mut hp_floater_lists = ecs.write_storage::<HpFloaterList>();
                 let uids = ecs.read_storage::<Uid>();
                 let me = client.entity();
                 let my_uid = uids.get(me);

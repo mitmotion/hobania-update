@@ -263,8 +263,8 @@ impl TagExampleInfo for ItemTag {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ItemKind {
     /// Something wieldable
-    Tool(tool::Tool),
-    ModularComponent(modular::ModularComponent),
+    Tool(Tool),
+    ModularComponent(ModularComponent),
     Lantern(Lantern),
     Armor(armor::Armor),
     Glider,
@@ -373,7 +373,7 @@ pub enum ItemName {
 #[derive(Clone, Debug)]
 pub enum ItemBase {
     Simple(Arc<ItemDef>),
-    Modular(modular::ModularBase),
+    Modular(ModularBase),
 }
 
 impl Serialize for ItemBase {
@@ -740,6 +740,42 @@ impl Item {
         };
         item.update_item_state(ability_map, msm);
         item
+    }
+
+    pub fn new_from_item_definition_id(
+        item_definition_id: ItemDefinitionId<'_>,
+        ability_map: &AbilityMap,
+        msm: &MaterialStatManifest,
+    ) -> Result<Self, Error> {
+        let (base, components) = match item_definition_id {
+            ItemDefinitionId::Simple(spec) => {
+                let base = ItemBase::Simple(Arc::<ItemDef>::load_cloned(spec)?);
+                (base, Vec::new())
+            },
+            ItemDefinitionId::Modular {
+                pseudo_base,
+                components,
+            } => {
+                let base = ItemBase::Modular(ModularBase::load_from_pseudo_id(pseudo_base));
+                let components = components
+                    .into_iter()
+                    .map(|id| Item::new_from_item_definition_id(id, ability_map, msm))
+                    .collect::<Result<Vec<_>, _>>()?;
+                (base, components)
+            },
+            ItemDefinitionId::Compound {
+                simple_base,
+                components,
+            } => {
+                let base = ItemBase::Simple(Arc::<ItemDef>::load_cloned(simple_base)?);
+                let components = components
+                    .into_iter()
+                    .map(|id| Item::new_from_item_definition_id(id, ability_map, msm))
+                    .collect::<Result<Vec<_>, _>>()?;
+                (base, components)
+            },
+        };
+        Ok(Item::new_from_item_base(base, components, ability_map, msm))
     }
 
     /// Creates a new instance of an `Item` from the provided asset identifier
@@ -1198,11 +1234,11 @@ impl<'a, T: ItemDesc + ?Sized> ItemDesc for &'a T {
 
     fn item_definition_id(&self) -> ItemDefinitionId<'_> { (*self).item_definition_id() }
 
-    fn components(&self) -> &[Item] { (*self).components() }
-
     fn tags(&self) -> Vec<ItemTag> { (*self).tags() }
 
     fn is_modular(&self) -> bool { (*self).is_modular() }
+
+    fn components(&self) -> &[Item] { (*self).components() }
 }
 
 /// Returns all item asset specifiers
@@ -1226,7 +1262,7 @@ mod tests {
     fn test_assets_items() {
         let ids = all_item_defs_expect();
         for item in ids.iter().map(|id| Item::new_from_asset_expect(id)) {
-            std::mem::drop(item)
+            drop(item)
         }
     }
 }

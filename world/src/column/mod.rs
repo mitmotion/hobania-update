@@ -17,7 +17,6 @@ use core::simd::{Simd, SimdElement};
 use noise::NoiseFn;
 use serde::Deserialize;
 use std::{
-    f32,
     ops::{Add, Div, Mul, Sub},
     simd::StdFloat,
 };
@@ -1179,7 +1178,7 @@ impl<'a, 'b, 'c> SamplerMut<'a, 'c> for ColumnGen1D<'a, 'b> {
                     // 0.0 = not near river, 1.0 = in middle of river
                     let near_center = ((river_dist / (river_width * 0.5)) as f32)
                         .min(1.0)
-                        .mul(f32::consts::PI)
+                        .mul(std::f32::consts::PI)
                         .cos()
                         .add(1.0)
                         .mul(0.5);
@@ -1385,7 +1384,7 @@ impl<'a, 'b, 'c> SamplerMut<'a, 'c> for ColumnGen1D<'a, 'b> {
                             const MIN_DEPTH: f32 = 1.0;
                             let near_center = ((river_dist / (river_width * 0.5)) as f32)
                                 .min(1.0)
-                                .mul(f32::consts::PI)
+                                .mul(std::f32::consts::PI)
                                 .cos()
                                 .add(1.0)
                                 .mul(0.5);
@@ -1464,7 +1463,7 @@ impl<'a, 'b, 'c> SamplerMut<'a, 'c> for ColumnGen1D<'a, 'b> {
                 // Terrain below sea level breaks things, so force it to never happen
                 base_sea_level + 0.5
             } else {
-                f32::MIN
+                std::f32::MIN
             });
 
             (alt, water_level, water_dist, water_dist)
@@ -1842,9 +1841,9 @@ impl<'a, 'b, 'c> SamplerMut<'a, 'c> for ColumnGen1D<'a, 'b> {
                 0.0
             },
             // forest_kind: sim_chunk.forest_kind,
-            // marble,
-            // marble_mid,
-            // marble_small,
+            marble,
+            marble_mid,
+            marble_small,
             rock_density,
             temp,
             humidity,
@@ -1910,9 +1909,9 @@ pub struct ColumnSample/*<'a>*/ {
     pub sub_surface_color: Rgb<f32>,
     pub tree_density: f32,
     // pub forest_kind: ForestKind,
-    // pub marble: f32,
-    // pub marble_mid: f32,
-    // pub marble_small: f32,
+    pub marble: f32,
+    pub marble_mid: f32,
+    pub marble_small: f32,
     pub rock_density: f32,
     pub temp: f32,
     pub humidity: f32,
@@ -1943,9 +1942,9 @@ pub const DEFAULT_COLUMN_SAMPLE: ColumnSample = ColumnSample {
     sub_surface_color: Rgb::new(0.0, 0.0, 0.0),
     tree_density: 0.0,
     // forest_kind: ForestKind,
-    // marble: 0.0,
-    // marble_mid: 0.0,
-    // marble_small: 0.0,
+    marble: 0.0,
+    marble_mid: 0.0,
+    marble_small: 0.0,
     rock_density: 0.0,
     temp: 0.0,
     humidity: 0.0,

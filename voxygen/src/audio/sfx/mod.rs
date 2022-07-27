@@ -103,6 +103,7 @@ use common::{
     outcome::Outcome,
     terrain::{BlockKind, TerrainChunk},
     uid::Uid,
+    DamageSource,
 };
 use common_state::State;
 use event_mapper::SfxEventMapper;
@@ -190,6 +191,7 @@ pub enum SfxEvent {
     PoiseChange(PoiseState),
     GroundSlam,
     Utterance(UtteranceKind, VoiceKind),
+    Lightning,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Deserialize, Hash, Eq)]
@@ -432,6 +434,16 @@ impl SfxMgr {
                     underwater,
                 );
             },
+            Outcome::Lightning { pos } => {
+                let power = (1.0 - pos.distance(audio.listener.pos) / 5_000.0)
+                    .max(0.0)
+                    .powi(7);
+                if power > 0.0 {
+                    let sfx_trigger_item = triggers.get_key_value(&SfxEvent::Lightning);
+                    // TODO: Don't use UI sfx, add a way to control position falloff
+                    audio.emit_ui_sfx(sfx_trigger_item, Some((power * 3.0).min(2.9)));
+                }
+            },
             Outcome::GroundSlam { pos, .. } => {
                 let sfx_trigger_item = triggers.get_key_value(&SfxEvent::GroundSlam);
                 audio.emit_sfx(sfx_trigger_item, *pos, Some(2.0), underwater);
@@ -527,8 +539,10 @@ impl SfxMgr {
                 );
             },
             Outcome::HealthChange { pos, info, .. } => {
-                // Don't emit sound effects from positive damage (healing)
-                if info.amount < Health::HEALTH_EPSILON {
+                // Ignore positive damage (healing) and buffs for now
+                if info.amount < Health::HEALTH_EPSILON
+                    && !matches!(info.cause, Some(DamageSource::Buff(_)))
+                {
                     let sfx_trigger_item = triggers.get_key_value(&SfxEvent::Damage);
                     audio.emit_sfx(sfx_trigger_item, *pos, Some(1.5), underwater);
                 }

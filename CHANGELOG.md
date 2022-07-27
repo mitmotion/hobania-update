@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Removed
+
+### Fixed
+
+## [0.13.0] - 2022-07-23
+
+### Added
 - Chat commands to mute and unmute players
 - Waypoints saved between sessions and shared with group members.
 - New rocks
@@ -38,6 +48,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Slider for ambience volume
 - Weather generated on server is sent to clients, and seen on clients as rain/clouds.
 - Updated Brazilian Portuguese Translation
+- Lightning storms
+- More varied ambient birdcalls
+- Cave biomes
+- Updated the Polish translation
 
 ### Changed
 
@@ -52,10 +66,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changed module component modifier costs to the following scheme, based on base material: 1 -> 2 -> 5 -> 10 -> 15 -> 25
 - Damage from the same source dealt in the same tick will now be grouped up.
 - Critical hits are now shown differently in the damage numbers.
-- Fall damage and some (extra) buffs/debuffs now show up in the damage numbers. 
+- Fall damage and some (extra) buffs/debuffs now show up in the damage numbers.
 - Optimized sprite processing decreasing the startup time of voxygen (and long freezes when trying
   to enter the world when this hasn't finished).
 - Metadata added to music files. Listen to the soundtrack more easily!
+- Overhauled caves: they're now a multi-layer network spanning the entire world
 
 ### Removed
 - Removed the options for single and cumulated damage.
@@ -70,7 +85,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed an error where '{amount} Exp' floater did not use existing localizations
 - Fix villagers seeing cultists and familiar enemies through objects.
 - Menacing agents are now less spammy with their menacing messages
-- Fixed the title screen FPS cap not applying when the background FPS limit was set higher than 60 FPS 
+- Fixed the title screen FPS cap not applying when the background FPS limit was set higher than 60 FPS
 - Fixed an issue where the hurt animation would "jump" whenever you lost/gained health.
 - Fixed a bug where multiple damage sources in the same tick would show up as a singular attack.
 - Fixed an issue where, if the same amount of healing and damage was received in the same tick, nothing would be shown.
@@ -78,6 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Most sfx now correctly play when camera is underwater
 - All sounds now stop upon quitting to main menu
 - Combat music now loops and ends properly
+- Modular weapons now have a selling price
+- Closing a subwindow now only regrabs the cursor if no other subwindow requires it.
 
 ## [0.12.0] - 2022-02-19
 
@@ -985,7 +1002,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _0.1.0 was part of the legacy engine_
 
-[unreleased]: https://gitlab.com/veloren/veloren/compare?from=v0.12.0&to=master
+[unreleased]: https://gitlab.com/veloren/veloren/compare?from=v0.13.0&to=master
+[0.13.0]: https://gitlab.com/veloren/veloren/compare?from=v0.12.0&to=v0.13.0
 [0.12.0]: https://gitlab.com/veloren/veloren/compare?from=v0.11.0&to=v0.12.0
 [0.11.0]: https://gitlab.com/veloren/veloren/compare?from=v0.10.0&to=v0.11.0
 [0.10.0]: https://gitlab.com/veloren/veloren/compare?from=v0.9.0&to=v0.10.0

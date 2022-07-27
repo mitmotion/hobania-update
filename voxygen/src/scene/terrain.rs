@@ -6,7 +6,7 @@ use crate::{
     mesh::{
         greedy::{GreedyMesh, SpriteAtlasAllocator},
         segment::generate_mesh_base_vol_sprite,
-        terrain::{generate_mesh, SUNLIGHT},
+        terrain::{generate_mesh, SUNLIGHT, SUNLIGHT_INV},
     },
     render::{
         pipelines::{self, ColLights},
@@ -29,7 +29,7 @@ use common::{
     volumes::vol_grid_2d::{VolGrid2d, VolGrid2dError},
 };
 use common_base::{prof_span, span};
-use core::{f32, fmt::Debug, i32, marker::PhantomData, time::Duration};
+use core::{f32, fmt::Debug, marker::PhantomData, time::Duration};
 use crossbeam_channel as channel;
 use enum_iterator::IntoEnumIterator;
 use guillotiere::AtlasAllocator;
@@ -48,7 +48,7 @@ const SPRITE_LOD_LEVELS: usize = 5;
 
 // For rain occlusion we only need to render the closest chunks.
 /// How many chunks are maximally rendered for rain occlusion.
-pub const RAIN_OCCLUSION_CHUNKS: usize = 9;
+pub const RAIN_OCCLUSION_CHUNKS: usize = 25;
 
 #[derive(Clone, Copy, Debug)]
 struct Visibility {
@@ -783,23 +783,27 @@ impl<V: RectRasterableVol> Terrain<V> {
                 let chunk_pos = wpos_chunk + rpos;
                 self.chunks
                     .get(&chunk_pos)
-                    .map(|c| c.blocks_of_interest.lights.iter())
                     .into_iter()
-                    .flatten()
-                    .map(move |(lpos, level)| {
-                        (
-                            Vec3::<i32>::from(
-                                chunk_pos * TerrainChunk::RECT_SIZE.map(|e| e as i32),
-                            ) + *lpos,
-                            level,
-                        )
+                    .flat_map(|c| c.blocks_of_interest.lights.iter())
+                    .filter_map(move |(lpos, level)| {
+                        if (*lpos - wpos_chunk).map(|e| e.abs()).reduce_min() < SUNLIGHT as i32 + 2
+                        {
+                            Some((
+                                Vec3::<i32>::from(
+                                    chunk_pos * TerrainChunk::RECT_SIZE.map(|e| e as i32),
+                                ) + *lpos,
+                                level,
+                            ))
+                        } else {
+                            None
+                        }
                     })
             })
             .fold(
                 (Vec3::broadcast(0.001), 0.0),
                 |(bias, total), (lpos, level)| {
                     let rpos = lpos.map(|e| e as f32 + 0.5) - wpos;
-                    let level = (*level as f32 - rpos.magnitude()).max(0.0) / SUNLIGHT as f32;
+                    let level = (*level as f32 - rpos.magnitude()).max(0.0) * SUNLIGHT_INV;
                     (
                         bias + rpos.try_normalized().unwrap_or_else(Vec3::zero) * level,
                         total + level,

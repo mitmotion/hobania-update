@@ -102,8 +102,8 @@ image_ids_ice! {
         orc_f: "voxygen.element.ui.char_select.portraits.orc_f",
         dwarf_m: "voxygen.element.ui.char_select.portraits.dwarf_m",
         dwarf_f: "voxygen.element.ui.char_select.portraits.dwarf_f",
-        undead_m: "voxygen.element.ui.char_select.portraits.ud_m",
-        undead_f: "voxygen.element.ui.char_select.portraits.ud_f",
+        draugr_m: "voxygen.element.ui.char_select.portraits.ud_m",
+        draugr_f: "voxygen.element.ui.char_select.portraits.ud_f",
         elf_m: "voxygen.element.ui.char_select.portraits.elf_m",
         elf_f: "voxygen.element.ui.char_select.portraits.elf_f",
         danari_m: "voxygen.element.ui.char_select.portraits.danari_m",
@@ -158,7 +158,7 @@ enum Mode {
     CreateOrEdit {
         name: String,
         body: humanoid::Body,
-        inventory: Box<comp::inventory::Inventory>,
+        inventory: Box<Inventory>,
         mainhand: Option<&'static str>,
         offhand: Option<&'static str>,
 
@@ -372,12 +372,12 @@ impl Controls {
             padding: 10,
         };
 
-        let version = iced::Text::new(&self.version)
+        let version = Text::new(&self.version)
             .size(self.fonts.cyri.scale(15))
             .width(Length::Fill)
             .horizontal_alignment(HorizontalAlignment::Right);
 
-        let alpha = iced::Text::new(&self.alpha)
+        let alpha = Text::new(&self.alpha)
             .size(self.fonts.cyri.scale(12))
             .width(Length::Fill)
             .horizontal_alignment(HorizontalAlignment::Center);
@@ -861,7 +861,7 @@ impl Controls {
                         humanoid::Species::Orc => (imgs.orc_m, imgs.orc_f),
                         humanoid::Species::Dwarf => (imgs.dwarf_m, imgs.dwarf_f),
                         humanoid::Species::Elf => (imgs.elf_m, imgs.elf_f),
-                        humanoid::Species::Undead => (imgs.undead_m, imgs.undead_f),
+                        humanoid::Species::Draugr => (imgs.draugr_m, imgs.draugr_f),
                         humanoid::Species::Danari => (imgs.danari_m, imgs.danari_f),
                     };
                     let [ref mut body_m_button, ref mut body_f_button] = body_type_buttons;
@@ -882,14 +882,14 @@ impl Controls {
                         .into(),
                     ])
                     .spacing(1);
-                    let (human_icon, orc_icon, dwarf_icon, elf_icon, undead_icon, danari_icon) =
+                    let (human_icon, orc_icon, dwarf_icon, elf_icon, draugr_icon, danari_icon) =
                         match body.body_type {
                             humanoid::BodyType::Male => (
                                 self.imgs.human_m,
                                 self.imgs.orc_m,
                                 self.imgs.dwarf_m,
                                 self.imgs.elf_m,
-                                self.imgs.undead_m,
+                                self.imgs.draugr_m,
                                 self.imgs.danari_m,
                             ),
                             humanoid::BodyType::Female => (
@@ -897,7 +897,7 @@ impl Controls {
                                 self.imgs.orc_f,
                                 self.imgs.dwarf_f,
                                 self.imgs.elf_f,
-                                self.imgs.undead_f,
+                                self.imgs.draugr_f,
                                 self.imgs.danari_f,
                             ),
                         };
@@ -906,7 +906,7 @@ impl Controls {
                         ref mut orc_button,
                         ref mut dwarf_button,
                         ref mut elf_button,
-                        ref mut undead_button,
+                        ref mut draugr_button,
                         ref mut danari_button,
                     ] = species_buttons;
                     let species = Column::with_children(vec![
@@ -948,11 +948,11 @@ impl Controls {
                             )
                             .into(),
                             icon_button_tooltip(
-                                undead_button,
-                                matches!(body.species, humanoid::Species::Undead),
-                                Message::Species(humanoid::Species::Undead),
-                                undead_icon,
-                                "common.species.undead",
+                                draugr_button,
+                                matches!(body.species, humanoid::Species::Draugr),
+                                Message::Species(humanoid::Species::Draugr),
+                                draugr_icon,
+                                "common.species.draugr",
                             )
                             .into(),
                             icon_button_tooltip(
@@ -1352,7 +1352,7 @@ impl Controls {
         // TODO: There is probably a better way to conditionally add in the warning box
         // here
         if let Some(mismatched_version) = &self.server_mismatched_version {
-            let warning = iced::Text::<IcedRenderer>::new(format!(
+            let warning = Text::<IcedRenderer>::new(format!(
                 "{}\n{}: {} {}: {}",
                 i18n.get("char_selection.version_mismatch"),
                 i18n.get("main.login.server_version"),
@@ -1605,7 +1605,7 @@ impl Controls {
     pub fn display_body_inventory<'a>(
         &'a self,
         characters: &'a [CharacterItem],
-    ) -> Option<(comp::Body, &'a comp::inventory::Inventory)> {
+    ) -> Option<(comp::Body, &'a Inventory)> {
         match &self.mode {
             Mode::Select { .. } => self
                 .selected
@@ -1676,7 +1676,7 @@ impl CharSelectionUi {
     pub fn display_body_inventory<'a>(
         &'a self,
         characters: &'a [CharacterItem],
-    ) -> Option<(comp::Body, &'a comp::inventory::Inventory)> {
+    ) -> Option<(comp::Body, &'a Inventory)> {
         self.controls.display_body_inventory(characters)
     }
 

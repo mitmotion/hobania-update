@@ -967,7 +967,7 @@ impl<F: Filler> Structure<F> for CliffTower {
                         max: (stair_pos1 + stair_radius1 as i32).with_z(floor_level + 4),
                     });
                     let stairs_fill = 
-                        /* painter.arena.alloc_with(move || */|pos| crate::site2::plot::dungeon::spiral_staircase(
+                        /* painter.arena.alloc_with(move || */|pos| dungeon::spiral_staircase(
                                 stair_pos1.with_z(floor_level + 4),
                                 stair_radius1,
                                 0.5,
@@ -980,7 +980,7 @@ impl<F: Filler> Structure<F> for CliffTower {
                 let spawn_pos = super_center.with_z(floor_level + 4);
                 let npc_amount = RandomField::new(0).get(spawn_pos) % 4;
                 for _ in 0..npc_amount {
-                    let mut rng = rand::thread_rng();
+                    let mut rng = thread_rng();
                     filler.spawn(
                         EntityInfo::at(spawn_pos.map(|e| e as f32))
                             .with_asset_expect("common.entity.village.mountaineer", &mut rng),

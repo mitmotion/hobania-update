@@ -47,7 +47,7 @@ const BIRD_MEDIUM_ROSTER: &[comp::bird_medium::Species] = &[
 ];
 
 const BIRD_LARGE_ROSTER: &[comp::bird_large::Species] = &[
-    // Flame Wyvern not incuded until proper introduction
+    // Flame Wyvern not included until proper introduction
     comp::bird_large::Species::Phoenix,
     comp::bird_large::Species::Cockatrice,
     comp::bird_large::Species::Roc,
@@ -231,15 +231,19 @@ impl Entity {
             .filter(|(good, _amount)| **good != Good::Coin)
             .for_each(|(_good, amount)| *amount *= 0.1);
         // Fill bags with stuff according to unclaimed stock
+        let ability_map = &comp::tool::AbilityMap::load().read();
+        let msm = &comp::item::MaterialStatManifest::load().read();
         let mut wares: Vec<Item> =
             TradePricing::random_items(&mut stockmap, slots as u32, true, true, 16)
                 .iter()
-                .map(|(n, a)| {
-                    let mut i = Item::new_from_asset_expect(n);
-                    i.set_amount(*a)
-                        .map_err(|_| tracing::error!("merchant loadout amount failure"))
-                        .ok();
-                    i
+                .filter_map(|(n, a)| {
+                    let i = Item::new_from_item_definition_id(n.as_ref(), ability_map, msm).ok();
+                    i.map(|mut i| {
+                        i.set_amount(*a)
+                            .map_err(|_| tracing::error!("merchant loadout amount failure"))
+                            .ok();
+                        i
+                    })
                 })
                 .collect();
         sort_wares(&mut wares);
@@ -1130,7 +1134,7 @@ mod tests {
     #[test]
     fn test_entity_configs() {
         let dummy_pos = Vec3::new(0.0, 0.0, 0.0);
-        let mut dummy_rng = rand::thread_rng();
+        let mut dummy_rng = thread_rng();
         // Bird Large test
         for bird_large_species in BIRD_LARGE_ROSTER {
             let female_body = comp::bird_large::Body {
@@ -1143,13 +1147,9 @@ mod tests {
             };
 
             let female_config = bird_large_config(female_body);
-            std::mem::drop(
-                EntityInfo::at(dummy_pos).with_asset_expect(female_config, &mut dummy_rng),
-            );
+            drop(EntityInfo::at(dummy_pos).with_asset_expect(female_config, &mut dummy_rng));
             let male_config = bird_large_config(male_body);
-            std::mem::drop(
-                EntityInfo::at(dummy_pos).with_asset_expect(male_config, &mut dummy_rng),
-            );
+            drop(EntityInfo::at(dummy_pos).with_asset_expect(male_config, &mut dummy_rng));
         }
         // Bird Medium test
         for bird_med_species in BIRD_MEDIUM_ROSTER {
@@ -1163,19 +1163,15 @@ mod tests {
             };
 
             let female_config = bird_medium_config(female_body);
-            std::mem::drop(
-                EntityInfo::at(dummy_pos).with_asset_expect(female_config, &mut dummy_rng),
-            );
+            drop(EntityInfo::at(dummy_pos).with_asset_expect(female_config, &mut dummy_rng));
             let male_config = bird_medium_config(male_body);
-            std::mem::drop(
-                EntityInfo::at(dummy_pos).with_asset_expect(male_config, &mut dummy_rng),
-            );
+            drop(EntityInfo::at(dummy_pos).with_asset_expect(male_config, &mut dummy_rng));
         }
         // Humanoid test
         for kind in RtSimEntityKind::iter() {
             for rank in TravelerRank::iter() {
                 let config = humanoid_config(kind, rank);
-                std::mem::drop(EntityInfo::at(dummy_pos).with_asset_expect(config, &mut dummy_rng));
+                drop(EntityInfo::at(dummy_pos).with_asset_expect(config, &mut dummy_rng));
             }
         }
     }

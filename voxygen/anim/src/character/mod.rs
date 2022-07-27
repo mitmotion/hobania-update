@@ -157,7 +157,7 @@ impl Skeleton for CharacterSkeleton {
             lantern: Some((lantern_mat * Vec4::new(0.0, 0.5, -6.0, 1.0)).xyz()),
             // TODO: see quadruped_medium for how to animate this
             mount_bone: Transform {
-                position: common::comp::Body::Humanoid(body)
+                position: comp::Body::Humanoid(body)
                     .mount_offset()
                     .into_tuple()
                     .into(),
@@ -243,7 +243,7 @@ impl Default for SkeletonAttr {
     }
 }
 
-impl<'a> std::convert::TryFrom<&'a comp::Body> for SkeletonAttr {
+impl<'a> TryFrom<&'a comp::Body> for SkeletonAttr {
     type Error = ();
 
     fn try_from(body: &'a comp::Body) -> Result<Self, Self::Error> {
@@ -268,8 +268,8 @@ impl<'a> From<&'a Body> for SkeletonAttr {
                 (Elf, Female) => 0.9,
                 (Dwarf, Male) => 1.0,
                 (Dwarf, Female) => 1.0,
-                (Undead, Male) => 0.9,
-                (Undead, Female) => 0.9,
+                (Draugr, Male) => 0.9,
+                (Draugr, Female) => 0.9,
                 (Danari, Male) => 1.15,
                 (Danari, Female) => 1.15,
             },
@@ -282,8 +282,8 @@ impl<'a> From<&'a Body> for SkeletonAttr {
                 (Elf, Female) => (-1.0, 9.5),
                 (Dwarf, Male) => (-2.0, 10.0),
                 (Dwarf, Female) => (-2.0, 9.5),
-                (Undead, Male) => (-1.5, 8.5),
-                (Undead, Female) => (-1.5, 9.5),
+                (Draugr, Male) => (-1.5, 8.5),
+                (Draugr, Female) => (-1.5, 9.5),
                 (Danari, Male) => (-1.5, 7.0),
                 (Danari, Female) => (-1.5, 7.0),
             },

@@ -5692,7 +5692,7 @@ impl<'a, 'b, 'c, F: Filler + 'b> dyn Structure</*'a, */F>/* + 'b*/ {
     }
 }
 /// Extend a 2d AABR to a 3d AABB
-pub fn aabr_with_z<T>(aabr: Aabr<T>, z: std::ops::Range<T>) -> Aabb<T> {
+pub fn aabr_with_z<T>(aabr: Aabr<T>, z: Range<T>) -> Aabb<T> {
     Aabb {
         min: aabr.min.with_z(z.start),
         max: aabr.max.with_z(z.end),

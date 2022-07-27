@@ -242,7 +242,7 @@ vec3 get_cloud_color(vec3 surf_color, vec3 dir, vec3 origin, const float time_of
         int i;
 
         #if (CLOUD_MODE >= CLOUD_MODE_MEDIUM)
-        #ifdef EXPERIMENTAL_RAINBOWS
+        #ifndef EXPERIMENTAL_NORAINBOWS
             // TODO: Make it a double rainbow
             float rainbow_t = (0.7 - dot(sun_dir.xyz, dir)) * 8 / 0.05;
             int rainbow_c = int(floor(rainbow_t));
@@ -281,11 +281,13 @@ vec3 get_cloud_color(vec3 surf_color, vec3 dir, vec3 origin, const float time_of
                 sun_color * sun_scatter * get_sun_brightness() * (sun_access * (1.0 - cloud_darken) * cloud_diffuse /*+ sky_color * global_scatter_factor*/) +
                 moon_color * moon_scatter * get_moon_brightness() * (moon_access * (1.0 - cloud_darken) * cloud_diffuse /*+ sky_color * global_scatter_factor*/) +
                 sky_light * (1.0 - global_darken) * not_underground +
+                // A small amount fake ambient light underground
+                (1.0 - not_underground) * vec3(0.2, 0.35, 0.5) * (1.0 - global_darken) +
                 emission * density_integrals.y * step;
 
             // Rainbow
-            #if (CLOUD_MODE >= CLOUD_MODE_MEDIUM)
-            #ifdef EXPERIMENTAL_RAINBOWS
+            #if (CLOUD_MODE >= CLOUD_MODE_ULTRA)
+            #ifndef EXPERIMENTAL_NORAINBOWS
                 if (rainbow_c >= 0 && rainbow_c < 8) {
                     vec3 colors[9] = {
                         surf_color,
@@ -300,7 +302,7 @@ vec3 get_cloud_color(vec3 surf_color, vec3 dir, vec3 origin, const float time_of
                     };
                     float h = max(0.0, min(pos.z, 900.0 - pos.z) / 450.0);
                     float rain = rain_density_at(pos.xy) * pow(h, 0.1);
-                    
+
                     float sun = sun_access * get_sun_brightness();
                     float energy = pow(rain * sun * min(cdist / 500.0, 1.0), 2.0) * 0.4;
 

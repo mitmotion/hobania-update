@@ -53,10 +53,10 @@ impl AmbientMgr {
             // If the conditions warrant creating a channel of that tag
             if AmbientChannelTag::get_tag_volume(tag, client, camera)
                 > match tag {
-                    AmbientChannelTag::Wind => 0.0,
+                    AmbientChannelTag::Wind => 0.1,
                     AmbientChannelTag::Rain => 0.1,
-                    AmbientChannelTag::Thunder => 0.0,
-                    AmbientChannelTag::Leaves => 0.1,
+                    AmbientChannelTag::Thunder => 0.1,
+                    AmbientChannelTag::Leaves => 0.05,
                 }
                 && audio.get_ambient_channel(tag).is_none()
             {
@@ -79,20 +79,21 @@ impl AmbientMgr {
                 // Update with sfx volume
                 channel.set_volume(ambience_volume);
 
-                // Set the duration of the loop to whatever the current value is (0.0 by
-                // default)
-
                 // If the sound should loop at this point:
                 if channel.began_playing.elapsed().as_secs_f32() > channel.next_track_change {
                     let track = ambience.tracks.iter().find(|track| track.tag == tag);
-                    // Set the channel's start point at this instant
+                    // Set the channel's start point to this instant
                     channel.began_playing = Instant::now();
                     if let Some(track) = track {
                         // Set loop duration to the one specified in the ron
                         channel.next_track_change = track.length;
                         // Play the file of the current tag at the current multiplier;
                         let current_multiplier = channel.multiplier;
-                        audio.play_ambient(tag, &track.path, current_multiplier);
+                        audio.play_ambient(
+                            tag,
+                            &track.path,
+                            Some(current_multiplier * ambience_volume),
+                        );
                     }
                 };
 
@@ -106,6 +107,15 @@ impl AmbientMgr {
 }
 
 impl AmbientChannelTag {
+    pub fn tag_max_volume(tag: AmbientChannelTag) -> f32 {
+        match tag {
+            AmbientChannelTag::Wind => 1.15,
+            AmbientChannelTag::Rain => 0.95,
+            AmbientChannelTag::Thunder => 1.33,
+            AmbientChannelTag::Leaves => 1.33,
+        }
+    }
+
     // Gets appropriate volume for each tag
     pub fn get_tag_volume(tag: AmbientChannelTag, client: &Client, camera: &Camera) -> f32 {
         match tag {
@@ -125,7 +135,7 @@ impl AmbientChannelTag {
                 // Tree density factors into wind volume. The more trees,
                 // the lower wind volume. The trees make more of an impact
                 // the closer the camera is to the ground.
-                let tree_multiplier = ((1.0 - tree_density)
+                let tree_multiplier = ((1.0 - (tree_density * 0.5))
                     + ((cam_pos.z - terrain_alt).abs() / 150.0).powi(2))
                 .min(1.0);
 
@@ -134,13 +144,13 @@ impl AmbientChannelTag {
                 // Client wind speed is a float approx. -30.0 to 30.0 (polarity depending on
                 // direction)
                 let wind_speed_multiplier = (client.weather_at_player().wind.magnitude_squared()
-                    / 30.0_f32.powi(2))
-                .min(1.0);
+                    / 15.0_f32.powi(2))
+                .min(1.33);
 
-                alt_multiplier
+                (alt_multiplier
                     * tree_multiplier
-                    * (wind_speed_multiplier + ((cam_pos.z - terrain_alt).abs() / 150.0).powi(2))
-                        .min(1.0)
+                    * (wind_speed_multiplier + ((cam_pos.z - terrain_alt).abs() / 150.0).powi(2)))
+                    + (alt_multiplier * 0.15) * tree_multiplier
             },
             AmbientChannelTag::Rain => {
                 let focus_off = camera.get_focus_pos().map(f32::trunc);
@@ -155,12 +165,10 @@ impl AmbientChannelTag {
                 let camera_multiplier =
                     1.0 - ((cam_pos.z - terrain_alt).abs() / 75.0).powi(2).min(1.0);
 
-                let rain_intensity = (client.weather_at_player().rain * 500.0) * camera_multiplier;
-
-                rain_intensity.min(0.9)
+                (client.weather_at_player().rain * 3.0) * camera_multiplier
             },
             AmbientChannelTag::Thunder => {
-                let rain_intensity = client.weather_at_player().rain * 500.0;
+                let rain_intensity = client.weather_at_player().rain * 3.0;
 
                 if rain_intensity < 0.7 {
                     0.0
@@ -183,11 +191,16 @@ impl AmbientChannelTag {
                 // the closer the camera is to the ground
                 let tree_multiplier = 1.0
                     - (((1.0 - tree_density)
-                        + ((cam_pos.z - terrain_alt + 20.0).abs() / 150.0).powi(2))
-                    .min(1.0));
+                        + ((cam_pos.z - terrain_alt - 20.0).abs() / 150.0).powi(2))
+                    .min(1.1));
+
+                // Take into account wind speed too, which amplifies tree noise
+                let wind_speed_multiplier = (client.weather_at_player().wind.magnitude_squared()
+                    / 20.0_f32.powi(2))
+                .min(1.0);
 
                 if tree_multiplier > 0.1 {
-                    tree_multiplier
+                    tree_multiplier * (1.0 + wind_speed_multiplier)
                 } else {
                     0.0
                 }
@@ -222,12 +235,10 @@ fn get_target_volume(
     {
         volume_multiplier *= 0.1;
     }
-    // Is the camera roughly under the terrain?
-    if cam_pos.z < terrain_alt - 20.0 {
-        volume_multiplier = 0.0;
-    }
 
-    volume_multiplier.clamped(0.0, 1.0)
+    // Is the camera underneath the terrain? Fade out the lower it goes beneath.
+    (volume_multiplier * ((cam_pos.z - terrain_alt) / 40.0 + 1.0).clamped(0.0, 1.0))
+        .min(AmbientChannelTag::tag_max_volume(tag))
 }
 
 pub fn load_ambience_items() -> AssetHandle<AmbientCollection> {

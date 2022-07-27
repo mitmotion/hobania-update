@@ -1,4 +1,4 @@
-use crate::{combat::DamageContributor, comp, uid::Uid};
+use crate::{combat::DamageContributor, comp, uid::Uid, DamageSource};
 use comp::{beam, item::Reagent, poise::PoiseState, skillset::SkillGroupKind, UtteranceKind};
 use hashbrown::HashSet;
 use serde::{Deserialize, Serialize};
@@ -10,6 +10,7 @@ pub struct HealthChangeInfo {
     pub crit: bool,
     pub target: Uid,
     pub by: Option<DamageContributor>,
+    pub cause: Option<DamageSource>,
     pub instance: u64,
 }
 
@@ -26,6 +27,9 @@ pub enum Outcome {
         radius: f32,
         is_attack: bool,
         reagent: Option<Reagent>, // How can we better define this?
+    },
+    Lightning {
+        pos: Vec3<f32>,
     },
     ProjectileShot {
         pos: Vec3<f32>,
@@ -50,7 +54,7 @@ pub enum Outcome {
     },
     SkillPointGain {
         uid: Uid,
-        skill_tree: comp::skillset::SkillGroupKind,
+        skill_tree: SkillGroupKind,
         total_points: u16,
     },
     ComboChange {
@@ -99,6 +103,8 @@ impl Outcome {
     pub fn get_pos(&self) -> Option<Vec3<f32>> {
         match self {
             Outcome::Explosion { pos, .. }
+            // TODO: Include this, but allow it to be sent to clients when outside of the VD
+            // | Outcome::Lightning { pos }
             | Outcome::ProjectileShot { pos, .. }
             | Outcome::ProjectileHit { pos, .. }
             | Outcome::Beam { pos, .. }
@@ -113,6 +119,7 @@ impl Outcome {
             Outcome::BreakBlock { pos, .. } => Some(pos.map(|e| e as f32 + 0.5)),
             Outcome::ExpChange { .. }
             | Outcome::ComboChange { .. }
+            | Outcome::Lightning { .. }
             | Outcome::SkillPointGain { .. } => None,
         }
     }

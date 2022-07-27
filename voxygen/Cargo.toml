@@ -3,7 +3,7 @@ authors = ["Joshua Barretto <joshua.s.barretto@gmail.com>", "Imbris <imbrisf@gma
 default-run = "veloren-voxygen"
 edition = "2021"
 name = "veloren-voxygen"
-version = "0.12.0"
+version = "0.13.0"
 # Cargo thinks it should build the voxygen binary even when a specific bench is specified for building
 # Uncomment below and comment out default-run if you want to avoid this
 # autobins = false
@@ -58,7 +58,7 @@ winit = {version = "0.25.0", features = ["serde"]}
 wgpu = { version = "=0.8.0", features = ["trace", "cross"] }
 wgpu-profiler = { git = "https://github.com/Imberflur/wgpu-profiler", tag = "wgpu-0.8" }
 bytemuck = { version="1.4", features=["derive"] }
-shaderc = "0.6.2"
+shaderc = "0.8.0"
 # cmake crate used by shaderc, newer version 0.1.46 uses a new cmake command that is not available in our CI cmake version
 # see https://github.com/alexcrichton/cmake-rs/issues/131
 cmake = "=0.1.45"
@@ -138,7 +138,7 @@ dispatch = "0.1.4"
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
 
-[target.'cfg(all(windows, target_env="msvc"))'.dependencies]
+[target.'cfg(windows)'.dependencies]
 mimalloc = "0.1.29"
 
 # Mumble

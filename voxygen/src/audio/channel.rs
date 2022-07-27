@@ -87,7 +87,7 @@ impl MusicChannel {
         S: Source + Send + 'static,
         S::Item: Sample,
         S::Item: Send,
-        <S as std::iter::Iterator>::Item: std::fmt::Debug,
+        <S as Iterator>::Item: std::fmt::Debug,
     {
         self.tag = tag;
         self.sink.append(source);
@@ -206,7 +206,7 @@ impl AmbientChannel {
         S: Source + Send + 'static,
         S::Item: Sample,
         S::Item: Send,
-        <S as std::iter::Iterator>::Item: std::fmt::Debug,
+        <S as Iterator>::Item: std::fmt::Debug,
     {
         self.sink.append(source);
     }
@@ -246,7 +246,7 @@ impl SfxChannel {
         S: Source + Send + 'static,
         S::Item: Sample,
         S::Item: Send,
-        <S as std::iter::Iterator>::Item: std::fmt::Debug,
+        <S as Iterator>::Item: std::fmt::Debug,
     {
         self.sink.append(source);
     }
@@ -282,6 +282,11 @@ impl SfxChannel {
     }
 }
 
+/// An UiChannel uses a non-spatial audio sink, and is designed for short-lived
+/// audio which is not spatially controlled, but does not need control over
+/// playback or fading/transitions
+///
+/// See also: [`Rodio::Sink`](https://docs.rs/rodio/0.11.0/rodio/struct.Sink.html)
 pub struct UiChannel {
     sink: Sink,
 }
@@ -298,7 +303,7 @@ impl UiChannel {
         S: Source + Send + 'static,
         S::Item: Sample,
         S::Item: Send,
-        <S as std::iter::Iterator>::Item: std::fmt::Debug,
+        <S as Iterator>::Item: std::fmt::Debug,
     {
         self.sink.append(source);
     }

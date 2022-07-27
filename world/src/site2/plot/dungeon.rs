@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     site::namegen::NameGen,
-    site2::{self, aabr_with_z, gen::PrimitiveTransform, Fill, Structure as SiteStructure},
+    site2::{aabr_with_z, gen::PrimitiveTransform, Fill, Structure as SiteStructure},
     util::{attempt, Grid, RandomField, Sampler, CARDINALS, DIRS},
     Land,
 };
@@ -1545,7 +1545,7 @@ impl Floor {
             sprites.push((sprite_layer, floor_sprite_fill));
         }
 
-        // Place a glowing purple septagonal star inscribed in a circle in the boss room
+        // Place a glowing purple heptagonal star inscribed in a circle in the boss room
         if let Some(boss_room_center) = boss_room_center {
             let magic_circle_bb = painter.cylinder(Aabb {
                 min: (boss_room_center - 3 * Vec2::broadcast(TILE_SIZE) / 2).with_z(floor_z - 1),
@@ -1564,7 +1564,7 @@ impl Floor {
 
         // Place pillars and pillar lights facing the pillars
         for (pos, pillar, lights) in pillars.iter() {
-            // Avoid placing pillars that would cover the septagonal star
+            // Avoid placing pillars that would cover the heptagonal star
             if let Some(boss_room_center) = boss_room_center {
                 if pos.distance_squared(boss_room_center) < (3 * TILE_SIZE / 2).pow(2) {
                     continue;
@@ -1604,7 +1604,7 @@ impl Floor {
 }
 
 impl<F: Filler> SiteStructure<F> for Dungeon {
-    fn render<'a>(&self, _site: &site2::Site, land: Land, painter: &Painter<'a>, filler: &mut FillFn<'a, '_, F>) {
+    fn render<'a>(&self, _site: &Site, land: Land, painter: &Painter<'a>, filler: &mut FillFn<'a, '_, F>) {
         let origin = (self.origin + Vec2::broadcast(TILE_SIZE / 2)).with_z(self.alt + ALT_OFFSET);
 
         lazy_static! {
@@ -1650,7 +1650,7 @@ mod tests {
 
     #[test]
     fn test_creating_bosses() {
-        let mut dynamic_rng = rand::thread_rng();
+        let mut dynamic_rng = thread_rng();
         let tile_wcenter = Vec3::new(0, 0, 0);
         boss_1(&mut dynamic_rng, tile_wcenter);
         boss_2(&mut dynamic_rng, tile_wcenter);
@@ -1663,7 +1663,7 @@ mod tests {
     #[test]
     // FIXME: Uses random, test may be not great
     fn test_creating_enemies() {
-        let mut dynamic_rng = rand::thread_rng();
+        let mut dynamic_rng = thread_rng();
         let random_position = Vec3::new(0, 0, 0);
         enemy_1(&mut dynamic_rng, random_position);
         enemy_2(&mut dynamic_rng, random_position);
@@ -1676,7 +1676,7 @@ mod tests {
     #[test]
     // FIXME: Uses random, test may be not great
     fn test_creating_minibosses() {
-        let mut dynamic_rng = rand::thread_rng();
+        let mut dynamic_rng = thread_rng();
         let tile_wcenter = Vec3::new(0, 0, 0);
         mini_boss_1(&mut dynamic_rng, tile_wcenter);
         mini_boss_2(&mut dynamic_rng, tile_wcenter);
@@ -1688,7 +1688,7 @@ mod tests {
 
     #[test]
     fn test_creating_turrets() {
-        let mut dynamic_rng = rand::thread_rng();
+        let mut dynamic_rng = thread_rng();
         let pos = Vec3::new(0.0, 0.0, 0.0);
         turret_3(&mut dynamic_rng, pos);
         turret_5(&mut dynamic_rng, pos);

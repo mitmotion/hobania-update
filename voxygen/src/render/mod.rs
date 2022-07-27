@@ -221,7 +221,7 @@ impl Default for ShadowMode {
     fn default() -> Self { ShadowMode::Map(Default::default()) }
 }
 
-impl core::convert::TryFrom<ShadowMode> for ShadowMapMode {
+impl TryFrom<ShadowMode> for ShadowMapMode {
     type Error = ();
 
     /// Get the shadow map details if they exist.
@@ -476,6 +476,8 @@ pub enum ExperimentalShader {
     /// Display grid lines to visualize the distribution of shadow map texels
     /// for the directional light from the sun.
     DirectionalShadowMapTexelGrid,
-    /// Enable rainbows
-    Rainbows,
+    /// Disable rainbows
+    NoRainbows,
+    /// Make objects appear wet when appropriate.
+    Wetness,
 }
