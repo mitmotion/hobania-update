@@ -2856,12 +2856,30 @@ impl Painter<'_> {
                     // TODO: Optimize further?
                     let aabb = Self::get_bounds(cache, tree, prim);
                     /*if !(aabb.size().w > 8 || aabb.size().h > 8 || aabb.size().d > 16) */{
+
+                        let distance = segment.end - segment.start;
+                        let distance2 = distance.magnitude_squared();
                         return aabb_iter(
                             aabb.as_(),
                             mat,
                             mask,
                             // |_| true,
-                            |pos| Self::contains_at::<TopAabr>(/*cache, */tree, prim_, pos),
+                            |pos| {
+                                let pos = pos.map(|e| e as f32) + 0.5;
+                                let length = pos - segment.start.as_();
+                                let t =
+                                    (length.as_().dot(distance) / distance2).clamped(0.0, 1.0);
+                                /* let t = length_factor(*segment, pos); */
+                                let projected_point = /*segment.projected_point(pos)*/
+                                    segment.start + distance * t;
+
+                                let mut diff = projected_point - pos;
+                                diff.z *= z_scale;
+                                let radius = Lerp::lerp_unclamped(r0, r1, t)/* - 0.25 */;
+                                diff.magnitude_squared() < radius * radius/* - 0.25/*0.01*/*/
+                    /* segment.distance_to_point(pos.map(|e| e as f32)) < radius - 0.25 */
+                                /* Self::contains_at::<TopAabr>(/*cache, */tree, prim_, pos) */
+                            },
                             hit,
                         );
                         return
