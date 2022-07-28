@@ -2858,27 +2858,21 @@ impl Painter<'_> {
                     /*if !(aabb.size().w > 8 || aabb.size().h > 8 || aabb.size().d > 16) */{
 
                         let distance = segment.end - segment.start;
-                        let distance2 = distance.magnitude_squared();
+                        let distance_proj = distance / distance.magnitude_squared();
+                        let segment_start = segment.start - 0.5;
                         return aabb_iter(
                             aabb.as_(),
                             mat,
                             mask,
                             // |_| true,
                             |pos| {
-                                let pos = pos.map(|e| e as f32) + 0.5;
-                                let length = pos - segment.start.as_();
-                                let t =
-                                    (length.as_().dot(distance) / distance2).clamped(0.0, 1.0);
-                                /* let t = length_factor(*segment, pos); */
-                                let projected_point = /*segment.projected_point(pos)*/
-                                    segment.start + distance * t;
-
-                                let mut diff = projected_point - pos;
+                                let pos = pos.as_::<f32>();
+                                let length = pos - segment_start;
+                                let t = length.dot(distance_proj).clamped(0.0, 1.0);
+                                let mut diff = distance * t - length;
                                 diff.z *= z_scale;
-                                let radius = Lerp::lerp_unclamped(r0, r1, t)/* - 0.25 */;
-                                diff.magnitude_squared() < radius * radius/* - 0.25/*0.01*/*/
-                    /* segment.distance_to_point(pos.map(|e| e as f32)) < radius - 0.25 */
-                                /* Self::contains_at::<TopAabr>(/*cache, */tree, prim_, pos) */
+                                let radius = Lerp::lerp_unclamped(r0, r1, t);
+                                diff.magnitude_squared() < radius * radius
                             },
                             hit,
                         );
