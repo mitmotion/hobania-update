@@ -227,6 +227,7 @@ fn calc_light<V: RectRasterableVol<Vox = Block> + ReadVol + Debug>(
 }
 
 #[allow(clippy::type_complexity)]
+#[inline(always)]
 pub fn generate_mesh<'a, V: RectRasterableVol<Vox = Block> + ReadVol + Debug + 'static>(
     vol: &'a VolGrid2d<V>,
     (range, max_texture_size, _boi): (Aabb<i32>, Vec2<u16>, &'a BlocksOfInterest),
@@ -279,17 +280,18 @@ pub fn generate_mesh<'a, V: RectRasterableVol<Vox = Block> + ReadVol + Debug + '
     let mut opaque_limits = None::<Limits>;
     let mut fluid_limits = None::<Limits>;
     let mut air_limits = None::<Limits>;
+    let mut flat;
     let flat_get = {
         span!(_guard, "copy to flat array");
         let (w, h, d) = range.size().into_tuple();
         // z can range from -1..range.size().d + 1
         let d = d + 2;
-        let flat = {
+        /*let flat = */{
             let mut volume = vol.cached();
             const AIR: Block = Block::air(common::terrain::sprite::SpriteKind::Empty);
             // TODO: Once we can manage it sensibly, consider using something like
             // Option<Block> instead of just assuming air.
-            let mut flat = vec![AIR; (w * h * d) as usize];
+            /*let mut */flat = vec![AIR; (w * h * d) as usize];
             let mut i = 0;
             for x in 0..range.size().w {
                 for y in 0..range.size().h {
@@ -320,16 +322,19 @@ pub fn generate_mesh<'a, V: RectRasterableVol<Vox = Block> + ReadVol + Debug + '
                     }
                 }
             }
-            flat
+            /* flat */
         };
 
-        move |Vec3 { x, y, z }| {
+        let hd = h * d;
+        let flat = &flat[0..(w * hd) as usize];
+        #[inline(always)] move |Vec3 { x, y, z }| {
             // z can range from -1..range.size().d + 1
             let z = z + 1;
-            match flat.get((x * h * d + y * d + z) as usize).copied() {
+            flat[(x * hd + y * d + z) as usize]
+            /* match flat.get((x * hd + y * d + z) as usize).copied() {
                 Some(b) => b,
                 None => panic!("x {} y {} z {} d {} h {}", x, y, z, d, h),
-            }
+            } */
         }
     };
 
@@ -370,28 +375,28 @@ pub fn generate_mesh<'a, V: RectRasterableVol<Vox = Block> + ReadVol + Debug + '
     let greedy_size_cross = Vec3::new(greedy_size.x - 1, greedy_size.y - 1, greedy_size.z);
     let draw_delta = Vec3::new(1, 1, z_start);
 
-    let get_light = |_: &mut (), pos: Vec3<i32>| {
+    let get_light = #[inline(always)] |_: &mut (), pos: Vec3<i32>| {
         if flat_get(pos).is_opaque() {
             0.0
         } else {
             light(pos + range.min)
         }
     };
-    let get_ao = |_: &mut (), pos: Vec3<i32>| {
+    let get_ao = #[inline(always)] |_: &mut (), pos: Vec3<i32>| {
         if flat_get(pos).is_opaque() { 0.0 } else { 1.0 }
     };
-    let get_glow = |_: &mut (), pos: Vec3<i32>| glow(pos + range.min);
+    let get_glow = #[inline(always)] |_: &mut (), pos: Vec3<i32>| glow(pos + range.min);
     let get_color =
-        |_: &mut (), pos: Vec3<i32>| flat_get(pos).get_color().unwrap_or_else(Rgb::zero);
-    let get_opacity = |_: &mut (), pos: Vec3<i32>| !flat_get(pos).is_opaque();
-    let should_draw = |_: &mut (), pos: Vec3<i32>, delta: Vec3<i32>, _uv| {
-        should_draw_greedy(pos, delta, &flat_get)
+        #[inline(always)] |_: &mut (), pos: Vec3<i32>| flat_get(pos).get_color().unwrap_or_else(Rgb::zero);
+    let get_opacity = #[inline(always)] |_: &mut (), pos: Vec3<i32>| !flat_get(pos).is_opaque();
+    let should_draw = #[inline(always)] |_: &mut (), pos: Vec3<i32>, delta: Vec3<i32>, _uv| {
+        should_draw_greedy(pos, delta, #[inline(always)] |pos| flat_get(pos))
     };
     // NOTE: Conversion to f32 is fine since this i32 is actually in bounds for u16.
     let mesh_delta = Vec3::new(0.0, 0.0, (z_start + range.min.z) as f32);
     let create_opaque =
-        |atlas_pos, pos, norm, meta| TerrainVertex::new(atlas_pos, pos + mesh_delta, norm, meta);
-    let create_transparent = |_atlas_pos, pos, norm| FluidVertex::new(pos + mesh_delta, norm);
+        #[inline(always)] |atlas_pos, pos, norm, meta| TerrainVertex::new(atlas_pos, pos + mesh_delta, norm, meta);
+    let create_transparent = #[inline(always)] |_atlas_pos, pos, norm| FluidVertex::new(pos + mesh_delta, norm);
 
     let mut greedy =
         GreedyMesh::<guillotiere::SimpleAtlasAllocator>::new(max_size, greedy::general_config());
@@ -407,7 +412,7 @@ pub fn generate_mesh<'a, V: RectRasterableVol<Vox = Block> + ReadVol + Debug + '
         get_glow,
         get_opacity,
         should_draw,
-        push_quad: |atlas_origin, dim, origin, draw_dim, norm, meta: &FaceKind| match meta {
+        push_quad: #[inline(always)] |atlas_origin, dim, origin, draw_dim, norm, meta: &FaceKind| match meta {
             FaceKind::Opaque(meta) => {
                 opaque_mesh.push_quad(greedy::create_quad(
                     atlas_origin,
@@ -431,7 +436,7 @@ pub fn generate_mesh<'a, V: RectRasterableVol<Vox = Block> + ReadVol + Debug + '
                 ));
             },
         },
-        make_face_texel: |data: &mut (), pos, light, glow, ao| {
+        make_face_texel: #[inline(always)] |data: &mut (), pos, light, glow, ao| {
             TerrainVertex::make_col_light(light, glow, get_color(data, pos), ao)
         },
     });
@@ -458,6 +463,7 @@ pub fn generate_mesh<'a, V: RectRasterableVol<Vox = Block> + ReadVol + Debug + '
 
 /// NOTE: Make sure to reflect any changes to how meshing is performanced in
 /// [scene::terrain::Terrain::skip_remesh].
+#[inline(always)]
 fn should_draw_greedy(
     pos: Vec3<i32>,
     delta: Vec3<i32>,
@@ -470,7 +476,7 @@ fn should_draw_greedy(
     if from_filled == to.is_filled() {
         // Check the interface of liquid and non-tangible non-liquid (e.g. air).
         let from_liquid = from.is_liquid();
-        if from_liquid == to.is_liquid() || from.is_filled() || to.is_filled() {
+        if from_liquid == to.is_liquid() || /*from.is_filled() || to.is_filled()*/from_filled {
             None
         } else {
             // While liquid is not culled, we still try to keep a consistent orientation as

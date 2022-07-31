@@ -280,7 +280,7 @@ pub struct CharacterList {
     pub loading: bool,
 }
 
-const TOTAL_PENDING_CHUNKS_LIMIT: usize = 1024;
+const TOTAL_PENDING_CHUNKS_LIMIT: usize = 2048;
 
 impl Client {
     pub async fn new(
@@ -1872,7 +1872,7 @@ impl Client {
                     for key in keys.iter() {
                         if self.state.terrain().get_key(*key).is_none() {
                             if !skip_mode && !self.pending_chunks.contains_key(key) {
-                                const CURRENT_TICK_PENDING_CHUNKS_LIMIT: usize = 8 * 4;
+                                const CURRENT_TICK_PENDING_CHUNKS_LIMIT: usize = 8 * 5;
                                 if self.pending_chunks.len() < TOTAL_PENDING_CHUNKS_LIMIT
                                     && current_tick_send_chunk_requests
                                         < CURRENT_TICK_PENDING_CHUNKS_LIMIT

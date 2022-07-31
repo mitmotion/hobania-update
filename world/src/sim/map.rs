@@ -156,7 +156,7 @@ pub fn sample_pos(
             } else {
                 Lerp::lerp(
                     sample.sub_surface_color,
-                    sample.surface_color,
+                    if sample.snow_cover { Rgb::new(210.0, 210.0, 255.0) / 255.0 } else { sample.surface_color },
                     ((wposz as f32 - (alt - grass_depth)) / grass_depth).sqrt(),
                 )
                 .map(|e| e as f64)

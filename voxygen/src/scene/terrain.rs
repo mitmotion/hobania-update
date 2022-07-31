@@ -237,7 +237,14 @@ fn mesh_worker<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + '
     sprite_config: &SpriteSpec,
 ) -> MeshWorkerResponse {
     span!(_guard, "mesh_worker");
-    let blocks_of_interest = BlocksOfInterest::from_chunk(&chunk);
+    let (blocks_of_interest, sprite_kinds) = BlocksOfInterest::from_chunk(&chunk)/*default()*/;
+
+    let mut range = range;
+    /* range.min += Vec3::from(V::RECT_SIZE.as_::<i32>()) - 1;
+    range.max -= Vec3::from(V::RECT_SIZE.as_::<i32>()) - 1; */
+    range.min.z = chunk.get_min_z() - 2;
+    range.max.z = chunk.get_max_z() + 2;
+    let z_bounds = (range.min.z, range.max.z);
 
     let mesh;
     let (light_map, glow_map) = if let Some((light_map, glow_map)) = &skip_remesh {
@@ -274,13 +281,14 @@ fn mesh_worker<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + '
             prof_span!("extract sprite_instances");
             let mut instances = [(); SPRITE_LOD_LEVELS].map(|()| Vec::new());
 
-            for x in 0..V::RECT_SIZE.x as i32 {
+            for (rel_pos, (sprite, ori)) in /*chunk.iter_changed()*/sprite_kinds {
+            /* for x in 0..V::RECT_SIZE.x as i32 {
                 for y in 0..V::RECT_SIZE.y as i32 {
-                    for z in z_bounds.0 as i32..z_bounds.1 as i32 + 1 {
-                        let rel_pos = Vec3::new(x, y, z);
+                    for z in z_bounds.0 as i32..z_bounds.1 as i32 + 1 {*/
+                        /* let rel_pos = Vec3::new(x, y, z); */
                         let wpos = Vec3::from(pos * V::RECT_SIZE.map(|e: u32| e as i32)) + rel_pos;
 
-                        let block = if let Ok(block) = volume.get(wpos) {
+                        /* let block = if let Ok(block) = volume.get(wpos) {
                             block
                         } else {
                             continue;
@@ -289,13 +297,13 @@ fn mesh_worker<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + '
                             sprite
                         } else {
                             continue;
-                        };
+                        }; */
 
                         if let Some(cfg) = sprite_config.get(sprite) {
                             let seed = wpos.x as u64 * 3
                                 + wpos.y as u64 * 7
                                 + wpos.x as u64 * wpos.y as u64; // Awful PRNG
-                            let ori = (block.get_ori().unwrap_or((seed % 4) as u8 * 2)) & 0b111;
+                            let ori = (ori.unwrap_or((seed % 4) as u8 * 2)) & 0b111;
                             let variation = seed as usize % cfg.variations.len();
                             let key = (sprite, variation);
                             // NOTE: Safe because we called sprite_config_for already.
@@ -334,8 +342,9 @@ fn mesh_worker<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + '
                                 }
                             }
                         }
-                    }
+                    /* }
                 }
+            } */
             }
 
             instances

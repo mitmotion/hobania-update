@@ -195,15 +195,18 @@ impl<V, Storage: core::ops::DerefMut<Target=Vec<V>>, S: RectVolSize, M: Clone> C
     /// Iterate through the voxels in this chunk, attempting to avoid those that
     /// are unchanged (i.e: match the `below` and `above` voxels). This is
     /// generally useful for performance reasons.
-    pub fn iter_changed(&self) -> impl Iterator<Item = (Vec3<i32>, &V)> + '_ {
+    pub fn iter_changed(&self) -> impl Iterator<Item = (/*Vec3<i32>*/u32, &V)> + '_ {
         self.sub_chunks
             .iter()
             .enumerate()
             .filter(|(_, sc)| sc.num_groups() > 0)
             .flat_map(move |(i, sc)| {
-                let z_offset = self.z_offset + i as i32 * SubChunkSize::<V, Storage, S>::SIZE.z as i32;
-                sc.vol_iter(Vec3::zero(), SubChunkSize::<V, Storage, S>::SIZE.map(|e| e as i32))
-                    .map(move |(pos, vox)| (pos + Vec3::unit_z() * z_offset, vox))
+                /* let z_offset = self.z_offset + i as i32 * SubChunkSize::<V, Storage, S>::SIZE.z as i32;
+                let z_delta = Vec3::unit_z() * z_offset; */
+                let z_delta = i as u32 * SubChunk::<V, Storage, S, M>::VOLUME;
+                sc.iter_changed()
+                /* sc.vol_iter(Vec3::zero(), SubChunkSize::<V, Storage, S>::SIZE.map(|e| e as i32)) */
+                    .map(move |(pos, vox)| (pos + z_delta, vox))
             })
     }
 

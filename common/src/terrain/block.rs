@@ -118,6 +118,18 @@ impl BlockKind {
                 | BlockKind::Sand
         )
     }
+
+    #[inline(always)]
+    /// NOTE: Do not call unless you are handling the case where the block is a sprite elsewhere,
+    /// as it will give incorrect results in this case!
+    pub const fn get_glow_raw(&self) -> Option<u8> {
+        match self {
+            BlockKind::Lava => Some(24),
+            BlockKind::GlowingRock | BlockKind::GlowingWeakRock => Some(10),
+            BlockKind::GlowingMushroom => Some(20),
+            _ => None,
+        }
+    }
 }
 
 /// XXX(@Sharp): If you feel like significantly modifying how Block works, you *MUST* also update
@@ -209,69 +221,41 @@ impl Block {
         }
     }
 
-    #[inline]
+    #[inline(always)]
+    /// NOTE: Do not call unless you already know this block is not filled!
+    pub fn get_sprite_raw(&self) -> Option<SpriteKind> {
+        SpriteKind::from_u8(self.attr[0])
+    }
+
+    #[inline(always)]
     pub fn get_sprite(&self) -> Option<SpriteKind> {
         if !self.is_filled() {
-            SpriteKind::from_u8(self.attr[0])
+            self.get_sprite_raw()
         } else {
             None
         }
+    }
+
+    #[inline(always)]
+    /// NOTE: Do not call unless you already know this block is a sprite and already called
+    /// has_ori on it!
+    pub const fn get_ori_raw(&self) -> u8 {
+        self.attr[1] & 0b111
     }
 
     #[inline]
     pub fn get_ori(&self) -> Option<u8> {
         if self.get_sprite()?.has_ori() {
             // TODO: Formalise this a bit better
-            Some(self.attr[1] & 0b111)
+            Some(self.get_ori_raw())
         } else {
             None
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn get_glow(&self) -> Option<u8> {
-        match self.kind() {
-            BlockKind::Lava => Some(24),
-            BlockKind::GlowingRock | BlockKind::GlowingWeakRock => Some(10),
-            BlockKind::GlowingMushroom => Some(20),
-            _ => match self.get_sprite()? {
-                SpriteKind::StreetLamp | SpriteKind::StreetLampTall => Some(24),
-                SpriteKind::Ember => Some(20),
-                SpriteKind::WallLamp
-                | SpriteKind::WallLampSmall
-                | SpriteKind::WallSconce
-                | SpriteKind::FireBowlGround
-                | SpriteKind::ChristmasOrnament
-                | SpriteKind::CliffDecorBlock
-                | SpriteKind::Orb => Some(16),
-                SpriteKind::Velorite
-                | SpriteKind::VeloriteFrag
-                | SpriteKind::CavernGrassBlueShort
-                | SpriteKind::CavernGrassBlueMedium
-                | SpriteKind::CavernGrassBlueLong
-                | SpriteKind::CavernLillypadBlue
-                | SpriteKind::CavernMycelBlue
-                | SpriteKind::CeilingMushroom => Some(6),
-                SpriteKind::CaveMushroom
-                | SpriteKind::CookingPot
-                | SpriteKind::CrystalHigh
-                | SpriteKind::CrystalLow => Some(10),
-                SpriteKind::Amethyst
-                | SpriteKind::Ruby
-                | SpriteKind::Sapphire
-                | SpriteKind::Diamond
-                | SpriteKind::Emerald
-                | SpriteKind::Topaz
-                | SpriteKind::AmethystSmall
-                | SpriteKind::TopazSmall
-                | SpriteKind::DiamondSmall
-                | SpriteKind::RubySmall
-                | SpriteKind::EmeraldSmall
-                | SpriteKind::SapphireSmall => Some(3),
-                SpriteKind::Lantern => Some(24),
-                _ => None,
-            },
-        }
+        self.get_glow_raw().or_else(|| self.get_sprite().and_then(|sprite| sprite.get_glow()))
     }
 
     // minimum block, attenuation
@@ -397,7 +381,7 @@ impl Block {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn kind(&self) -> BlockKind { self.kind }
 
     /// If this block is a fluid, replace its sprite.

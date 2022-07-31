@@ -2,9 +2,9 @@ use crate::{
     all::*,
     block::block_from_structure,
     column::ColumnGen,
-    site2::{self, PrimitiveTransform},
+    site2::{self, Fill, Filler, FillFn, Painter, PrimitiveTransform},
     layer::cave::tunnel_bounds_at,
-    util::{gen_cache::StructureGenCache, RandomPerm, Sampler, UnitChooser},
+    util::{gen_cache::StructureGenCache, RandomField, RandomPerm, Sampler, UnitChooser},
     Canvas, CanvasInfo, ColumnSample,
 };
 use common::{
@@ -323,122 +323,193 @@ pub fn apply_trees_to(
                     (s.get_bounds(), [(0.0004, SpriteKind::Beehive)].as_ref())
                 },
                 &TreeModel::Procedural(ref t, leaf_block) => {
+                    #[inline(always)]
+                    fn draw_tree<'a, F: Filler>(
+                        t: &ProceduralTree,
+                        leaf_block: impl Fill + Copy,
+                        trunk_block: impl Fill + Copy,
+                        wpos: Vec3<i32>,
+                        painter: &Painter<'a>,
+                        filler: &mut FillFn<'a, '_, F>
+                    ) {
+                        let leaf_vertical_scale = t.config.leaf_vertical_scale.recip();
+                        let branch_child_radius_lerp = t.config.branch_child_radius_lerp;
+
+                        // NOTE: Technically block_from_structure isn't correct here, because it could
+                        // lerp with position; in practice, it almost never does, and most of the other
+                        // expensive parameters are unused.
+                        /* let trunk_block = if let Some(block) = block_from_structure(
+                            info.index(),
+                            trunk_block,
+                            wpos,
+                            tree.pos.xy(),
+                            tree.seed,
+                            &col,
+                            Block::air,
+                            calendar,
+                        ) {
+                            block
+                        } else {
+                            return;
+                        };
+                        let leaf_block = if let Some(block) = block_from_structure(
+                            info.index(),
+                            leaf_block,
+                            wpos,
+                            tree.pos.xy(),
+                            tree.seed,
+                            &col,
+                            Block::air,
+                            calendar,
+                        ) {
+                            block
+                        } else {
+                            return;
+                        }; */
+                        t.walk(|branch, parent| {
+                            let aabr = Aabr {
+                                min: wpos.xy() + branch.get_aabb().min.xy().as_(),
+                                max: wpos.xy() + branch.get_aabb().max.xy().as_(),
+                            };
+                            if aabr.collides_with_aabr(filler.render_aabr().as_()) {
+                                let start =
+                                    wpos.as_::<f32>() + branch.get_line().start/*.as_()*//* - 0.5*/;
+                                let end =
+                                    wpos.as_::<f32>() + branch.get_line().end/*.as_()*//* - 0.5*/;
+                                let wood_radius = branch.get_wood_radius();
+                                let leaf_radius = branch.get_leaf_radius();
+                                let parent_wood_radius = if branch_child_radius_lerp {
+                                    parent.get_wood_radius()
+                                } else {
+                                    wood_radius
+                                };
+                                let leaf_eats_wood = leaf_radius > wood_radius;
+                                let leaf_eats_parent_wood = leaf_radius > parent_wood_radius;
+                                if !leaf_eats_wood || !leaf_eats_parent_wood {
+                                    // Render the trunk, since it's not swallowed by its leaf.
+                                    painter
+                                        .line_two_radius(
+                                            start,
+                                            end,
+                                            parent_wood_radius,
+                                            wood_radius,
+                                            1.0,
+                                        )
+                                        .fill(/*filler.block(trunk_block)*/trunk_block, filler);
+                                }
+                                if leaf_eats_wood || leaf_eats_parent_wood {
+                                    // Render the leaf, since it's not *completely* swallowed
+                                    // by the trunk.
+                                    painter
+                                        .line_two_radius(
+                                            start,
+                                            end,
+                                            leaf_radius,
+                                            leaf_radius,
+                                            leaf_vertical_scale,
+                                        )
+                                        .fill(/*filler.block(leaf_block)*/leaf_block, filler);
+                                }
+                                true
+                            } else {
+                                false
+                            }
+                        });
+                        // Draw the roots.
+                        t.roots.iter().for_each(|root| {
+                            painter
+                                .line(
+                                    wpos/*.as_::<f32>()*/ + root.line.start.as_()/* - 0.5*/,
+                                    wpos/*.as_::<f32>()*/ + root.line.end.as_()/* - 0.5*/,
+                                    root.radius,
+                                )
+                                .fill(/*filler.block(leaf_block)*/trunk_block, filler);
+                        });
+                    }
                     let bounds = t.get_bounds().map(|e| e as i32);
                     let trunk_block = t.config.trunk_block;
-                    let leaf_vertical_scale = t.config.leaf_vertical_scale.recip();
-                    let branch_child_radius_lerp = t.config.branch_child_radius_lerp;
-
-                    // NOTE: Technically block_from_structure isn't correct here, because it could
-                    // lerp with position; in practice, it almost never does, and most of the other
-                    // expensive parameters are unused.
-                    /* let trunk_block = if let Some(block) = block_from_structure(
-                        info.index(),
-                        trunk_block,
-                        wpos,
-                        tree.pos.xy(),
-                        tree.seed,
-                        &col,
-                        Block::air,
-                        calendar,
-                    ) {
-                        block
-                    } else {
-                        return;
-                    };
-                    let leaf_block = if let Some(block) = block_from_structure(
-                        info.index(),
-                        leaf_block,
-                        wpos,
-                        tree.pos.xy(),
-                        tree.seed,
-                        &col,
-                        Block::air,
-                        calendar,
-                    ) {
-                        block
-                    } else {
-                        return;
-                    }; */
-
                     site2::render_collect(
                         &arena,
                         info,
                         render_area,
                         canvas,
                         |painter, filler| {
-                            let trunk_block = filler.block_from_structure(
-                                trunk_block,
-                                tree.pos.xy(),
-                                tree.seed,
-                                &col,
-                            );
-                            let leaf_block = filler.block_from_structure(
+                            let leaf_block = /* filler.block_from_structure(
                                 leaf_block,
                                 tree.pos.xy(),
                                 tree.seed,
                                 &col,
-                            );
-                            t.walk(|branch, parent| {
-                                let aabr = Aabr {
-                                    min: wpos.xy() + branch.get_aabb().min.xy().as_(),
-                                    max: wpos.xy() + branch.get_aabb().max.xy().as_(),
-                                };
-                                if aabr.collides_with_aabr(filler.render_aabr().as_()) {
-                                    let start =
-                                        wpos.as_::<f32>() + branch.get_line().start/*.as_()*//* - 0.5*/;
-                                    let end =
-                                        wpos.as_::<f32>() + branch.get_line().end/*.as_()*//* - 0.5*/;
-                                    let wood_radius = branch.get_wood_radius();
-                                    let leaf_radius = branch.get_leaf_radius();
-                                    let parent_wood_radius = if branch_child_radius_lerp {
-                                        parent.get_wood_radius()
-                                    } else {
-                                        wood_radius
-                                    };
-                                    let leaf_eats_wood = leaf_radius > wood_radius;
-                                    let leaf_eats_parent_wood = leaf_radius > parent_wood_radius;
-                                    if !leaf_eats_wood || !leaf_eats_parent_wood {
-                                        // Render the trunk, since it's not swallowed by its leaf.
-                                        painter
-                                            .line_two_radius(
-                                                start,
-                                                end,
-                                                parent_wood_radius,
-                                                wood_radius,
-                                                1.0,
-                                            )
-                                            .fill(/*filler.block(trunk_block)*/trunk_block, filler);
-                                    }
-                                    if leaf_eats_wood || leaf_eats_parent_wood {
-                                        // Render the leaf, since it's not *completely* swallowed
-                                        // by the trunk.
-                                        painter
-                                            .line_two_radius(
-                                                start,
-                                                end,
-                                                leaf_radius,
-                                                leaf_radius,
-                                                leaf_vertical_scale,
-                                            )
-                                            .fill(/*filler.block(leaf_block)*/leaf_block, filler);
-                                    }
-                                    true
+                            ) */{
+                                let structure_pos = tree.pos.xy();
+                                let structure_seed = tree.seed;
+                                let field = RandomField::new(structure_seed);
+
+                                let lerp = ((field.get(Vec3::from(structure_pos)).rem_euclid(256)) as f32 / 255.0) * 0.8;
+
+                                let ranges = leaf_block
+                                    .elim_case_pure(&info.index().colors.block.structure_blocks)
+                                    .as_ref()
+                                    .map(Vec::as_slice)
+                                    .unwrap_or(&[]);
+                                let range = if ranges.is_empty() {
+                                    // Error occurred, but this ideally shouldn't happen.
+                                    return;
                                 } else {
-                                    false
-                                }
-                            });
-                            // Draw the roots.
-                            t.roots.iter().for_each(|root| {
-                                painter
-                                    .line(
-                                        wpos/*.as_::<f32>()*/ + root.line.start.as_()/* - 0.5*/,
-                                        wpos/*.as_::<f32>()*/ + root.line.end.as_()/* - 0.5*/,
-                                        root.radius,
+                                    &ranges[
+                                        RandomPerm::new(structure_seed).get(structure_seed) as usize % ranges.len()
+                                    ]
+                                };
+                                let start = Rgb::<u8>::from(range.start).map(f32::from);
+                                let end = Rgb::<u8>::from(range.end).map(f32::from);
+                                let is_christmas = calendar.map_or(false, |c| c.is_event(CalendarEvent::Christmas));
+                                filler.sampling(move |pos| {
+                                    Some(
+                                        if is_christmas && field.chance(pos + structure_pos, 0.025)
+                                        {
+                                            Block::new(BlockKind::GlowingWeakRock, Rgb::new(255, 0, 0))
+                                        } else {
+                                            let lerp = lerp
+                                                + ((field.get(pos + i32::MAX / 2).rem_euclid(256)) as f32 / 255.0) * 0.2;
+                                            Block::new(
+                                                BlockKind::Leaves,
+                                                Rgb::<f32>::lerp(start, end, lerp).as_::<u8>(),
+                                            )
+                                        }
                                     )
-                                    .fill(/*filler.block(leaf_block)*/trunk_block, filler);
-                            });
-                        },
-                    );
+                                })
+                            };
+                        /* let trunk_block = /* filler.block_from_structure(
+                            trunk_block,
+                            tree.pos.xy(),
+                            tree.seed,
+                            &col,
+                        ); */*/match trunk_block {
+                            StructureBlock::Filled(kind, color) => {
+                                let trunk_block = filler.block(Block::new(kind, color));
+                                draw_tree(t, leaf_block, trunk_block, wpos, painter, filler);
+                                /* filler.block(Block::new(kind, color)) */
+                            },
+                            StructureBlock::BirchWood => {
+                                let structure_pos = tree.pos.xy();
+                                let field = RandomField::new(tree.seed);
+                                let trunk_block = filler.sampling(move |pos| {
+                                    let wpos = pos + structure_pos;
+                                    if field.chance(
+                                        (wpos + Vec3::new(wpos.z, wpos.z, 0) / 2)
+                                            / Vec3::new(1 + wpos.z % 2, 1 + (wpos.z + 1) % 2, 1),
+                                        0.25,
+                                    ) && wpos.z % 2 == 0
+                                    {
+                                        Some(Block::new(BlockKind::Wood, Rgb::new(70, 35, 25)))
+                                    } else {
+                                        Some(Block::new(BlockKind::Wood, Rgb::new(220, 170, 160)))
+                                    }
+                                });
+                                draw_tree(t, leaf_block, trunk_block, wpos, painter, filler);
+                            },
+                            _ => unimplemented!("Only birch and filled trunk blocks are currently supported."),
+                        }
+                    });
                     (bounds, t.config.hanging_sprites)
                 },
             };

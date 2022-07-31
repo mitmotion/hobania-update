@@ -194,6 +194,45 @@ impl<V, S: core::ops::DerefMut<Target=Vec<V>> + VolSize<V>, M> Chunk<V, S, M> {
             });
     }
 
+    /// Iterate as fast as possible over all changed (non-default) blocks.
+    pub fn iter_changed(&self) -> impl Iterator<Item = (/* Vec3<i32> */u32, &V)> + '_
+    {
+        let vox = &self.vox;
+        self.indices
+            .iter()
+            .enumerate()
+            .flat_map(|(grp_idx, &base)| {
+                /* let grp_idx = grp_idx as i32;
+                let x = grp_idx & (Chunk::<V, S, M>::GROUP_COUNT.x as i32 - 1);
+                let y = (grp_idx >> 3) & (Chunk::<V, S, M>::GROUP_COUNT.y as i32 - 1);
+                let z = (grp_idx >> 6) & (Chunk::<V, S, M>::GROUP_COUNT.z as i32 - 1);
+                let grp_off = Vec3::new(
+                    x * Chunk::<V, S, M>::GROUP_SIZE.x as i32,
+                    y * Chunk::<V, S, M>::GROUP_SIZE.y as i32,
+                    z * Chunk::<V, S, M>::GROUP_SIZE.z as i32,
+                ); */
+                let grp_idx = grp_idx as u32;
+                let grp_off = grp_idx * Self::GROUP_VOLUME/* as usize */;
+
+                let start = usize::from(base) * Self::GROUP_VOLUME as usize;
+                let end = start + Self::GROUP_VOLUME as usize;
+                vox.get(start..end)
+                    .into_iter()
+                    .flatten()
+                    .enumerate()
+                    .map(move |(rel_idx, block)| {
+                        // Construct the relative position.
+                        /* let rel_idx = rel_idx as i32;
+                        let x = rel_idx & (Chunk::<V, S, M>::GROUP_SIZE.x as i32 - 1);
+                        let y = (rel_idx >> 2) & (Chunk::<V, S, M>::GROUP_SIZE.y as i32 - 1);
+                        let z = (rel_idx >> 4) & (Chunk::<V, S, M>::GROUP_SIZE.z as i32 - 1);
+                        let rel_off = Vec3::new(x, y, z); */
+                        let rel_off = rel_idx as u32;
+                        (grp_off | rel_off, block)
+                    })
+            })
+    }
+
     /// Compress this subchunk by frequency.
     pub fn defragment(&mut self)
     where

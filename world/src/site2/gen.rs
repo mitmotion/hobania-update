@@ -660,6 +660,7 @@ impl<'a, 'b, F: Filler> FillFn<'a, 'b, F> {
         })
     }
 
+    #[inline(always)]
     pub fn block_from_structure(&self, sb: StructureBlock, structure_pos: Vec2<i32>, seed: u32, col_sample: &'b ColumnSample) -> impl Fill + Copy + 'b
     {
         /* let col_sample = /*if let Some(col_sample) = */self.canvas_info.col(self.canvas_info.wpos)/* {
@@ -2856,27 +2857,83 @@ impl Painter<'_> {
                     // TODO: Optimize further?
                     let aabb = Self::get_bounds(cache, tree, prim);
                     /*if !(aabb.size().w > 8 || aabb.size().h > 8 || aabb.size().d > 16) */{
-
+                    let mut do_segment = || {
                         let distance = segment.end - segment.start;
                         let distance_proj = distance / distance.magnitude_squared();
                         let segment_start = segment.start - 0.5;
-                        return aabb_iter(
-                            aabb.as_(),
-                            mat,
-                            mask,
-                            // |_| true,
-                            |pos| {
-                                let pos = pos.as_::<f32>();
-                                let length = pos - segment_start;
-                                let t = length.dot(distance_proj).clamped(0.0, 1.0);
-                                let mut diff = distance * t - length;
-                                diff.z *= z_scale;
-                                let radius = Lerp::lerp_unclamped(r0, r1, t);
-                                diff.magnitude_squared() < radius * radius
-                            },
-                            hit,
-                        );
-                        return
+                        if r0 == r1 {
+                            let radius_2 = r0 * r0;
+                            if z_scale == 1.0 {
+                                return aabb_iter(
+                                    aabb.as_(),
+                                    mat,
+                                    mask,
+                                    // |_| true,
+                                    |pos| {
+                                        let pos = pos.as_::<f32>();
+                                        let length = pos - segment_start;
+                                        let t = length.dot(distance_proj).clamped(0.0, 1.0);
+                                        let diff = distance * t - length;
+                                        diff.magnitude_squared() < radius_2
+                                    },
+                                    hit,
+                                );
+                            } else {
+                                return aabb_iter(
+                                    aabb.as_(),
+                                    mat,
+                                    mask,
+                                    // |_| true,
+                                    |pos| {
+                                        let pos = pos.as_::<f32>();
+                                        let length = pos - segment_start;
+                                        let t = length.dot(distance_proj).clamped(0.0, 1.0);
+                                        let mut diff = distance * t - length;
+                                        diff.z *= z_scale;
+                                        diff.magnitude_squared() < radius_2
+                                    },
+                                    hit,
+                                );
+                            }
+                        } else if z_scale == 1.0 {
+                            return aabb_iter(
+                                aabb.as_(),
+                                mat,
+                                mask,
+                                // |_| true,
+                                |pos| {
+                                    let pos = pos.as_::<f32>();
+                                    let length = pos - segment_start;
+                                    let t = length.dot(distance_proj).clamped(0.0, 1.0);
+                                    let diff = distance * t - length;
+                                    let radius = Lerp::lerp_unclamped(r0, r1, t);
+                                    diff.magnitude_squared() < radius * radius
+                                },
+                                hit,
+                            );
+                        } else {
+                            return aabb_iter(
+                                aabb.as_(),
+                                mat,
+                                mask,
+                                // |_| true,
+                                |pos| {
+                                    let pos = pos.as_::<f32>();
+                                    let length = pos - segment_start;
+                                    let t = length.dot(distance_proj).clamped(0.0, 1.0);
+                                    let mut diff = distance * t - length;
+                                    diff.z *= z_scale;
+                                    let radius = Lerp::lerp_unclamped(r0, r1, t);
+                                    diff.magnitude_squared() < radius * radius
+                                },
+                                hit,
+                            );
+                        }
+                    };
+                    // NOTE: This hurts gnarling fortresses by about 1.5% but helps cliff towns by
+                    // about 3%, compared to no closure.  We deem the latter more important.
+                    do_segment();
+                    return;
                     }
                     // NOTE: vol(frustum) = 1/3 h(A(r₀) + A(r₁) + √(A(r₀)A(r₁)))
                     // = 1/3 h (r₀² + r₁² + √(r₀²r₁²))

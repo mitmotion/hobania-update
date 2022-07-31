@@ -32,7 +32,7 @@ pub struct TerrainChunkSize;
 /// Base two logarithm of the number of blocks along either horizontal axis of
 /// a chunk.
 ///
-/// NOTE: (1 << CHUNK_SIZE_LG) is guaranteed to fit in a u32.
+/// NOTE: (1 << TERRAIN_CHUNK_BLOCKS_LG) is guaranteed to fit in a u32.
 ///
 /// NOTE: A lot of code assumes that the two dimensions are equal, so we make it
 /// explicit here.

@@ -181,6 +181,7 @@ impl<'a> ZCache<'a> {
     }
 }
 
+#[inline(always)]
 pub fn block_from_structure(
     index: IndexRef,
     sblock: StructureBlock,

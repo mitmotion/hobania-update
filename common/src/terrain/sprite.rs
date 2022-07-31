@@ -454,6 +454,47 @@ impl SpriteKind {
     }
 
     #[inline]
+    pub fn get_glow(&self) -> Option<u8> {
+        match self {
+            SpriteKind::StreetLamp | SpriteKind::StreetLampTall => Some(24),
+            SpriteKind::Ember => Some(20),
+            SpriteKind::WallLamp
+            | SpriteKind::WallLampSmall
+            | SpriteKind::WallSconce
+            | SpriteKind::FireBowlGround
+            | SpriteKind::ChristmasOrnament
+            | SpriteKind::CliffDecorBlock
+            | SpriteKind::Orb => Some(16),
+            SpriteKind::Velorite
+            | SpriteKind::VeloriteFrag
+            | SpriteKind::CavernGrassBlueShort
+            | SpriteKind::CavernGrassBlueMedium
+            | SpriteKind::CavernGrassBlueLong
+            | SpriteKind::CavernLillypadBlue
+            | SpriteKind::CavernMycelBlue
+            | SpriteKind::CeilingMushroom => Some(6),
+            SpriteKind::CaveMushroom
+            | SpriteKind::CookingPot
+            | SpriteKind::CrystalHigh
+            | SpriteKind::CrystalLow => Some(10),
+            SpriteKind::Amethyst
+            | SpriteKind::Ruby
+            | SpriteKind::Sapphire
+            | SpriteKind::Diamond
+            | SpriteKind::Emerald
+            | SpriteKind::Topaz
+            | SpriteKind::AmethystSmall
+            | SpriteKind::TopazSmall
+            | SpriteKind::DiamondSmall
+            | SpriteKind::RubySmall
+            | SpriteKind::EmeraldSmall
+            | SpriteKind::SapphireSmall => Some(3),
+            SpriteKind::Lantern => Some(24),
+            _ => None,
+        }
+    }
+
+    #[inline]
     pub fn has_ori(&self) -> bool {
         matches!(
             self,

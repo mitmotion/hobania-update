@@ -8,6 +8,7 @@
     bool_to_option,
     drain_filter,
     once_cell,
+    stmt_expr_attributes,
     trait_alias,
     option_get_or_insert_default,
     map_try_insert,

@@ -601,14 +601,23 @@ fn greedy_mesh_cross_section<M: PartialEq>(
     // mask represents which faces are either set while the other is unset, or unset
     // while the other is set.
     let mut mask = (0..dims.y * dims.x).map(|_| None).collect::<Vec<_>>();
+    let mut mask = &mut mask[0..dims.y * dims.x];
     (0..dims.z + 1).for_each(|d| {
         // Compute mask
-        mask.iter_mut().enumerate().for_each(|(posi, mask)| {
+        let mut posi = 0;
+        (0..dims.y).for_each(|j| {
+            (0..dims.x).for_each(|i| {
+                // NOTE: Safe because dims.z actually fits in a u16.
+                mask[posi] = draw_face(Vec3::new(i as i32, j as i32, d as i32));
+                posi += 1;
+            });
+        });
+        /* mask.iter_mut().enumerate().for_each(|(posi, mask)| {
             let i = posi % dims.x;
             let j = posi / dims.x;
             // NOTE: Safe because dims.z actually fits in a u16.
             *mask = draw_face(Vec3::new(i as i32, j as i32, d as i32));
-        });
+        }); */
 
         (0..dims.y).for_each(|j| {
             let mut i = 0;
