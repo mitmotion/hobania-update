@@ -134,6 +134,12 @@ impl Message {
         Ok(uncompressed_data)
     }
 
+    /// Get the size of the message in bytes.
+    #[inline]
+    pub fn size(&self) -> usize {
+        self.data.len()
+    }
+
     #[cfg(debug_assertions)]
     pub(crate) fn verify(&self, params: StreamParams) {
         #[cfg(not(feature = "compression"))]

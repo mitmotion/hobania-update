@@ -2431,7 +2431,7 @@ impl Client {
                 cnt += 1;
                 #[cfg(feature = "tracy")]
                 {
-                    ingame_cnt += 1;
+                    ingame_cnt += msg.size();
                 }
                 self.handle_server_in_game_msg(frontend_events, bincode::deserialize(&msg.decompress()?)?)?;
             }
@@ -2440,6 +2440,10 @@ impl Client {
             let mut terrain_messages = Vec::new(); */
             while let Some(msg) = self.terrain_stream.try_recv_raw()? {
                 cnt += 1;
+                #[cfg(feature = "tracy")]
+                {
+                    terrain_cnt += msg.size();
+                }
                 self.terrain_tx.send(msg);
             }
             /* if !terrain_messages.is_empty() {
@@ -2454,12 +2458,6 @@ impl Client {
 
             while let Ok(msg) = self.terrain_rx.try_recv() {
                 let msg = msg?;
-                #[cfg(feature = "tracy")]
-                {
-                    if let TerrainUpdate::Chunk { chunk, .. } = &msg {
-                        terrain_cnt += chunk.as_ref().map(|x| x.approx_len()).unwrap_or(0);
-                    }
-                }
                 self.handle_terrain_msg(msg);
             }
 
