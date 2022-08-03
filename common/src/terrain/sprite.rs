@@ -454,7 +454,7 @@ impl SpriteKind {
     }
 
     #[inline]
-    pub fn get_glow(&self) -> Option<u8> {
+    pub const fn get_glow(&self) -> Option<u8> {
         match self {
             SpriteKind::StreetLamp | SpriteKind::StreetLampTall => Some(24),
             SpriteKind::Ember => Some(20),

@@ -10,6 +10,7 @@
     once_cell,
     stmt_expr_attributes,
     trait_alias,
+    type_alias_impl_trait,
     option_get_or_insert_default,
     map_try_insert,
     slice_as_chunks,

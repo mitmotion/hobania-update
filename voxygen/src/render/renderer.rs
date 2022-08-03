@@ -1378,15 +1378,20 @@ impl Renderer {
     }
 
     /// Create a new raw texture.
-    pub fn create_texture_raw(
+    ///
+    /// NOTE: This is done lazily--the returned function must be invoked to actually create the
+    /// texture.  This allows creating the texture on another thread.
+    pub fn create_texture_raw<'a>(
         &mut self,
-        texture_info: &wgpu::TextureDescriptor,
-        view_info: &wgpu::TextureViewDescriptor,
-        sampler_info: &wgpu::SamplerDescriptor,
-    ) -> Texture {
-        let texture = Texture::new_raw(&self.device, texture_info, view_info, sampler_info);
-        texture.clear(&self.queue); // Needs to be fully initialized for partial writes to work on Dx12 AMD
-        texture
+        texture_info: wgpu::TextureDescriptor<'a>,
+        view_info: wgpu::TextureViewDescriptor<'a>,
+        sampler_info: wgpu::SamplerDescriptor<'a>,
+    ) -> impl FnOnce() -> Texture + Send + Sync + 'a {
+        let device = Arc::clone(&self.device);
+        move || {
+            let texture = Texture::new_raw(&device, &texture_info, &view_info, &sampler_info);
+            texture
+        }
     }
 
     /// Create a new texture from the provided image.
@@ -1427,6 +1432,21 @@ impl Renderer {
         data: &[[u8; 4]],
     ) {
         texture.update(&self.queue, offset, size, bytemuck::cast_slice(data))
+    }
+
+    /// Clears the texture data to 0.
+    pub fn clear_texture(
+        &mut self,
+        texture: &Texture, /* <T> */
+    ) {
+        texture.clear(&self.queue)
+    }
+
+    /// Replaces the destination texture with the contents of the source texture.
+    ///
+    /// The source size should at least fit within the destination texture's size.
+    pub fn replace_texture(&mut self, dest: &Texture, source: &Texture) {
+        dest.replace(&self.device, &self.queue, source);
     }
 
     /// Queue to obtain a screenshot on the next frame render

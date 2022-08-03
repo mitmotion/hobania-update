@@ -295,7 +295,7 @@ impl Scene {
 
         let globals_bind_group = renderer.bind_globals(&data, lod.get_data());
 
-        let terrain = Terrain::new(renderer, &data, lod.get_data(), sprite_render_context);
+        let terrain = Terrain::new(client, renderer, &data, lod.get_data(), sprite_render_context);
 
         Self {
             data,
