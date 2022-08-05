@@ -17,9 +17,32 @@ impl<T: Copy + Pod> Consts<T> {
         }
     }
 
+    pub fn new_with_data(device: &wgpu::Device, data: &[T]) -> Self {
+        Self {
+            // TODO: examine if all our consts need to be updatable
+            buf: DynamicBuffer::new_with_data(device, wgpu::BufferUsage::UNIFORM, data),
+        }
+    }
+
+    /// Create a new `Const<T>` that is mapped at creation.
+    ///
+    /// Warning: buffer must be unmapped before attempting to use this buffer on the GPU!
+    pub fn new_mapped(device: &wgpu::Device, len: usize) -> Self {
+        Self {
+            // TODO: examine if all our consts need to be updatable
+            buf: DynamicBuffer::new_mapped(device, len, wgpu::BufferUsage::UNIFORM),
+        }
+    }
+
     /// Update the GPU-side value represented by this constant handle.
     pub fn update(&mut self, queue: &wgpu::Queue, vals: &[T], offset: usize) {
         self.buf.update(queue, vals, offset)
+    }
+
+    /// Update the GPU-side value represented by this constant handle, if it was previously memory
+    /// mapped, and then immediately unmaps it.
+    pub fn update_mapped(&mut self, queue: &wgpu::Queue, vals: &[T], offset: usize) {
+        self.buf.update_mapped(queue, vals, offset)
     }
 
     pub fn buf(&self) -> &wgpu::Buffer { &self.buf.buf }

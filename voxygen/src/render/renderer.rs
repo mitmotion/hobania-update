@@ -34,6 +34,7 @@ use super::{
 use common::assets::{self, AssetExt, AssetHandle, ReloadWatcher};
 use common_base::span;
 use core::{sync::atomic::{AtomicUsize, Ordering}, convert::TryFrom};
+use crossbeam_channel as channel;
 #[cfg(feature = "egui-ui")]
 use egui_wgpu_backend::wgpu::TextureFormat;
 use std::sync::Arc;
@@ -151,6 +152,9 @@ pub struct Renderer {
     // Some if there is a pending need to recreate the pipelines (e.g. RenderMode change or shader
     // hotloading)
     recreation_pending: Option<PipelineModes>,
+    // Handle to wgpu maintain thread (which is mostly responsible for performing garbage
+    // collection).
+    maintain_tx: channel::Sender<()>,
 
     layouts: Layouts,
     // Note: we keep these here since their bind groups need to be updated if we resize the
@@ -471,9 +475,9 @@ impl Renderer {
         )?;
 
         let clouds_locals =
-            Self::create_consts_inner(&device, &queue, &[clouds::Locals::default()]);
+            Self::create_consts_inner(&device, &[clouds::Locals::default()]);
         let postprocess_locals =
-            Self::create_consts_inner(&device, &queue, &[postprocess::Locals::default()]);
+            Self::create_consts_inner(&device, &[postprocess::Locals::default()]);
 
         let locals = Locals::new(
             &device,
@@ -484,7 +488,7 @@ impl Renderer {
             &views.tgt_depth,
             views.bloom_tgts.as_ref().map(|tgts| locals::BloomParams {
                 locals: bloom_sizes.map(|size| {
-                    Self::create_consts_inner(&device, &queue, &[bloom::Locals::new(size)])
+                    Self::create_consts_inner(&device, &[bloom::Locals::new(size)])
                 }),
                 src_views: [&views.tgt_color_pp, &tgts[1], &tgts[2], &tgts[3], &tgts[4]],
                 final_tgt_view: &tgts[0],
@@ -503,6 +507,19 @@ impl Renderer {
         profiler.enable_timer = other_modes.profiler_enabled;
         profiler.enable_debug_marker = other_modes.profiler_enabled;
 
+        // If the maintain channel is still busy, there's no actual reason to send the maintain
+        // request, since we'll do it next frame anyway and it will cover any work missed during
+        // the previous frame.
+        let (maintain_tx, maintain_rx) = channel::bounded(0);
+
+        let device_ = Arc::clone(&device);
+        std::thread::spawn(move || {
+            // Maintain each time we are requested to do so, until the renderer dies.
+            while let Ok(()) = maintain_rx.recv() {
+                device_.poll(wgpu::Maintain::Poll);
+            }
+        });
+
         #[cfg(feature = "egui-ui")]
         let egui_renderpass =
             egui_wgpu_backend::RenderPass::new(&*device, TextureFormat::Bgra8UnormSrgb, 1);
@@ -516,6 +533,7 @@ impl Renderer {
 
             state,
             recreation_pending: None,
+            maintain_tx,
 
             layouts,
             locals,
@@ -672,7 +690,7 @@ impl Renderer {
                 .as_ref()
                 .map(|tgts| locals::BloomParams {
                     locals: bloom_sizes.map(|size| {
-                        Self::create_consts_inner(&self.device, &self.queue, &[bloom::Locals::new(
+                        Self::create_consts_inner(&self.device, &[bloom::Locals::new(
                             size,
                         )])
                     }),
@@ -787,7 +805,15 @@ impl Renderer {
             self.queue.submit(std::iter::empty());
         }
 
-        self.device.poll(wgpu::Maintain::Poll)
+        // If the send fails, we can (generally) assume it's because the channel is out of
+        // capacity.  If not, it's because of an internal wgpu panic which we don't care to
+        // handle anyway (and we're currently okay with leaking wgpu state if the other thread
+        // panicked and we don't have panic=abort on, since panic=abort is on in release).
+        //
+        // Since if the channel is out of capacity, it means a maintain is already being processed
+        // (in which case we can just catch up next frame), this is a long-winded way of saying we
+        // can ignore the result of try_send.
+        let _ = self.maintain_tx.try_send(());
     }
 
     /// Create render target views
@@ -1229,22 +1255,24 @@ impl Renderer {
 
     /// Create a new set of constants with the provided values.
     pub fn create_consts<T: Copy + bytemuck::Pod>(&mut self, vals: &[T]) -> Consts<T> {
-        Self::create_consts_inner(&self.device, &self.queue, vals)
+        Self::create_consts_inner(&self.device, vals)
     }
 
     pub fn create_consts_inner<T: Copy + bytemuck::Pod>(
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
         vals: &[T],
     ) -> Consts<T> {
-        let mut consts = Consts::new(device, vals.len());
-        consts.update(queue, vals, 0);
-        consts
+        Consts::new_with_data(device, vals)
     }
 
     /// Update a set of constants with the provided values.
     pub fn update_consts<T: Copy + bytemuck::Pod>(&self, consts: &mut Consts<T>, vals: &[T]) {
         consts.update(&self.queue, vals, 0)
+    }
+
+    /// Update a set of memory mapped constants with the provided values.
+    pub fn update_mapped<T: Copy + bytemuck::Pod>(&self, consts: &mut Consts<T>, vals: &[T]) {
+        consts.update_mapped(&self.queue, vals, 0)
     }
 
     pub fn update_clouds_locals(&mut self, new_val: clouds::Locals) {
@@ -1298,7 +1326,10 @@ impl Renderer {
                 }
 
                 // NOTE: This operation is monotonic, so Relaxed is sufficient.
-                quad_index_buffer_u32_len.fetch_update(
+                //
+                // We don't care whether the result succeded or failed, since either way we know
+                // we're at the maximum value now.
+                let _ = quad_index_buffer_u32_len.fetch_update(
                     Ordering::Relaxed,
                     Ordering::Relaxed,
                     |old_len| (old_len < quad_index_length).then_some(vert_length),

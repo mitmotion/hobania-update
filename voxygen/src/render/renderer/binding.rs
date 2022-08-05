@@ -1,5 +1,6 @@
 use crate::render::pipelines::rain_occlusion;
 
+use std::sync::Arc;
 use super::{
     super::{
         pipelines::{
@@ -8,6 +9,7 @@ use super::{
         },
         texture::Texture,
     },
+    Consts,
     Renderer,
 };
 
@@ -63,12 +65,26 @@ impl Renderer {
             .bind_locals(&self.device, locals, bone_data)
     }
 
+    /* /// Create a new set of constants with the provided values, lazily (so this can be instantiated
+    /// from another thread).
+    pub fn create_consts_lazy<T: Copy + bytemuck::Pod>(&mut self) ->
+        impl for<'a> Fn(&'a [T]) -> Consts<T> + Send + Sync
+    {
+        let device = Arc::clone(&self.device);
+        move |vals| Self::create_consts_inner(&device, vals)
+    } */
+
+    /// NOTE: Locals are mapped at creation, so you still have to memory map and bind them in order
+    /// before use.
     pub fn create_terrain_bound_locals(
         &mut self,
-        locals: &[terrain::Locals],
-    ) -> terrain::BoundLocals {
-        let locals = self.create_consts(locals);
-        self.layouts.terrain.bind_locals(&self.device, locals)
+    ) -> /*for<'a> Fn(&'a [terrain::Locals]) -> terrain::BoundLocals + Send + Sync*/impl Fn() -> terrain::BoundLocals + Send + Sync {
+        let device = Arc::clone(&self.device);
+        let immutable = Arc::clone(&self.layouts.immutable);
+        move || {
+            let locals = Consts::new_mapped(&device, 1);
+            immutable.terrain.bind_locals(&device, locals)
+        }
     }
 
     pub fn create_shadow_bound_locals(&mut self, locals: &[shadow::Locals]) -> shadow::BoundLocals {

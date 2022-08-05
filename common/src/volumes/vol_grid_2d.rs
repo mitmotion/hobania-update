@@ -163,6 +163,11 @@ impl<V: RectRasterableVol> VolGrid2d<V> {
         self.chunks.get(&key).map(|arc_chunk| arc_chunk.as_ref())
     }
 
+    #[inline(always)]
+    pub fn contains_key(&self, key: Vec2<i32>) -> bool {
+        self.chunks.contains_key(&key)
+    }
+
     pub fn get_key_arc(&self, key: Vec2<i32>) -> Option<&Arc<V>> { self.chunks.get(&key) }
 
     pub fn clear(&mut self) { self.chunks.clear(); }
