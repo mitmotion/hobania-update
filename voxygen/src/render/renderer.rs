@@ -33,7 +33,7 @@ use super::{
 };
 use common::assets::{self, AssetExt, AssetHandle, ReloadWatcher};
 use common_base::span;
-use core::convert::TryFrom;
+use core::{sync::atomic::{AtomicUsize, Ordering}, convert::TryFrom};
 #[cfg(feature = "egui-ui")]
 use egui_wgpu_backend::wgpu::TextureFormat;
 use std::sync::Arc;
@@ -46,8 +46,8 @@ use vek::*;
 // TODO: revert to u16
 pub type ColLightInfo = (Vec<[u8; 4]>, Vec2<u16>);
 
-const QUAD_INDEX_BUFFER_U16_START_VERT_LEN: u16 = 3000;
-const QUAD_INDEX_BUFFER_U32_START_VERT_LEN: u32 = 3000;
+const QUAD_INDEX_BUFFER_U16_VERT_LEN: u16 = u16::MAX;
+const QUAD_INDEX_BUFFER_U32_START_VERT_LEN: u32 = u16::MAX as u32;
 
 /// A type that stores all the layouts associated with this renderer that never
 /// change when the RenderMode is modified.
@@ -160,6 +160,7 @@ pub struct Renderer {
     noise_tex: Texture,
 
     quad_index_buffer_u16: Buffer<u16>,
+    quad_index_buffer_u32_len: Arc<AtomicUsize>,
     quad_index_buffer_u32: Buffer<u32>,
 
     shaders: AssetHandle<Shaders>,
@@ -494,7 +495,7 @@ impl Renderer {
         );
 
         let quad_index_buffer_u16 =
-            create_quad_index_buffer_u16(&device, QUAD_INDEX_BUFFER_U16_START_VERT_LEN as usize);
+            create_quad_index_buffer_u16(&device, QUAD_INDEX_BUFFER_U16_VERT_LEN.into());
         let quad_index_buffer_u32 =
             create_quad_index_buffer_u32(&device, QUAD_INDEX_BUFFER_U32_START_VERT_LEN as usize);
         let mut profiler = wgpu_profiler::GpuProfiler::new(4, queue.get_timestamp_period());
@@ -526,6 +527,7 @@ impl Renderer {
 
             quad_index_buffer_u16,
             quad_index_buffer_u32,
+            quad_index_buffer_u32_len: Arc::new(AtomicUsize::new(QUAD_INDEX_BUFFER_U32_START_VERT_LEN as usize)),
 
             shaders,
             shaders_watcher,
@@ -1258,15 +1260,22 @@ impl Renderer {
         &mut self,
         vals: &[T],
     ) -> Result<Instances<T>, RenderError> {
-        let mut instances = Instances::new(&self.device, vals.len());
-        instances.update(&self.queue, vals, 0);
-        Ok(instances)
+        Ok(Instances::new_with_data(&self.device, vals))
     }
 
-    /// Ensure that the quad index buffer is large enough for a quad vertex
-    /// buffer with this many vertices
-    pub(super) fn ensure_sufficient_index_length<V: Vertex>(
+    /// Create a new set of instances with the provided values lazily (for use off the main
+    /// thread).
+    pub fn create_instances_lazy<T: Copy + bytemuck::Pod>(
         &mut self,
+    ) -> impl for<'a> Fn(&'a [T]) -> Instances<T> + Send + Sync {
+        let device = Arc::clone(&self.device);
+        move |vals| Instances::new_with_data(&device, &vals)
+    }
+
+    /// Update the expected index length to be large enough for a quad vertex bfufer with this many
+    /// vertices.
+    fn update_index_length<V: Vertex>(
+        quad_index_buffer_u32_len: &AtomicUsize,
         // Length of the vert buffer with 4 verts per quad
         vert_length: usize,
     ) {
@@ -1274,55 +1283,78 @@ impl Renderer {
 
         match V::QUADS_INDEX {
             Some(wgpu::IndexFormat::Uint16) => {
-                // Make sure the global quad index buffer is large enough
-                if self.quad_index_buffer_u16.len() < quad_index_length {
-                    // Make sure we aren't over the max
-                    if vert_length > u16::MAX as usize {
-                        panic!(
-                            "Vertex type: {} needs to use a larger index type, length: {}",
-                            core::any::type_name::<V>(),
-                            vert_length
-                        );
-                    }
-                    self.quad_index_buffer_u16 =
-                        create_quad_index_buffer_u16(&self.device, vert_length);
-                }
+                // Index length is always sufficient.
             },
             Some(wgpu::IndexFormat::Uint32) => {
                 // Make sure the global quad index buffer is large enough
+                let vert_length = quad_index_length.next_power_of_two();
+                if u32::try_from(vert_length).ok() <= Some(0) {
+                    panic!(
+                        "More than u32::MAX({}) verts({}) for type({}) using an index buffer!",
+                        u32::MAX,
+                        vert_length,
+                        core::any::type_name::<V>()
+                    );
+                }
+
+                // NOTE: This operation is monotonic, so Relaxed is sufficient.
+                quad_index_buffer_u32_len.fetch_update(
+                    Ordering::Relaxed,
+                    Ordering::Relaxed,
+                    |old_len| (old_len < quad_index_length).then_some(vert_length),
+                );
+                /* let old_len = quad_index_buffer_u32_len.load();
                 if self.quad_index_buffer_u32.len() < quad_index_length {
                     // Make sure we aren't over the max
-                    if vert_length > u32::MAX as usize {
-                        panic!(
-                            "More than u32::MAX({}) verts({}) for type({}) using an index buffer!",
-                            u32::MAX,
-                            vert_length,
-                            core::any::type_name::<V>()
-                        );
-                    }
                     self.quad_index_buffer_u32 =
                         create_quad_index_buffer_u32(&self.device, vert_length);
-                }
+                } */
             },
             None => {},
         }
     }
 
+    /// Ensure that the quad index buffer is large enough for all quad vertices that we might
+    /// render.  Should be called before using the index buffers.  Only applies to rendering vertex
+    /// buffers whose creation synchronizes with the call to this function in some other way.
+    pub(super) fn ensure_sufficient_index_length(&mut self) {
+        // Make sure the global quad index buffer is large enough
+        //
+        // NOTE: Relaxed ordering is fine due to monotonicity, provided that we synchronize any
+        // rendered buffers with this function call in some other way.
+        let vert_length = self.quad_index_buffer_u32_len.load(Ordering::Relaxed);
+        if self.quad_index_buffer_u32.len() < vert_length {
+            self.quad_index_buffer_u32 =
+                create_quad_index_buffer_u32(&self.device, vert_length);
+        }
+    }
+
     pub fn create_sprite_verts(&mut self, mesh: Mesh<sprite::Vertex>) -> sprite::SpriteVerts {
-        self.ensure_sufficient_index_length::<sprite::Vertex>(sprite::VERT_PAGE_SIZE as usize);
+        Self::update_index_length::<sprite::Vertex>(&self.quad_index_buffer_u32_len, sprite::VERT_PAGE_SIZE as usize);
         sprite::create_verts_buffer(&self.device, mesh)
     }
 
     /// Create a new model from the provided mesh.
     /// If the provided mesh is empty this returns None
     pub fn create_model<V: Vertex>(&mut self, mesh: &Mesh<V>) -> Option<Model<V>> {
-        self.ensure_sufficient_index_length::<V>(mesh.vertices().len());
+        Self::update_index_length::<V>(&self.quad_index_buffer_u32_len, mesh.vertices().len());
         Model::new(&self.device, mesh)
+    }
+
+    /// Create a new model from the provided mesh, lazily (for use off the main thread).
+    /// If the provided mesh is empty this returns None
+    pub fn create_model_lazy<V: Vertex>(&mut self) -> impl for<'a> Fn(&'a Mesh<V>) -> Option<Model<V>> + Send + Sync {
+        let device = Arc::clone(&self.device);
+        let quad_index_buffer_u32_len = Arc::clone(&self.quad_index_buffer_u32_len);
+        move |mesh| {
+            Self::update_index_length::<V>(&quad_index_buffer_u32_len, mesh.vertices().len());
+            Model::new(&device, mesh)
+        }
     }
 
     /// Create a new dynamic model with the specified size.
     pub fn create_dynamic_model<V: Vertex>(&mut self, size: usize) -> DynamicModel<V> {
-        self.ensure_sufficient_index_length::<V>(size);
+        Self::update_index_length::<V>(&self.quad_index_buffer_u32_len, size);
         DynamicModel::new(&self.device, size)
     }
 

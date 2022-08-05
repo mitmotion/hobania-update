@@ -115,8 +115,8 @@ struct ChunkMeshState {
 pub struct MeshWorkerResponseMesh {
     z_bounds: (f32, f32),
     shadow_z_bounds: (f32, f32),
-    opaque_mesh: Mesh<TerrainVertex>,
-    fluid_mesh: Mesh<FluidVertex>,
+    opaque_model: Option<Model<TerrainVertex>>,
+    fluid_model: Option<Model<FluidVertex>>,
     col_lights_info: ColLightInfo,
     light_map: LightMapFn,
     glow_map: LightMapFn,
@@ -126,7 +126,7 @@ pub struct MeshWorkerResponseMesh {
 /// mesh of a chunk.
 struct MeshWorkerResponse {
     pos: Vec2<i32>,
-    sprite_instances: [Vec<SpriteInstance>; SPRITE_LOD_LEVELS],
+    sprite_instances: [Instances<SpriteInstance>; SPRITE_LOD_LEVELS],
     /// If None, this update was requested without meshing.
     mesh: Option<MeshWorkerResponseMesh>,
     started_tick: u64,
@@ -238,6 +238,9 @@ fn mesh_worker<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + '
     range: Aabb<i32>,
     sprite_data: &HashMap<(SpriteKind, usize), [SpriteData; SPRITE_LOD_LEVELS]>,
     sprite_config: &SpriteSpec,
+    create_opaque: impl for<'a> Fn(&'a Mesh<TerrainVertex>) -> Option<Model<TerrainVertex>> + Send + Sync,
+    create_fluid: impl for<'a> Fn(&'a Mesh<FluidVertex>) -> Option<Model<FluidVertex>> + Send + Sync,
+    create_instances: impl for<'a> Fn(&'a [SpriteInstance]) -> Instances<SpriteInstance> + Send + Sync,
 ) -> MeshWorkerResponse {
     span!(_guard, "mesh_worker");
     let (blocks_of_interest, sprite_kinds) = BlocksOfInterest::from_chunk(&chunk)/*default()*/;
@@ -271,8 +274,8 @@ fn mesh_worker<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + '
             // we can ignore such cases for the purposes of determining a shadow bounding box (but
             // not visibility, unfortunately).
             shadow_z_bounds: ((chunk.get_min_z() as f32).max(bounds.min.z), (chunk.get_max_z() as f32).min(bounds.max.z)),
-            opaque_mesh,
-            fluid_mesh,
+            opaque_model: create_opaque(&opaque_mesh),
+            fluid_model: create_fluid(&fluid_mesh),
             col_lights_info,
             light_map,
             glow_map,
@@ -355,7 +358,7 @@ fn mesh_worker<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + '
             } */
             }
 
-            instances
+            instances.map(|instances| create_instances(&instances))
         },
         mesh,
         blocks_of_interest,
@@ -1201,6 +1204,9 @@ impl<V: RectRasterableVol> Terrain<V> {
             let sprite_data = Arc::clone(&self.sprite_data);
             let sprite_config = Arc::clone(&self.sprite_config);
             let cnt = Arc::clone(&self.mesh_todos_active);
+            let create_opaque = renderer.create_model_lazy();
+            let create_fluid = renderer.create_model_lazy();
+            let create_instances = renderer.create_instances_lazy();
             cnt.fetch_add(1, Ordering::Relaxed);
             scene_data
                 .state
@@ -1218,6 +1224,9 @@ impl<V: RectRasterableVol> Terrain<V> {
                         aabb,
                         &sprite_data,
                         &sprite_config,
+                        create_opaque,
+                        create_fluid,
+                        create_instances,
                     ));
                     cnt.fetch_sub(1, Ordering::Relaxed);
                 });
@@ -1244,11 +1253,7 @@ impl<V: RectRasterableVol> Terrain<V> {
                 Some(todo) if response.started_tick <= todo.started_tick => {
                     let started_tick = todo.started_tick;
 
-                    let sprite_instances = response.sprite_instances.map(|instances| {
-                        renderer
-                            .create_instances(&instances)
-                            .expect("Failed to upload chunk sprite instances to the GPU!")
-                    });
+                    let sprite_instances = response.sprite_instances;
 
                     if let Some(mesh) = response.mesh {
                         // Full update, insert the whole chunk.
@@ -1314,8 +1319,8 @@ impl<V: RectRasterableVol> Terrain<V> {
 
                         self.insert_chunk(response.pos, TerrainChunkData {
                             load_time,
-                            opaque_model: renderer.create_model(&mesh.opaque_mesh),
-                            fluid_model: renderer.create_model(&mesh.fluid_mesh),
+                            opaque_model: mesh.opaque_model,
+                            fluid_model: mesh.fluid_model,
                             col_lights_alloc: Some(allocation.id),
                             col_lights: Arc::clone(&self.col_lights),
                             light_map: mesh.light_map,

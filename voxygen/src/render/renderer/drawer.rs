@@ -87,6 +87,8 @@ impl<'frame> Drawer<'frame> {
         swap_tex: wgpu::SwapChainTexture,
         globals: &'frame GlobalsBindGroup,
     ) -> Self {
+        renderer.ensure_sufficient_index_length();
+
         let taking_screenshot = renderer.take_screenshot.take().map(|screenshot_fn| {
             super::screenshot::TakeScreenshot::new(
                 &renderer.device,

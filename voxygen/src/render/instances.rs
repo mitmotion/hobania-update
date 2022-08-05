@@ -15,6 +15,14 @@ impl<T: Copy + Pod> Instances<T> {
         }
     }
 
+    pub fn new_with_data(device: &wgpu::Device, data: &[T]) -> Self {
+        Self {
+            // TODO: examine if we have Instances that are not updated (e.g. sprites) and if there
+            // would be any gains from separating those out
+            buf: DynamicBuffer::new_with_data(device, wgpu::BufferUsage::VERTEX, data),
+        }
+    }
+
     // TODO: count vs len naming scheme??
     pub fn count(&self) -> usize { self.buf.len() }
 
