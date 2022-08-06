@@ -426,7 +426,7 @@ fn write_column<R: Rng>(
     wpos2d: Vec2<i32>,
     z_range: Range<i32>,
     tunnel: Tunnel,
-    mushroom_cache: &mut SmallCache<Option<Mushroom>>,
+    mushroom_cache: &mut SmallCache<Vec3<i32>, Option<Mushroom>>,
     rng: &mut R,
 ) {
     let info = canvas.info();
@@ -494,7 +494,7 @@ fn write_column<R: Rng>(
     let mut get_mushroom = |wpos: Vec3<i32>, dynamic_rng: &mut R| {
         for (wpos2d, seed) in StructureGen2d::new(34537, 24, 8).get(wpos.xy()) {
             let mushroom = if let Some(mushroom) = mushroom_cache
-                .get(wpos2d, |_| {
+                .get(wpos2d.with_z(tunnel.a.depth), |_| {
                     let mut rng = RandomPerm::new(seed);
                     let (z_range, radius) =
                         tunnel.z_range_at(wpos2d.map(|e| e as f64 + 0.5), info)?;
