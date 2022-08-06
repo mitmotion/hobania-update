@@ -10,7 +10,7 @@ use common::{
     trade::{SiteId, SitePrices},
 };
 use core::ops::Deref;
-use noise::{Fbm, Seedable, SuperSimplex};
+use noise::{Fbm, Seedable, SuperSimplex, MultiFractal};
 use std::sync::Arc;
 
 const WORLD_COLORS_MANIFEST: &str = "world.style.colors";
@@ -145,7 +145,9 @@ impl Noise {
         Self {
             cave_nz: SuperSimplex::new().set_seed(seed + 0),
             scatter_nz: /*SuperSimplex::new().set_seed(seed + 1)*/FastNoise2d::new(seed + 1),
-            cave_fbm_nz: Fbm::new().set_seed(seed + 2),
+            cave_fbm_nz: Fbm::new()
+                .set_seed(seed + 2)
+                .set_octaves(5),
         }
     }
 }

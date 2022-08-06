@@ -1,7 +1,7 @@
 use super::scatter::close;
 
 use crate::{
-    util::{sampler::Sampler, FastNoise, RandomField, RandomPerm, StructureGen2d, LOCALITY, SQUARE_4},
+    util::{sampler::Sampler, FastNoise, RandomField, RandomPerm, StructureGen2d, FastNoise2d, SmallCache, LOCALITY, SQUARE_4},
     Canvas, CanvasInfo, ColumnSample, Land,
 };
 use common::{
@@ -14,9 +14,9 @@ use common::{
 };
 use noise::NoiseFn;
 use rand::prelude::*;
+use hashbrown::HashMap;
 use std::{
     cmp::Ordering,
-    collections::HashMap,
     f64::consts::PI,
     ops::{Add, Mul, Range, Sub},
 };
@@ -172,32 +172,28 @@ impl Tunnel {
 
         let humidity = Lerp::lerp(
             col.humidity,
-            info.index()
-                .noise
-                .cave_nz
-                .get(wpos.xy().map(|e| e as f64 / 1024.0).into_array()) as f32,
+            FastNoise2d::new(41)
+                .get(wpos.xy().map(|e| e as f64 / 512.0))
+                .mul(1.15),
             below,
         );
         let temp = Lerp::lerp(
             col.temp,
-            info.index()
-                .noise
-                .cave_nz
-                .get(wpos.xy().map(|e| e as f64 / 2048.0).into_array())
+            FastNoise2d::new(42)
+                .get(wpos.xy().map(|e| e as f64 / 1024.0))
+                .mul(1.15)
                 .mul(2.0)
                 .sub(1.0)
                 .add(
-                    ((col.alt as f64 - wpos.z as f64)
-                        / (AVG_LEVEL_DEPTH as f64 * LAYERS as f64 * 0.5))
+                    ((col.alt - wpos.z as f32)
+                        / (AVG_LEVEL_DEPTH as f32 * LAYERS as f32 * 0.5))
                         .clamped(0.0, 2.5),
-                ) as f32,
+                ),
             below,
         );
-        let mineral = info
-            .index()
-            .noise
-            .cave_nz
-            .get(wpos.xy().map(|e| e as f64 / 256.0).into_array())
+        let mineral = FastNoise2d::new(43)
+            .get(wpos.xy().map(|e| e as f64 / 128.0))
+            .mul(1.15)
             .mul(0.5)
             .add(0.5) as f32;
 
@@ -365,17 +361,18 @@ pub fn tunnel_bounds_at<'a>(
 pub fn apply_caves_to(canvas: &mut Canvas, rng: &mut impl Rng) {
     let info = canvas.info();
     let land = info.land();
-    let mut mushroom_cache = HashMap::new();
 
     let diagonal = (TerrainChunkSize::RECT_SIZE.map(|e| e * e).sum() as f32).sqrt() as f64;
     let tunnels = all_tunnels_at(info.wpos() + TerrainChunkSize::RECT_SIZE.map(|e| e as i32) / 2, &info, &land)
         .filter(|(_, tunnel)| SQUARE_4
             .into_iter()
             .map(|rpos| info.wpos() + rpos * TerrainChunkSize::RECT_SIZE.map(|e| e as i32))
-            .all(|wpos| tunnel.possibly_near(wpos.map(|e| e as f64), diagonal + 1.0).is_some()))
+            .any(|wpos| tunnel.possibly_near(wpos.map(|e| e as f64), diagonal + 1.0).is_some()))
         .collect::<Vec<_>>();
 
     if !tunnels.is_empty() {
+        let mut mushroom_cache = SmallCache::default();
+
         canvas.foreach_col(|canvas, wpos2d, col| {
             let tunnel_bounds = tunnel_bounds_at_from(wpos2d, &info, &land, tunnels.iter().copied())
                 .collect::<Vec<_>>();
@@ -429,10 +426,9 @@ fn write_column<R: Rng>(
     wpos2d: Vec2<i32>,
     z_range: Range<i32>,
     tunnel: Tunnel,
-    mushroom_cache: &mut HashMap<(Vec3<i32>, Vec2<i32>), Option<Mushroom>>,
+    mushroom_cache: &mut SmallCache<Option<Mushroom>>,
     rng: &mut R,
 ) {
-    mushroom_cache.clear();
     let info = canvas.info();
 
     // Exposed to the sky, or some other void above
@@ -444,45 +440,40 @@ fn write_column<R: Rng>(
     let biome = tunnel.biome_at(wpos2d.with_z(z_range.start), &info);
 
     let stalactite = {
-        let cavern_height = (z_range.end - z_range.start) as f64;
-        info
-            .index()
-            .noise
-            .cave_nz
-            .get(wpos2d.map(|e| e as f64 / 16.0).into_array())
+        let cavern_height = (z_range.end - z_range.start) as f32;
+        FastNoise2d::new(35)
+            .get(wpos2d.map(|e| e as f64 / 8.0))
             .sub(0.5)
             .max(0.0)
             .mul(2.0)
             // No stalactites near entrances
-            .mul(((col.alt as f64 - z_range.end as f64) / 8.0).clamped(0.0, 1.0))
+            .mul(((col.alt as f32 - z_range.end as f32) / 8.0).clamped(0.0, 1.0))
             .mul(8.0 + cavern_height * 0.4)
+            as f64
     };
 
     let basalt = if biome.fire > 0.0 {
-        let cavern_height = (z_range.end - z_range.start) as f64;
-        info.index()
-            .noise
-            .cave_nz
-            .get(wpos2d.map(|e| e as f64 / 48.0).into_array())
+        let cavern_height = (z_range.end - z_range.start) as f32;
+        FastNoise2d::new(36)
+            .get(wpos2d.map(|e| e as f64 / 32.0))
+            .mul(1.25)
             .sub(0.5)
             .max(0.0)
             .mul(6.0 + cavern_height * 0.5)
-            .mul(biome.fire as f64)
+            .mul(biome.fire)
     } else {
         0.0
     };
 
     let lava = if biome.fire > 0.0 {
-        info.index()
-            .noise
-            .cave_nz
-            .get(wpos2d.map(|e| e as f64 / 64.0).into_array())
-            .sub(0.5)
+        FastNoise2d::new(37)
+            .get(wpos2d.map(|e| e as f64 / 32.0))
+            .mul(0.5)
             .abs()
             .sub(0.2)
             .min(0.0)
             // .mul((biome.temp as f64 - 1.5).mul(30.0).clamped(0.0, 1.0))
-            .mul((biome.fire as f64 - 0.5).mul(30.0).clamped(0.0, 1.0))
+            .mul((biome.fire as f32 - 0.5).mul(30.0).clamped(0.0, 1.0))
             .mul(64.0)
             .max(-32.0)
     } else {
@@ -503,8 +494,7 @@ fn write_column<R: Rng>(
     let mut get_mushroom = |wpos: Vec3<i32>, dynamic_rng: &mut R| {
         for (wpos2d, seed) in StructureGen2d::new(34537, 24, 8).get(wpos.xy()) {
             let mushroom = if let Some(mushroom) = mushroom_cache
-                .entry((tunnel.a.wpos.with_z(tunnel.a.depth), wpos2d))
-                .or_insert_with(|| {
+                .get(wpos2d, |_| {
                     let mut rng = RandomPerm::new(seed);
                     let (z_range, radius) =
                         tunnel.z_range_at(wpos2d.map(|e| e as f64 + 0.5), info)?;
