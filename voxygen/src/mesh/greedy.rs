@@ -9,7 +9,7 @@ type TodoRect = (
     Vec3<i32>,
 );
 
-pub struct GreedyConfig<D, FA, FL, FG, FO, FS, FP, FT> {
+pub struct GreedyConfig<D, FV, FA, FL, FG, FO, FS, FP, FT> {
     pub data: D,
     /// The minimum position to mesh, in the coordinate system used
     /// for queries against the volume.
@@ -31,6 +31,9 @@ pub struct GreedyConfig<D, FA, FL, FG, FO, FS, FP, FT> {
     /// the number of *horizontal* planes large enough to cover the whole
     /// chunk.
     pub greedy_size_cross: Vec3<usize>,
+    /// Given a position, return the full information for the voxel at that
+    /// position.
+    pub get_vox: FV,
     /// Given a position, return the AO information for the voxel at that
     /// position (0.0 - 1.0).
     pub get_ao: FA,
@@ -104,7 +107,23 @@ fn guillotiere_size<T: Into<i32>>(size: Vec2<T>) -> guillotiere::Size {
     guillotiere::Size::new(size.x.into(), size.y.into())
 }
 
-/// Currently used by terrain/particles/figures
+/// Currently used by terrain
+pub fn terrain_config() -> guillotiere::AllocatorOptions {
+    // TODO: Collect information to see if we can choose a good value here. These
+    // current values were optimized for sprites, but we are using a
+    // different allocator for them so different values might be better
+    // here.
+    let large_size_threshold = /*16*//*32*/8; //256.min(min_max_dim / 2 + 1);
+    let small_size_threshold = /*4*//*4*/3; //33.min(large_size_threshold / 2 + 1);
+
+    guillotiere::AllocatorOptions {
+        alignment: guillotiere::Size::new(1, 1),
+        small_size_threshold,
+        large_size_threshold,
+    }
+}
+
+/// Currently used by particles/figures
 pub fn general_config() -> guillotiere::AllocatorOptions {
     // TODO: Collect information to see if we can choose a good value here. These
     // current values were optimized for sprites, but we are using a
@@ -370,15 +389,16 @@ impl<'a, Allocator: AtlasAllocator> GreedyMesh<'a, Allocator> {
     /// Returns an estimate of the bounds of the current meshed model.
     ///
     /// For more information on the config parameter, see [GreedyConfig].
-    pub fn push<M: PartialEq, D: 'a, FA, FL, FG, FO, FS, FP, FT>(
+    pub fn push<M: PartialEq, D: 'a, V: 'a, FV, FA, FL, FG, FO, FS, FP, FT>(
         &mut self,
-        config: GreedyConfig<D, FA, FL, FG, FO, FS, FP, FT>,
+        config: GreedyConfig<D, FV, FA, FL, FG, FO, FS, FP, FT>,
     ) where
+        FV: for<'r> FnMut(&'r mut D, Vec3<i32>) -> V + 'a,
         FA: for<'r> FnMut(&'r mut D, Vec3<i32>) -> f32 + 'a,
         FL: for<'r> FnMut(&'r mut D, Vec3<i32>) -> f32 + 'a,
         FG: for<'r> FnMut(&'r mut D, Vec3<i32>) -> f32 + 'a,
         FO: for<'r> FnMut(&'r mut D, Vec3<i32>) -> bool + 'a,
-        FS: for<'r> FnMut(&'r mut D, Vec3<i32>, Vec3<i32>, Vec2<Vec3<i32>>) -> Option<(bool, M)>,
+        FS: for<'r> FnMut(&'r mut D, Vec3<i32>, V, V, /*Vec3<i32>, */Vec2<Vec3<i32>>) -> Option<(bool, M)>,
         FP: FnMut(Vec2<u16>, Vec2<Vec2<u16>>, Vec3<f32>, Vec2<Vec3<f32>>, Vec3<f32>, &M),
         FT: for<'r> FnMut(&'r mut D, Vec3<i32>, u8, u8, bool) -> [u8; 4] + 'a,
     {
@@ -418,7 +438,7 @@ impl<'a, Allocator: AtlasAllocator> GreedyMesh<'a, Allocator> {
     pub fn max_size(&self) -> Vec2<u16> { self.max_size }
 }
 
-fn greedy_mesh<'a, M: PartialEq, D: 'a, FA, FL, FG, FO, FS, FP, FT, Allocator: AtlasAllocator>(
+fn greedy_mesh<'a, M: PartialEq, D: 'a, V: 'a, FV, FA, FL, FG, FO, FS, FP, FT, Allocator: AtlasAllocator>(
     atlas: &mut Allocator,
     col_lights_size: &mut Vec2<u16>,
     max_size: Vec2<u16>,
@@ -427,6 +447,7 @@ fn greedy_mesh<'a, M: PartialEq, D: 'a, FA, FL, FG, FO, FS, FP, FT, Allocator: A
         draw_delta,
         greedy_size,
         greedy_size_cross,
+        mut get_vox,
         get_ao,
         get_light,
         get_glow,
@@ -434,14 +455,15 @@ fn greedy_mesh<'a, M: PartialEq, D: 'a, FA, FL, FG, FO, FS, FP, FT, Allocator: A
         mut should_draw,
         mut push_quad,
         make_face_texel,
-    }: GreedyConfig<D, FA, FL, FG, FO, FS, FP, FT>,
+    }: GreedyConfig<D, FV, FA, FL, FG, FO, FS, FP, FT>,
 ) -> Box<SuspendedMesh<'a>>
 where
+    FV: for<'r> FnMut(&'r mut D, Vec3<i32>) -> V + 'a,
     FA: for<'r> FnMut(&'r mut D, Vec3<i32>) -> f32 + 'a,
     FL: for<'r> FnMut(&'r mut D, Vec3<i32>) -> f32 + 'a,
     FG: for<'r> FnMut(&'r mut D, Vec3<i32>) -> f32 + 'a,
     FO: for<'r> FnMut(&'r mut D, Vec3<i32>) -> bool + 'a,
-    FS: for<'r> FnMut(&'r mut D, Vec3<i32>, Vec3<i32>, Vec2<Vec3<i32>>) -> Option<(bool, M)>,
+    FS: for<'r> FnMut(&'r mut D, Vec3<i32>, V, V, /*Vec3<i32>, */Vec2<Vec3<i32>>) -> Option<(bool, M)>,
     FP: FnMut(Vec2<u16>, Vec2<Vec2<u16>>, Vec3<f32>, Vec2<Vec3<f32>>, Vec3<f32>, &M),
     FT: for<'r> FnMut(&'r mut D, Vec3<i32>, u8, u8, bool) -> [u8; 4] + 'a,
 {
@@ -451,18 +473,25 @@ where
 
     // x (u = y, v = z)
     greedy_mesh_cross_section(
-        Vec3::new(greedy_size.y, greedy_size.z, greedy_size_cross.x),
-        |pos| {
+        Vec3::new(greedy_size.z, greedy_size.y, greedy_size_cross.x),
+        #[inline(always)] |pos| {
+            let pos = draw_delta + Vec3::new(pos.z, pos.y, pos.x);
+            let delta = Vec3::unit_x();
+            let from = get_vox(&mut data, pos - delta);
+            let to = get_vox(&mut data, pos);
             should_draw(
                 &mut data,
-                draw_delta + Vec3::new(pos.z, pos.x, pos.y),
-                Vec3::unit_x(),
-                Vec2::new(Vec3::unit_y(), Vec3::unit_z()),
+                /* draw_delta + Vec3::new(pos.z, pos.x, pos.y),
+                Vec3::unit_x(), */
+                pos,
+                from,
+                to,
+                Vec2::new(Vec3::unit_z(), Vec3::unit_y()),
             )
         },
         |pos, dim, &(faces_forward, ref meta)| {
-            let pos = Vec3::new(pos.z, pos.x, pos.y);
-            let uv = Vec2::new(Vec3::unit_y(), Vec3::unit_z());
+            let pos = Vec3::new(pos.z, pos.y, pos.x);
+            let uv = Vec2::new(Vec3::unit_z(), Vec3::unit_y());
             let norm = Vec3::unit_x();
             let atlas_pos = add_to_atlas(
                 atlas,
@@ -479,8 +508,8 @@ where
                 pos,
                 dim,
                 uv,
-                norm,
-                faces_forward,
+                -norm,
+                !faces_forward,
                 meta,
                 atlas_pos,
                 |atlas_pos, dim, pos, draw_dim, norm, meta| {
@@ -490,20 +519,27 @@ where
         },
     );
 
-    // y (u = z, v = x)
+    // y (u = x, v = z)
     greedy_mesh_cross_section(
-        Vec3::new(greedy_size.z, greedy_size.x, greedy_size_cross.y),
-        |pos| {
+        Vec3::new(greedy_size.x, greedy_size.z, greedy_size_cross.y),
+        #[inline(always)] |pos| {
+            let pos = draw_delta + Vec3::new(pos.x, pos.z, pos.y);
+            let delta = Vec3::unit_y();
+            let from = get_vox(&mut data, pos - delta);
+            let to = get_vox(&mut data, pos);
             should_draw(
                 &mut data,
-                draw_delta + Vec3::new(pos.y, pos.z, pos.x),
-                Vec3::unit_y(),
-                Vec2::new(Vec3::unit_z(), Vec3::unit_x()),
+                /* draw_delta + Vec3::new(pos.y, pos.z, pos.x),
+                Vec3::unit_y(), */
+                pos,
+                from,
+                to,
+                Vec2::new(Vec3::unit_x(), Vec3::unit_z()),
             )
         },
         |pos, dim, &(faces_forward, ref meta)| {
-            let pos = Vec3::new(pos.y, pos.z, pos.x);
-            let uv = Vec2::new(Vec3::unit_z(), Vec3::unit_x());
+            let pos = Vec3::new(pos.x, pos.z, pos.y);
+            let uv = Vec2::new(Vec3::unit_x(), Vec3::unit_z());
             let norm = Vec3::unit_y();
             let atlas_pos = add_to_atlas(
                 atlas,
@@ -520,8 +556,8 @@ where
                 pos,
                 dim,
                 uv,
-                norm,
-                faces_forward,
+                -norm,
+                !faces_forward,
                 meta,
                 atlas_pos,
                 |atlas_pos, dim, pos, draw_dim, norm, meta| {
@@ -534,11 +570,18 @@ where
     // z (u = x, v = y)
     greedy_mesh_cross_section(
         Vec3::new(greedy_size.x, greedy_size.y, greedy_size_cross.z),
-        |pos| {
+        #[inline(always)] |pos| {
+            let pos = draw_delta + Vec3::new(pos.x, pos.y, pos.z);
+            let delta = Vec3::unit_z();
+            let from = get_vox(&mut data, pos - delta);
+            let to = get_vox(&mut data, pos);
             should_draw(
                 &mut data,
-                draw_delta + Vec3::new(pos.x, pos.y, pos.z),
-                Vec3::unit_z(),
+                /* draw_delta + Vec3::new(pos.x, pos.y, pos.z),
+                Vec3::unit_z(), */
+                pos,
+                from,
+                to,
                 Vec2::new(Vec3::unit_x(), Vec3::unit_y()),
             )
         },
@@ -604,12 +647,10 @@ fn greedy_mesh_cross_section<M: PartialEq>(
     let mut mask = &mut mask[0..dims.y * dims.x];
     (0..dims.z + 1).for_each(|d| {
         // Compute mask
-        let mut posi = 0;
-        (0..dims.y).for_each(|j| {
-            (0..dims.x).for_each(|i| {
+        mask.chunks_exact_mut(dims.x).enumerate().for_each(|(j, mask)| {
+            mask.iter_mut().enumerate().for_each(|(i, mask)| {
                 // NOTE: Safe because dims.z actually fits in a u16.
-                mask[posi] = draw_face(Vec3::new(i as i32, j as i32, d as i32));
-                posi += 1;
+                *mask = draw_face(Vec3::new(i as i32, j as i32, d as i32));
             });
         });
         /* mask.iter_mut().enumerate().for_each(|(posi, mask)| {
@@ -620,12 +661,13 @@ fn greedy_mesh_cross_section<M: PartialEq>(
         }); */
 
         (0..dims.y).for_each(|j| {
+            let mask = &mut mask[j * dims.x..];
             let mut i = 0;
             while i < dims.x {
                 // Compute width (number of set x bits for this row and layer, starting at the
                 // current minimum column).
-                if let Some(ori) = &mask[j * dims.x + i] {
-                    let width = 1 + mask[j * dims.x + i + 1..j * dims.x + dims.x]
+                if let Some(ori) = &mask[i] {
+                    let width = 1 + mask[i + 1..dims.x]
                         .iter()
                         .take_while(move |&mask| mask.as_ref() == Some(ori))
                         .count();
@@ -633,19 +675,20 @@ fn greedy_mesh_cross_section<M: PartialEq>(
                     // Compute height (number of rows having w set x bits for this layer, starting
                     // at the current minimum column and row).
                     let height = 1
-                        + (j + 1..dims.y)
-                            .take_while(|h| {
-                                mask[h * dims.x + i..h * dims.x + max_x]
+                        + mask[dims.x..(dims.y - j) * dims.x/* + max_x + i*/]
+                            .chunks_exact(dims.x)
+                            .take_while(|mask| {
+                                mask[i..max_x]
                                     .iter()
                                     .all(|mask| mask.as_ref() == Some(ori))
                             })
                             .count();
-                    let max_y = j + height;
+                    let max_y = height;
                     // Add quad.
                     push_quads(Vec3::new(i, j, d), Vec2::new(width, height), ori);
                     // Unset mask bits in drawn region, so we don't try to re-draw them.
-                    (j..max_y).for_each(|l| {
-                        mask[l * dims.x + i..l * dims.x + max_x]
+                    mask[..max_y * dims.x].chunks_exact_mut(dims.x).for_each(|mask| {
+                        mask[i..max_x]
                             .iter_mut()
                             .for_each(|mask| {
                                 *mask = None;

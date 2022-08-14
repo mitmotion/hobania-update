@@ -11,9 +11,9 @@ pub fn init(world: &mut World) {
 
     {
         let pool = world.read_resource::<SlowJobPool>();
-        pool.configure("IMAGE_PROCESSING", |n| n / 2);
-        pool.configure("FIGURE_MESHING", |n| n / 2);
-        pool.configure("TERRAIN_MESHING", |n| n / 2);
+        pool.configure(&"IMAGE_PROCESSING", |n| n / 2);
+        pool.configure(&"FIGURE_MESHING", |n| n / 4);
+        pool.configure(&"TERRAIN_MESHING", |n| n / 2);
     }
 
     // Voxygen event buses

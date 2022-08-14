@@ -293,8 +293,8 @@ impl Server {
         }
         {
             let pool = state.ecs_mut().write_resource::<SlowJobPool>();
-            pool.configure("CHUNK_GENERATOR", |n| n / 2 + n / 4);
-            pool.configure("CHUNK_SERIALIZER", |n| n / 2);
+            pool.configure(&"CHUNK_GENERATOR", |n| n / 2 + n / 4);
+            pool.configure(&"CHUNK_SERIALIZER", |n| n / 2);
         }
         state
             .ecs_mut()

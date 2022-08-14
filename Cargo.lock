@@ -156,6 +156,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "arbalest"
+version = "0.2.1"
+source = "git+https://gitlab.com/veloren/arbalest.git?rev=9cb8f67a4f6d8f3cc908dac4eb5eb8aec9fab07b#9cb8f67a4f6d8f3cc908dac4eb5eb8aec9fab07b"
+
+[[package]]
 name = "arr_macro"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6510,6 +6515,7 @@ name = "veloren-common"
 version = "0.10.0"
 dependencies = [
  "approx 0.4.0",
+ "arbalest",
  "bitflags",
  "bitvec",
  "bumpalo",
@@ -6824,6 +6830,7 @@ dependencies = [
  "assets_manager",
  "backtrace",
  "bincode",
+ "bumpalo",
  "bytemuck",
  "chrono",
  "chumsky",

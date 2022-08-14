@@ -10,7 +10,7 @@ use crate::{
 use common::{figure::Segment, slowjob::SlowJobPool};
 use guillotiere::{size2, SimpleAtlasAllocator};
 use hashbrown::{hash_map::Entry, HashMap};
-use image::{DynamicImage, RgbaImage};
+use image::{DynamicImage, GenericImageView, RgbaImage};
 use pixel_art::resize_pixel_art;
 use slab::Slab;
 use std::{hash::Hash, sync::Arc};
@@ -411,6 +411,20 @@ fn draw_graphic(
         // Short-circuit spawning a job on the threadpool for blank graphics
         Some(Graphic::Blank) => None,
         Some(inner) => {
+            // HACK: Only use the pool for "large" graphics (greater than 32x32 source images,
+            // which is the size of the minimap images).
+            //
+            // FIXME: Proper flickering solution.
+            let pool = if let Graphic::Image(image, _) = inner {
+                let (w, h) = image.dimensions();
+                if w.saturating_mul(h) > 256 * 256 {
+                    pool
+                } else {
+                    None
+                }
+            } else {
+                pool
+            };
             keyed_jobs
                 .spawn(pool, (graphic_id, dims), || {
                     let inner = inner.clone();

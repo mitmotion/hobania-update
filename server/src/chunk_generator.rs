@@ -55,7 +55,7 @@ impl ChunkGenerator {
         v.insert(Arc::clone(&cancel));
         let chunk_tx = self.chunk_tx.clone();
         self.metrics.chunks_requested.inc();
-        slowjob_pool.spawn("CHUNK_GENERATOR", move || {
+        slowjob_pool.spawn(&"CHUNK_GENERATOR", move || {
             let index = index.as_index_ref();
             let payload = world
                 .generate_chunk(index, key, || cancel.load(Ordering::Relaxed), Some(time))

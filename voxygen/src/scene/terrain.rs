@@ -35,7 +35,7 @@ use core::{f32, fmt::Debug, marker::PhantomData, time::Duration};
 use crossbeam_channel as channel;
 use enum_iterator::IntoEnumIterator;
 use guillotiere::AtlasAllocator;
-use hashbrown::HashMap;
+use hashbrown::{hash_map, HashMap};
 use serde::Deserialize;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
@@ -103,11 +103,25 @@ pub struct TerrainChunkData {
     frustum_last_plane_index: u8,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ChunkWorkerStatus {
+    /// The worker is not currently active.
+    Invalid,
+    /// The worker is currently active and the chunk it is working on is up to date.
+    Active,
+    /// The worker was once active for this chunk (it may or may not currently be
+    /// active), but the chunk is stale and needs remeshing, so we want to process
+    /// it as soon as possible to prioritize the update.
+    Stale,
+}
+
+#[derive(Clone)]
 struct ChunkMeshState {
     pos: Vec2<i32>,
-    started_tick: u64,
-    is_worker_active: bool,
+    /// Only ever set from the main thread.  Always increasing, and it's okay to read a stale vlue
+    /// from the worker threads, so we can use Relaxed loads and stores.
+    started_tick: Arc<AtomicU64>,
+    status: ChunkWorkerStatus,
     // If this is set, we skip the actual meshing part of the update.
     skip_remesh: bool,
 }
@@ -226,11 +240,13 @@ impl assets::Asset for SpriteSpec {
     const EXTENSION: &'static str = "ron";
 }
 
+type V = TerrainChunk;
+
 /// Function executed by worker threads dedicated to chunk meshing.
 
 /// skip_remesh is either None (do the full remesh, including recomputing the
 /// light map), or Some((light_map, glow_map)).
-fn mesh_worker<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + 'static>(
+fn mesh_worker/*<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + 'static>*/(
     pos: Vec2<i32>,
     z_bounds: (f32, f32),
     skip_remesh: Option<(LightMapFn, LightMapFn)>,
@@ -630,7 +646,7 @@ impl SpriteRenderContext {
     }
 }
 
-impl<V: RectRasterableVol> Terrain<V> {
+impl/*<V: RectRasterableVol>*/ Terrain<V> {
     pub fn new(
         client: &Client,
         renderer: &mut Renderer,
@@ -754,7 +770,7 @@ impl<V: RectRasterableVol> Terrain<V> {
                     ..Default::default()
                 },
             );
-            slowjob.spawn("TERRAIN_MESHING", move || {
+            slowjob.spawn(&"IMAGE_PROCESSING", move || {
                     // Construct the next atlas on a separate thread.  If it doesn't get sent, it means
                     // the original channel was dropped, which implies the terrain scene data no longer
                     // exists, so we can just drop the result in that case.
@@ -781,20 +797,20 @@ impl<V: RectRasterableVol> Terrain<V> {
         Ok(col_light)
     }
 
-    fn remove_chunk_meta(&mut self, _pos: Vec2<i32>, chunk: &TerrainChunkData) {
+    fn remove_chunk_meta(atlas: &mut AtlasAllocator, _pos: Vec2<i32>, chunk: &TerrainChunkData) {
         // No need to free the allocation if the chunk is not allocated in the current
         // atlas, since we don't bother tracking it at that point.
         if let Some(col_lights) = chunk.col_lights_alloc {
-            self.atlas.deallocate(col_lights);
+            atlas.deallocate(col_lights);
         }
         /* let (zmin, zmax) = chunk.z_bounds;
         self.z_index_up.remove(Vec3::from(zmin, pos.x, pos.y));
         self.z_index_down.remove(Vec3::from(zmax, pos.x, pos.y)); */
     }
 
-    fn insert_chunk(&mut self, pos: Vec2<i32>, chunk: TerrainChunkData) {
-        if let Some(old) = self.chunks.insert(pos, chunk) {
-            self.remove_chunk_meta(pos, &old);
+    fn insert_chunk(chunks: &mut HashMap<Vec2<i32>, TerrainChunkData>, atlas: &mut AtlasAllocator, pos: Vec2<i32>, chunk: TerrainChunkData) {
+        if let Some(old) = chunks.insert(pos, chunk) {
+            Self::remove_chunk_meta(atlas, pos, &old);
         }
         /* let (zmin, zmax) = chunk.z_bounds;
         self.z_index_up.insert(Vec3::from(zmin, pos.x, pos.y));
@@ -803,13 +819,15 @@ impl<V: RectRasterableVol> Terrain<V> {
 
     fn remove_chunk(&mut self, pos: Vec2<i32>) {
         if let Some(chunk) = self.chunks.remove(&pos) {
-            self.remove_chunk_meta(pos, &chunk);
+            Self::remove_chunk_meta(&mut self.atlas, pos, &chunk);
             // Temporarily remember dead chunks for shadowing purposes.
             self.shadow_chunks.push((pos, chunk));
         }
 
-        if let Some(_todo) = self.mesh_todo.remove(&pos) {
-            //Do nothing on todo mesh removal.
+        if let Some(todo) = self.mesh_todo.remove(&pos) {
+            // Update the old starting tick to u64::MAX so any chunk workers that haven't started
+            // yet can be canceled.
+            todo.started_tick.store(u64::MAX, Ordering::Relaxed);
         }
     }
 
@@ -945,7 +963,11 @@ impl<V: RectRasterableVol> Terrain<V> {
             for i in -1..2 {
                 for j in -1..2 {
                     if i != 0 || j != 0 {
-                        self.mesh_todo.remove(&(pos + Vec2::new(i, j)));
+                        if let Some(todo) = self.mesh_todo.remove(&(pos + Vec2::new(i, j))) {
+                            // Update the old starting tick to u64::MAX so any chunk workers that
+                            // haven't started yet can be canceled.
+                            todo.started_tick.store(u64::MAX, Ordering::Relaxed);
+                        }
                     }
                 }
             }
@@ -980,9 +1002,10 @@ impl<V: RectRasterableVol> Terrain<V> {
                 for j in -1..2 {
                     let pos = pos + Vec2::new(i, j);
 
-                    if !(self.chunks.contains_key(&pos) || self.mesh_todo.contains_key(&pos))
-                        || modified
-                    {
+                    let entry = self.mesh_todo.entry(pos);
+                    let done_meshing = self.chunks.contains_key(&pos);
+                    let in_progress = done_meshing || matches!(entry, hash_map::Entry::Occupied(_));
+                    if modified || !in_progress {
                         let mut neighbours = true;
                         for i in -1..2 {
                             for j in -1..2 {
@@ -992,12 +1015,22 @@ impl<V: RectRasterableVol> Terrain<V> {
                         }
 
                         if neighbours {
-                            self.mesh_todo.insert(pos, ChunkMeshState {
+                            let todo = entry.or_insert_with(|| ChunkMeshState {
                                 pos,
-                                started_tick: current_tick,
-                                is_worker_active: false,
+                                started_tick: Arc::new(AtomicU64::new(current_tick)),
+                                status: ChunkWorkerStatus::Invalid,
                                 skip_remesh: false,
                             });
+
+                            todo.skip_remesh = false;
+                            todo.started_tick.store(current_tick, Ordering::Relaxed);
+                            todo.status = if done_meshing/* || todo.status != ChunkWorkerStatus::Invalid*/ {
+                                // Make the new status stale, to make sure the chunk gets updated
+                                // promptly.
+                                ChunkWorkerStatus::Stale
+                            } else {
+                                ChunkWorkerStatus::Invalid
+                            };
                         }
                     }
                 }
@@ -1077,13 +1110,14 @@ impl<V: RectRasterableVol> Terrain<V> {
                         }
                     }
                     if neighbours {
+                        let done_meshing = self.chunks.contains_key(&neighbour_chunk_pos);
                         let todo =
                             self.mesh_todo
                                 .entry(neighbour_chunk_pos)
-                                .or_insert(ChunkMeshState {
+                                .or_insert_with(|| ChunkMeshState {
                                     pos: neighbour_chunk_pos,
-                                    started_tick: current_tick,
-                                    is_worker_active: false,
+                                    started_tick: Arc::new(AtomicU64::new(current_tick)),
+                                    status: ChunkWorkerStatus::Invalid,
                                     skip_remesh,
                                 });
 
@@ -1094,8 +1128,15 @@ impl<V: RectRasterableVol> Terrain<V> {
                         // since otherwise the active remesh is computing new lighting values
                         // that we don't have yet.
                         todo.skip_remesh &= skip_remesh;
-                        todo.is_worker_active = false;
-                        todo.started_tick = current_tick;
+                        todo.started_tick.store(current_tick, Ordering::Relaxed);
+                        todo.status = if done_meshing/* || todo.status != ChunkWorkerStatus::Invalid*/ {
+                            // This chunk is now stale, and was already meshed before, so we
+                            // want to update it as soon as possible to make its update take
+                            // effect.
+                            ChunkWorkerStatus::Stale
+                        } else {
+                            ChunkWorkerStatus::Invalid
+                        };
                     }
                 }
             }
@@ -1116,20 +1157,20 @@ impl<V: RectRasterableVol> Terrain<V> {
         let mut todo = self
             .mesh_todo
             .values_mut()
-            .filter(|todo| !todo.is_worker_active)
+            .filter(|todo| todo.status != ChunkWorkerStatus::Active)
             // TODO: BinaryHeap
             .collect::<Vec<_>>();
         todo.sort_unstable_by_key(|todo| {
             (
                 (todo.pos.as_::<i64>() * TerrainChunk::RECT_SIZE.as_::<i64>())
                     .distance_squared(mesh_focus_pos),
-                todo.started_tick,
+                todo.started_tick.load(Ordering::Relaxed),
             )
         });
 
         let slowjob = scene_data.state.slow_job_pool();
         for (todo, chunk) in todo.into_iter()
-            .filter(|todo| !todo.is_worker_active)
+            /* .filter(|todo| todo.status != ChunkWorkerStatus::Active) */
             /* .min_by_key(|todo| ((todo.pos.as_::<i64>() * TerrainChunk::RECT_SIZE.as_::<i64>()).distance_squared(mesh_focus_pos), todo.started_tick)) */
             // Find a reference to the actual `TerrainChunk` we're meshing
             ./*and_then*/filter_map(|todo| {
@@ -1144,9 +1185,9 @@ impl<V: RectRasterableVol> Terrain<V> {
                     })?))
             })
         {
-            if self.mesh_todos_active.load(Ordering::Relaxed) > meshing_cores * 8 {
+            /* if self.mesh_todos_active.load(Ordering::Relaxed) > /* meshing_cores * 16 */CHUNKS_PER_SECOND as u64 / 60 {
                 break;
-            }
+            } */
 
             // like ambient occlusion and edge elision, we also need the borders
             // of the chunk's neighbours too (hence the `- 1` and `+ 1`).
@@ -1174,13 +1215,16 @@ impl<V: RectRasterableVol> Terrain<V> {
             };
 
             // The region to actually mesh
+            let mesh_filter = |pos: &Vec2<i32>|
+                pos.x == todo.pos.x && pos.y <= todo.pos.y ||
+                pos.y == todo.pos.y && pos.x <= todo.pos.x;
             let min_z = volume
                 .iter()
-                .filter(|(pos, _)| pos.x <= todo.pos.x && pos.y <= todo.pos.y)
+                .filter(|(pos, _)| mesh_filter(pos))
                 .fold(i32::MAX, |min, (_, chunk)| chunk.get_min_z().min(min));
             let max_z = volume
                 .iter()
-                .filter(|(pos, _)| pos.x <= todo.pos.x && pos.y <= todo.pos.y)
+                .filter(|(pos, _)| mesh_filter(pos))
                 .fold(i32::MIN, |max, (_, chunk)| chunk.get_max_z().max(max));
 
             let aabb = Aabb {
@@ -1200,7 +1244,8 @@ impl<V: RectRasterableVol> Terrain<V> {
                 .map(|chunk| (Arc::clone(&chunk.light_map), Arc::clone(&chunk.glow_map)));
 
             // Queue the worker thread.
-            let started_tick = todo.started_tick;
+            let started_tick_ = Arc::clone(&todo.started_tick);
+            let started_tick = started_tick_.load(Ordering::Relaxed);
             let sprite_data = Arc::clone(&self.sprite_data);
             let sprite_config = Arc::clone(&self.sprite_config);
             let cnt = Arc::clone(&self.mesh_todos_active);
@@ -1209,8 +1254,14 @@ impl<V: RectRasterableVol> Terrain<V> {
             let create_instances = renderer.create_instances_lazy();
             let create_locals = renderer.create_terrain_bound_locals();
             cnt.fetch_add(1, Ordering::Relaxed);
-            slowjob
-                .spawn("TERRAIN_MESHING", move || {
+            let job = move || {
+                // Since this loads when the task actually *runs*, rather than when it's
+                // queued, it provides us with a good opportunity to check whether the chunk
+                // should be canceled.  We might miss updates, but that's okay, since canceling
+                // is just an optimization.
+                let started_tick_ = started_tick_.load(Ordering::Relaxed);
+                if started_tick_ <= started_tick {
+                    // This meshing job was not canceled.
                     let sprite_data = sprite_data;
                     let _ = send.send(mesh_worker(
                         pos,
@@ -1228,9 +1279,17 @@ impl<V: RectRasterableVol> Terrain<V> {
                         create_instances,
                         create_locals,
                     ));
-                    cnt.fetch_sub(1, Ordering::Relaxed);
-                });
-            todo.is_worker_active = true;
+                }
+                cnt.fetch_sub(1, Ordering::Relaxed);
+            };
+            if todo.status == ChunkWorkerStatus::Stale {
+                // The chunk was updated unexpectedly, so insert at the front, not the back, to see
+                // the update as soon as possible.
+                slowjob.spawn_front(&"TERRAIN_MESHING", job);
+            } else {
+                slowjob.spawn(&"TERRAIN_MESHING", job);
+            }
+            todo.status = ChunkWorkerStatus::Active;
         }
         drop(terrain);
         drop(guard);
@@ -1243,16 +1302,21 @@ impl<V: RectRasterableVol> Terrain<V> {
         let recv_count =
             scene_data.state.get_delta_time() * CHUNKS_PER_SECOND + self.mesh_recv_overflow;
         self.mesh_recv_overflow = recv_count.fract();
+        let mesh_recv = &self.mesh_recv;
         let incoming_chunks =
-            std::iter::from_fn(|| self.mesh_recv.recv_timeout(Duration::new(0, 0)).ok())
-                .take(recv_count.floor() as usize)
-                .collect::<Vec<_>>(); // Avoid ownership issue
+            std::iter::from_fn(|| mesh_recv.try_recv().ok())
+                .take(recv_count.floor() as usize);
         for response in incoming_chunks {
             match self.mesh_todo.get(&response.pos) {
                 // It's the mesh we want, insert the newly finished model into the terrain model
                 // data structure (convert the mesh to a model first of course).
-                Some(todo) if response.started_tick <= todo.started_tick => {
-                    let started_tick = todo.started_tick;
+                Some(todo) => {
+                    let started_tick = todo.started_tick.load(Ordering::Relaxed);
+                    if response.started_tick > started_tick {
+                        // Chunk must have been removed, or it was spawned on an old tick. Drop
+                        // the mesh since it's either out of date or no longer needed.
+                        continue;
+                    }
 
                     let sprite_instances = response.sprite_instances;
 
@@ -1331,7 +1395,7 @@ impl<V: RectRasterableVol> Terrain<V> {
                             load_time,
                         )]);
 
-                        self.insert_chunk(response.pos, TerrainChunkData {
+                        Self::insert_chunk(&mut self.chunks, &mut self.atlas, response.pos, TerrainChunkData {
                             load_time,
                             opaque_model: mesh.opaque_model,
                             fluid_model: mesh.fluid_model,
@@ -1360,12 +1424,11 @@ impl<V: RectRasterableVol> Terrain<V> {
                     }
 
                     if response.started_tick == started_tick {
+                        // This was the latest worker for this chunk, so we don't need to worry
+                        // about canceling any later tasks.
                         self.mesh_todo.remove(&response.pos);
                     }
                 },
-                // Chunk must have been removed, or it was spawned on an old tick. Drop the mesh
-                // since it's either out of date or no longer needed.
-                Some(_todo) => {},
                 None => {},
             }
         }

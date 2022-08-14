@@ -280,7 +280,8 @@ pub struct CharacterList {
     pub loading: bool,
 }
 
-const TOTAL_PENDING_CHUNKS_LIMIT: usize = 1024;
+/// Higher than what's needed at VD = 65.
+const TOTAL_PENDING_CHUNKS_LIMIT: usize = /*1024*/13800;
 
 impl Client {
     pub async fn new(
@@ -1874,8 +1875,8 @@ impl Client {
                             if !skip_mode && !self.pending_chunks.contains_key(key) {
                                 const CURRENT_TICK_PENDING_CHUNKS_LIMIT: usize = 8 * 4;
                                 if self.pending_chunks.len() < TOTAL_PENDING_CHUNKS_LIMIT
-                                    && current_tick_send_chunk_requests
-                                        < CURRENT_TICK_PENDING_CHUNKS_LIMIT
+                                    && /* current_tick_send_chunk_requests
+                                        < CURRENT_TICK_PENDING_CHUNKS_LIMIT */true
                                 {
                                     self.send_msg_err(ClientGeneral::TerrainChunkRequest {
                                         key: *key,

@@ -62,12 +62,12 @@ where
     };
     let get_glow = |_vol: &mut V, _pos: Vec3<i32>| 0.0;
     let get_opacity = |vol: &mut V, pos: Vec3<i32>| vol.get(pos).map_or(true, |vox| vox.is_empty());
-    let should_draw = |vol: &mut V, pos: Vec3<i32>, delta: Vec3<i32>, uv| {
-        should_draw_greedy(pos, delta, uv, |vox| {
+    let should_draw = |vol: &mut V, pos: Vec3<i32>, from: Cell, to: Cell, /*delta: Vec3<i32>, */uv| {
+        should_draw_greedy(pos, from, to,/* delta, */uv/*, |vox| {
             vol.get(vox)
                 .map(|vox| *vox)
                 .unwrap_or_else(|_| Cell::empty())
-        })
+        } */)
     };
     let create_opaque = |atlas_pos, pos, norm| {
         TerrainVertex::new_figure(atlas_pos, (pos + offs) * scale, norm, bone_idx)
@@ -78,6 +78,11 @@ where
         draw_delta,
         greedy_size,
         greedy_size_cross,
+        get_vox: |vol: &mut V, vox| {
+            vol.get(vox)
+                .map(|vox| *vox)
+                .unwrap_or_else(|_| Cell::empty())
+        },
         get_ao: |_: &mut V, _: Vec3<i32>| 1.0,
         get_light,
         get_glow,
@@ -204,8 +209,8 @@ where
         flat_get(flat, pos).get_color().unwrap_or_else(Rgb::zero)
     };
     let get_opacity = move |flat: &mut _, pos: Vec3<i32>| flat_get(flat, pos).is_empty();
-    let should_draw = move |flat: &mut _, pos: Vec3<i32>, delta: Vec3<i32>, uv| {
-        should_draw_greedy_ao(vertical_stripes, pos, delta, uv, |vox| flat_get(flat, vox))
+    let should_draw = move |flat: &mut _, pos: Vec3<i32>, from: Cell, to: Cell, /*delta: Vec3<i32>, */uv| {
+        should_draw_greedy_ao(vertical_stripes, pos, from, to,/* delta, */uv/* , |vox| flat_get(flat, vox) */)
     };
     // NOTE: Fits in i16 (much lower actually) so f32 is no problem (and the final
     // position, pos + mesh_delta, is guaranteed to fit in an f32).
@@ -219,6 +224,7 @@ where
         draw_delta,
         greedy_size,
         greedy_size_cross,
+        get_vox: move |flat: &mut _, vox| flat_get(flat, vox),
         get_ao: |_: &mut _, _: Vec3<i32>| 1.0,
         get_light,
         get_glow,
@@ -292,12 +298,12 @@ where
             .unwrap_or_else(Rgb::zero)
     };
     let get_opacity = |vol: &mut V, pos: Vec3<i32>| vol.get(pos).map_or(true, |vox| vox.is_empty());
-    let should_draw = |vol: &mut V, pos: Vec3<i32>, delta: Vec3<i32>, uv| {
-        should_draw_greedy(pos, delta, uv, |vox| {
+    let should_draw = |vol: &mut V, pos: Vec3<i32>, from: Cell, to: Cell, /*delta: Vec3<i32>, */uv| {
+        should_draw_greedy(pos, from, to,/* delta, */uv/*, |vox| {
             vol.get(vox)
                 .map(|vox| *vox)
                 .unwrap_or_else(|_| Cell::empty())
-        })
+        }*/)
     };
     let create_opaque = |_atlas_pos, pos: Vec3<f32>, norm| ParticleVertex::new(pos, norm);
 
@@ -307,6 +313,11 @@ where
         draw_delta,
         greedy_size,
         greedy_size_cross,
+        get_vox: |vol: &mut V, vox| {
+            vol.get(vox)
+                .map(|vox| *vox)
+                .unwrap_or_else(|_| Cell::empty())
+        },
         get_ao: |_: &mut V, _: Vec3<i32>| 1.0,
         get_light,
         get_glow,
@@ -333,12 +344,14 @@ where
 
 fn should_draw_greedy(
     pos: Vec3<i32>,
-    delta: Vec3<i32>,
+    from: Cell,
+    to: Cell,
+    /* delta: Vec3<i32>, */
     _uv: Vec2<Vec3<i32>>,
-    flat_get: impl Fn(Vec3<i32>) -> Cell,
+    /* flat_get: impl Fn(Vec3<i32>) -> Cell, */
 ) -> Option<(bool, /* u8 */ ())> {
-    let from = flat_get(pos - delta);
-    let to = flat_get(pos);
+    /* let from = flat_get(pos - delta);
+    let to = flat_get(pos); */
     let from_opaque = !from.is_empty();
     if from_opaque != to.is_empty() {
         None
@@ -352,12 +365,14 @@ fn should_draw_greedy(
 fn should_draw_greedy_ao(
     vertical_stripes: bool,
     pos: Vec3<i32>,
-    delta: Vec3<i32>,
+    from: Cell,
+    to: Cell,
+    /* delta: Vec3<i32>, */
     _uv: Vec2<Vec3<i32>>,
-    flat_get: impl Fn(Vec3<i32>) -> Cell,
+    /* flat_get: impl Fn(Vec3<i32>) -> Cell, */
 ) -> Option<(bool, bool)> {
-    let from = flat_get(pos - delta);
-    let to = flat_get(pos);
+    /* let from = flat_get(pos - delta);
+    let to = flat_get(pos); */
     let from_opaque = !from.is_empty();
     if from_opaque != to.is_empty() {
         None

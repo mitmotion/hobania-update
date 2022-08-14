@@ -63,7 +63,7 @@ impl<K: Hash + Eq + Send + Sync + 'static + Clone, V: Send + Sync + 'static> Key
                                 // which means that it completed while we tried to GC its pending
                                 // struct, which means that we'll GC it in the next cycle, so ignore
                                 // the error in this collection.
-                                let _ = pool.cancel(job);
+                                let _ = job.cancel();
                             }
                         }
                         fresh
@@ -89,7 +89,7 @@ impl<K: Hash + Eq + Send + Sync + 'static + Clone, V: Send + Sync + 'static> Key
                     // approximating that
                     let tx = self.tx.clone();
                     let f = f();
-                    let job = pool.spawn(self.name, move || {
+                    let job = pool.spawn(&self.name, move || {
                         let v = f(&k);
                         let _ = tx.send((k, v));
                     });

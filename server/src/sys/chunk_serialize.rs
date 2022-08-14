@@ -117,7 +117,7 @@ impl<'a> System<'a> for Sys {
         while chunks_iter.peek().is_some() {
             let chunks: Vec<_> = chunks_iter.by_ref().take(CHUNK_SIZE).collect();
             let chunk_sender = chunk_sender.clone();
-            slow_jobs.spawn("CHUNK_SERIALIZER", move || {
+            slow_jobs.spawn(&"CHUNK_SERIALIZER", move || {
                 for (chunk, chunk_key, mut meta) in chunks {
                     let msg = Client::prepare_chunk_update_msg(
                         ServerGeneral::TerrainChunkUpdate {

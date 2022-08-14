@@ -1728,12 +1728,13 @@ impl CharSelectionUi {
     pub fn maintain(&mut self, global_state: &mut GlobalState, client: &Client) -> Vec<Event> {
         let mut events = Vec::new();
         let i18n = global_state.i18n.read();
+        let pool = client.state().slow_job_pool();
 
         let (mut messages, _) = self.ui.maintain(
             self.controls
                 .view(&global_state.settings, client, &self.error, &i18n),
             global_state.window.renderer_mut(),
-            None,
+            Some(&pool),
             &mut global_state.clipboard,
         );
 

@@ -600,7 +600,7 @@ fn write_column<R: Rng>(
     for z in bedrock..z_range.end {
         let wpos = wpos2d.with_z(z);
         let mut try_spawn_entity = false;
-        canvas.map(wpos, |_block| {
+        canvas.set(wpos, {
             if z < z_range.start - 4 && !void_below {
                 Block::new(BlockKind::Lava, Rgb::new(255, 65, 0))
             } else if basalt > 0.0
@@ -844,7 +844,7 @@ fn write_column<R: Rng>(
             {
                 Block::air(sprite)
             } else {
-                get_mushroom(wpos, rng).unwrap_or(Block::air(SpriteKind::Empty))
+                /*get_mushroom(wpos, rng).unwrap_or(*/Block::air(SpriteKind::Empty)/*)*/
             }
         });
 

@@ -4295,11 +4295,10 @@ impl Hud {
         // TODO: using a thread pool in the obvious way for speeding up map zoom results
         // in flickering artifacts, figure out a better way to make use of the
         // thread pool
-        let _pool = client.state().ecs().read_resource::<SlowJobPool>();
+        let pool = client.state().slow_job_pool();
         self.ui.maintain(
             global_state.window.renderer_mut(),
-            None,
-            //Some(&pool),
+            Some(&pool),
             Some(proj_mat * view_mat * Mat4::translation_3d(-focus_off)),
         );
 
