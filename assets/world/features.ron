@@ -3,7 +3,7 @@
 
 (
     caverns: false, // TODO: Disabled by default until cave overhaul
-    caves: false,
+    caves: true,
     rocks: true,
     shrubs: true,
     trees: true,
