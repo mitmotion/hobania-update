@@ -398,6 +398,8 @@ impl Client {
                 let mut state = State::client();
                 // Client-only components
                 state.ecs_mut().register::<comp::Last<CharacterState>>();
+                state.ecs_mut().write_resource::<SlowJobPool>()
+                    .configure(&"TERRAIN_DROP", |_n| 1);
                 /* state.ecs_mut().write_resource::<SlowJobPool>()
                     .configure("TERRAIN_DESERIALIZING", |n| n / 2); */
                 let entity = state.ecs_mut().apply_entity_package(entity_package);
@@ -1835,9 +1837,14 @@ impl Client {
                     chunks_to_remove.push(key);
                 }
             });
+            // TODO: Parallelize?
+            let slowjob = self.state.slow_job_pool();
             for key in chunks_to_remove {
-                self.state.remove_chunk(key);
+                let chunk = self.state.remove_chunk(key);
+                // Drop chunk in a background thread.
+                slowjob.spawn(&"TERRAIN_DROP", move || { drop(chunk); });
             }
+            drop(slowjob);
 
             let mut current_tick_send_chunk_requests = 0;
             // Request chunks from the server.

@@ -441,18 +441,18 @@ impl State {
 
     /// Remove the chunk with the given key from this state's terrain, if it
     /// exists.
-    pub fn remove_chunk(&mut self, key: Vec2<i32>) {
-        if self
+    pub fn remove_chunk(&self, key: Vec2<i32>) -> Option<Arc<TerrainChunk>> {
+        self
             .ecs
             .write_resource::<TerrainGrid>()
             .remove(key)
-            .is_some()
-        {
-            self.ecs
-                .write_resource::<TerrainChanges>()
-                .removed_chunks
-                .insert(key);
-        }
+            .map(|chunk| {
+                self.ecs
+                    .write_resource::<TerrainChanges>()
+                    .removed_chunks
+                    .insert(key);
+                chunk
+            })
     }
 
     // Run RegionMap tick to update entity region occupancy

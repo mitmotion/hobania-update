@@ -421,9 +421,12 @@ impl<'a, Allocator: AtlasAllocator> GreedyMesh<'a, Allocator> {
     /// potentially use a single staged upload to the GPU.
     ///
     /// Returns the ColLightsInfo corresponding to the constructed atlas.
-    pub fn finalize(self) -> ColLightInfo {
+    pub fn finalize(self, alignment: Vec2<u16>) -> ColLightInfo {
         span!(_guard, "finalize", "GreedyMesh::finalize");
-        let cur_size = self.col_lights_size;
+        let mut cur_size = self.col_lights_size;
+        // Round to nearest alignment (assuming power of 2)
+        cur_size.x = (cur_size.x + alignment.x - 1) / alignment.x * alignment.x;
+        cur_size.y = (cur_size.y + alignment.y - 1) / alignment.y * alignment.y;
         let col_lights = vec![
             TerrainVertex::make_col_light(254, 0, Rgb::broadcast(254), true);
             cur_size.x as usize * cur_size.y as usize

@@ -66,6 +66,11 @@ pub trait Vertex: Clone + bytemuck::Pod {
     const QUADS_INDEX: Option<wgpu::IndexFormat>;
 }
 
+impl Vertex for [u8; 4] {
+    const QUADS_INDEX: Option<wgpu::IndexFormat> = None;
+    const STRIDE: wgpu::BufferAddress = core::mem::size_of::<Self>() as wgpu::BufferAddress;
+}
+
 use serde::{Deserialize, Serialize};
 /// Anti-aliasing modes
 #[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]

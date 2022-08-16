@@ -1650,6 +1650,10 @@ impl PlayState for SessionState {
 
     fn globals_bind_group(&self) -> &GlobalsBindGroup { self.scene.global_bind_group() }
 
+    fn pre_commands(&mut self) -> Vec<wgpu::CommandBuffer> {
+        self.scene.pre_commands()
+    }
+
     /// Render the session to the screen.
     ///
     /// This method should be called once per frame.

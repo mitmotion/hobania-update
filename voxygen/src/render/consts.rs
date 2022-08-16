@@ -39,11 +39,19 @@ impl<T: Copy + Pod> Consts<T> {
         self.buf.update(queue, vals, offset)
     }
 
-    /// Update the GPU-side value represented by this constant handle, if it was previously memory
-    /// mapped, and then immediately unmaps it.
-    pub fn update_mapped(&mut self, queue: &wgpu::Queue, vals: &[T], offset: usize) {
-        self.buf.update_mapped(queue, vals, offset)
+    /// Get the GPU-side mapped slice represented by this constant handle, if it was previously
+    /// memory mapped.
+    pub fn get_mapped_mut(&self, offset: usize, len: usize) -> /* &mut [T] */wgpu::BufferViewMut<'_> {
+        self.buf.get_mapped_mut(offset, len)
+    }
+
+    /// Unmaps the GPU-side handle represented by this constant handle, if it was previously
+    /// memory-mapped.
+    pub fn unmap(&self, queue: &wgpu::Queue) {
+        self.buf.unmap(queue);
     }
 
     pub fn buf(&self) -> &wgpu::Buffer { &self.buf.buf }
+
+    pub fn len(&self) -> usize { self.buf.len() }
 }

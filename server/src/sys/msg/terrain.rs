@@ -92,7 +92,7 @@ impl<'a> System<'a> for Sys {
                                         });
                                     } else {
                                         network_metrics.chunks_generation_triggered.inc();
-                                        chunk_requests.push(ChunkRequest { entity, key });
+                                        chunk_requests.push(ChunkRequest { entity: Some(entity), key });
                                     }
                                 } else {
                                     network_metrics.chunks_request_dropped.inc();
@@ -133,8 +133,8 @@ impl<'a> System<'a> for Sys {
                                 // TODO: @zesterer do we want to be sending these chunk to the
                                 // client even if they aren't
                                 // requested? If we don't we could replace the
-                                // entity here with Option<Entity> and pass in None.
-                                chunk_requests.push(ChunkRequest { entity, key });
+                                // entity here with None.
+                                chunk_requests.push(ChunkRequest { entity: None, key });
                             }
                         }
                     }

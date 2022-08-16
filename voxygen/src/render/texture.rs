@@ -193,12 +193,7 @@ impl Texture {
     /// Replaces this texture with the contents of another texture.
     ///
     /// The source size should at least fit within this texture's size.
-    pub fn replace(&self, device: &wgpu::Device, queue: &wgpu::Queue, texture: &Self) {
-        let mut encoder = device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Replace the texture buffer"),
-            });
-
+    pub fn replace<'a>(&self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder, texture: &Self) {
         // Copy image
         encoder.copy_texture_to_texture(
             wgpu::ImageCopyTexture {
@@ -217,9 +212,6 @@ impl Texture {
                 depth_or_array_layers: 1,
             },
         );
-
-        // TODO: Delay submission, don't just submit immediately out of convenience!
-        queue.submit(std::iter::once(encoder.finish()));
     }
 
     /// Update a texture with the given data (used for updating the glyph cache

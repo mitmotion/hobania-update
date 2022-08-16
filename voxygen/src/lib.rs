@@ -155,6 +155,11 @@ pub trait PlayState {
     /// Determines whether the play state should have an enforced FPS cap
     fn capped_fps(&self) -> bool;
 
+    /// Some scenes may have prepared command buffers they need to add directly to the queue.
+    fn pre_commands(&mut self) -> Vec<wgpu::CommandBuffer> {
+        vec![]
+    }
+
     fn globals_bind_group(&self) -> &GlobalsBindGroup;
 
     /// Draw the play state.

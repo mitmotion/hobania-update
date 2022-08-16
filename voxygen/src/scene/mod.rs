@@ -1137,6 +1137,11 @@ impl Scene {
         self.music_mgr.maintain(audio, scene_data.state, client);
     }
 
+    pub fn pre_commands(&mut self) -> Vec<wgpu::CommandBuffer> {
+        // We may have some initial work to do before we get started (usually uploading textures).
+        core::mem::replace(&mut self.terrain.command_buffers, vec![])
+    }
+
     pub fn global_bind_group(&self) -> &GlobalsBindGroup { &self.globals_bind_group }
 
     /// Render the scene using the provided `Drawer`.

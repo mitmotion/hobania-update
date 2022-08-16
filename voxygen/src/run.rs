@@ -206,10 +206,11 @@ fn handle_main_events_cleared(
         span!(guard, "Render");
 
         // Render the screen using the global renderer
+        let is_egui_enabled = last.egui_enabled();
         if let Some(mut drawer) = global_state
             .window
             .renderer_mut()
-            .start_recording_frame(last.globals_bind_group())
+            .start_recording_frame(last.pre_commands(), last.globals_bind_group())
             .expect("Unrecoverable render error when starting a new frame!")
         {
             if global_state.clear_shadows_next_frame {
@@ -219,7 +220,7 @@ fn handle_main_events_cleared(
             last.render(&mut drawer, &global_state.settings);
 
             #[cfg(feature = "egui-ui")]
-            if last.egui_enabled() && global_state.settings.interface.egui_enabled() {
+            if is_egui_enabled && global_state.settings.interface.egui_enabled() {
                 drawer.draw_egui(&mut global_state.egui_state.platform, scale_factor);
             }
         };

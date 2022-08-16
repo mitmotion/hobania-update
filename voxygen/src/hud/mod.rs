@@ -1242,7 +1242,7 @@ impl Hud {
     ) -> Vec<Event> {
         span!(_guard, "update_layout", "Hud::update_layout");
         let mut events = core::mem::take(&mut self.events);
-        if global_state.settings.interface.map_show_voxel_map {
+        if global_state.settings.interface.map_show_voxel_map && global_state.settings.interface.minimap_show {
             self.voxel_minimap.maintain(client, &mut self.ui);
         }
         let (ref mut ui_widgets, ref mut item_tooltip_manager, ref mut tooltip_manager) =

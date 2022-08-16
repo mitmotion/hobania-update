@@ -996,7 +996,10 @@ pub fn generate_mesh<'a/*, V: RectRasterableVol<Vox = Block> + ReadVol + Debug +
         min: min_bounds,
         max: max_bounds + min_bounds,
     };
-    let (col_lights, col_lights_size) = greedy.finalize();
+    // WGPU requires this alignment.
+    let (col_lights, col_lights_size) = greedy.finalize(
+        Vec2::new((wgpu::COPY_BYTES_PER_ROW_ALIGNMENT / 4) as u16, 1),
+    );
 
     (
         opaque_mesh,

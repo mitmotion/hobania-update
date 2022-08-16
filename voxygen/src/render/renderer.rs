@@ -139,8 +139,8 @@ enum State {
 /// GPU, along with pipeline state objects (PSOs) needed to renderer different
 /// kinds of models to the screen.
 pub struct Renderer {
-    device: Arc<wgpu::Device>,
-    queue: wgpu::Queue,
+    pub(crate) device: Arc<wgpu::Device>,
+    pub(crate) queue: wgpu::Queue,
     surface: wgpu::Surface,
     swap_chain: wgpu::SwapChain,
     sc_desc: wgpu::SwapChainDescriptor,
@@ -998,6 +998,7 @@ impl Renderer {
     /// be returned
     pub fn start_recording_frame<'a>(
         &'a mut self,
+        pre_commands: Vec<wgpu::CommandBuffer>,
         globals: &'a GlobalsBindGroup,
     ) -> Result<Option<drawer::Drawer<'a>>, RenderError> {
         span!(
@@ -1214,7 +1215,7 @@ impl Renderer {
                 label: Some("A render encoder"),
             });
 
-        Ok(Some(drawer::Drawer::new(encoder, self, tex, globals)))
+        Ok(Some(drawer::Drawer::new(encoder, self, tex, pre_commands, globals)))
     }
 
     /// Recreate the pipelines
@@ -1265,14 +1266,26 @@ impl Renderer {
         Consts::new_with_data(device, vals)
     }
 
+    pub fn create_consts_mapped<T: Copy + bytemuck::Pod>(
+        &mut self,
+        len: usize,
+    ) -> Consts<T> {
+        Consts::new_mapped(&self.device, len)
+    }
+
     /// Update a set of constants with the provided values.
     pub fn update_consts<T: Copy + bytemuck::Pod>(&self, consts: &mut Consts<T>, vals: &[T]) {
         consts.update(&self.queue, vals, 0)
     }
 
-    /// Update a set of memory mapped constants with the provided values.
-    pub fn update_mapped<T: Copy + bytemuck::Pod>(&self, consts: &mut Consts<T>, vals: &[T]) {
-        consts.update_mapped(&self.queue, vals, 0)
+    /// Gets a memory mapped buffer of a set of constants.
+    pub fn get_consts_mapped<'a, T: Copy + bytemuck::Pod>(&self, consts: &'a Consts<T>) -> /* &'a mut [T] */wgpu::BufferViewMut<'a> {
+        consts.get_mapped_mut(0, consts.len())
+    }
+
+    /// Unmaps a set of memory mapped constants.
+    pub fn unmap_consts<T: Copy + bytemuck::Pod>(&self, consts: &Consts<T>) {
+        consts.unmap(&self.queue)
     }
 
     pub fn update_clouds_locals(&mut self, new_val: clouds::Locals) {
@@ -1369,17 +1382,17 @@ impl Renderer {
     /// If the provided mesh is empty this returns None
     pub fn create_model<V: Vertex>(&mut self, mesh: &Mesh<V>) -> Option<Model<V>> {
         Self::update_index_length::<V>(&self.quad_index_buffer_u32_len, mesh.vertices().len());
-        Model::new(&self.device, mesh)
+        Model::new(&self.device, wgpu::BufferUsage::VERTEX, mesh)
     }
 
     /// Create a new model from the provided mesh, lazily (for use off the main thread).
     /// If the provided mesh is empty this returns None
-    pub fn create_model_lazy<V: Vertex>(&mut self) -> impl for<'a> Fn(&'a Mesh<V>) -> Option<Model<V>> + Send + Sync {
+    pub fn create_model_lazy<V: Vertex>(&mut self, usage: wgpu::BufferUsage) -> impl for<'a> Fn(&'a Mesh<V>) -> Option<Model<V>> + Send + Sync {
         let device = Arc::clone(&self.device);
         let quad_index_buffer_u32_len = Arc::clone(&self.quad_index_buffer_u32_len);
         move |mesh| {
             Self::update_index_length::<V>(&quad_index_buffer_u32_len, mesh.vertices().len());
-            Model::new(&device, mesh)
+            Model::new(&device, usage, mesh)
         }
     }
 
@@ -1444,14 +1457,11 @@ impl Renderer {
     ///
     /// NOTE: This is done lazily--the returned function must be invoked to actually create the
     /// texture.  This allows creating the texture on another thread.
-    pub fn create_texture_raw<'a>(
+    pub fn create_texture_raw(
         &mut self,
-        texture_info: wgpu::TextureDescriptor<'a>,
-        view_info: wgpu::TextureViewDescriptor<'a>,
-        sampler_info: wgpu::SamplerDescriptor<'a>,
-    ) -> impl FnOnce() -> Texture + Send + Sync + 'a {
+    ) -> impl for<'a> Fn(wgpu::TextureDescriptor<'a>, wgpu::TextureViewDescriptor<'a>, wgpu::SamplerDescriptor<'a>) -> Texture + Send + Sync {
         let device = Arc::clone(&self.device);
-        move || {
+        move |texture_info, view_info, sampler_info| {
             let texture = Texture::new_raw(&device, &texture_info, &view_info, &sampler_info);
             texture
         }
@@ -1508,8 +1518,8 @@ impl Renderer {
     /// Replaces the destination texture with the contents of the source texture.
     ///
     /// The source size should at least fit within the destination texture's size.
-    pub fn replace_texture(&mut self, dest: &Texture, source: &Texture) {
-        dest.replace(&self.device, &self.queue, source);
+    pub fn replace_texture(&mut self, encoder: &mut wgpu::CommandEncoder, dest: &Texture, source: &Texture) {
+        dest.replace(&self.device, encoder, source);
     }
 
     /// Queue to obtain a screenshot on the next frame render

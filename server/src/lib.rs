@@ -191,7 +191,7 @@ impl BattleModeBuffer {
 }
 
 pub struct ChunkRequest {
-    entity: EcsEntity,
+    entity: Option<EcsEntity>,
     key: Vec2<i32>,
 }
 

@@ -30,13 +30,13 @@ pub struct Model<V: Vertex> {
 
 impl<V: Vertex> Model<V> {
     /// Returns None if the provided mesh is empty
-    pub fn new(device: &wgpu::Device, mesh: &Mesh<V>) -> Option<Self> {
+    pub fn new(device: &wgpu::Device, usage: wgpu::BufferUsage, mesh: &Mesh<V>) -> Option<Self> {
         if mesh.vertices().is_empty() {
             return None;
         }
 
         Some(Self {
-            vbuf: Buffer::new(device, wgpu::BufferUsage::VERTEX, mesh.vertices()),
+            vbuf: Buffer::new(device, /*wgpu::BufferUsage::VERTEX*/usage, mesh.vertices()),
         })
     }
 
@@ -50,7 +50,7 @@ impl<V: Vertex> Model<V> {
         }
     }
 
-    pub(super) fn buf(&self) -> &wgpu::Buffer { &self.vbuf.buf }
+    pub fn buf(&self) -> &wgpu::Buffer { &self.vbuf.buf }
 
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize { self.vbuf.len() }

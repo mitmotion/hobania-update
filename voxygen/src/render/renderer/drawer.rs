@@ -72,6 +72,7 @@ struct RendererBorrow<'frame> {
 
 pub struct Drawer<'frame> {
     encoder: Option<ManualOwningScope<'frame, wgpu::CommandEncoder>>,
+    pub(crate) pre_commands: Vec<wgpu::CommandBuffer>,
     borrow: RendererBorrow<'frame>,
     swap_tex: wgpu::SwapChainTexture,
     globals: &'frame GlobalsBindGroup,
@@ -85,6 +86,7 @@ impl<'frame> Drawer<'frame> {
         encoder: wgpu::CommandEncoder,
         renderer: &'frame mut Renderer,
         swap_tex: wgpu::SwapChainTexture,
+        pre_commands: Vec<wgpu::CommandBuffer>,
         globals: &'frame GlobalsBindGroup,
     ) -> Self {
         renderer.ensure_sufficient_index_length();
@@ -128,6 +130,7 @@ impl<'frame> Drawer<'frame> {
 
         Self {
             encoder: Some(encoder),
+            pre_commands,
             borrow,
             swap_tex,
             globals,
@@ -640,7 +643,7 @@ impl<'frame> Drop for Drawer<'frame> {
         profiler.resolve_queries(&mut encoder);
 
         // It is recommended to only do one submit per frame
-        self.borrow.queue.submit(std::iter::once(encoder.finish()));
+        self.borrow.queue.submit(self.pre_commands.drain(..).chain(std::iter::once(encoder.finish())));
         // Need to call this after submit so the async mapping doesn't occur before
         // copying the screenshot to the buffer which will be mapped.
         if let Some(f) = download_and_handle_screenshot {

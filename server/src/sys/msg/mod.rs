@@ -21,7 +21,13 @@ pub fn add_server_systems(dispatch_builder: &mut DispatcherBuilder) {
     dispatch::<in_game::Sys>(dispatch_builder, &[]);
     dispatch::<ping::Sys>(dispatch_builder, &[&general::Sys::sys_name()]);
     dispatch::<register::Sys>(dispatch_builder, &[]);
-    dispatch::<terrain::Sys>(dispatch_builder, &[]);
+    // Unfortunately, this is currently desirable because otherwise we can miss chunk requests the
+    // first time around due to them not being within the view distance circle, requiring the
+    // client to time out before retrieving them again.
+    //
+    // This can also happen due to in-game commands like /site.  Unfortunately this is a lot harder
+    // to fix, because the in-game commands are not even processed in a system.
+    dispatch::<terrain::Sys>(dispatch_builder, &[&in_game::Sys::sys_name()]);
     dispatch::<pets::Sys>(dispatch_builder, &[]);
     dispatch::<loot::Sys>(dispatch_builder, &[]);
 }

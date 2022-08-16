@@ -464,7 +464,7 @@ where
                     ];
 
                     slot_.store(Some(MeshWorkerResponse {
-                        col_light: greedy.finalize(),
+                        col_light: greedy.finalize(Vec2::broadcast(1)),
                         opaque,
                         bounds: figure_bounds,
                         vertex_range: models,

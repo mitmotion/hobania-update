@@ -9,6 +9,7 @@ use crate::{
     chunk_generator::ChunkGenerator,
     chunk_serialize::ChunkSendEntry,
     client::Client,
+    // metrics::NetworkRequestMetrics,
     presence::{Presence, RepositionOnChunkLoad},
     rtsim::RtSim,
     settings::Settings,
@@ -24,7 +25,8 @@ use common::{
     lottery::LootSpec,
     resources::{Time, TimeOfDay},
     slowjob::SlowJobPool,
-    terrain::TerrainGrid,
+    terrain::{/* TerrainChunkSize, */TerrainGrid},
+    vol::RectVolSize,
     SkillSetBuilder,
 };
 
@@ -64,6 +66,7 @@ impl<'a> System<'a> for Sys {
         ReadExpect<'a, IndexOwned>,
         ReadExpect<'a, Arc<World>>,
         ReadExpect<'a, EventBus<ChunkSendEntry>>,
+        // ReadExpect<'a, NetworkRequestMetrics>,
         WriteExpect<'a, ChunkGenerator>,
         WriteExpect<'a, TerrainGrid>,
         Write<'a, TerrainChanges>,
@@ -97,6 +100,7 @@ impl<'a> System<'a> for Sys {
             index,
             world,
             chunk_send_bus,
+            // network_metrics,
             mut chunk_generator,
             mut terrain,
             mut terrain_changes,
@@ -114,6 +118,7 @@ impl<'a> System<'a> for Sys {
         ): Self::SystemData,
     ) {
         let mut server_emitter = server_event_bus.emitter();
+        // let mut chunk_send_emitter = chunk_send_bus.emitter();
 
         // Generate requested chunks
         //
@@ -121,8 +126,35 @@ impl<'a> System<'a> for Sys {
         // don't create duplicate work for chunks that just finished but are not
         // yet added to the terrain.
         chunk_requests.drain(..).for_each(|request| {
+            /* if let Some(entity) = request.entity {
+                let in_vd = if let Some((pos, presence)) = positions.get(entity).zip(presences.get(entity)) {
+                    pos.0.xy().map(|e| e as f64).distance_squared(
+                        request.key.map(|e| e as f64 + 0.5)
+                            * TerrainChunkSize::RECT_SIZE.map(|e| e as f64),
+                    ) < ((presence.view_distance as f64 - 1.0
+                        + 2.5 * 2.0_f64.sqrt())
+                        * TerrainChunkSize::RECT_SIZE.x as f64)
+                        .powi(2)
+                } else {
+                    true
+                };
+                if in_vd {
+                    if terrain.get_key_arc(request.key).is_some() {
+                        network_metrics.chunks_served_from_memory.inc();
+                        chunk_send_emitter.emit(ChunkSendEntry {
+                            chunk_key: request.key,
+                            entity,
+                        });
+                        return;
+                    }
+                } else {
+                    network_metrics.chunks_request_dropped.inc();
+                    return;
+                }
+            }
+            network_metrics.chunks_request_dropped.inc(); */
             chunk_generator.generate_chunk(
-                Some(request.entity),
+                request.entity,
                 request.key,
                 &slow_jobs,
                 Arc::clone(&world),

@@ -1,6 +1,6 @@
 use super::super::{AaMode, Bound, Consts, GlobalsLayouts, Vertex as VertexTrait};
 use bytemuck::{Pod, Zeroable};
-use std::mem;
+use std::{mem, sync::Arc};
 use vek::*;
 
 #[repr(C)]
@@ -136,6 +136,11 @@ impl VertexTrait for Vertex {
     const STRIDE: wgpu::BufferAddress = mem::size_of::<Self>() as wgpu::BufferAddress;
 }
 
+/// Needs to be aligned / padded to this value to fulfill wgpu spec (4 is just the number of u64s
+/// we currently have in Locals, we could replace Locals with LocalsInner or something if we wanted
+/// to make this more robust).
+const PADDING_LEN: usize = wgpu::BIND_BUFFER_ALIGNMENT as usize / mem::size_of::<u64>() - 4;
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Zeroable, Pod)]
 // TODO: new function and private fields??
@@ -143,6 +148,7 @@ pub struct Locals {
     model_offs: [f32; 3],
     load_time: f32,
     atlas_offs: [i32; 4],
+    padding: [u64; PADDING_LEN],
 }
 
 impl Locals {
@@ -151,6 +157,7 @@ impl Locals {
             model_offs: model_offs.into_array(),
             load_time,
             atlas_offs: Vec4::new(atlas_offs.x as i32, atlas_offs.y as i32, 0, 0).into_array(),
+            .. Self::default()
         }
     }
 
@@ -159,11 +166,12 @@ impl Locals {
             model_offs: [0.0; 3],
             load_time: 0.0,
             atlas_offs: [0; 4],
+            padding: [0; PADDING_LEN],
         }
     }
 }
 
-pub type BoundLocals = Bound<Consts<Locals>>;
+pub type BoundLocals = Bound<()>;
 
 pub struct TerrainLayout {
     pub locals: wgpu::BindGroupLayout,
@@ -191,19 +199,23 @@ impl TerrainLayout {
         }
     }
 
-    pub fn bind_locals(&self, device: &wgpu::Device, locals: Consts<Locals>) -> BoundLocals {
+    pub fn bind_locals(&self, device: &wgpu::Device, locals: &Consts<Locals>, offset: usize) -> BoundLocals {
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &self.locals,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: locals.buf().as_entire_binding(),
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                    buffer: locals.buf(),
+                    offset: (offset * mem::size_of::<Locals>()) as wgpu::BufferAddress,
+                    size: wgpu::BufferSize::new(mem::size_of::<Locals>() as u64),
+                })
             }],
         });
 
         BoundLocals {
             bind_group,
-            with: locals,
+            with: /*locals*/(),
         }
     }
 }

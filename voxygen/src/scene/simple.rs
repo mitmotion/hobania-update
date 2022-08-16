@@ -147,7 +147,7 @@ impl Scene {
                 let range = 0..opaque_mesh.vertices().len() as u32;
                 let model =
                     col_lights
-                        .create_figure(renderer, greedy.finalize(), (opaque_mesh, bounds), [range]);
+                        .create_figure(renderer, greedy.finalize(Vec2::broadcast(1)), (opaque_mesh, bounds), [range]);
                 let mut buf = [Default::default(); anim::MAX_BONE_COUNT];
                 let common_params = FigureUpdateCommonParameters {
                     entity: None,
