@@ -1354,8 +1354,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                 label: Some("Update textures."),
             });
 
-        let locals_buffer_ = bytemuck::cast_slice_mut(&mut *locals_buffer);
-        for (locals_offset, (response, locals_buffer)) in incoming_chunks.zip(locals_buffer_).enumerate() {
+        for (locals_offset, (response, locals_buffer)) in incoming_chunks.zip(locals_buffer.array_chunks_mut::<{ core::mem::size_of::<TerrainLocals>() }>()).enumerate() {
             match self.mesh_todo.get(&response.pos) {
                 // It's the mesh we want, insert the newly finished model into the terrain model
                 // data structure (convert the mesh to a model first of course).
@@ -1462,7 +1461,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                         );
 
                         // Update the memory mapped locals.
-                        *locals_buffer =
+                        let locals_buffer_ =
                         /* renderer.update_mapped(&mut mesh.locals, &[*/TerrainLocals::new(
                             Vec3::from(
                                 response.pos.map2(VolGrid2d::<V>::chunk_size(), |e, sz| {
@@ -1472,6 +1471,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                             atlas_offs,
                             load_time,
                         )/*])*/;
+                        *locals_buffer = bytemuck::cast(locals_buffer_);
 
                         /* let locals = Arc::clone(&locals); */
                         Self::insert_chunk(&slowjob, &mut self.chunks, &mut self.atlas, response.pos, TerrainChunkData {

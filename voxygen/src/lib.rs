@@ -3,6 +3,7 @@
 #![allow(clippy::identity_op, clippy::option_map_unit_fn)]
 #![deny(clippy::clone_on_ref_ptr)]
 #![feature(
+    array_chunks,
     array_methods,
     array_windows,
     array_zip,
