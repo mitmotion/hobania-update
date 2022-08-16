@@ -79,7 +79,7 @@ impl Renderer {
     pub fn create_terrain_bound_locals(
         &mut self,
         locals: /*Arc<*/&Consts<terrain::Locals>/*>*/,
-        offset: usize,
+        /* offset: usize, */
     ) -> /*for<'a> Fn(&'a [terrain::Locals]) -> terrain::BoundLocals + Send + Sync*//* impl Fn() -> terrain::BoundLocals + Send + Sync */terrain::BoundLocals {
         /* let device = Arc::clone(&self.device);
         let immutable = Arc::clone(&self.layouts.immutable);
@@ -87,7 +87,7 @@ impl Renderer {
             let locals = Consts::new_mapped(&device, 1);
             immutable.terrain.bind_locals(&device, locals)
         } */
-        self.layouts.immutable.terrain.bind_locals(&self.device, locals, offset)
+        self.layouts.immutable.terrain.bind_locals(&self.device, locals/* , offset */)
     }
 
     pub fn create_shadow_bound_locals(&mut self, locals: &[shadow::Locals]) -> shadow::BoundLocals {

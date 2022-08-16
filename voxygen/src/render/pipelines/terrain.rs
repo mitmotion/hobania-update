@@ -171,7 +171,7 @@ impl Locals {
     }
 }
 
-pub type BoundLocals = Bound<()>;
+pub type BoundLocals = Arc<Bound<()>>;
 
 pub struct TerrainLayout {
     pub locals: wgpu::BindGroupLayout,
@@ -189,7 +189,7 @@ impl TerrainLayout {
                         visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
+                            has_dynamic_offset: true,
                             min_binding_size: None,
                         },
                         count: None,
@@ -199,7 +199,7 @@ impl TerrainLayout {
         }
     }
 
-    pub fn bind_locals(&self, device: &wgpu::Device, locals: &Consts<Locals>, offset: usize) -> BoundLocals {
+    pub fn bind_locals(&self, device: &wgpu::Device, locals: &Consts<Locals>/*, offset: usize*/) -> BoundLocals {
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &self.locals,
@@ -207,16 +207,16 @@ impl TerrainLayout {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                     buffer: locals.buf(),
-                    offset: (offset * mem::size_of::<Locals>()) as wgpu::BufferAddress,
+                    offset: /* (offset * mem::size_of::<Locals>()) */0 as wgpu::BufferAddress,
                     size: wgpu::BufferSize::new(mem::size_of::<Locals>() as u64),
                 })
             }],
         });
 
-        BoundLocals {
+        Arc::new(Bound {
             bind_group,
             with: /*locals*/(),
-        }
+        })
     }
 }
 

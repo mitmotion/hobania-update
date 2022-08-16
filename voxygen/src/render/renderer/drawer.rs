@@ -465,7 +465,7 @@ impl<'frame> Drawer<'frame> {
         &mut self,
         matrices: &[shadow::PointLightMatrix; 126],
         chunks: impl Clone
-        + Iterator<Item = (&'data Model<terrain::Vertex>, &'data terrain::BoundLocals)>,
+        + Iterator<Item = (&'data Model<terrain::Vertex>, &'data (wgpu::DynamicOffset, terrain::BoundLocals))>,
     ) {
         if !self.borrow.pipeline_modes.shadow.is_map() {
             return;
@@ -524,8 +524,8 @@ impl<'frame> Drawer<'frame> {
                         &data[(6 * (point_light + 1) * STRIDE + face as usize * STRIDE)
                             ..(6 * (point_light + 1) * STRIDE + (face + 1) as usize * STRIDE)],
                     );
-                    chunks.clone().for_each(|(model, locals)| {
-                        render_pass.set_bind_group(1, &locals.bind_group, &[]);
+                    chunks.clone().for_each(|(model, &(locals_offset, ref locals))| {
+                        render_pass.set_bind_group(1, &locals.bind_group, &[locals_offset]);
                         render_pass.set_vertex_buffer(0, model.buf().slice(..));
                         render_pass.draw_indexed(0..model.len() as u32 / 4 * 6, 0, 0..1);
                     });
@@ -746,9 +746,9 @@ impl<'pass_ref, 'pass: 'pass_ref> TerrainShadowDrawer<'pass_ref, 'pass> {
     pub fn draw<'data: 'pass>(
         &mut self,
         model: &'data Model<terrain::Vertex>,
-        locals: &'data terrain::BoundLocals,
+        &(locals_offset, ref locals): &'data (wgpu::DynamicOffset, terrain::BoundLocals),
     ) {
-        self.render_pass.set_bind_group(1, &locals.bind_group, &[]);
+        self.render_pass.set_bind_group(1, &locals.bind_group, &[locals_offset]);
         self.render_pass.set_vertex_buffer(0, model.buf().slice(..));
         self.render_pass
             .draw_indexed(0..model.len() as u32 / 4 * 6, 0, 0..1);
@@ -924,7 +924,7 @@ impl<'pass_ref, 'pass: 'pass_ref> TerrainDrawer<'pass_ref, 'pass> {
         &mut self,
         model: &'data Model<terrain::Vertex>,
         col_lights: &'data Arc<ColLights<terrain::Locals>>,
-        locals: &'data terrain::BoundLocals,
+        &(locals_offset, ref locals): &'data (wgpu::DynamicOffset, terrain::BoundLocals),
     ) {
         if self.col_lights
             // Check if we are still using the same atlas texture as the previous drawn
@@ -937,7 +937,7 @@ impl<'pass_ref, 'pass: 'pass_ref> TerrainDrawer<'pass_ref, 'pass> {
             self.col_lights = Some(col_lights);
         };
 
-        self.render_pass.set_bind_group(3, &locals.bind_group, &[]);
+        self.render_pass.set_bind_group(3, &locals.bind_group, &[locals_offset]);
         self.render_pass.set_vertex_buffer(0, model.buf().slice(..));
         self.render_pass
             .draw_indexed(0..model.len() as u32 / 4 * 6, 0, 0..1);
@@ -975,11 +975,11 @@ pub struct SpriteDrawer<'pass_ref, 'pass: 'pass_ref> {
 impl<'pass_ref, 'pass: 'pass_ref> SpriteDrawer<'pass_ref, 'pass> {
     pub fn draw<'data: 'pass>(
         &mut self,
-        terrain_locals: &'data terrain::BoundLocals,
+        &(terrain_locals_offset, ref terrain_locals): &'data (wgpu::DynamicOffset, terrain::BoundLocals),
         instances: &'data Instances<sprite::Instance>,
     ) {
         self.render_pass
-            .set_bind_group(3, &terrain_locals.bind_group, &[]);
+            .set_bind_group(3, &terrain_locals.bind_group, &[terrain_locals_offset]);
 
         self.render_pass
             .set_vertex_buffer(0, instances.buf().slice(..));
@@ -1027,10 +1027,10 @@ impl<'pass_ref, 'pass: 'pass_ref> FluidDrawer<'pass_ref, 'pass> {
     pub fn draw<'data: 'pass>(
         &mut self,
         model: &'data Model<fluid::Vertex>,
-        locals: &'data terrain::BoundLocals,
+        &(locals_offset, ref locals): &'data (wgpu::DynamicOffset, terrain::BoundLocals),
     ) {
         self.render_pass.set_vertex_buffer(0, model.buf().slice(..));
-        self.render_pass.set_bind_group(2, &locals.bind_group, &[]);
+        self.render_pass.set_bind_group(2, &locals.bind_group, &[locals_offset]);
         self.render_pass
             .draw_indexed(0..model.len() as u32 / 4 * 6, 0, 0..1);
     }
@@ -1187,3 +1187,5 @@ fn set_quad_index_buffer<'a, V: super::Vertex>(
         pass.set_index_buffer(slice, format);
     }
 }
+
+

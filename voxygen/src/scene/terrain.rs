@@ -92,7 +92,7 @@ pub struct TerrainChunkData {
     light_map: LightMapFn,
     glow_map: LightMapFn,
     sprite_instances: [Instances<SpriteInstance>; SPRITE_LOD_LEVELS],
-    locals: pipelines::terrain::BoundLocals,
+    locals: (wgpu::DynamicOffset, pipelines::terrain::BoundLocals),
     pub blocks_of_interest: BlocksOfInterest,
 
     visible: Visibility,
@@ -1339,7 +1339,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
             scene_data.state.get_delta_time() * CHUNKS_PER_SECOND + self.mesh_recv_overflow;
         self.mesh_recv_overflow = recv_count.fract();
         let mesh_recv = &self.mesh_recv;
-        let max_recv_count = self.mesh_todos_active.load(Ordering::Relaxed).min(recv_count.floor() as u64);
+        let max_recv_count = self.mesh_todos_active.load(Ordering::Relaxed)/*.min(recv_count.floor() as u64)*/;
         let incoming_chunks =
             std::iter::from_fn(|| mesh_recv.try_recv().ok())
                 .take(/* recv_count.floor() as usize */max_recv_count as usize);
@@ -1349,6 +1349,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
         // be some unused slots, which is fine.
         let locals = /*Arc::new(*/renderer.create_consts_mapped(max_recv_count as usize)/*)*/;
         let mut locals_buffer = renderer.get_consts_mapped(&locals);
+        let mut locals_bound = renderer.create_terrain_bound_locals(&locals/*, locals_offset */);
         let mut encoder = renderer.device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Update textures."),
@@ -1459,6 +1460,8 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                                 depth_or_array_layers: 1,
                             },
                         );
+                        // Drop image on background thread.
+                        slowjob.spawn(&"TERRAIN_DROP", move || { drop(tex); });
 
                         // Update the memory mapped locals.
                         let locals_buffer_ =
@@ -1483,7 +1486,8 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                             light_map: mesh.light_map,
                             glow_map: mesh.glow_map,
                             sprite_instances,
-                            locals: /* mesh.locals */renderer.create_terrain_bound_locals(&locals, locals_offset),
+                            locals: /* mesh.locals *//*renderer.create_terrain_bound_locals(&locals/*, locals_offset */)*/
+                                ((locals_offset * core::mem::size_of::<TerrainLocals>()) as wgpu::DynamicOffset, Arc::clone(&locals_bound)),
                             visible: Visibility {
                                 in_range: false,
                                 in_frustum: false,
@@ -1514,6 +1518,8 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
         // Drop the memory mapping and unmap the locals.
         drop(locals_buffer);
         renderer.unmap_consts(&locals);
+        // Drop buffer on background thread.
+        slowjob.spawn(&"TERRAIN_DROP", move || { drop(locals); });
         /* // TODO: Delay submission, don't just submit immediately out of convenience!
         renderer.queue.submit(std::iter::once(encoder.finish())); */
         self.command_buffers.push(encoder.finish());
@@ -1829,7 +1835,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
     + Iterator<
         Item = (
             &Model<pipelines::terrain::Vertex>,
-            &pipelines::terrain::BoundLocals,
+            &(wgpu::DynamicOffset, pipelines::terrain::BoundLocals),
         ),
     > {
         let focus_chunk = Vec2::from(focus_pos).map2(TerrainChunk::RECT_SIZE, |e: f32, sz| {
