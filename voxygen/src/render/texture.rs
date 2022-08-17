@@ -193,7 +193,7 @@ impl Texture {
     /// Replaces this texture with the contents of another texture.
     ///
     /// The source size should at least fit within this texture's size.
-    pub fn replace<'a>(&self, device: &wgpu::Device, encoder: &mut wgpu::CommandEncoder, texture: &Self) {
+    pub fn replace<'a>(&self, encoder: &mut wgpu::CommandEncoder, texture: &Self) {
         // Copy image
         encoder.copy_texture_to_texture(
             wgpu::ImageCopyTexture {

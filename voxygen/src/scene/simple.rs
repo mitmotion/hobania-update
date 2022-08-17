@@ -109,9 +109,9 @@ impl Scene {
         let mut col_lights = FigureColLights::new(renderer);
 
         let data = GlobalModel {
-            globals: renderer.create_consts(&[Globals::default()]),
-            lights: renderer.create_consts(&[Light::default(); 20]),
-            shadows: renderer.create_consts(&[Shadow::default(); 24]),
+            globals: renderer.create_consts(wgpu::BufferUsage::COPY_DST, &[Globals::default()]),
+            lights: renderer.create_consts(wgpu::BufferUsage::COPY_DST, &[Light::default(); 20]),
+            shadows: renderer.create_consts(wgpu::BufferUsage::COPY_DST, &[Shadow::default(); 24]),
             shadow_mats: renderer.create_shadow_bound_locals(&[ShadowLocals::default()]),
             rain_occlusion_mats: renderer
                 .create_rain_occlusion_bound_locals(&[RainOcclusionLocals::default()]),
@@ -145,9 +145,15 @@ impl Scene {
                 // total size is bounded by 2^24 * 3 * 1.5 which is bounded by
                 // 2^27, which fits in a u32.
                 let range = 0..opaque_mesh.vertices().len() as u32;
+
+                let (col_lights_alloc_size, finalize) = greedy.finalize(Vec2::broadcast(1));
+                let mut col_light = vec![[0; 4]; col_lights_alloc_size];
+                let col_lights_size = finalize(&mut col_light);
+                let col_light = (col_light, col_lights_size);
+
                 let model =
                     col_lights
-                        .create_figure(renderer, greedy.finalize(Vec2::broadcast(1)), (opaque_mesh, bounds), [range]);
+                        .create_figure(renderer, col_light, (opaque_mesh, bounds), [range]);
                 let mut buf = [Default::default(); anim::MAX_BONE_COUNT];
                 let common_params = FigureUpdateCommonParameters {
                     entity: None,

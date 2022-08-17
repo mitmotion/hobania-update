@@ -463,8 +463,13 @@ where
                         make_model(generate_mesh_lod_low),
                     ];
 
+                    let (col_lights_alloc_size, finalize) = greedy.finalize(Vec2::broadcast(1));
+                    let mut col_lights = vec![[0; 4]; col_lights_alloc_size];
+                    let col_lights_size = finalize(&mut col_lights);
+                    let col_light = (col_lights, col_lights_size);
+
                     slot_.store(Some(MeshWorkerResponse {
-                        col_light: greedy.finalize(Vec2::broadcast(1)),
+                        col_light,
                         opaque,
                         bounds: figure_bounds,
                         vertex_range: models,

@@ -5,7 +5,7 @@ use crate::{
         greedy::{self, GreedyConfig, GreedyMesh},
         MeshGen,
     },
-    render::{ColLightInfo, FluidVertex, Mesh, TerrainVertex},
+    render::{ColLightInfo, FluidVertex, Mesh, Model, TerrainVertex},
     scene::terrain::BlocksOfInterest,
 };
 use common::{
@@ -332,6 +332,7 @@ type V = TerrainChunk;
 #[inline(always)]
 pub fn generate_mesh<'a/*, V: RectRasterableVol<Vox = Block> + ReadVol + Debug + 'static*/>(
     vol: &'a VolGrid2d<V>,
+    create_texture: impl Fn(usize) -> Option<Model<[u8; 4]>>,
     (range, max_texture_size, boi): (Aabb<i32>, Vec2<u16>, &'a BlocksOfInterest),
 ) -> MeshGen<
     TerrainVertex,
@@ -339,7 +340,7 @@ pub fn generate_mesh<'a/*, V: RectRasterableVol<Vox = Block> + ReadVol + Debug +
     TerrainVertex,
     (
         Aabb<f32>,
-        ColLightInfo,
+        /*ColLightInfo*/(Option<Model<[u8; 4]>>, Vec2<u16>),
         Arc<dyn Fn(Vec3<i32>) -> f32 + Send + Sync>,
         Arc<dyn Fn(Vec3<i32>) -> f32 + Send + Sync>,
     ),
@@ -997,10 +998,14 @@ pub fn generate_mesh<'a/*, V: RectRasterableVol<Vox = Block> + ReadVol + Debug +
         max: max_bounds + min_bounds,
     };
     // WGPU requires this alignment.
-    let (col_lights, col_lights_size) = greedy.finalize(
+    let /*(col_lights, col_lights_size)*/(col_lights_alloc_size, finalize) = greedy.finalize(
         Vec2::new((wgpu::COPY_BYTES_PER_ROW_ALIGNMENT / 4) as u16, 1),
     );
-
+    // Allocate the fresh mesh.
+    let mut col_lights = create_texture(col_lights_alloc_size);
+    let col_lights_size = col_lights.as_mut().map(|col_lights| {
+        finalize(bytemuck::cast_slice_mut(&mut col_lights.get_mapped_mut(0, col_lights.len())))
+    }).unwrap_or(Vec2::broadcast(0));
     (
         opaque_mesh,
         fluid_mesh,

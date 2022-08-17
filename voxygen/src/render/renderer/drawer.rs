@@ -976,7 +976,7 @@ impl<'pass_ref, 'pass: 'pass_ref> SpriteDrawer<'pass_ref, 'pass> {
     pub fn draw<'data: 'pass>(
         &mut self,
         &(terrain_locals_offset, ref terrain_locals): &'data (wgpu::DynamicOffset, terrain::BoundLocals),
-        instances: &'data Instances<sprite::Instance>,
+        (range, instances): (Range<u32>, &'data Instances<sprite::Instance>),
     ) {
         self.render_pass
             .set_bind_group(3, &terrain_locals.bind_group, &[terrain_locals_offset]);
@@ -986,7 +986,7 @@ impl<'pass_ref, 'pass: 'pass_ref> SpriteDrawer<'pass_ref, 'pass> {
         self.render_pass.draw_indexed(
             0..sprite::VERT_PAGE_SIZE / 4 * 6,
             0,
-            0..instances.count() as u32,
+            range,
         );
     }
 }

@@ -30,14 +30,39 @@ pub struct Model<V: Vertex> {
 
 impl<V: Vertex> Model<V> {
     /// Returns None if the provided mesh is empty
-    pub fn new(device: &wgpu::Device, usage: wgpu::BufferUsage, mesh: &Mesh<V>) -> Option<Self> {
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, usage: wgpu::BufferUsage, mesh: &Mesh<V>) -> Option<Self> {
         if mesh.vertices().is_empty() {
             return None;
         }
 
         Some(Self {
-            vbuf: Buffer::new(device, /*wgpu::BufferUsage::VERTEX*/usage, mesh.vertices()),
+            vbuf: Buffer::new(device, queue, /*wgpu::BufferUsage::VERTEX*/usage, mesh.vertices()),
         })
+    }
+
+    /// Create a new `Const<T>` that is mapped at creation.  Returns None if the mesh is empty.
+    ///
+    /// Warning: buffer must be unmapped before attempting to use this buffer on the GPU!
+    pub fn new_mapped(device: &wgpu::Device, len: usize, usage: wgpu::BufferUsage) -> Option<Self> {
+        if len == 0 {
+            return None;
+        }
+
+        Some(Self {
+            vbuf: Buffer::new_mapped(device, len, /*wgpu::BufferUsage::VERTEX*/usage/*, mesh.vertices()*/),
+        })
+    }
+
+    /// Get the GPU-side mapped slice represented by this model handle, if it was previously
+    /// memory mapped.
+    pub fn get_mapped_mut(&self, offset: usize, len: usize) -> /* &mut [T] */wgpu::BufferViewMut<'_> {
+        self.vbuf.get_mapped_mut(offset, len)
+    }
+
+    /// Unmaps the GPU-side handle represented by this model handle, if it was previously
+    /// memory-mapped.
+    pub fn unmap(&self, queue: &wgpu::Queue) {
+        self.vbuf.unmap(queue);
     }
 
     /// Create a model with a slice of a portion of this model to send to the
@@ -64,7 +89,7 @@ pub struct DynamicModel<V: Vertex> {
 impl<V: Vertex> DynamicModel<V> {
     pub fn new(device: &wgpu::Device, size: usize) -> Self {
         Self {
-            vbuf: DynamicBuffer::new(device, size, wgpu::BufferUsage::VERTEX),
+            vbuf: DynamicBuffer::new(device, size, wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST),
         }
     }
 

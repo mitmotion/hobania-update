@@ -9,6 +9,7 @@ use std::mem;
 use vek::*;
 
 pub const VERT_PAGE_SIZE: u32 = 256;
+pub const LOD_LEVELS: usize = 5;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Zeroable, Pod)]
@@ -81,11 +82,13 @@ pub struct SpriteVerts(Buffer<Vertex>);
 
 pub(in super::super) fn create_verts_buffer(
     device: &wgpu::Device,
+    queue: &wgpu::Queue,
     mesh: Mesh<Vertex>,
 ) -> SpriteVerts {
     // TODO: type Buffer by wgpu::BufferUsage
     SpriteVerts(Buffer::new(
         device,
+        queue,
         wgpu::BufferUsage::STORAGE,
         mesh.vertices(),
     ))

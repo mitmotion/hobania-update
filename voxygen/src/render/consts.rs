@@ -10,27 +10,25 @@ pub struct Consts<T: Copy + Pod> {
 
 impl<T: Copy + Pod> Consts<T> {
     /// Create a new `Const<T>`.
-    pub fn new(device: &wgpu::Device, len: usize) -> Self {
+    pub fn new(device: &wgpu::Device, usage: wgpu::BufferUsage, len: usize) -> Self {
         Self {
             // TODO: examine if all our consts need to be updatable
-            buf: DynamicBuffer::new(device, len, wgpu::BufferUsage::UNIFORM),
+            buf: DynamicBuffer::new(device, len, wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::UNIFORM),
         }
     }
 
-    pub fn new_with_data(device: &wgpu::Device, data: &[T]) -> Self {
+    pub fn new_with_data(device: &wgpu::Device, queue: &wgpu::Queue, usage: wgpu::BufferUsage, data: &[T]) -> Self {
         Self {
-            // TODO: examine if all our consts need to be updatable
-            buf: DynamicBuffer::new_with_data(device, wgpu::BufferUsage::UNIFORM, data),
+            buf: DynamicBuffer::new_with_data(device, queue, usage | wgpu::BufferUsage::UNIFORM, data),
         }
     }
 
     /// Create a new `Const<T>` that is mapped at creation.
     ///
     /// Warning: buffer must be unmapped before attempting to use this buffer on the GPU!
-    pub fn new_mapped(device: &wgpu::Device, len: usize) -> Self {
+    pub fn new_mapped(device: &wgpu::Device, usage: wgpu::BufferUsage, len: usize) -> Self {
         Self {
-            // TODO: examine if all our consts need to be updatable
-            buf: DynamicBuffer::new_mapped(device, len, wgpu::BufferUsage::UNIFORM),
+            buf: DynamicBuffer::new_mapped(device, len, usage | wgpu::BufferUsage::UNIFORM),
         }
     }
 

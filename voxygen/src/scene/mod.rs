@@ -282,9 +282,9 @@ impl Scene {
         let sprite_render_context = lazy_init(renderer);
 
         let data = GlobalModel {
-            globals: renderer.create_consts(&[Globals::default()]),
-            lights: renderer.create_consts(&[Light::default(); MAX_LIGHT_COUNT]),
-            shadows: renderer.create_consts(&[Shadow::default(); MAX_SHADOW_COUNT]),
+            globals: renderer.create_consts(wgpu::BufferUsage::COPY_DST, &[Globals::default()]),
+            lights: renderer.create_consts(wgpu::BufferUsage::COPY_DST, &[Light::default(); MAX_LIGHT_COUNT]),
+            shadows: renderer.create_consts(wgpu::BufferUsage::COPY_DST, &[Shadow::default(); MAX_SHADOW_COUNT]),
             shadow_mats: renderer.create_shadow_bound_locals(&[ShadowLocals::default()]),
             rain_occlusion_mats: renderer
                 .create_rain_occlusion_bound_locals(&[RainOcclusionLocals::default()]),

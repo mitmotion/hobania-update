@@ -475,9 +475,9 @@ impl Renderer {
         )?;
 
         let clouds_locals =
-            Self::create_consts_inner(&device, &[clouds::Locals::default()]);
+            Self::create_consts_inner(&device, &queue, wgpu::BufferUsage::COPY_DST, &[clouds::Locals::default()]);
         let postprocess_locals =
-            Self::create_consts_inner(&device, &[postprocess::Locals::default()]);
+            Self::create_consts_inner(&device, &queue, wgpu::BufferUsage::COPY_DST, &[postprocess::Locals::default()]);
 
         let locals = Locals::new(
             &device,
@@ -488,7 +488,7 @@ impl Renderer {
             &views.tgt_depth,
             views.bloom_tgts.as_ref().map(|tgts| locals::BloomParams {
                 locals: bloom_sizes.map(|size| {
-                    Self::create_consts_inner(&device, &[bloom::Locals::new(size)])
+                    Self::create_consts_inner(&device, &queue, wgpu::BufferUsage::empty(), &[bloom::Locals::new(size)])
                 }),
                 src_views: [&views.tgt_color_pp, &tgts[1], &tgts[2], &tgts[3], &tgts[4]],
                 final_tgt_view: &tgts[0],
@@ -499,9 +499,9 @@ impl Renderer {
         );
 
         let quad_index_buffer_u16 =
-            create_quad_index_buffer_u16(&device, QUAD_INDEX_BUFFER_U16_VERT_LEN.into());
+            create_quad_index_buffer_u16(&device, &queue, QUAD_INDEX_BUFFER_U16_VERT_LEN.into());
         let quad_index_buffer_u32 =
-            create_quad_index_buffer_u32(&device, QUAD_INDEX_BUFFER_U32_START_VERT_LEN as usize);
+            create_quad_index_buffer_u32(&device, &queue, QUAD_INDEX_BUFFER_U32_START_VERT_LEN as usize);
         let mut profiler = wgpu_profiler::GpuProfiler::new(4, queue.get_timestamp_period());
         other_modes.profiler_enabled &= profiler_features_enabled;
         profiler.enable_timer = other_modes.profiler_enabled;
@@ -513,12 +513,15 @@ impl Renderer {
         let (maintain_tx, maintain_rx) = channel::bounded(0);
 
         let device_ = Arc::clone(&device);
-        std::thread::spawn(move || {
+        /* std::thread::spawn(move || {
             // Maintain each time we are requested to do so, until the renderer dies.
+            // Additionally, accepts CPU->GPU tasks containing updates to perform that need to lock
+            // the device (but not necessarily the queue?).  This is a hopefully temporary measure
+            // required because wgpu as currently written cannot help itself.
             while let Ok(()) = maintain_rx.recv() {
                 device_.poll(wgpu::Maintain::Poll);
             }
-        });
+        }); */
 
         #[cfg(feature = "egui-ui")]
         let egui_renderpass =
@@ -690,7 +693,7 @@ impl Renderer {
                 .as_ref()
                 .map(|tgts| locals::BloomParams {
                     locals: bloom_sizes.map(|size| {
-                        Self::create_consts_inner(&self.device, &[bloom::Locals::new(
+                        Self::create_consts_inner(&self.device, &self.queue, wgpu::BufferUsage::empty(), &[bloom::Locals::new(
                             size,
                         )])
                     }),
@@ -813,7 +816,8 @@ impl Renderer {
         // Since if the channel is out of capacity, it means a maintain is already being processed
         // (in which case we can just catch up next frame), this is a long-winded way of saying we
         // can ignore the result of try_send.
-        let _ = self.maintain_tx.try_send(());
+        // let _ = self.maintain_tx.try_send(());
+        self.device.poll(wgpu::Maintain::Poll);
     }
 
     /// Create render target views
@@ -1255,22 +1259,25 @@ impl Renderer {
     }
 
     /// Create a new set of constants with the provided values.
-    pub fn create_consts<T: Copy + bytemuck::Pod>(&mut self, vals: &[T]) -> Consts<T> {
-        Self::create_consts_inner(&self.device, vals)
+    pub fn create_consts<T: Copy + bytemuck::Pod>(&mut self, usage: wgpu::BufferUsage, vals: &[T]) -> Consts<T> {
+        Self::create_consts_inner(&self.device, &self.queue, usage, vals)
     }
 
     pub fn create_consts_inner<T: Copy + bytemuck::Pod>(
         device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        usage: wgpu::BufferUsage,
         vals: &[T],
     ) -> Consts<T> {
-        Consts::new_with_data(device, vals)
+        Consts::new_with_data(device, queue, usage, vals)
     }
 
     pub fn create_consts_mapped<T: Copy + bytemuck::Pod>(
         &mut self,
+        usage: wgpu::BufferUsage,
         len: usize,
     ) -> Consts<T> {
-        Consts::new_mapped(&self.device, len)
+        Consts::new_mapped(&self.device, usage, len)
     }
 
     /// Update a set of constants with the provided values.
@@ -1278,15 +1285,11 @@ impl Renderer {
         consts.update(&self.queue, vals, 0)
     }
 
-    /// Gets a memory mapped buffer of a set of constants.
-    pub fn get_consts_mapped<'a, T: Copy + bytemuck::Pod>(&self, consts: &'a Consts<T>) -> /* &'a mut [T] */wgpu::BufferViewMut<'a> {
-        consts.get_mapped_mut(0, consts.len())
-    }
-
-    /// Unmaps a set of memory mapped constants.
+    /// Unmaps a set of memory mapped consts.
     pub fn unmap_consts<T: Copy + bytemuck::Pod>(&self, consts: &Consts<T>) {
         consts.unmap(&self.queue)
     }
+
 
     pub fn update_clouds_locals(&mut self, new_val: clouds::Locals) {
         self.locals.clouds.update(&self.queue, &[new_val], 0)
@@ -1301,16 +1304,21 @@ impl Renderer {
         &mut self,
         vals: &[T],
     ) -> Result<Instances<T>, RenderError> {
-        Ok(Instances::new_with_data(&self.device, vals))
+        Ok(Instances::new_with_data(&self.device, &self.queue, vals))
     }
 
-    /// Create a new set of instances with the provided values lazily (for use off the main
+    /// Create a new set of instances with the provided size lazily (for use off the main
     /// thread).
     pub fn create_instances_lazy<T: Copy + bytemuck::Pod>(
         &mut self,
-    ) -> impl for<'a> Fn(&'a [T]) -> Instances<T> + Send + Sync {
+    ) -> impl /*for<'a> */Fn(/* &'a [T]*/usize) -> Instances<T> + Send + Sync {
         let device = Arc::clone(&self.device);
-        move |vals| Instances::new_with_data(&device, &vals)
+        move |/*vals*/len| Instances::new_mapped(&device, len)/*Instances::new_with_data(&device, &vals)*/
+    }
+
+    /// Unmaps a set of memory mapped instances.
+    pub fn unmap_instances<T: Copy + bytemuck::Pod>(&self, instances: &Instances<T>) {
+        instances.unmap(&self.queue)
     }
 
     /// Update the expected index length to be large enough for a quad vertex bfufer with this many
@@ -1351,7 +1359,7 @@ impl Renderer {
                 if self.quad_index_buffer_u32.len() < quad_index_length {
                     // Make sure we aren't over the max
                     self.quad_index_buffer_u32 =
-                        create_quad_index_buffer_u32(&self.device, vert_length);
+                        create_quad_index_buffer_u32(&self.device, &self.queue, vert_length);
                 } */
             },
             None => {},
@@ -1369,31 +1377,51 @@ impl Renderer {
         let vert_length = self.quad_index_buffer_u32_len.load(Ordering::Relaxed);
         if self.quad_index_buffer_u32.len() < vert_length {
             self.quad_index_buffer_u32 =
-                create_quad_index_buffer_u32(&self.device, vert_length);
+                create_quad_index_buffer_u32(&self.device, &self.queue, vert_length);
         }
     }
 
     pub fn create_sprite_verts(&mut self, mesh: Mesh<sprite::Vertex>) -> sprite::SpriteVerts {
         Self::update_index_length::<sprite::Vertex>(&self.quad_index_buffer_u32_len, sprite::VERT_PAGE_SIZE as usize);
-        sprite::create_verts_buffer(&self.device, mesh)
+        sprite::create_verts_buffer(&self.device, &self.queue, mesh)
     }
 
     /// Create a new model from the provided mesh.
     /// If the provided mesh is empty this returns None
     pub fn create_model<V: Vertex>(&mut self, mesh: &Mesh<V>) -> Option<Model<V>> {
         Self::update_index_length::<V>(&self.quad_index_buffer_u32_len, mesh.vertices().len());
-        Model::new(&self.device, wgpu::BufferUsage::VERTEX, mesh)
+        Model::new(&self.device, &self.queue, wgpu::BufferUsage::VERTEX, mesh)
     }
 
-    /// Create a new model from the provided mesh, lazily (for use off the main thread).
-    /// If the provided mesh is empty this returns None
-    pub fn create_model_lazy<V: Vertex>(&mut self, usage: wgpu::BufferUsage) -> impl for<'a> Fn(&'a Mesh<V>) -> Option<Model<V>> + Send + Sync {
+    /// Create a new model for a mesh with the provided length, lazily (for use off the main
+    /// thread).  If the provided mesh is empty this returns None.  The mesh is memory mapped, and
+    /// still needs to be unmapped before use.
+    pub fn create_model_lazy_base<V: Vertex>(&mut self, usage: wgpu::BufferUsage) -> impl Fn(usize) -> Option<Model<V>> + Send + Sync {
         let device = Arc::clone(&self.device);
         let quad_index_buffer_u32_len = Arc::clone(&self.quad_index_buffer_u32_len);
-        move |mesh| {
-            Self::update_index_length::<V>(&quad_index_buffer_u32_len, mesh.vertices().len());
-            Model::new(&device, usage, mesh)
+        move |len| {
+            Self::update_index_length::<V>(&quad_index_buffer_u32_len, len);
+            Model::new_mapped(&device, len, usage/*, mesh.vertices()*/)
         }
+    }
+
+    /// Create a new model for a mesh with the provided length, lazily (for use off the main
+    /// thread).  If the provided mesh is empty this returns None.  The mesh is memory mapped, and
+    /// still needs to be unmapped before use.
+    pub fn create_model_lazy<V: Vertex>(&mut self, usage: wgpu::BufferUsage) -> impl for<'a> Fn(&'a Mesh<V>) -> Option<Model<V>> + Send + Sync {
+        let create_model = self.create_model_lazy_base(usage);
+        move |mesh| {
+            let len = mesh.vertices().len();
+            let model = create_model(len)?;
+            model.get_mapped_mut(0, len)
+                .copy_from_slice(bytemuck::cast_slice(mesh.vertices()));
+            Some(model)
+        }
+    }
+
+    /// Unmaps a memory mapped model.
+    pub fn unmap_model<V: Vertex>(&self, model: &Model<V>) {
+        model.unmap(&self.queue);
     }
 
     /// Create a new dynamic model with the specified size.
@@ -1515,13 +1543,6 @@ impl Renderer {
         texture.clear(&self.queue)
     }
 
-    /// Replaces the destination texture with the contents of the source texture.
-    ///
-    /// The source size should at least fit within the destination texture's size.
-    pub fn replace_texture(&mut self, encoder: &mut wgpu::CommandEncoder, dest: &Texture, source: &Texture) {
-        dest.replace(&self.device, encoder, source);
-    }
-
     /// Queue to obtain a screenshot on the next frame render
     pub fn create_screenshot(
         &mut self,
@@ -1613,7 +1634,7 @@ impl Renderer {
     // }
 }
 
-fn create_quad_index_buffer_u16(device: &wgpu::Device, vert_length: usize) -> Buffer<u16> {
+fn create_quad_index_buffer_u16(device: &wgpu::Device, queue: &wgpu::Queue, vert_length: usize) -> Buffer<u16> {
     assert!(vert_length <= u16::MAX as usize);
     let indices = [0, 1, 2, 2, 1, 3]
         .iter()
@@ -1624,10 +1645,10 @@ fn create_quad_index_buffer_u16(device: &wgpu::Device, vert_length: usize) -> Bu
         .map(|(i, b)| (i / 6 * 4 + b) as u16)
         .collect::<Vec<_>>();
 
-    Buffer::new(device, wgpu::BufferUsage::INDEX, &indices)
+    Buffer::new(device, queue, wgpu::BufferUsage::INDEX, &indices)
 }
 
-fn create_quad_index_buffer_u32(device: &wgpu::Device, vert_length: usize) -> Buffer<u32> {
+fn create_quad_index_buffer_u32(device: &wgpu::Device, queue: &wgpu::Queue, vert_length: usize) -> Buffer<u32> {
     assert!(vert_length <= u32::MAX as usize);
     let indices = [0, 1, 2, 2, 1, 3]
         .iter()
@@ -1638,5 +1659,5 @@ fn create_quad_index_buffer_u32(device: &wgpu::Device, vert_length: usize) -> Bu
         .map(|(i, b)| (i / 6 * 4 + b) as u32)
         .collect::<Vec<_>>();
 
-    Buffer::new(device, wgpu::BufferUsage::INDEX, &indices)
+    Buffer::new(device, queue, wgpu::BufferUsage::INDEX, &indices)
 }

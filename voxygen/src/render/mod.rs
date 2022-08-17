@@ -35,7 +35,8 @@ pub use self::{
         skybox::{create_mesh as create_skybox_mesh, Vertex as SkyboxVertex},
         sprite::{
             Instance as SpriteInstance, SpriteGlobalsBindGroup, SpriteVerts,
-            Vertex as SpriteVertex, VERT_PAGE_SIZE as SPRITE_VERT_PAGE_SIZE,
+            Vertex as SpriteVertex, LOD_LEVELS as SPRITE_LOD_LEVELS,
+            VERT_PAGE_SIZE as SPRITE_VERT_PAGE_SIZE,
         },
         terrain::{Locals as TerrainLocals, TerrainLayout, Vertex as TerrainVertex},
         trail::Vertex as TrailVertex,

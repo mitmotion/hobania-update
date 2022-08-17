@@ -40,12 +40,12 @@ impl Renderer {
     }
 
     pub fn create_debug_bound_locals(&mut self, vals: &[debug::Locals]) -> debug::BoundLocals {
-        let locals = self.create_consts(vals);
+        let locals = self.create_consts(wgpu::BufferUsage::COPY_DST, vals);
         self.layouts.debug.bind_locals(&self.device, locals)
     }
 
     pub fn create_ui_bound_locals(&mut self, vals: &[ui::Locals]) -> ui::BoundLocals {
-        let locals = self.create_consts(vals);
+        let locals = self.create_consts(wgpu::BufferUsage::COPY_DST, vals);
         self.layouts.ui.bind_locals(&self.device, locals)
     }
 
@@ -58,21 +58,12 @@ impl Renderer {
         locals: &[figure::Locals],
         bone_data: &[figure::BoneData],
     ) -> figure::BoundLocals {
-        let locals = self.create_consts(locals);
-        let bone_data = self.create_consts(bone_data);
+        let locals = self.create_consts(wgpu::BufferUsage::COPY_DST, locals);
+        let bone_data = self.create_consts(wgpu::BufferUsage::COPY_DST, bone_data);
         self.layouts
             .figure
             .bind_locals(&self.device, locals, bone_data)
     }
-
-    /* /// Create a new set of constants with the provided values, lazily (so this can be instantiated
-    /// from another thread).
-    pub fn create_consts_lazy<T: Copy + bytemuck::Pod>(&mut self) ->
-        impl for<'a> Fn(&'a [T]) -> Consts<T> + Send + Sync
-    {
-        let device = Arc::clone(&self.device);
-        move |vals| Self::create_consts_inner(&device, vals)
-    } */
 
     /// NOTE: Locals are mapped at creation, so you still have to memory map and bind them in order
     /// before use.
@@ -84,14 +75,14 @@ impl Renderer {
         /* let device = Arc::clone(&self.device);
         let immutable = Arc::clone(&self.layouts.immutable);
         move || {
-            let locals = Consts::new_mapped(&device, 1);
+            let locals = Consts::new_mapped(&device, wgpu::BufferUsage::empty(), 1);
             immutable.terrain.bind_locals(&device, locals)
         } */
         self.layouts.immutable.terrain.bind_locals(&self.device, locals/* , offset */)
     }
 
     pub fn create_shadow_bound_locals(&mut self, locals: &[shadow::Locals]) -> shadow::BoundLocals {
-        let locals = self.create_consts(locals);
+        let locals = self.create_consts(wgpu::BufferUsage::COPY_DST, locals);
         self.layouts.shadow.bind_locals(&self.device, locals)
     }
 
@@ -99,7 +90,7 @@ impl Renderer {
         &mut self,
         locals: &[rain_occlusion::Locals],
     ) -> rain_occlusion::BoundLocals {
-        let locals = self.create_consts(locals);
+        let locals = self.create_consts(wgpu::BufferUsage::COPY_DST, locals);
         self.layouts
             .rain_occlusion
             .bind_locals(&self.device, locals)

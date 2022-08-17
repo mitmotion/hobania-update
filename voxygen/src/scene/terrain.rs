@@ -12,7 +12,7 @@ use crate::{
         pipelines::{self, ColLights},
         ColLightInfo, Consts, FirstPassDrawer, FluidVertex, GlobalModel, Instances, LodData, Mesh, Model,
         RenderError, Renderer, SpriteGlobalsBindGroup, SpriteInstance, SpriteVertex, SpriteVerts,
-        TerrainLocals, TerrainShadowDrawer, TerrainVertex, Texture, SPRITE_VERT_PAGE_SIZE,
+        TerrainLocals, TerrainShadowDrawer, TerrainVertex, Texture, SPRITE_LOD_LEVELS, SPRITE_VERT_PAGE_SIZE,
     },
 };
 
@@ -46,7 +46,6 @@ use treeculler::{BVol, Frustum, AABB};
 use vek::*;
 
 const SPRITE_SCALE: Vec3<f32> = Vec3::new(1.0 / 11.0, 1.0 / 11.0, 1.0 / 11.0);
-const SPRITE_LOD_LEVELS: usize = 5;
 
 // For rain occlusion we only need to render the closest chunks.
 /// How many chunks are maximally rendered for rain occlusion.
@@ -91,7 +90,7 @@ pub struct TerrainChunkData {
     col_lights: Arc<ColLights<pipelines::terrain::Locals>>,
     light_map: LightMapFn,
     glow_map: LightMapFn,
-    sprite_instances: [Instances<SpriteInstance>; SPRITE_LOD_LEVELS],
+    sprite_instances: ([core::ops::Range<u32>; SPRITE_LOD_LEVELS], Instances<SpriteInstance>),
     locals: (wgpu::DynamicOffset, pipelines::terrain::BoundLocals),
     pub blocks_of_interest: BlocksOfInterest,
 
@@ -143,7 +142,7 @@ pub struct MeshWorkerResponseMesh {
 /// mesh of a chunk.
 struct MeshWorkerResponse {
     pos: Vec2<i32>,
-    sprite_instances: [Instances<SpriteInstance>; SPRITE_LOD_LEVELS],
+    sprite_instances: ([core::ops::Range<u32>; SPRITE_LOD_LEVELS], Instances<SpriteInstance>),
     /// If None, this update was requested without meshing.
     mesh: Option<MeshWorkerResponseMesh>,
     started_tick: u64,
@@ -259,9 +258,9 @@ fn mesh_worker/*<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug +
     sprite_config: &SpriteSpec,
     create_opaque: impl for<'a> Fn(&'a Mesh<TerrainVertex>) -> Option<Model<TerrainVertex>>,
     create_fluid: impl for<'a> Fn(&'a Mesh<FluidVertex>) -> Option<Model<FluidVertex>>,
-    create_instances: impl for<'a> Fn(&'a [SpriteInstance]) -> Instances<SpriteInstance>,
+    create_instances: impl for<'a> Fn(/* &'a [SpriteInstance] */usize) -> Instances<SpriteInstance>,
     /* create_locals: impl Fn() -> pipelines::terrain::BoundLocals, */
-    create_texture: impl for<'a> Fn(/* wgpu::TextureDescriptor<'a>, wgpu::TextureViewDescriptor<'a>, wgpu::SamplerDescriptor<'a>*/&'a Mesh<[u8; 4]>) -> /*Texture + Send + Sync*/Option<Model<[u8; 4]>>,
+    create_texture: impl for<'a> Fn(/* wgpu::TextureDescriptor<'a>, wgpu::TextureViewDescriptor<'a>, wgpu::SamplerDescriptor<'a>*//*&'a Mesh<[u8; 4]>*/usize) -> /*Texture + Send + Sync*/Option<Model<[u8; 4]>>,
 ) -> MeshWorkerResponse {
     span!(_guard, "mesh_worker");
     let (blocks_of_interest, sprite_kinds) = BlocksOfInterest::from_chunk(&chunk)/*default()*/;
@@ -281,15 +280,16 @@ fn mesh_worker/*<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug +
         let (opaque_mesh, fluid_mesh, _shadow_mesh, (bounds, col_lights_info, light_map, glow_map)) =
             generate_mesh(
                 &volume,
+                create_texture,
                 (
                     range,
                     Vec2::new(max_texture_size, max_texture_size),
                     &blocks_of_interest,
                 ),
             );
-        let mut tex_ = Mesh::new();
+        /* let mut tex_ = Mesh::new();
         *tex_.vertices_mut_vec() = col_lights_info.0;
-        let tex = create_texture(&tex_);
+        let tex = create_texture(&tex_); */
         mesh = Some(MeshWorkerResponseMesh {
             // TODO: Take sprite bounds into account somehow?
             z_bounds: (bounds.min.z, bounds.max.z),
@@ -301,7 +301,7 @@ fn mesh_worker/*<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug +
             opaque_model: create_opaque(&opaque_mesh),
             fluid_model: create_fluid(&fluid_mesh),
             /* locals: create_locals(), */
-            col_lights_info: (tex, col_lights_info.1),
+            col_lights_info/*: (tex, col_lights_info.1)*/,
             light_map,
             glow_map,
         });
@@ -383,7 +383,25 @@ fn mesh_worker/*<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug +
             } */
             }
 
-            instances.map(|instances| create_instances(&instances))
+            let mut start = 0;
+            let instance_ranges = instances.each_ref().map(|instances| {
+                let range = start..start + instances.len() as u32;
+                start = range.end;
+                range
+            });
+            let sprite_instances = create_instances(instance_ranges.iter().map(|range| range.len()).sum());
+            if start > 0 {
+                sprite_instances
+                    .get_mapped_mut(0, sprite_instances.count())
+                    .array_chunks_mut::<{ core::mem::size_of::<SpriteInstance>() }>()
+                    .zip(instances.into_iter().flatten()).for_each(|(dst, src)| {
+                    // FIXME: cast doesn't work because bytemuck::cast isn't const generic-ified
+                    // yet, so it fails on some array lengths.
+                    // *dst = bytemuck::cast(src);
+                    dst.copy_from_slice(bytemuck::cast_slice(&[src]));
+                });
+            }
+            (instance_ranges, sprite_instances)
         },
         mesh,
         blocks_of_interest,
@@ -601,7 +619,10 @@ impl SpriteRenderContext {
 
             let sprite_col_lights = {
                 prof_span!("finalize");
-                greedy.finalize(Vec2::broadcast(1))
+                let (col_lights_alloc_size, finalize) = greedy.finalize(Vec2::broadcast(1));
+                let mut col_lights = vec![[0; 4]; col_lights_alloc_size];
+                let col_lights_size = finalize(&mut col_lights);
+                (col_lights, col_lights_size)
             };
 
             SpriteWorkerResponse {
@@ -799,7 +820,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
         // a copy from the previous atlas, skipping the CPU->GPU upload.
         if let Some((old_texture, encoder)) = old_texture {
             // TODO: Delay submission, don't just submit immediately out of convenience!
-            renderer.replace_texture(encoder, &texture, old_texture);
+            texture.replace(encoder, old_texture);
         } else {
             renderer.clear_texture(&texture);
         }
@@ -1286,7 +1307,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
             let create_fluid = renderer.create_model_lazy(wgpu::BufferUsage::VERTEX);
             let create_instances = renderer.create_instances_lazy();
             /* let create_locals = renderer.create_terrain_bound_locals(); */
-            let create_texture = renderer./*create_texture_raw*/create_model_lazy(wgpu::BufferUsage::COPY_SRC);
+            let create_texture = renderer./*create_texture_raw*/create_model_lazy_base(wgpu::BufferUsage::COPY_SRC);
             /* cnt.fetch_add(1, Ordering::Relaxed); */
             let job = move || {
                 // Since this loads when the task actually *runs*, rather than when it's
@@ -1347,8 +1368,8 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
         if max_recv_count > 0 {
         // Construct a buffer for all the chunks we're going to process in this frame.  There might
         // be some unused slots, which is fine.
-        let locals = /*Arc::new(*/renderer.create_consts_mapped(max_recv_count as usize)/*)*/;
-        let mut locals_buffer = renderer.get_consts_mapped(&locals);
+        let locals = /*Arc::new(*/renderer.create_consts_mapped(wgpu::BufferUsage::empty(), max_recv_count as usize)/*)*/;
+        let mut locals_buffer = locals.get_mapped_mut(0, locals.len());
         let mut locals_bound = renderer.create_terrain_bound_locals(&locals/*, locals_offset */);
         let mut encoder = renderer.device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -1356,25 +1377,26 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
             });
 
         for (locals_offset, (response, locals_buffer)) in incoming_chunks.zip(locals_buffer.array_chunks_mut::<{ core::mem::size_of::<TerrainLocals>() }>()).enumerate() {
-            match self.mesh_todo.get(&response.pos) {
+            let pos = response.pos;
+            let response_started_tick = response.started_tick;
+            match self.mesh_todo.get(&pos) {
                 // It's the mesh we want, insert the newly finished model into the terrain model
                 // data structure (convert the mesh to a model first of course).
                 Some(todo) => {
                     let started_tick = todo.started_tick.load(Ordering::Relaxed);
-                    if response.started_tick > started_tick {
+                    if response_started_tick > started_tick {
                         // Chunk must have been removed, or it was spawned on an old tick. Drop
-                        // the mesh since it's either out of date or no longer needed.
+                        // the mesh in the background since it's either out of date or no longer
+                        // needed.
+                        slowjob.spawn(&"TERRAIN_DROP", move || { drop(response); });
                         continue;
                     }
 
-                    let sprite_instances = response.sprite_instances;
-
                     if let Some(mut mesh) = response.mesh {
                         // Full update, insert the whole chunk.
-
                         let load_time = self
                             .chunks
-                            .get(&response.pos)
+                            .get(&pos)
                             .map(|chunk| chunk.load_time)
                             .unwrap_or(current_time as f32);
                         // TODO: Allocate new atlas on allocation failure.
@@ -1422,6 +1444,16 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                                 .expect("Chunk data does not fit in a texture of maximum size.")
                         });
 
+                        // Unmap buffers mapped on other threads (we do this here to avoid
+                        // contention with queue submission, as both of these take the device write
+                        // lock as of wgpu 0.8.1).
+                        //
+                        // FIXME: When we upgrade wgpu, reconsider all this.
+                        renderer.unmap_instances(&response.sprite_instances.1);
+                        mesh.opaque_model.as_ref().map(|model| renderer.unmap_model(model));
+                        mesh.fluid_model.as_ref().map(|model| renderer.unmap_model(model));
+                        renderer.unmap_model(&tex);
+
                         // NOTE: Cast is safe since the origin was a u16.
                         let atlas_offs = Vec2::new(
                             allocation.rectangle.min.x as u32,
@@ -1467,7 +1499,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                         let locals_buffer_ =
                         /* renderer.update_mapped(&mut mesh.locals, &[*/TerrainLocals::new(
                             Vec3::from(
-                                response.pos.map2(VolGrid2d::<V>::chunk_size(), |e, sz| {
+                                pos.map2(VolGrid2d::<V>::chunk_size(), |e, sz| {
                                     e as f32 * sz as f32
                                 }),
                             ),
@@ -1477,7 +1509,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                         *locals_buffer = bytemuck::cast(locals_buffer_);
 
                         /* let locals = Arc::clone(&locals); */
-                        Self::insert_chunk(&slowjob, &mut self.chunks, &mut self.atlas, response.pos, TerrainChunkData {
+                        Self::insert_chunk(&slowjob, &mut self.chunks, &mut self.atlas, pos, TerrainChunkData {
                             load_time,
                             opaque_model: mesh.opaque_model,
                             fluid_model: mesh.fluid_model,
@@ -1485,7 +1517,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                             col_lights: Arc::clone(&self.col_lights),
                             light_map: mesh.light_map,
                             glow_map: mesh.glow_map,
-                            sprite_instances,
+                            sprite_instances: response.sprite_instances,
                             locals: /* mesh.locals *//*renderer.create_terrain_bound_locals(&locals/*, locals_offset */)*/
                                 ((locals_offset * core::mem::size_of::<TerrainLocals>()) as wgpu::DynamicOffset, Arc::clone(&locals_bound)),
                             visible: Visibility {
@@ -1499,20 +1531,27 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                             shadow_z_bounds: mesh.shadow_z_bounds,
                             frustum_last_plane_index: 0,
                         });
-                    } else if let Some(chunk) = self.chunks.get_mut(&response.pos) {
+                    } else if let Some(chunk) = self.chunks.get_mut(&pos) {
                         // There was an update that didn't require a remesh (probably related to
                         // non-glowing sprites) so we just update those.
-                        chunk.sprite_instances = sprite_instances;
+                        chunk.sprite_instances = response.sprite_instances;
                         chunk.blocks_of_interest = response.blocks_of_interest;
+                    } else {
+                        // Not sure what happened here, but we should drop the result in the
+                        // background.
+                        slowjob.spawn(&"TERRAIN_DROP", move || { drop(response); });
                     }
 
-                    if response.started_tick == started_tick {
+                    if response_started_tick == started_tick {
                         // This was the latest worker for this chunk, so we don't need to worry
                         // about canceling any later tasks.
-                        self.mesh_todo.remove(&response.pos);
+                        self.mesh_todo.remove(&pos);
                     }
                 },
-                None => {},
+                // Old task, drop the response in the background.
+                None => {
+                    slowjob.spawn(&"TERRAIN_DROP", move || { drop(response); });
+                },
             }
         }
         // Drop the memory mapping and unmap the locals.
@@ -1923,7 +1962,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
             .filter(|(_, c)| c.visible.is_visible())
             .for_each(|(pos, chunk)| {
                 // Skip chunk if it has no sprites
-                if chunk.sprite_instances[0].count() == 0 {
+                if chunk.sprite_instances.1.count() == 0 {
                     return;
                 }
 
@@ -1949,7 +1988,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                         4
                     };
 
-                    sprite_drawer.draw(&chunk.locals, &chunk.sprite_instances[lod_level]);
+                    sprite_drawer.draw(&chunk.locals, (chunk.sprite_instances.0[lod_level].clone(), &chunk.sprite_instances.1));
                 }
             });
         drop(sprite_drawer);

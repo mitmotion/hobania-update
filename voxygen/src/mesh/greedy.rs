@@ -81,7 +81,7 @@ pub struct GreedyConfig<D, FV, FA, FL, FG, FO, FS, FP, FT> {
 /// coloring part as a continuation.  When called with a final tile size and
 /// vector, the continuation will consume the color data and write it to the
 /// vector.
-pub type SuspendedMesh<'a> = dyn for<'r> FnOnce(&'r mut ColLightInfo) + 'a;
+pub type SuspendedMesh<'a> = dyn for<'r> FnOnce(/*&'r mut ColLightInfo*/(&'r mut [[u8; 4]], Vec2<u16>)) + 'a;
 
 /// Abstraction over different atlas allocators. Useful to swap out the
 /// allocator implementation for specific cases (e.g. sprites).
@@ -418,24 +418,41 @@ impl<'a, Allocator: AtlasAllocator> GreedyMesh<'a, Allocator> {
     /// are known, we can perform just a single allocation to construct a
     /// precisely fitting atlas.  This will also let us (in the future)
     /// suspend meshing partway through in order to meet frame budget, and
-    /// potentially use a single staged upload to the GPU.
+    /// allows us to use a single staged upload to the GPU.
     ///
-    /// Returns the ColLightsInfo corresponding to the constructed atlas.
-    pub fn finalize(self, alignment: Vec2<u16>) -> ColLightInfo {
-        span!(_guard, "finalize", "GreedyMesh::finalize");
+    /// `make_buffer` is the function that produces the buffer to which we draw (which may be
+    /// either a staging buffer for upload to the GPU, or any other s
+    ///
+    /// Returns a tuple containing the size of the required buffer, and a function that, when
+    /// applied to a buffer allocated with that size, will produce the correct bounds for the
+    /// texture (which can then be bundled up into a ColLightsInfo, if need be).  The reason
+    /// for this awkward API is to allow consumers to create a mapped buffer with the correct
+    /// size, then write to it directly, rather than introducing a second staging copy.
+    pub fn finalize(
+        self,
+        alignment: Vec2<u16>,
+    ) -> (usize, impl for<'b> FnOnce(&'b mut [[u8; 4]]) -> Vec2<u16> + 'a)
+    {
         let mut cur_size = self.col_lights_size;
         // Round to nearest alignment (assuming power of 2)
         cur_size.x = (cur_size.x + alignment.x - 1) / alignment.x * alignment.x;
         cur_size.y = (cur_size.y + alignment.y - 1) / alignment.y * alignment.y;
+        /* let col_lights = make_buffer(cur_size.x as usize * cur_size.y as usize);
         let col_lights = vec![
             TerrainVertex::make_col_light(254, 0, Rgb::broadcast(254), true);
             cur_size.x as usize * cur_size.y as usize
-        ];
-        let mut col_lights_info = (col_lights, cur_size);
-        self.suspended.into_iter().for_each(|cont| {
-            cont(&mut col_lights_info);
-        });
-        col_lights_info
+        ]; */
+        let alloc_size = cur_size.x as usize * cur_size.y as usize;
+        (alloc_size, move |col_lights| {
+            span!(_guard, "finalize", "GreedyMesh::finalize");
+            assert!(col_lights.len() == alloc_size);
+            self.suspended.into_iter().for_each(move |cont| {
+                let col_lights_info = (&mut *col_lights, cur_size);
+                cont(/*&mut */col_lights_info);
+            });
+            /* col_lights_info */
+            cur_size
+        })
     }
 
     pub fn max_size(&self) -> Vec2<u16> { self.max_size }
@@ -783,7 +800,7 @@ fn add_to_atlas<Allocator: AtlasAllocator>(
 //
 // TODO: See if we can speed this up using SIMD.
 fn draw_col_lights<D>(
-    (col_lights, cur_size): &mut ColLightInfo,
+    (col_lights, cur_size): /*&mut ColLightInfo*/(&mut [[u8; 4]], Vec2<u16>),
     data: &mut D,
     todo_rects: Vec<TodoRect>,
     draw_delta: Vec3<i32>,
@@ -793,6 +810,7 @@ fn draw_col_lights<D>(
     mut get_opacity: impl FnMut(&mut D, Vec3<i32>) -> bool,
     mut make_face_texel: impl FnMut(&mut D, Vec3<i32>, u8, u8, bool) -> [u8; 4],
 ) {
+    let col_lights = &mut col_lights[0..cur_size.y as usize * cur_size.x as usize];
     todo_rects.into_iter().for_each(|(pos, uv, rect, delta)| {
         // NOTE: Conversions are safe because width, height, and offset must be
         // non-negative, and because every allocated coordinate in the atlas must be in
