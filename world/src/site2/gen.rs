@@ -23,7 +23,7 @@ use num::cast::AsPrimitive;
 use std::{
     cell::RefCell,
     hash::BuildHasherDefault,
-    simd::StdFloat,
+    simd::{SimdInt, StdFloat},
 };
 use vek::*;
 

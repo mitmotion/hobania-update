@@ -36,7 +36,7 @@ pub const MAX_LIGHT_DIST: i32 = SUNLIGHT as i32;
 /// Working around lack of existential types.
 ///
 /// See [https://github.com/rust-lang/rust/issues/42940]
-type CalcLightFn<V, I> = impl Fn(Vec3<i32>) -> f32 + 'static + Send + Sync;
+// type CalcLightFn/*<V, I>*/ = impl Fn(Vec3<i32>) -> f32 + 'static + Send + Sync;
 
 #[inline(always)]
 /* #[allow(unsafe_code)] */
@@ -83,7 +83,7 @@ fn calc_light<'a,
     lit_blocks: I,
     flat: &'a Vec<Block>,
     (w, h, d): (i32, i32, i32)
-) -> CalcLightFn<V, I> {
+) -> impl Fn(Vec3<i32>) -> f32 + 'static + Send + Sync/*CalcLightFn*//*<V, I>*/ {
     span!(_guard, "calc_light");
     const UNKNOWN: u8 = 255;
     const OPAQUE: u8 = 254;

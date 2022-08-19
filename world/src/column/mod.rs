@@ -18,7 +18,7 @@ use noise::NoiseFn;
 use serde::Deserialize;
 use std::{
     ops::{Add, Div, Mul, Sub},
-    simd::StdFloat,
+    simd::{SimdInt, SimdFloat, StdFloat},
 };
 use tracing::error;
 use vek::*;
@@ -318,7 +318,7 @@ impl<Sampler> SplineGen2D<Sampler> {
         let secant = |b, c| c - b;
         let parabola = |a, c| (c - a) * half;
         let slope = |s_a: Simd<f32, 4>, s_b: Simd<f32, 4>, p_b: Simd<f32, 4>| {
-            (s_a.signum() + s_b.signum()) * (s_a.abs().min(s_b.abs()).min(p_b.abs() * half))
+            (s_a.signum() + s_b.signum()) * (s_a.abs().simd_min(s_b.abs()).simd_min(p_b.abs() * half))
         };
 
         // Compute secants.

@@ -108,15 +108,16 @@ impl State {
             GameMode::Singleplayer => "sp",
         };
 
+        let num_cpu = num_cpus::get();
         let thread_pool = Arc::new(
             ThreadPoolBuilder::new()
-                .num_threads(num_cpus::get().max(common::consts::MIN_RECOMMENDED_RAYON_THREADS))
+                .num_threads(num_cpu.max(common::consts::MIN_RECOMMENDED_RAYON_THREADS))
                 .thread_name(move |i| format!("rayon-{}-{}", thread_name_infix, i))
                 .build()
                 .unwrap(),
         );
         Self {
-            ecs: Self::setup_ecs_world(game_mode, &thread_pool),
+            ecs: Self::setup_ecs_world(game_mode, num_cpu as u64, &thread_pool),
             thread_pool,
         }
     }
@@ -124,7 +125,7 @@ impl State {
     /// Creates ecs world and registers all the common components and resources
     // TODO: Split up registering into server and client (e.g. move
     // EventBus<ServerEvent> to the server)
-    fn setup_ecs_world(game_mode: GameMode, thread_pool: &Arc<ThreadPool>) -> specs::World {
+    fn setup_ecs_world(game_mode: GameMode, num_cpu: u64, thread_pool: &Arc<ThreadPool>) -> specs::World {
         let mut ecs = specs::World::new();
         // Uids for sync
         ecs.register_sync_marker();
@@ -223,7 +224,6 @@ impl State {
         ecs.insert(common::CachedSpatialGrid::default());
         ecs.insert(EntitiesDiedLastTick::default());
 
-        let num_cpu = num_cpus::get() as u64;
         let slow_limit = (num_cpu / 2 + num_cpu / 4).max(1);
         tracing::trace!(?slow_limit, "Slow Thread limit");
         ecs.insert(SlowJobPool::new(

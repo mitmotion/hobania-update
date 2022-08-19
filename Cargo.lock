@@ -4054,9 +4054,9 @@ dependencies = [
 
 [[package]]
 name = "packed_simd_2"
-version = "0.3.7"
+version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "defdcfef86dcc44ad208f71d9ff4ce28df6537a4e0d6b0e8e845cb8ca10059a6"
+checksum = "a1914cd452d8fccd6f9db48147b29fd4ae05bea9dc5d9ad578509f72415de282"
 dependencies = [
  "cfg-if 1.0.0",
  "libm 0.1.4",
@@ -7566,7 +7566,7 @@ dependencies = [
 [[package]]
 name = "wgpu"
 version = "0.8.0"
-source = "git+https://github.com/gfx-rs/wgpu.git?rev=a92b8549a8e2cb9dac781bafc5ed32828f3caf46#a92b8549a8e2cb9dac781bafc5ed32828f3caf46"
+source = "git+https://github.com/pythonesque/wgpu.git?rev=b30d573c9aca0787f4ff7aba8bb0db7f823b7064#b30d573c9aca0787f4ff7aba8bb0db7f823b7064"
 dependencies = [
  "arrayvec 0.5.2",
  "js-sys",
@@ -7586,7 +7586,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core"
 version = "0.8.0"
-source = "git+https://github.com/gfx-rs/wgpu.git?rev=a92b8549a8e2cb9dac781bafc5ed32828f3caf46#a92b8549a8e2cb9dac781bafc5ed32828f3caf46"
+source = "git+https://github.com/pythonesque/wgpu.git?rev=b30d573c9aca0787f4ff7aba8bb0db7f823b7064#b30d573c9aca0787f4ff7aba8bb0db7f823b7064"
 dependencies = [
  "arrayvec 0.5.2",
  "bitflags",
@@ -7626,7 +7626,7 @@ dependencies = [
 [[package]]
 name = "wgpu-types"
 version = "0.8.0"
-source = "git+https://github.com/gfx-rs/wgpu.git?rev=a92b8549a8e2cb9dac781bafc5ed32828f3caf46#a92b8549a8e2cb9dac781bafc5ed32828f3caf46"
+source = "git+https://github.com/pythonesque/wgpu.git?rev=b30d573c9aca0787f4ff7aba8bb0db7f823b7064#b30d573c9aca0787f4ff7aba8bb0db7f823b7064"
 dependencies = [
  "bitflags",
  "serde",

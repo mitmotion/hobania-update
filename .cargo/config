@@ -24,6 +24,7 @@ tracy-test-server = "run --bin veloren-server-cli --no-default-features --featur
 # voxygen
 test-voxygen = "run --bin veloren-voxygen --no-default-features --features simd,egui-ui,shaderc-from-source"
 tracy-voxygen = "run --bin veloren-voxygen --no-default-features --features tracy,simd,egui-ui,shaderc-from-source --profile no_overflow"
+tracy-voxygen-releasedebuginfo = "run --bin veloren-voxygen --no-default-features --features tracy,simd,egui-ui,shaderc-from-source,singleplayer --profile releasedebuginfo"
 dbg-voxygen = "run --bin veloren-voxygen --profile debuginfo"
 # misc
 swarm = "run --bin swarm --features client/bin_bot,client/tick_network --"
