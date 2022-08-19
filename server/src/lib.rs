@@ -68,6 +68,7 @@ use crate::{
     rtsim::RtSim,
     state_ext::StateExt,
     sys::sentinel::{DeletedEntities, TrackedStorages},
+    sys::permissions::UserRoles,
 };
 use censor::Censor;
 #[cfg(not(feature = "worldgen"))]
@@ -343,6 +344,7 @@ impl Server {
         state.ecs_mut().register::<comp::Pet>();
         state.ecs_mut().register::<login_provider::PendingLogin>();
         state.ecs_mut().register::<RepositionOnChunkLoad>();
+        state.ecs_mut().register::<UserRoles>();
 
         // Load banned words list
         let banned_words = settings.moderation.load_banned_words(data_dir);

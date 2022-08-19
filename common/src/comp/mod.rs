@@ -33,6 +33,8 @@ pub mod loot_owner;
 #[cfg(not(target_arch = "wasm32"))] pub mod melee;
 #[cfg(not(target_arch = "wasm32"))] mod misc;
 #[cfg(not(target_arch = "wasm32"))] pub mod ori;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod permissions;
 #[cfg(not(target_arch = "wasm32"))] pub mod pet;
 #[cfg(not(target_arch = "wasm32"))] mod phys;
 #[cfg(not(target_arch = "wasm32"))] mod player;
@@ -81,6 +83,7 @@ pub use self::{
     fluid_dynamics::Fluid,
     group::Group,
     inputs::CanBuild,
+    permissions::RuleSet,
     inventory::{
         item::{
             self,
