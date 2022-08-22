@@ -583,7 +583,9 @@ pub fn delete_character(
     requesting_player_uuid: &str,
     char_id: CharacterId,
     transaction: &mut Transaction,
-) -> CharacterListResult {
+) -> Result<(), PersistenceError> {
+    debug!(?requesting_player_uuid, ?char_id, "Deleting character");
+
     let mut stmt = transaction.prepare_cached(
         "
         SELECT  COUNT(1)
@@ -688,7 +690,7 @@ pub fn delete_character(
         )));
     }
 
-    load_character_list(requesting_player_uuid, transaction)
+    Ok(())
 }
 
 /// Before creating a character, we ensure that the limit on the number of

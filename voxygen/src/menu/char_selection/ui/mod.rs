@@ -1571,7 +1571,7 @@ impl Controls {
                                 events.push(Event::SelectCharacter(None));
                             }
                         }
-                        *info_content = Some(InfoContent::DeletingCharacter);
+                        *info_content = None;
                     }
                 }
             },

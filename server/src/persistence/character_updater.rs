@@ -20,6 +20,7 @@ use std::{
 use tracing::{debug, error, info, trace, warn};
 
 pub type CharacterUpdateData = (
+    CharacterId,
     comp::SkillSet,
     comp::Inventory,
     Vec<PetPersistenceData>,
@@ -32,7 +33,7 @@ pub type PetPersistenceData = (comp::Pet, comp::Body, comp::Stats);
 
 #[allow(clippy::large_enum_variant)]
 pub enum CharacterUpdaterEvent {
-    BatchUpdate(Vec<(CharacterId, CharacterUpdateData)>),
+    BatchUpdate(Vec<PendingDatabaseEvent>),
     CreateCharacter {
         entity: Entity,
         player_uuid: String,
@@ -46,12 +47,15 @@ pub enum CharacterUpdaterEvent {
         character_alias: String,
         editable_components: EditableComponents,
     },
+    DisconnectedSuccess,
+}
+
+pub enum PendingDatabaseEvent {
+    LogoutUpdate(CharacterUpdateData),
     DeleteCharacter {
-        entity: Entity,
         requesting_player_uuid: String,
         character_id: CharacterId,
     },
-    DisconnectedSuccess,
 }
 
 /// A unidirectional messaging resource for saving characters in a
@@ -63,7 +67,9 @@ pub struct CharacterUpdater {
     update_tx: Option<crossbeam_channel::Sender<CharacterUpdaterEvent>>,
     response_rx: crossbeam_channel::Receiver<CharacterLoaderResponse>,
     handle: Option<std::thread::JoinHandle<()>>,
-    pending_logout_updates: HashMap<CharacterId, CharacterUpdateData>,
+    /// Pending actions to be performed during the next persistence batch, such
+    /// as updates for recently logged out players and character deletions
+    pending_database_events: HashMap<CharacterId, PendingDatabaseEvent>,
     /// Will disconnect all characters (without persistence) on the next tick if
     /// set to true
     disconnect_all_clients_requested: Arc<AtomicBool>,
@@ -165,33 +171,6 @@ impl CharacterUpdater {
                                 ),
                             }
                         },
-                        CharacterUpdaterEvent::DeleteCharacter {
-                            entity,
-                            requesting_player_uuid,
-                            character_id,
-                        } => {
-                            match execute_character_delete(
-                                entity,
-                                &requesting_player_uuid,
-                                character_id,
-                                &mut conn,
-                            ) {
-                                Ok(response) => {
-                                    if let Err(e) = response_tx.send(response) {
-                                        error!(?e, "Could not send character deletion response");
-                                    } else {
-                                        debug!(
-                                            "Processed character delete for character ID {}",
-                                            character_id
-                                        );
-                                    }
-                                },
-                                Err(e) => error!(
-                                    "Error deleting character ID {}, error: {:?}",
-                                    character_id, e
-                                ),
-                            }
-                        },
                         CharacterUpdaterEvent::DisconnectedSuccess => {
                             info!(
                                 "CharacterUpdater received DisconnectedSuccess event, resuming \
@@ -210,29 +189,27 @@ impl CharacterUpdater {
             update_tx: Some(update_tx),
             response_rx,
             handle: Some(handle),
-            pending_logout_updates: HashMap::new(),
+            pending_database_events: HashMap::new(),
             disconnect_all_clients_requested,
         })
     }
 
     /// Adds a character to the list of characters that have recently logged out
     /// and will be persisted in the next batch update.
-    pub fn add_pending_logout_update(
-        &mut self,
-        character_id: CharacterId,
-        update_data: CharacterUpdateData,
-    ) {
+    pub fn add_pending_logout_update(&mut self, update_data: CharacterUpdateData) {
         if !self
             .disconnect_all_clients_requested
             .load(Ordering::Relaxed)
         {
-            self.pending_logout_updates
-                .insert(character_id, update_data);
+            self.pending_database_events.insert(
+                update_data.0, // CharacterId
+                PendingDatabaseEvent::LogoutUpdate(update_data),
+            );
         } else {
             warn!(
                 "Ignoring request to add pending logout update for character ID {} as there is a \
                  disconnection of all clients in progress",
-                character_id
+                update_data.0
             );
         }
     }
@@ -240,7 +217,7 @@ impl CharacterUpdater {
     /// Returns the character IDs of characters that have recently logged out
     /// and are awaiting persistence in the next batch update.
     pub fn characters_pending_logout(&self) -> impl Iterator<Item = CharacterId> + '_ {
-        self.pending_logout_updates.keys().copied()
+        self.pending_database_events.keys().copied()
     }
 
     /// Returns a value indicating whether there is a pending request to
@@ -296,79 +273,31 @@ impl CharacterUpdater {
         }
     }
 
-    pub fn delete_character(
-        &mut self,
-        entity: Entity,
-        requesting_player_uuid: String,
-        character_id: CharacterId,
-    ) {
-        if let Err(e) =
-            self.update_tx
-                .as_ref()
-                .unwrap()
-                .send(CharacterUpdaterEvent::DeleteCharacter {
-                    entity,
-                    requesting_player_uuid,
-                    character_id,
-                })
-        {
-            error!(?e, "Could not send character deletion request");
-        } else {
-            // Once a delete request has been sent to the channel we must remove any pending
-            // updates for the character in the event that it has recently logged out.
-            // Since the user has actively chosen to delete the character there is no value
-            // in the pending update data anyway.
-            self.pending_logout_updates.remove(&character_id);
-        }
+    pub fn delete_character(&mut self, requesting_player_uuid: String, character_id: CharacterId) {
+        // Insert the delete as a pending database action - if the player has recently
+        // logged out this will replace their pending update with a delete which
+        // is fine, as the user has actively chosen to delete the character.
+        self.pending_database_events
+            .insert(character_id, PendingDatabaseEvent::DeleteCharacter {
+                requesting_player_uuid,
+                character_id,
+            });
     }
 
     /// Updates a collection of characters based on their id and components
-    pub fn batch_update<'a>(
-        &mut self,
-        updates: impl Iterator<
-            Item = (
-                CharacterId,
-                &'a comp::SkillSet,
-                &'a comp::Inventory,
-                Vec<PetPersistenceData>,
-                Option<&'a comp::Waypoint>,
-                &'a comp::ability::ActiveAbilities,
-                Option<&'a comp::MapMarker>,
-            ),
-        >,
-    ) {
-        let updates = updates
-            .map(
-                |(
-                    character_id,
-                    skill_set,
-                    inventory,
-                    pets,
-                    waypoint,
-                    active_abilities,
-                    map_marker,
-                )| {
-                    (
-                        character_id,
-                        (
-                            skill_set.clone(),
-                            inventory.clone(),
-                            pets,
-                            waypoint.cloned(),
-                            active_abilities.clone(),
-                            map_marker.cloned(),
-                        ),
-                    )
-                },
-            )
-            .chain(self.pending_logout_updates.drain())
-            .collect::<Vec<_>>();
+    pub fn batch_update(&mut self, updates: impl Iterator<Item = CharacterUpdateData>) {
+        let pending_actions = self
+            .pending_database_events
+            .drain()
+            .map(|(_, event)| event) // Discard CharacterId key as it was only required to check if a character had a pending database event
+            .chain(updates.map(|update| PendingDatabaseEvent::LogoutUpdate(update)))
+            .collect::<Vec<PendingDatabaseEvent>>();
 
         if let Err(e) = self
             .update_tx
             .as_ref()
             .unwrap()
-            .send(CharacterUpdaterEvent::BatchUpdate(updates))
+            .send(CharacterUpdaterEvent::BatchUpdate(pending_actions))
         {
             error!(?e, "Could not send stats updates");
         }
@@ -392,26 +321,41 @@ impl CharacterUpdater {
 }
 
 fn execute_batch_update(
-    updates: Vec<(CharacterId, CharacterUpdateData)>,
+    updates: Vec<PendingDatabaseEvent>,
     connection: &mut VelorenConnection,
 ) -> Result<(), PersistenceError> {
     let mut transaction = connection.connection.transaction()?;
     transaction.set_drop_behavior(DropBehavior::Rollback);
     trace!("Transaction started for character batch update");
-    updates.into_iter().try_for_each(
-        |(character_id, (stats, inventory, pets, waypoint, active_abilities, map_marker))| {
-            super::character::update(
-                character_id,
-                stats,
-                inventory,
-                pets,
-                waypoint,
-                active_abilities,
-                map_marker,
-                &mut transaction,
-            )
-        },
-    )?;
+    updates.into_iter().try_for_each(|event| match event {
+        PendingDatabaseEvent::LogoutUpdate((
+            character_id,
+            stats,
+            inventory,
+            pets,
+            waypoint,
+            active_abilities,
+            map_marker,
+        )) => super::character::update(
+            character_id,
+            stats,
+            inventory,
+            pets,
+            waypoint,
+            active_abilities,
+            map_marker,
+            &mut transaction,
+        ),
+        PendingDatabaseEvent::DeleteCharacter {
+            requesting_player_uuid,
+            character_id,
+        } => super::character::delete_character(
+            &requesting_player_uuid,
+            character_id,
+            &mut transaction,
+        ),
+    })?;
+
     transaction.commit()?;
 
     trace!("Commit for character batch update completed");
@@ -451,21 +395,6 @@ fn execute_character_edit(
         character_id,
         requesting_player_uuid,
         &alias,
-    ));
-    check_response(entity, transaction, result)
-}
-
-fn execute_character_delete(
-    entity: Entity,
-    requesting_player_uuid: &str,
-    character_id: CharacterId,
-    connection: &mut VelorenConnection,
-) -> Result<CharacterLoaderResponse, PersistenceError> {
-    let mut transaction = connection.connection.transaction()?;
-    let result = CharacterLoaderResponseKind::CharacterList(super::character::delete_character(
-        requesting_player_uuid,
-        character_id,
-        &mut transaction,
     ));
     check_response(entity, transaction, result)
 }

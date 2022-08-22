@@ -192,7 +192,6 @@ impl Sys {
             ClientGeneral::DeleteCharacter(character_id) => {
                 if let Some(player) = players.get(entity) {
                     character_updater.delete_character(
-                        entity,
                         player.uuid().to_string(),
                         character_id,
                     );

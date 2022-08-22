@@ -264,17 +264,15 @@ fn persist_entity(state: &mut State, entity: EcsEntity) -> EcsEntity {
                     })
                     .collect();
 
-                character_updater.add_pending_logout_update(
+                character_updater.add_pending_logout_update((
                     char_id,
-                    (
-                        skill_set.clone(),
-                        inventory.clone(),
-                        pets,
-                        waypoint,
-                        active_abilities.clone(),
-                        map_marker,
-                    ),
-                );
+                    skill_set.clone(),
+                    inventory.clone(),
+                    pets,
+                    waypoint,
+                    active_abilities.clone(),
+                    map_marker,
+                ));
             },
             PresenceKind::Spectator => { /* Do nothing, spectators do not need persisting */ },
             PresenceKind::Possessor => { /* Do nothing, possessor's are not persisted */ },
