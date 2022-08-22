@@ -12,6 +12,7 @@
     option_zip,
     unwrap_infallible
 )]
+#![feature(hash_drain_filter)]
 
 pub mod automod;
 mod character_creator;
@@ -131,6 +132,7 @@ use {
     common_state::plugin::{memory_manager::EcsWorld, PluginMgr},
 };
 
+use crate::persistence::character_loader::CharacterLoaderResponse;
 use common::comp::Anchor;
 #[cfg(feature = "worldgen")]
 use world::{
@@ -837,52 +839,56 @@ impl Server {
 
         let character_loader = self.state.ecs().read_resource::<CharacterLoader>();
 
-        let character_updater = self.state.ecs().read_resource::<CharacterUpdater>();
+        let mut character_updater = self.state.ecs().write_resource::<CharacterUpdater>();
+        let updater_messages: Vec<CharacterLoaderResponse> = character_updater.messages().collect();
 
         // Get character-related database responses and notify the requesting client
         character_loader
             .messages()
-            .chain(character_updater.messages())
+            .chain(updater_messages)
             .for_each(|query_result| match query_result.result {
+                CharacterLoaderResponseKind::PendingDatabaseEventsCompletion(max_id) => {
+                    character_updater.clear_pending_database_events(max_id);
+                },
                 CharacterLoaderResponseKind::CharacterList(result) => match result {
                     Ok(character_list_data) => self.notify_client(
-                        query_result.entity,
+                        query_result.entity.expect("TODO: FIX THIS"),
                         ServerGeneral::CharacterListUpdate(character_list_data),
                     ),
                     Err(error) => self.notify_client(
-                        query_result.entity,
+                        query_result.entity.expect("TODO: FIX THIS"),
                         ServerGeneral::CharacterActionError(error.to_string()),
                     ),
                 },
                 CharacterLoaderResponseKind::CharacterCreation(result) => match result {
                     Ok((character_id, list)) => {
                         self.notify_client(
-                            query_result.entity,
+                            query_result.entity.expect("TODO: FIX THIS"),
                             ServerGeneral::CharacterListUpdate(list),
                         );
                         self.notify_client(
-                            query_result.entity,
+                            query_result.entity.expect("TODO: FIX THIS"),
                             ServerGeneral::CharacterCreated(character_id),
                         );
                     },
                     Err(error) => self.notify_client(
-                        query_result.entity,
+                        query_result.entity.expect("TODO: FIX THIS"),
                         ServerGeneral::CharacterActionError(error.to_string()),
                     ),
                 },
                 CharacterLoaderResponseKind::CharacterEdit(result) => match result {
                     Ok((character_id, list)) => {
                         self.notify_client(
-                            query_result.entity,
+                            query_result.entity.expect("TODO: FIX THIS"),
                             ServerGeneral::CharacterListUpdate(list),
                         );
                         self.notify_client(
-                            query_result.entity,
+                            query_result.entity.expect("TODO: FIX THIS"),
                             ServerGeneral::CharacterEdited(character_id),
                         );
                     },
                     Err(error) => self.notify_client(
-                        query_result.entity,
+                        query_result.entity.expect("TODO: FIX THIS"),
                         ServerGeneral::CharacterActionError(error.to_string()),
                     ),
                 },
@@ -910,7 +916,7 @@ impl Server {
                                 map_marker,
                             );
                             ServerEvent::UpdateCharacterData {
-                                entity: query_result.entity,
+                                entity: query_result.entity.expect("TODO: FIX THIS"),
                                 components: character_data,
                             }
                         },
@@ -919,13 +925,13 @@ impl Server {
                             // client to push the state back to character selection, with the error
                             // to display
                             self.notify_client(
-                                query_result.entity,
+                                query_result.entity.expect("TODO: FIX THIS"),
                                 ServerGeneral::CharacterDataLoadError(error.to_string()),
                             );
 
                             // Clean up the entity data on the server
                             ServerEvent::ExitIngame {
-                                entity: query_result.entity,
+                                entity: query_result.entity.expect("TODO: FIX THIS"),
                             }
                         },
                     };

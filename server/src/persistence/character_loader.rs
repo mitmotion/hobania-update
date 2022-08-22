@@ -35,12 +35,13 @@ pub enum CharacterLoaderResponseKind {
     CharacterData(Box<CharacterDataResult>),
     CharacterCreation(CharacterCreationResult),
     CharacterEdit(CharacterEditResult),
+    PendingDatabaseEventsCompletion(u64),
 }
 
 /// Common message format dispatched in response to an update request
 #[derive(Debug)]
 pub struct CharacterLoaderResponse {
-    pub entity: specs::Entity,
+    pub entity: Option<specs::Entity>,
     pub result: CharacterLoaderResponseKind,
 }
 
@@ -114,7 +115,7 @@ impl CharacterLoader {
     ) -> CharacterLoaderResponse {
         let (entity, kind) = request;
         CharacterLoaderResponse {
-            entity,
+            entity: Some(entity),
             result: match kind {
                 CharacterLoaderRequestKind::LoadCharacterList { player_uuid } => {
                     CharacterLoaderResponseKind::CharacterList(load_character_list(

@@ -50,7 +50,21 @@ pub enum CharacterUpdaterEvent {
     DisconnectedSuccess,
 }
 
-pub enum PendingDatabaseEvent {
+#[derive(Clone)]
+pub struct PendingDatabaseEvent {
+    event_id: u64,
+    event_type: PendingDatabaseEventType,
+    state: PendingDatabaseEventState,
+}
+
+#[derive(Clone, PartialEq)]
+pub enum PendingDatabaseEventState {
+    New,
+    PendingCompletion,
+}
+
+#[derive(Clone)]
+pub enum PendingDatabaseEventType {
     LogoutUpdate(CharacterUpdateData),
     DeleteCharacter {
         requesting_player_uuid: String,
@@ -73,6 +87,7 @@ pub struct CharacterUpdater {
     /// Will disconnect all characters (without persistence) on the next tick if
     /// set to true
     disconnect_all_clients_requested: Arc<AtomicBool>,
+    last_pending_database_event_id: u64,
 }
 
 impl CharacterUpdater {
@@ -101,7 +116,14 @@ impl CharacterUpdater {
                                 continue;
                             }
                             conn.update_log_mode(&settings);
-                            if let Err(e) = execute_batch_update(updates, &mut conn) {
+
+                            let max_pending_event_id =
+                                updates.iter().map(|x| x.event_id).max().unwrap_or_default();
+
+                            if let Err(e) = execute_batch_update(
+                                updates.into_iter().map(|x| x.event_type),
+                                &mut conn,
+                            ) {
                                 error!(
                                     "Error during character batch update, disconnecting all \
                                      clients to avoid loss of data integrity. Error: {:?}",
@@ -110,6 +132,28 @@ impl CharacterUpdater {
                                 disconnect_all_clients_requested_clone
                                     .store(true, Ordering::Relaxed);
                             };
+
+                            if let Err(e) = response_tx.send(CharacterLoaderResponse {
+                                // TODO: Entity isn't needed for this message - fix enum
+                                entity: None,
+                                result:
+                                    CharacterLoaderResponseKind::PendingDatabaseEventsCompletion(
+                                        max_pending_event_id,
+                                    ),
+                            }) {
+                                // TODO: Panic here instead? If this fails something's gone very
+                                // wrong and it would prevent players logging in until a server
+                                // restart
+                                error!(
+                                    ?e,
+                                    "Could not send PendingDatabaseEventsCompletion message"
+                                );
+                            } else {
+                                trace!(
+                                    "Submitted PendingDatabaseEventsCompletion - Max ID: {}",
+                                    max_pending_event_id
+                                );
+                            }
                         },
                         CharacterUpdaterEvent::CreateCharacter {
                             entity,
@@ -191,6 +235,7 @@ impl CharacterUpdater {
             handle: Some(handle),
             pending_database_events: HashMap::new(),
             disconnect_all_clients_requested,
+            last_pending_database_event_id: 0,
         })
     }
 
@@ -201,9 +246,14 @@ impl CharacterUpdater {
             .disconnect_all_clients_requested
             .load(Ordering::Relaxed)
         {
+            let next_event_id = self.next_pending_database_event_id();
             self.pending_database_events.insert(
                 update_data.0, // CharacterId
-                PendingDatabaseEvent::LogoutUpdate(update_data),
+                PendingDatabaseEvent {
+                    event_id: next_event_id,
+                    event_type: PendingDatabaseEventType::LogoutUpdate(update_data),
+                    state: PendingDatabaseEventState::New,
+                },
             );
         } else {
             warn!(
@@ -216,8 +266,15 @@ impl CharacterUpdater {
 
     /// Returns the character IDs of characters that have recently logged out
     /// and are awaiting persistence in the next batch update.
-    pub fn characters_pending_logout(&self) -> impl Iterator<Item = CharacterId> + '_ {
+    pub fn characters_with_pending_database_events(
+        &self,
+    ) -> impl Iterator<Item = CharacterId> + '_ {
         self.pending_database_events.keys().copied()
+    }
+
+    pub fn clear_pending_database_events(&mut self, clear_up_to_id: u64) {
+        self.pending_database_events
+            .drain_filter(|_, event| event.event_id <= clear_up_to_id);
     }
 
     /// Returns a value indicating whether there is a pending request to
@@ -273,31 +330,53 @@ impl CharacterUpdater {
         }
     }
 
+    fn next_pending_database_event_id(&mut self) -> u64 {
+        self.last_pending_database_event_id += 1;
+        self.last_pending_database_event_id
+    }
+
     pub fn delete_character(&mut self, requesting_player_uuid: String, character_id: CharacterId) {
         // Insert the delete as a pending database action - if the player has recently
         // logged out this will replace their pending update with a delete which
         // is fine, as the user has actively chosen to delete the character.
+        let next_event_id = self.next_pending_database_event_id();
         self.pending_database_events
-            .insert(character_id, PendingDatabaseEvent::DeleteCharacter {
-                requesting_player_uuid,
-                character_id,
+            .insert(character_id, PendingDatabaseEvent {
+                event_id: next_event_id,
+                event_type: PendingDatabaseEventType::DeleteCharacter {
+                    requesting_player_uuid,
+                    character_id,
+                },
+                state: PendingDatabaseEventState::New,
             });
     }
 
     /// Updates a collection of characters based on their id and components
     pub fn batch_update(&mut self, updates: impl Iterator<Item = CharacterUpdateData>) {
-        let pending_actions = self
+        let existing_pending_events = self
             .pending_database_events
-            .drain()
-            .map(|(_, event)| event) // Discard CharacterId key as it was only required to check if a character had a pending database event
-            .chain(updates.map(|update| PendingDatabaseEvent::LogoutUpdate(update)))
+            .iter_mut()
+            .filter(|(_, event)| event.state == PendingDatabaseEventState::New)
+            .map(|(_, mut event)| {
+                event.state = PendingDatabaseEventState::PendingCompletion;
+                event.clone()
+            })
+            .collect::<Vec<PendingDatabaseEvent>>();
+
+        let pending_events = existing_pending_events
+            .into_iter()
+            .chain(updates.map(|update| PendingDatabaseEvent {
+                event_id: self.next_pending_database_event_id(),
+                event_type: PendingDatabaseEventType::LogoutUpdate(update),
+                state: PendingDatabaseEventState::PendingCompletion,
+            }))
             .collect::<Vec<PendingDatabaseEvent>>();
 
         if let Err(e) = self
             .update_tx
             .as_ref()
             .unwrap()
-            .send(CharacterUpdaterEvent::BatchUpdate(pending_actions))
+            .send(CharacterUpdaterEvent::BatchUpdate(pending_events))
         {
             error!(?e, "Could not send stats updates");
         }
@@ -321,14 +400,14 @@ impl CharacterUpdater {
 }
 
 fn execute_batch_update(
-    updates: Vec<PendingDatabaseEvent>,
+    updates: impl Iterator<Item = PendingDatabaseEventType>,
     connection: &mut VelorenConnection,
 ) -> Result<(), PersistenceError> {
     let mut transaction = connection.connection.transaction()?;
     transaction.set_drop_behavior(DropBehavior::Rollback);
     trace!("Transaction started for character batch update");
     updates.into_iter().try_for_each(|event| match event {
-        PendingDatabaseEvent::LogoutUpdate((
+        PendingDatabaseEventType::LogoutUpdate((
             character_id,
             stats,
             inventory,
@@ -346,7 +425,7 @@ fn execute_batch_update(
             map_marker,
             &mut transaction,
         ),
-        PendingDatabaseEvent::DeleteCharacter {
+        PendingDatabaseEventType::DeleteCharacter {
             requesting_player_uuid,
             character_id,
         } => super::character::delete_character(
@@ -404,7 +483,10 @@ fn check_response(
     transaction: Transaction,
     result: CharacterLoaderResponseKind,
 ) -> Result<CharacterLoaderResponse, PersistenceError> {
-    let response = CharacterLoaderResponse { entity, result };
+    let response = CharacterLoaderResponse {
+        entity: Some(entity),
+        result,
+    };
 
     if !response.is_err() {
         transaction.commit()?;
