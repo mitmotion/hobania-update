@@ -37,7 +37,7 @@ pub type PetPersistenceData = (comp::Pet, comp::Body, comp::Stats);
 pub enum CharacterUpdaterAction {
     BatchUpdate {
         batch_id: u64,
-        updates: Vec<PendingDatabaseAction>,
+        updates: Vec<PendingDatabaseActionKind>,
     },
     CreateCharacter {
         entity: Entity,
@@ -56,15 +56,21 @@ pub enum CharacterUpdaterAction {
 }
 
 #[derive(Clone)]
-pub struct PendingDatabaseAction {
-    kind: PendingDatabaseActionKind,
-    state: PendingDatabaseActionState,
+pub enum PendingDatabaseAction {
+    New(PendingDatabaseActionKind),
+    Submitted { batch_id: u64 },
 }
 
-#[derive(Clone, PartialEq)]
-pub enum PendingDatabaseActionState {
-    New,
-    PendingCompletion { batch_id: u64 },
+impl PendingDatabaseAction {
+    fn take_new(&mut self, batch_id: u64) -> Option<PendingDatabaseActionKind> {
+        match core::mem::replace(self, Self::Submitted { batch_id }) {
+            Self::New(action) => Some(action),
+            submitted @ Self::Submitted { .. } => {
+                *self = submitted; // restore old batch_id
+                None
+            },
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -121,9 +127,7 @@ impl CharacterUpdater {
                             }
                             conn.update_log_mode(&settings);
 
-                            if let Err(e) =
-                                execute_batch_update(updates.into_iter().map(|x| x.kind), &mut conn)
-                            {
+                            if let Err(e) = execute_batch_update(updates.into_iter(), &mut conn) {
                                 error!(
                                     "Error during character batch update, disconnecting all \
                                      clients to avoid loss of data integrity. Error: {:?}",
@@ -240,10 +244,9 @@ impl CharacterUpdater {
         {
             self.pending_database_actions.insert(
                 update_data.0, // CharacterId
-                PendingDatabaseAction {
-                    kind: PendingDatabaseActionKind::UpdateCharacter(Box::new(update_data)),
-                    state: PendingDatabaseActionState::New,
-                },
+                PendingDatabaseAction::New(PendingDatabaseActionKind::UpdateCharacter(Box::new(
+                    update_data,
+                ))),
             );
         } else {
             warn!(
@@ -264,11 +267,8 @@ impl CharacterUpdater {
 
     pub fn process_batch_completion(&mut self, completed_batch_id: u64) {
         self.pending_database_actions.drain_filter(|_, event| {
-            matches!(event, PendingDatabaseAction {
-                state: PendingDatabaseActionState::PendingCompletion {
+            matches!(event, PendingDatabaseAction::Submitted {
                     batch_id,
-                },
-                ..
             } if completed_batch_id == *batch_id)
         });
         debug!(
@@ -339,14 +339,13 @@ impl CharacterUpdater {
         // Insert the delete as a pending database action - if the player has recently
         // logged out this will replace their pending update with a delete which
         // is fine, as the user has actively chosen to delete the character.
-        self.pending_database_actions
-            .insert(character_id, PendingDatabaseAction {
-                kind: PendingDatabaseActionKind::DeleteCharacter {
-                    requesting_player_uuid,
-                    character_id,
-                },
-                state: PendingDatabaseActionState::New,
-            });
+        self.pending_database_actions.insert(
+            character_id,
+            PendingDatabaseAction::New(PendingDatabaseActionKind::DeleteCharacter {
+                requesting_player_uuid,
+                character_id,
+            }),
+        );
     }
 
     /// Updates a collection of characters based on their id and components
@@ -358,20 +357,15 @@ impl CharacterUpdater {
         let existing_pending_actions = self
             .pending_database_actions
             .iter_mut()
-            .filter(|(_, event)| event.state == PendingDatabaseActionState::New)
-            .map(|(_, mut event)| {
-                event.state = PendingDatabaseActionState::PendingCompletion { batch_id };
-                event.clone()
-            });
+            .filter_map(|(_, event)| event.take_new(batch_id));
 
         // Combine the pending actions with the updates for logged in characters
         let pending_actions = existing_pending_actions
             .into_iter()
-            .chain(updates.map(|update| PendingDatabaseAction {
-                kind: PendingDatabaseActionKind::UpdateCharacter(Box::new(update)),
-                state: PendingDatabaseActionState::PendingCompletion { batch_id },
-            }))
-            .collect::<Vec<PendingDatabaseAction>>();
+            .chain(
+                updates.map(|update| PendingDatabaseActionKind::UpdateCharacter(Box::new(update))),
+            )
+            .collect::<Vec<PendingDatabaseActionKind>>();
 
         if !pending_actions.is_empty() {
             debug!(
