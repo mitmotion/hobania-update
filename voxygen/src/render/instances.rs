@@ -21,14 +21,14 @@ impl<T: Copy + Pod> Instances<T> {
 
     /// Get the GPU-side mapped slice represented by this instances buffer, if it was previously
     /// memory mapped.
-    pub fn get_mapped_mut(&self, offset: usize, len: usize) -> /* &mut [T] */wgpu::BufferViewMut<'_> {
+    pub fn get_mapped_mut(&mut self, offset: usize, len: usize) -> /* &mut [T] */wgpu::BufferSliceMut<'_> {
         self.buf.get_mapped_mut(offset, len)
     }
 
     /// Unmaps the GPU-side handle represented by this instances buffer, if it was previously
     /// memory-mapped.
-    pub fn unmap(&self, queue: &wgpu::Queue) {
-        self.buf.unmap(queue);
+    pub fn unmap(&mut self/*, queue: &wgpu::Queue*/) {
+        self.buf.unmap(/*queue*/);
     }
 
     // TODO: count vs len naming scheme??

@@ -49,14 +49,14 @@ impl<T: Copy + Pod> Buffer<T> {
     ///
     /// NOTE: Will panic if the buffer was not explicitly mapped before this (without being
     /// unmapped), either directly or via [Buffer::new_mapped].
-    pub fn get_mapped_mut(&self, offset: usize, len: usize) -> wgpu::BufferViewMut<'_> {
+    pub fn get_mapped_mut(&mut self, offset: usize, len: usize) -> wgpu::BufferSliceMut<'_> {
         /* if !vals.is_empty() {
             let contents = bytemuck::cast_slice(vals); */
 
             let size_ty = std::mem::size_of::<T>() as u64;
             let offset = offset as u64 * size_ty;
             let size = /*vals.len()*/len as u64 * size_ty;
-            /* bytemuck::cast_slice_mut(&mut */self.buf.slice(offset..offset + size).get_mapped_range_mut()/* ) */
+            /* bytemuck::cast_slice_mut(&mut */self.buf.slice_mut(offset..offset + size)/*.get_mapped_range_mut()*//* ) */
                 /* .copy_from_slice(contents);
         } */
     }
@@ -70,7 +70,7 @@ impl<T: Copy + Pod> Buffer<T> {
     /// NOTE: Queue is not *explicitly* used here, but it is implicitly used during the unmap
     /// (within wgpu internals) when mapped at creation, and requires acquiring a lock on it,
     /// so it's left in the API to deter people from using it when the queue isn't available.
-    pub fn unmap(&self, _queue: &wgpu::Queue/* , vals: &[T], offset: usize */) {
+    pub fn unmap(&mut self/*, _queue: &wgpu::Queue/* , vals: &[T], offset: usize */*/) {
         /* if !vals.is_empty() {
             let contents = bytemuck::cast_slice(vals);
 
@@ -125,4 +125,8 @@ impl<T: Copy + Pod> std::ops::Deref for DynamicBuffer<T> {
     type Target = Buffer<T>;
 
     fn deref(&self) -> &Self::Target { &self.0 }
+}
+
+impl<T: Copy + Pod> std::ops::DerefMut for DynamicBuffer<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.0 }
 }

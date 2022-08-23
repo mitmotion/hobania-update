@@ -1614,7 +1614,7 @@ dependencies = [
 [[package]]
 name = "egui_wgpu_backend"
 version = "0.8.0"
-source = "git+https://github.com/hasenbanck/egui_wgpu_backend.git?rev=63a002c6a9b6c016e45806dd065864431caab621#63a002c6a9b6c016e45806dd065864431caab621"
+source = "git+https://github.com/pythonesque/egui_wgpu_backend.git?rev=7a811c5f8915a1486f477ed7d8907d22579c6b17#7a811c5f8915a1486f477ed7d8907d22579c6b17"
 dependencies = [
  "bytemuck",
  "epi",
@@ -7566,7 +7566,7 @@ dependencies = [
 [[package]]
 name = "wgpu"
 version = "0.8.0"
-source = "git+https://github.com/pythonesque/wgpu.git?rev=b30d573c9aca0787f4ff7aba8bb0db7f823b7064#b30d573c9aca0787f4ff7aba8bb0db7f823b7064"
+source = "git+https://github.com/pythonesque/wgpu.git?rev=3858992e25d494fe7544ec3064221bbdafd5a547#3858992e25d494fe7544ec3064221bbdafd5a547"
 dependencies = [
  "arrayvec 0.5.2",
  "js-sys",
@@ -7586,7 +7586,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core"
 version = "0.8.0"
-source = "git+https://github.com/pythonesque/wgpu.git?rev=b30d573c9aca0787f4ff7aba8bb0db7f823b7064#b30d573c9aca0787f4ff7aba8bb0db7f823b7064"
+source = "git+https://github.com/pythonesque/wgpu.git?rev=3858992e25d494fe7544ec3064221bbdafd5a547#3858992e25d494fe7544ec3064221bbdafd5a547"
 dependencies = [
  "arrayvec 0.5.2",
  "bitflags",
@@ -7617,7 +7617,7 @@ dependencies = [
 [[package]]
 name = "wgpu-profiler"
 version = "0.4.0"
-source = "git+https://github.com/Imberflur/wgpu-profiler?tag=wgpu-0.8#b156eb145bc223386ef344860d9b33b3c181650c"
+source = "git+https://github.com/pythonesque/wgpu-profiler?rev=b6b16da077a1aca2fe3a2ceaa3bdcc1bdeb11d74#b6b16da077a1aca2fe3a2ceaa3bdcc1bdeb11d74"
 dependencies = [
  "futures",
  "wgpu",
@@ -7626,7 +7626,7 @@ dependencies = [
 [[package]]
 name = "wgpu-types"
 version = "0.8.0"
-source = "git+https://github.com/pythonesque/wgpu.git?rev=b30d573c9aca0787f4ff7aba8bb0db7f823b7064#b30d573c9aca0787f4ff7aba8bb0db7f823b7064"
+source = "git+https://github.com/pythonesque/wgpu.git?rev=3858992e25d494fe7544ec3064221bbdafd5a547#3858992e25d494fe7544ec3064221bbdafd5a547"
 dependencies = [
  "bitflags",
  "serde",

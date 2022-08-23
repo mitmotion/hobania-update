@@ -389,10 +389,11 @@ fn mesh_worker/*<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug +
                 start = range.end;
                 range
             });
-            let sprite_instances = create_instances(instance_ranges.iter().map(|range| range.len()).sum());
+            let mut sprite_instances = create_instances(instance_ranges.iter().map(|range| range.len()).sum());
             if start > 0 {
-                sprite_instances
-                    .get_mapped_mut(0, sprite_instances.count())
+                let slice = sprite_instances
+                    .get_mapped_mut(0, sprite_instances.count());
+                slice.get_mapped_range_mut()
                     .array_chunks_mut::<{ core::mem::size_of::<SpriteInstance>() }>()
                     .zip(instances.into_iter().flatten()).for_each(|(dst, src)| {
                     // FIXME: cast doesn't work because bytemuck::cast isn't const generic-ified
@@ -400,10 +401,16 @@ fn mesh_worker/*<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug +
                     // *dst = bytemuck::cast(src);
                     dst.copy_from_slice(bytemuck::cast_slice(&[src]));
                 });
+                /* sprite_instances.unmap(); */
             }
             (instance_ranges, sprite_instances)
         },
-        mesh,
+        mesh/* : mesh.map(|mut mesh| {
+            mesh.opaque_model.as_mut().map(|model| model.unmap());
+            mesh.fluid_model.as_mut().map(|model| model.unmap());
+            mesh.col_lights_info.0.as_mut().map(|model| model.unmap());
+            mesh
+        })*/,
         blocks_of_interest,
         started_tick,
     }
@@ -1307,7 +1314,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
             let create_fluid = renderer.create_model_lazy(wgpu::BufferUsage::VERTEX);
             let create_instances = renderer.create_instances_lazy();
             /* let create_locals = renderer.create_terrain_bound_locals(); */
-            let create_texture = renderer./*create_texture_raw*/create_model_lazy_base(wgpu::BufferUsage::COPY_SRC);
+            let create_texture = renderer./*create_texture_raw*/create_model_lazy_base(wgpu::BufferUsage::COPY_SRC/* | wgpu::BufferUsage::MAP_WRITE */);
             /* cnt.fetch_add(1, Ordering::Relaxed); */
             let job = move || {
                 // Since this loads when the task actually *runs*, rather than when it's
@@ -1368,15 +1375,15 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
         if max_recv_count > 0 {
         // Construct a buffer for all the chunks we're going to process in this frame.  There might
         // be some unused slots, which is fine.
-        let locals = /*Arc::new(*/renderer.create_consts_mapped(wgpu::BufferUsage::empty(), max_recv_count as usize)/*)*/;
-        let mut locals_buffer = locals.get_mapped_mut(0, locals.len());
+        let mut locals = /*Arc::new(*/renderer.create_consts_mapped(wgpu::BufferUsage::empty(), max_recv_count as usize)/*)*/;
         let mut locals_bound = renderer.create_terrain_bound_locals(&locals/*, locals_offset */);
+        let mut locals_buffer = locals.get_mapped_mut(0, locals.len());
         let mut encoder = renderer.device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Update textures."),
             });
 
-        for (locals_offset, (response, locals_buffer)) in incoming_chunks.zip(locals_buffer.array_chunks_mut::<{ core::mem::size_of::<TerrainLocals>() }>()).enumerate() {
+        for (locals_offset, (mut response, locals_buffer)) in incoming_chunks.zip(locals_buffer.get_mapped_range_mut().array_chunks_mut::<{ core::mem::size_of::<TerrainLocals>() }>()).enumerate() {
             let pos = response.pos;
             let response_started_tick = response.started_tick;
             match self.mesh_todo.get(&pos) {
@@ -1401,7 +1408,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                             .unwrap_or(current_time as f32);
                         // TODO: Allocate new atlas on allocation failure.
                         let (tex, tex_size) = mesh.col_lights_info;
-                        let tex = tex.expect("The mesh exists, so the texture should too.");
+                        let mut tex = tex.expect("The mesh exists, so the texture should too.");
                         let atlas = &mut self.atlas;
                         let chunks = &mut self.chunks;
                         let col_lights = &mut self.col_lights;
@@ -1449,10 +1456,10 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                         // lock as of wgpu 0.8.1).
                         //
                         // FIXME: When we upgrade wgpu, reconsider all this.
-                        renderer.unmap_instances(&response.sprite_instances.1);
-                        mesh.opaque_model.as_ref().map(|model| renderer.unmap_model(model));
-                        mesh.fluid_model.as_ref().map(|model| renderer.unmap_model(model));
-                        renderer.unmap_model(&tex);
+                        renderer.unmap_instances(&mut response.sprite_instances.1);
+                        mesh.opaque_model.as_mut().map(|model| renderer.unmap_model(model));
+                        mesh.fluid_model.as_mut().map(|model| renderer.unmap_model(model));
+                        renderer.unmap_model(&mut tex);
 
                         // NOTE: Cast is safe since the origin was a u16.
                         let atlas_offs = Vec2::new(
@@ -1556,7 +1563,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
         }
         // Drop the memory mapping and unmap the locals.
         drop(locals_buffer);
-        renderer.unmap_consts(&locals);
+        renderer.unmap_consts(&mut locals);
         // Drop buffer on background thread.
         slowjob.spawn(&"TERRAIN_DROP", move || { drop(locals); });
         /* // TODO: Delay submission, don't just submit immediately out of convenience!

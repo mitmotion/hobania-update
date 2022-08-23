@@ -512,8 +512,8 @@ impl Renderer {
         // the previous frame.
         let (maintain_tx, maintain_rx) = channel::bounded(0);
 
-        let device_ = Arc::clone(&device);
-        /* std::thread::spawn(move || {
+        /* let device_ = Arc::clone(&device);
+        std::thread::spawn(move || {
             // Maintain each time we are requested to do so, until the renderer dies.
             // Additionally, accepts CPU->GPU tasks containing updates to perform that need to lock
             // the device (but not necessarily the queue?).  This is a hopefully temporary measure
@@ -806,6 +806,7 @@ impl Renderer {
     pub fn maintain(&self) {
         if self.is_minimized {
             self.queue.submit(std::iter::empty());
+            // self.device.poll(wgpu::Maintain::Poll);
         }
 
         // If the send fails, we can (generally) assume it's because the channel is out of
@@ -1286,7 +1287,7 @@ impl Renderer {
     }
 
     /// Unmaps a set of memory mapped consts.
-    pub fn unmap_consts<T: Copy + bytemuck::Pod>(&self, consts: &Consts<T>) {
+    pub fn unmap_consts<T: Copy + bytemuck::Pod>(&self, consts: &mut Consts<T>) {
         consts.unmap(&self.queue)
     }
 
@@ -1317,8 +1318,8 @@ impl Renderer {
     }
 
     /// Unmaps a set of memory mapped instances.
-    pub fn unmap_instances<T: Copy + bytemuck::Pod>(&self, instances: &Instances<T>) {
-        instances.unmap(&self.queue)
+    pub fn unmap_instances<T: Copy + bytemuck::Pod>(&self, instances: &mut Instances<T>) {
+        instances.unmap(/*&self.queue*/)
     }
 
     /// Update the expected index length to be large enough for a quad vertex bfufer with this many
@@ -1412,16 +1413,17 @@ impl Renderer {
         let create_model = self.create_model_lazy_base(usage);
         move |mesh| {
             let len = mesh.vertices().len();
-            let model = create_model(len)?;
-            model.get_mapped_mut(0, len)
+            let mut model = create_model(len)?;
+            let slice = model.get_mapped_mut(0, len);
+            slice.get_mapped_range_mut()
                 .copy_from_slice(bytemuck::cast_slice(mesh.vertices()));
             Some(model)
         }
     }
 
     /// Unmaps a memory mapped model.
-    pub fn unmap_model<V: Vertex>(&self, model: &Model<V>) {
-        model.unmap(&self.queue);
+    pub fn unmap_model<V: Vertex>(&self, model: &mut Model<V>) {
+        model.unmap(/*&self.queue*/);
     }
 
     /// Create a new dynamic model with the specified size.

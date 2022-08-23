@@ -131,7 +131,7 @@ impl TakeScreenshot {
         }
     }
 
-    fn download_and_handle_internal(self) {
+    fn download_and_handle_internal(mut self) {
         // Calculate padded bytes per row
         let padded_bytes_per_row = padded_bytes_per_row(self.width, self.bytes_per_pixel);
         let singlethread_rt = match tokio::runtime::Builder::new_current_thread().build() {
@@ -143,7 +143,7 @@ impl TakeScreenshot {
         };
 
         // Map buffer
-        let buffer_slice = self.buffer.slice(..);
+        let mut buffer_slice = self.buffer.slice_mut(..);
         let buffer_map_future = buffer_slice.map_async(wgpu::MapMode::Read);
 
         // Wait on buffer mapping

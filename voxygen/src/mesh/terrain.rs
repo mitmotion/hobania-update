@@ -1004,7 +1004,9 @@ pub fn generate_mesh<'a/*, V: RectRasterableVol<Vox = Block> + ReadVol + Debug +
     // Allocate the fresh mesh.
     let mut col_lights = create_texture(col_lights_alloc_size);
     let col_lights_size = col_lights.as_mut().map(|col_lights| {
-        finalize(bytemuck::cast_slice_mut(&mut col_lights.get_mapped_mut(0, col_lights.len())))
+        let slice = col_lights.get_mapped_mut(0, col_lights.len());
+        let mut buf = slice.get_mapped_range_mut();
+        finalize(bytemuck::cast_slice_mut(&mut buf))
     }).unwrap_or(Vec2::broadcast(0));
     (
         opaque_mesh,

@@ -55,14 +55,14 @@ impl<V: Vertex> Model<V> {
 
     /// Get the GPU-side mapped slice represented by this model handle, if it was previously
     /// memory mapped.
-    pub fn get_mapped_mut(&self, offset: usize, len: usize) -> /* &mut [T] */wgpu::BufferViewMut<'_> {
+    pub fn get_mapped_mut(&mut self, offset: usize, len: usize) -> /* &mut [T] */wgpu::BufferSliceMut<'_> {
         self.vbuf.get_mapped_mut(offset, len)
     }
 
     /// Unmaps the GPU-side handle represented by this model handle, if it was previously
     /// memory-mapped.
-    pub fn unmap(&self, queue: &wgpu::Queue) {
-        self.vbuf.unmap(queue);
+    pub fn unmap(&mut self/*, queue: &wgpu::Queue*/) {
+        self.vbuf.unmap(/*queue*/);
     }
 
     /// Create a model with a slice of a portion of this model to send to the
