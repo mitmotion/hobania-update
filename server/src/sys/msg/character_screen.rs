@@ -79,7 +79,7 @@ impl Sys {
                     if presences.contains(entity) {
                         debug!("player already ingame, aborting");
                     } else if character_updater
-                        .characters_with_pending_database_events()
+                        .characters_with_pending_database_actions()
                         .any(|x| x == character_id)
                     {
                         debug!("player recently logged out pending persistence, aborting");
