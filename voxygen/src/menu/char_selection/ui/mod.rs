@@ -260,7 +260,6 @@ enum InfoContent {
     LoadingCharacters,
     CreatingCharacter,
     EditingCharacter,
-    DeletingCharacter,
     CharacterError(String),
 }
 
@@ -454,7 +453,6 @@ impl Controls {
                     Some(InfoContent::LoadingCharacters)
                         | Some(InfoContent::CreatingCharacter)
                         | Some(InfoContent::EditingCharacter)
-                        | Some(InfoContent::DeletingCharacter)
                 ) && !client.character_list().loading
                 {
                     *info_content = None;
@@ -775,11 +773,6 @@ impl Controls {
                         },
                         InfoContent::EditingCharacter => {
                             Text::new(i18n.get("char_selection.editing_character"))
-                                .size(fonts.cyri.scale(24))
-                                .into()
-                        },
-                        InfoContent::DeletingCharacter => {
-                            Text::new(i18n.get("char_selection.deleting_character"))
                                 .size(fonts.cyri.scale(24))
                                 .into()
                         },

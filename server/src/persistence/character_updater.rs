@@ -69,7 +69,7 @@ pub enum PendingDatabaseActionState {
 
 #[derive(Clone)]
 pub enum PendingDatabaseActionKind {
-    UpdateCharacter(CharacterUpdateData),
+    UpdateCharacter(Box<CharacterUpdateData>),
     DeleteCharacter {
         requesting_player_uuid: String,
         character_id: CharacterId,
@@ -241,7 +241,7 @@ impl CharacterUpdater {
             self.pending_database_actions.insert(
                 update_data.0, // CharacterId
                 PendingDatabaseAction {
-                    kind: PendingDatabaseActionKind::UpdateCharacter(update_data),
+                    kind: PendingDatabaseActionKind::UpdateCharacter(Box::new(update_data)),
                     state: PendingDatabaseActionState::New,
                 },
             );
@@ -362,14 +362,13 @@ impl CharacterUpdater {
             .map(|(_, mut event)| {
                 event.state = PendingDatabaseActionState::PendingCompletion { batch_id };
                 event.clone()
-            })
-            .collect::<Vec<PendingDatabaseAction>>();
+            });
 
         // Combine the pending actions with the updates for logged in characters
         let pending_actions = existing_pending_actions
             .into_iter()
             .chain(updates.map(|update| PendingDatabaseAction {
-                kind: PendingDatabaseActionKind::UpdateCharacter(update),
+                kind: PendingDatabaseActionKind::UpdateCharacter(Box::new(update)),
                 state: PendingDatabaseActionState::PendingCompletion { batch_id },
             }))
             .collect::<Vec<PendingDatabaseAction>>();
@@ -421,7 +420,7 @@ fn execute_batch_update(
     transaction.set_drop_behavior(DropBehavior::Rollback);
     trace!("Transaction started for character batch update");
     updates.into_iter().try_for_each(|event| match event {
-        PendingDatabaseActionKind::UpdateCharacter((
+        PendingDatabaseActionKind::UpdateCharacter(box (
             character_id,
             stats,
             inventory,
