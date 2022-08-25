@@ -1,18 +1,30 @@
 use arbalest::sync::{Strong, Frail};
 use core::{
     fmt,
+    future::Future,
     marker::Unsize,
     ops::{CoerceUnsized, DispatchFromDyn},
-    sync::atomic::{AtomicBool, Ordering}
+    pin::Pin,
+    sync::{atomic::{AtomicBool, Ordering}, Exclusive},
+    task,
 };
+use executors::{
+    crossbeam_workstealing_pool::ThreadPool as ThreadPool_,
+    parker::{LargeThreadData, StaticParker},
+    Executor,
+};
+pub use executors::parker::large;
 use hashbrown::{hash_map::Entry, HashMap};
-use rayon::ThreadPool;
+use pin_project_lite::pin_project;
+// use rayon::ThreadPool;
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
     time::Instant,
 };
-use tracing::{error, warn};
+use tracing::{error, warn/* , Instrument */};
+
+pub type ThreadPool = ThreadPool_<StaticParker<LargeThreadData>>;
 
 /// Provides a Wrapper around rayon threadpool to execute slow-jobs.
 /// slow means, the job doesn't need to not complete within the same tick.
@@ -51,24 +63,30 @@ use tracing::{error, warn};
 /// pool.configure("CHUNK_GENERATOR", |n| n / 2);
 /// pool.spawn("CHUNK_GENERATOR", move || println!("this is a job"));
 /// ```
-#[derive(Clone)]
+// #[derive(Clone)]
 pub struct SlowJobPool {
     internal: Arc<Mutex<InternalSlowJobPool>>,
-    threadpool: Arc<ThreadPool>,
+    threadpool: ThreadPool,
+}
+
+impl Drop for SlowJobPool {
+    fn drop(&mut self) {
+        self.threadpool.shutdown_borrowed();
+    }
 }
 
 type Name = /*String*/&'static str;
 
 #[derive(Debug)]
 pub struct SlowJob {
-    task: Frail<Queue>,
+    task: Pin<Frail<Queue>>,
 }
 
 // impl<T: ?Sized + Unsize<U> + CoerceUnsized<U>, U: ?Sized> CoerceUnsized<Task<U>> for Task<T> {}
 
 struct InternalSlowJobPool {
     cur_slot: usize,
-    queue: HashMap<Name, VecDeque<Strong<Queue>>>,
+    queue: HashMap<Name, VecDeque<Pin<Strong<Queue>>>>,
     configs: HashMap<Name, Config>,
     last_spawned_configs: Vec<Name>,
     global_spawned_and_running: u64,
@@ -83,20 +101,29 @@ struct Config {
     local_spawned_and_running: u64,
 }
 
-#[derive(Debug)]
-struct Task<F: ?Sized> {
-    queue_created: Instant,
-    /// Has this task been canceled?
-    is_canceled: AtomicBool,
-    /// The actual task function.  Technically, the Option is unnecessary, since we'll only ever
-    /// run it once, but the performance improvement doesn't justify unsafe in this case.
-    task: F,
+pin_project! {
+    struct Task<F: ?Sized> {
+        queue_created: Instant,
+        // Has this task been canceled?
+        is_canceled: AtomicBool,
+        #[pin]
+        // The actual task future.
+        task: Exclusive<F>,
+    }
+}
+
+impl<F: Future + ?Sized> Future for Task<F> {
+    type Output = F::Output;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
+        self.project().task.poll(cx)
+    }
 }
 
 /// NOTE: Should be FnOnce, but can't because there's no easy way to run an FnOnce function on an
-/// Arc even if [try_unwrap] would work.  We could write unsafe code to do this, but it probably
+/// Arc even if [try_unwrap] would work.  We could write non-safe code to do this, but it probably
 /// isn't worth it.
-type Queue = Task<dyn FnMut() + Send + Sync + 'static>;
+type Queue = Task<dyn /*FnMut()*/Future<Output=()> + Send + 'static>;
 
 pub struct JobMetrics {
     pub queue_created: Instant,
@@ -105,20 +132,20 @@ pub struct JobMetrics {
 }
 
 impl<F> Task<F> {
-    fn new(f: F) -> Task<impl FnMut() + Send + Sync + 'static>
-        where F: FnOnce() + Send + Sync + 'static
+    fn new(f: F) -> Task<impl /*FnMut()*/Future<Output=F::Output> + Send + 'static>
+        where F: /*FnOnce()*/Future + Send + 'static
     {
         let queue_created = Instant::now();
-        let mut f = Some(f);
+        /* let mut f = Some(f); */
         Task {
             queue_created,
             is_canceled: AtomicBool::new(false),
-            task: move || {
+            task: Exclusive::new(/* move || {
                 // Working around not being able to call FnOnce in an Arc.
                 if let Some(f) = f.take() {
                     f();
                 }
-            },
+            }*/f),
         }
     }
 }
@@ -246,14 +273,15 @@ impl InternalSlowJobPool {
 
     fn spawn<F>(&mut self, slowjob: &SlowJobPool, push_back: bool, name: &Name, f: F) -> SlowJob
     where
-        F: FnOnce() + Send + Sync + 'static,
+        F: /*FnOnce()*/Future<Output=()> + Send + 'static,
     {
-        let queue: Strong<Queue> = Strong::new(Task::new(f));
+        // let f = f.instrument(tracing::info_span!("{}", name));
+        let queue: Pin<Strong<Queue>> = Strong::pin(Task::new(f));
         let mut deque = self.queue
             .entry(name.to_owned())
             .or_default();
         let job = SlowJob {
-            task: Strong::downgrade(&queue)
+            task: Strong::pin_downgrade(&queue)
         };
         if push_back {
             deque.push_back(queue);
@@ -287,7 +315,7 @@ impl InternalSlowJobPool {
     /// and global task counters, so make sure to actually finish the returned jobs if you consume
     /// the iterator, or the position in the queue may be off!
     #[must_use = "Remember to actually use the returned jobs if you consume the iterator."]
-    fn next_jobs<'a>(&'a mut self) -> impl Iterator<Item = (Name, Strong<Queue>)> + 'a {
+    fn next_jobs<'a>(&'a mut self) -> impl Iterator<Item = (Name, Pin<Strong<Queue>>)> + 'a {
         let queued = &mut self.queue;
         let configs = &mut self.configs;
         let global_spawned_and_running = &mut self.global_spawned_and_running;
@@ -426,7 +454,7 @@ impl SlowJob {
         // run the task, and we only drop the strong side after the task is complete, this is
         // a conservative signal that there's no point in cancelling the task, so this has no
         // false positives.
-        let task = self.task.try_upgrade().or(Err(self))?;
+        let task = Frail::try_pin_upgrade(&self.task).or(Err(self))?;
         // Now that the task is upgraded, any attempt by the strong side to mutably access the
         // task will fail, so it will assume it's been canceled.  This is fine, because we're
         // about to cancel it anyway.
@@ -448,7 +476,7 @@ impl SlowJob {
 }
 
 impl SlowJobPool {
-    pub fn new(global_limit: u64, jobs_metrics_cnt: usize, threadpool: Arc<ThreadPool>) -> Self {
+    pub fn new(global_limit: u64, jobs_metrics_cnt: usize, threadpool: /*Arc<*/ThreadPool/*>*/) -> Self {
         Self {
             internal: Arc::new(Mutex::new(InternalSlowJobPool::new(global_limit, jobs_metrics_cnt))),
             threadpool,
@@ -482,12 +510,12 @@ impl SlowJobPool {
     /// This runs the task, and then checks at the end to see if there are any more tasks to run
     /// before returning for good.  In cases with lots of tasks, this may help avoid unnecessary
     /// context switches or extra threads being spawned unintentionally.
-    fn spawn_in_threadpool(&self, mut name_task: (Name, Strong<Queue>)) {
+    fn spawn_in_threadpool(&self, mut name_task: (Name, Pin<Strong<Queue>>)) {
         let internal = Arc::clone(&self.internal);
 
         // NOTE: It's important not to use internal until we're in the spawned thread, since the
         // lock is probably currently taken!
-        self.threadpool.spawn(move || {
+        self.threadpool.execute(move || {
             // Repeatedly run until exit; we do things this way to avoid recursion, which might blow
             // our call stack.
             loop {
@@ -499,14 +527,17 @@ impl SlowJobPool {
                 // difference is minor and it makes it easier to assign metrics to canceled tasks
                 // (though maybe we don't want to do that?).
                 let execution_start = Instant::now();
-                if let Some(mut task) = Strong::try_borrow_mut(&mut task)
+                if let Some(mut task) = Strong::try_pin_borrow_mut(&mut task)
                     .ok()
                     .filter(|task| !task.is_canceled.load(Ordering::Relaxed)) {
                     // The task was not canceled.
                     //
                     // Run the task in its own scope so perf works correctly.
                     common_base::prof_span_alloc!(_guard, &name);
-                    (task.task)();
+                    futures::executor::block_on(task.as_mut()/* .instrument({
+                        common_base::prof_span!(span, &name);
+                        span
+                    }) */);
                 }
                 let execution_end = Instant::now();
                 let metrics = JobMetrics {
@@ -542,7 +573,7 @@ impl SlowJobPool {
     #[allow(clippy::result_unit_err)]
     pub fn try_run<F>(&self, name: &Name, f: F) -> Result<SlowJob, ()>
     where
-        F: FnOnce() + Send + Sync + 'static,
+        F: /*FnOnce()*/Future<Output=()> + Send + 'static,
     {
         let mut lock = self.internal.lock().expect("lock poisoned while try_run");
         let lock = &mut *lock;
@@ -557,7 +588,7 @@ impl SlowJobPool {
 
     pub fn spawn<F>(&self, name: &Name, f: F) -> SlowJob
     where
-        F: FnOnce() + Send + Sync + 'static,
+        F: /*FnOnce()*/Future<Output=()> + Send + 'static,
     {
         self.internal
             .lock()
@@ -568,7 +599,7 @@ impl SlowJobPool {
     /// Spawn at the front of the queue, which is preferrable in some cases.
     pub fn spawn_front<F>(&self, name: &Name, f: F) -> SlowJob
     where
-        F: FnOnce() + Send + Sync + 'static,
+        F: /*FnOnce()*/Future<Output=()> + Send + 'static,
     {
         self.internal
             .lock()

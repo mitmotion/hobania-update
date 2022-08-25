@@ -48,6 +48,7 @@ impl ClientInit {
         username: String,
         password: String,
         runtime: Arc<runtime::Runtime>,
+        pools: common_state::Pools,
     ) -> Self {
         let (tx, rx) = unbounded();
         let (trust_tx, trust_rx) = unbounded();
@@ -77,6 +78,7 @@ impl ClientInit {
                     connection_args.clone(),
                     Arc::clone(&runtime2),
                     &mut mismatched_server_info,
+                    pools.clone(),
                 )
                 .await
                 {
@@ -89,6 +91,7 @@ impl ClientInit {
                             break 'tries;
                         }
                         let _ = tx.send(Msg::Done(Ok(client)));
+                        drop(pools);
                         tokio::task::block_in_place(move || drop(runtime2));
                         return;
                     },
@@ -108,12 +111,12 @@ impl ClientInit {
                 }
                 tokio::time::sleep(Duration::from_secs(5)).await;
             }
-
             // Parsing/host name resolution successful but no connection succeeded
             // If last_err is None this typically means there was no server up at the input
             // address and all the attempts timed out.
             let _ = tx.send(Msg::Done(Err(last_err.unwrap_or(Error::ServerNotFound))));
 
+            drop(pools);
             // Safe drop runtime
             tokio::task::block_in_place(move || drop(runtime2));
         });

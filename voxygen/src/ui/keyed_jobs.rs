@@ -89,7 +89,7 @@ impl<K: Hash + Eq + Send + Sync + 'static + Clone, V: Send + Sync + 'static> Key
                     // approximating that
                     let tx = self.tx.clone();
                     let f = f();
-                    let job = pool.spawn(&self.name, move || {
+                    let job = pool.spawn(&self.name, async move {
                         let v = f(&k);
                         let _ = tx.send((k, v));
                     });

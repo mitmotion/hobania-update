@@ -30,6 +30,7 @@ enum-iterator = "0.7"
 vek = { version = "0.15.8", features = ["serde"] }
 chrono = "0.4"
 chrono-tz = "0.6"
+pin-project-lite = "0.2"
 sha2 = "0.10"
 serde_json = "1.0.50"
 serde_with = { version = "1.14.0" }
@@ -48,6 +49,13 @@ clap = "2.33"
 crossbeam-utils = "0.8.1"
 bitflags = "1.2"
 crossbeam-channel = "0.5"
+executors = { version = "0.9", default-features = false, features = [
+    "workstealing-exec",
+    "ws-timed-fairness",
+    "thread-pinning",
+    "numa-aware"
+] }
+futures = "0.3"
 lazy_static = "1.4.0"
 num-derive = "0.3"
 num-traits = "0.2"
@@ -79,7 +87,8 @@ petgraph = { version = "0.6", optional = true }
 kiddo = { version = "0.1", optional = true }
 
 # Data structures
-arbalest = { git = "https://gitlab.com/veloren/arbalest.git", rev = "9cb8f67a4f6d8f3cc908dac4eb5eb8aec9fab07b", features = ["nightly"] }
+arbalest = { git = "https://gitlab.com/veloren/arbalest.git", rev = "743a8a262e4a762d6d7656c1193782ea35dd2a1d", features = ["nightly"] }
+# arbalest = { path = "../../arbalest", features = ["nightly"] }
 hashbrown = { version = "0.12", features = ["rayon", "serde", "nightly"] }
 slotmap = { version = "1.0", features = ["serde"] }
 indexmap = { version = "1.3.0", features = ["rayon"] }

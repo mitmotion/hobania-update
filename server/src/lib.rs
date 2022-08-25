@@ -2,7 +2,6 @@
 #![allow(clippy::option_map_unit_fn)]
 #![deny(clippy::clone_on_ref_ptr)]
 #![feature(
-    bool_to_option,
     box_patterns,
     drain_filter,
     label_break_value,
@@ -218,6 +217,7 @@ impl Server {
         database_settings: DatabaseSettings,
         data_dir: &std::path::Path,
         runtime: Arc<Runtime>,
+        pools: common_state::Pools,
     ) -> Result<Self, Error> {
         info!("Server data dir is: {}", data_dir.display());
         if settings.auth_server_address.is_none() {
@@ -242,7 +242,7 @@ impl Server {
 
         let battlemode_buffer = BattleModeBuffer::default();
 
-        let mut state = State::server();
+        let mut state = State::server(pools);
         state.ecs_mut().insert(battlemode_buffer);
         state.ecs_mut().insert(settings.clone());
         state.ecs_mut().insert(editable_settings);

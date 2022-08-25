@@ -772,7 +772,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
         (0..=count).for_each(|_| {
             let new_atlas_tx = new_atlas_tx.clone();
             let texture_fn = renderer.create_texture_raw();
-            slowjob.spawn(&"IMAGE_PROCESSING", move || {
+            slowjob.spawn(&"IMAGE_PROCESSING", async move {
                 // Construct the next atlas on a separate thread.  If it doesn't get sent, it means
                 // the original channel was dropped, which implies the terrain scene data no longer
                 // exists, so we can just drop the result in that case.
@@ -850,7 +850,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
         if let Some(old) = chunks.insert(pos, chunk) {
             Self::remove_chunk_meta(atlas, pos, &old);
             // Drop the chunk on another thread.
-            slowjob.spawn(&"TERRAIN_DROP", move || { drop(old); });
+            slowjob.spawn(&"TERRAIN_DROP", async move { drop(old); });
         }
         /* let (zmin, zmax) = chunk.z_bounds;
         self.z_index_up.insert(Vec3::from(zmin, pos.x, pos.y));
@@ -1316,7 +1316,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
             /* let create_locals = renderer.create_terrain_bound_locals(); */
             let create_texture = renderer./*create_texture_raw*/create_model_lazy_base(wgpu::BufferUsage::COPY_SRC/* | wgpu::BufferUsage::MAP_WRITE */);
             /* cnt.fetch_add(1, Ordering::Relaxed); */
-            let job = move || {
+            let job = async move {
                 // Since this loads when the task actually *runs*, rather than when it's
                 // queued, it provides us with a good opportunity to check whether the chunk
                 // should be canceled.  We might miss updates, but that's okay, since canceling
@@ -1395,7 +1395,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                         // Chunk must have been removed, or it was spawned on an old tick. Drop
                         // the mesh in the background since it's either out of date or no longer
                         // needed.
-                        slowjob.spawn(&"TERRAIN_DROP", move || { drop(response); });
+                        slowjob.spawn(&"TERRAIN_DROP", async move { drop(response); });
                         continue;
                     }
 
@@ -1500,7 +1500,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                             },
                         );
                         // Drop image on background thread.
-                        slowjob.spawn(&"TERRAIN_DROP", move || { drop(tex); });
+                        slowjob.spawn(&"TERRAIN_DROP", async move { drop(tex); });
 
                         // Update the memory mapped locals.
                         let locals_buffer_ =
@@ -1546,7 +1546,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                     } else {
                         // Not sure what happened here, but we should drop the result in the
                         // background.
-                        slowjob.spawn(&"TERRAIN_DROP", move || { drop(response); });
+                        slowjob.spawn(&"TERRAIN_DROP", async move { drop(response); });
                     }
 
                     if response_started_tick == started_tick {
@@ -1557,7 +1557,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                 },
                 // Old task, drop the response in the background.
                 None => {
-                    slowjob.spawn(&"TERRAIN_DROP", move || { drop(response); });
+                    slowjob.spawn(&"TERRAIN_DROP", async move { drop(response); });
                 },
             }
         }
@@ -1565,7 +1565,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
         drop(locals_buffer);
         renderer.unmap_consts(&mut locals);
         // Drop buffer on background thread.
-        slowjob.spawn(&"TERRAIN_DROP", move || { drop(locals); });
+        slowjob.spawn(&"TERRAIN_DROP", async move { drop(locals); });
         /* // TODO: Delay submission, don't just submit immediately out of convenience!
         renderer.queue.submit(std::iter::once(encoder.finish())); */
         self.command_buffers.push(encoder.finish());
@@ -1728,7 +1728,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                 .drain_filter(|(pos, chunk)| chunks.contains_key(pos) || !can_shadow_sun(*pos, chunk))
                 .for_each(|(pos, chunk)| {
                     // Drop the chunk on another thread.
-                    slowjob.spawn(&"TERRAIN_DROP", move || { drop(chunk); });
+                    slowjob.spawn(&"TERRAIN_DROP", async move { drop(chunk); });
                 });
 
             (visible_light_volume, visible_bounds)
@@ -1737,7 +1737,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
             // shadow chunks around.
             let chunks = core::mem::replace(&mut self.shadow_chunks, Vec::new());
             // Drop the chunks on another thread.
-            slowjob.spawn(&"TERRAIN_DROP", move || { drop(chunks); });
+            slowjob.spawn(&"TERRAIN_DROP", async move { drop(chunks); });
             (Vec::new(), math::Aabr {
                 min: math::Vec2::zero(),
                 max: math::Vec2::zero(),

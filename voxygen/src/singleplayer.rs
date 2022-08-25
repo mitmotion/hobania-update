@@ -22,7 +22,7 @@ const TPS: u64 = 30;
 pub struct Singleplayer {
     _server_thread: JoinHandle<()>,
     stop_server_s: Sender<()>,
-    pub receiver: Receiver<Result<(), ServerError>>,
+    pub receiver: Receiver<Result<common_state::Pools, ServerError>>,
     // Wether the server is stopped or not
     paused: Arc<AtomicBool>,
     // Settings that the server was started with
@@ -105,14 +105,16 @@ impl Singleplayer {
             .spawn(move || {
                 trace!("starting singleplayer server thread");
 
+                let pools = common_state::State::pools(common::resources::GameMode::Singleplayer);
                 let (server, init_result) = match Server::new(
                     settings2,
                     editable_settings,
                     database_settings,
                     &server_data_dir,
                     runtime,
+                    pools.clone(),
                 ) {
-                    Ok(server) => (Some(server), Ok(())),
+                    Ok(server) => (Some(server), Ok(pools)),
                     Err(err) => (None, Err(err)),
                 };
 

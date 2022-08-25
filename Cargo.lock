@@ -158,7 +158,7 @@ dependencies = [
 [[package]]
 name = "arbalest"
 version = "0.2.1"
-source = "git+https://gitlab.com/veloren/arbalest.git?rev=9cb8f67a4f6d8f3cc908dac4eb5eb8aec9fab07b#9cb8f67a4f6d8f3cc908dac4eb5eb8aec9fab07b"
+source = "git+https://gitlab.com/veloren/arbalest.git?rev=743a8a262e4a762d6d7656c1193782ea35dd2a1d#743a8a262e4a762d6d7656c1193782ea35dd2a1d"
 
 [[package]]
 name = "arr_macro"
@@ -251,6 +251,12 @@ dependencies = [
  "event-listener",
  "futures-core",
 ]
+
+[[package]]
+name = "async-task"
+version = "4.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a40729d2133846d9ed0ea60a8b9541bccddab49cd30f0715a1da672fe9a2524"
 
 [[package]]
 name = "async-trait"
@@ -1014,6 +1020,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "core_affinity"
+version = "0.5.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f8a03115cc34fb0d7c321dd154a3914b3ca082ccc5c11d91bf7117dbbe7171f"
+dependencies = [
+ "kernel32-sys",
+ "libc",
+ "num_cpus",
+ "winapi 0.2.8",
+]
+
+[[package]]
 name = "coreaudio-rs"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1183,7 +1201,7 @@ dependencies = [
  "crossbeam-channel",
  "crossbeam-deque 0.8.1",
  "crossbeam-epoch 0.9.8",
- "crossbeam-queue",
+ "crossbeam-queue 0.3.5",
  "crossbeam-utils 0.8.8",
 ]
 
@@ -1250,12 +1268,31 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-queue"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c979cd6cfe72335896575c6b5688da489e420d36a27a0b9eb0c73db574b4a4b"
+dependencies = [
+ "crossbeam-utils 0.6.6",
+]
+
+[[package]]
+name = "crossbeam-queue"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f25d8400f4a7a5778f0e4e52384a48cbd9b5c495d110786187fc750075277a2"
 dependencies = [
  "cfg-if 1.0.0",
  "crossbeam-utils 0.8.8",
+]
+
+[[package]]
+name = "crossbeam-utils"
+version = "0.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04973fa96e96579258a5091af6003abde64af786b860f18622b82e026cca60e6"
+dependencies = [
+ "cfg-if 0.1.10",
+ "lazy_static",
 ]
 
 [[package]]
@@ -1790,6 +1827,23 @@ name = "event-listener"
 version = "2.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77f3309417938f28bf8228fcff79a4a37103981e3e186d2ccd19c74b38f4eb71"
+
+[[package]]
+name = "executors"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a94f9d4d0b228598ba8db61d2fe9321df9afcaa10aabdc26aa183cc76b10f7d"
+dependencies = [
+ "arr_macro",
+ "async-task",
+ "core_affinity",
+ "crossbeam-channel",
+ "crossbeam-deque 0.8.1",
+ "crossbeam-utils 0.8.8",
+ "log",
+ "rand 0.8.5",
+ "synchronoise",
+]
 
 [[package]]
 name = "fallible-iterator"
@@ -3388,7 +3442,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b47412f3a52115b936ff2a229b803498c7b4d332adeb87c2f1498c9da54c398c"
 dependencies = [
  "crossbeam",
- "crossbeam-queue",
+ "crossbeam-queue 0.3.5",
  "log",
  "mio 0.7.14",
 ]
@@ -5667,7 +5721,7 @@ version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ea85dac2880f84d4025ff5ace80cda6d8bc43bc88b6a389b9277fcf894b51e9"
 dependencies = [
- "crossbeam-queue",
+ "crossbeam-queue 0.3.5",
  "hashbrown 0.12.0",
  "hibitset",
  "log",
@@ -5924,6 +5978,15 @@ dependencies = [
  "proc-macro2 1.0.36",
  "quote 1.0.17",
  "unicode-xid 0.2.2",
+]
+
+[[package]]
+name = "synchronoise"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d717ed0efc9d39ab3b642a096bc369a3e02a38a51c41845d7fe31bdad1d6eaeb"
+dependencies = [
+ "crossbeam-queue 0.1.2",
 ]
 
 [[package]]
@@ -6529,6 +6592,8 @@ dependencies = [
  "csv",
  "dot_vox",
  "enum-iterator",
+ "executors",
+ "futures",
  "fxhash",
  "hashbrown 0.12.0",
  "indexmap",
@@ -6538,6 +6603,7 @@ dependencies = [
  "num-traits",
  "ordered-float 2.10.0",
  "petgraph 0.6.0",
+ "pin-project-lite",
  "rand 0.8.5",
  "rayon",
  "ron 0.7.0",
@@ -6634,6 +6700,7 @@ name = "veloren-common-state"
 version = "0.10.0"
 dependencies = [
  "bincode",
+ "core_affinity",
  "hashbrown 0.12.0",
  "num_cpus",
  "rayon",
@@ -6820,6 +6887,7 @@ dependencies = [
  "veloren-common-base",
  "veloren-common-frontend",
  "veloren-common-net",
+ "veloren-common-state",
  "veloren-server",
 ]
 

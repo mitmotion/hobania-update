@@ -96,7 +96,7 @@ impl PlayState for MainMenuState {
         {
             if let Some(singleplayer) = &global_state.singleplayer {
                 match singleplayer.receiver.try_recv() {
-                    Ok(Ok(())) => {
+                    Ok(Ok(pools)) => {
                         // Attempt login after the server is finished initializing
                         attempt_login(
                             &mut global_state.info_message,
@@ -106,6 +106,7 @@ impl PlayState for MainMenuState {
                             &mut self.init,
                             &global_state.tokio_runtime,
                             &global_state.i18n,
+                            Some(pools),
                         );
                     },
                     Ok(Err(e)) => {
@@ -301,6 +302,7 @@ impl PlayState for MainMenuState {
                         &mut self.init,
                         &global_state.tokio_runtime,
                         &global_state.i18n,
+                        None,
                     );
                 },
                 MainMenuEvent::CancelLoginAttempt => {
@@ -500,6 +502,7 @@ fn attempt_login(
     init: &mut InitState,
     runtime: &Arc<runtime::Runtime>,
     localized_strings: &LocalizationHandle,
+    pools: Option<common_state::Pools>,
 ) {
     let localization = localized_strings.read();
     if let Err(err) = comp::Player::alias_validate(&username) {
@@ -530,6 +533,7 @@ fn attempt_login(
             username,
             password,
             Arc::clone(runtime),
+            pools.unwrap_or_else(|| common_state::State::pools(common::resources::GameMode::Client)),
         ));
     }
 }

@@ -28,6 +28,7 @@ hot-reloading = ["server/hot-reloading"]
 server = { package = "veloren-server", path = "../server", default-features = false, features = ["simd"] }
 common = { package = "veloren-common", path = "../common" }
 common-base = { package = "veloren-common-base", path = "../common/base" }
+common-state = { package = "veloren-common-state", path = "../common/state" }
 common-net = { package = "veloren-common-net", path = "../common/net" }
 common-frontend = { package = "veloren-common-frontend", path = "../common/frontend" }
 

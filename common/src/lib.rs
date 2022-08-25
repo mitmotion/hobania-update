@@ -10,6 +10,7 @@
     bool_to_option,
     coerce_unsized,
     dispatch_from_dyn,
+    exclusive_wrapper,
     fundamental,
     generic_const_exprs,
     generic_arg_infer,

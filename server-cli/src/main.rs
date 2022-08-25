@@ -170,6 +170,7 @@ fn main() -> io::Result<()> {
         database_settings,
         &server_data_dir,
         runtime,
+        common_state::State::pools(common::resources::GameMode::Server),
     )
     .expect("Failed to create server instance!");
 

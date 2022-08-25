@@ -16,7 +16,7 @@ use common::{
         DeltaTime, EntitiesDiedLastTick, GameMode, PlayerEntity, PlayerPhysicsSettings, Time,
         TimeOfDay,
     },
-    slowjob::SlowJobPool,
+    slowjob::{self, SlowJobPool},
     terrain::{Block, TerrainChunk, TerrainGrid},
     time::DayPeriod,
     trade::Trades,
@@ -94,38 +94,125 @@ pub struct State {
     thread_pool: Arc<ThreadPool>,
 }
 
+pub type Pools = (usize, GameMode/*u64*/, Arc<ThreadPool>/*, slowjob::SlowJobPool*/);
+
+
 impl State {
-    /// Create a new `State` in client mode.
-    pub fn client() -> Self { Self::new(GameMode::Client) }
+    pub fn pools(game_mode: GameMode) -> Pools {
+        let num_cpu = num_cpus::get()/* - 1*/;
 
-    /// Create a new `State` in server mode.
-    pub fn server() -> Self { Self::new(GameMode::Server) }
-
-    pub fn new(game_mode: GameMode) -> Self {
         let thread_name_infix = match game_mode {
             GameMode::Server => "s",
             GameMode::Client => "c",
             GameMode::Singleplayer => "sp",
         };
-
-        let num_cpu = num_cpus::get();
-        let thread_pool = Arc::new(
+        let rayon_threads = match game_mode {
+            GameMode::Server | GameMode::Client => num_cpu / 2,
+            GameMode::Singleplayer => num_cpu / 4,
+        }/*num_cpu*/.max(common::consts::MIN_RECOMMENDED_RAYON_THREADS);
+        let rayon_pool = Arc::new(
             ThreadPoolBuilder::new()
-                .num_threads(num_cpu.max(common::consts::MIN_RECOMMENDED_RAYON_THREADS))
+                .num_threads(rayon_threads)
+                // .thread_name(move |i| format!("rayon-{}", i))
                 .thread_name(move |i| format!("rayon-{}-{}", thread_name_infix, i))
                 .build()
                 .unwrap(),
         );
+
+        // let num_cpu = num_cpu as u64;
+        /* let slow_limit = /* match game_mode {
+            GameMode::Server | GameMode::Client => num_cpu / 2,
+            GameMode::Singleplayer => num_cpu / 4
+        }.max(1); */(2 * num_cpu).max(1); */
+        /* let slow_limit = 2 * (num_cpu - 1).max(1);
+        let cores = core_affinity::get_core_ids().unwrap_or(vec![]).into_iter().take(slow_limit).collect::<Vec<_>>();
+        let floating = slow_limit.saturating_sub(cores.len());
+        tracing::trace!(?slow_limit, "Slow Thread limit");
+        let slow_pool = slowjob::ThreadPool::with_affinity(&cores, floating, slowjob::large());
+        // let slow_pool = slowjob::large_pool(slow_limit.min(64)/* as usize */);
+        let slowjob = SlowJobPool::new(
+            slow_limit as u64,
+            10_000,
+            /*Arc::clone(*/slow_pool/*)*/,
+        ); */
+
+        (num_cpu - 1/*slow_limit*//* as u64*/, game_mode, rayon_pool/*, slowjob*/)
+    }
+
+    /// Create a new `State` in client mode.
+    pub fn client(pools: Pools) -> Self { Self::new(GameMode::Client, pools) }
+
+    /// Create a new `State` in server mode.
+    pub fn server(pools: Pools) -> Self { Self::new(GameMode::Server, pools) }
+
+    pub fn new(ecs_role: GameMode, pools: Pools) -> Self {
+        /* let thread_name_infix = match game_mode {
+            GameMode::Server => "s",
+            GameMode::Client => "c",
+            GameMode::Singleplayer => "sp",
+        }; */
+
+        let num_cpu = /*num_cpus::get()*/pools.0/* / 2 + pools.0 / 4*/;
+        let game_mode = pools.1;
+        /* let rayon_threads = match game_mode {
+            GameMode::Server | GameMode::Client => num_cpu/* / 2*/,
+            GameMode::Singleplayer => num_cpu/* / 4*// 2,
+        }/*num_cpu*/;
+        let rayon_threads = rayon_threads.max(common::consts::MIN_RECOMMENDED_RAYON_THREADS);
+
+        let thread_pool = Arc::new(
+            ThreadPoolBuilder::new()
+                .num_threads(rayon_threads)
+                .thread_name(move |i| format!("rayon-{}-{}", thread_name_infix, i))
+                .build()
+                .unwrap(),
+        ); */
+
+        // let num_cpu = num_cpu as u64;
+        let (start, step, total) = match (game_mode, ecs_role) {
+            (_, GameMode::Singleplayer) => todo!("Singleplayer is not a valid ECS role (yet)"),
+            (GameMode::Server | GameMode::Client, _) => (0, 1, num_cpu),
+            (GameMode::Singleplayer, GameMode::Server) => (0, 2, num_cpu / 2/* + num_cpu / 4 */),
+            (GameMode::Singleplayer, GameMode::Client) => (1, 2, num_cpu - num_cpu / 2/* + num_cpu / 4 */),
+        };
+        let total = total.max(1);
+        let cores = core_affinity::get_core_ids().unwrap_or(vec![]).into_iter().skip(start).step_by(step).take(total).collect::<Vec<_>>();
+        let floating = total.saturating_sub(cores.len());
+        // TODO: NUMA utils
+        let slow_pool = slowjob::ThreadPool::with_affinity(&cores, floating, slowjob::large());
+        /* let slow_pool = if cores.is_empty() {
+            // We need *some* workers, so just start on all cores.
+            slowjob::large_pool(1)/*slow_limit.min(64)/* as usize */)*/
+        } else {
+            let slow_pool = with_affinity(
+                cores: &[CoreId],
+                floating: usize,
+                parker: P
+            ) -> ThreadPool<P>
+        } */
+        /* let slow_limit = match game_mode {
+            GameMode::Server | GameMode::Client => num_cpu / 2,
+            GameMode::Singleplayer => num_cpu / 4
+        }.max(1);/*(/*2 * */num_cpu / 2 + num_cpu / 4).max(1);*/ */
+        tracing::trace!(?game_mode, ?ecs_role, ?num_cpu, ?start, ?step, ?total, "Slow Thread limit");
+        // dbg!(game_mode, ecs_role, num_cpu, start, step, total, cores, floating, "Slow Thread limit");
+        let slowjob = SlowJobPool::new(
+            /* slow_limit as u64, */
+            total as u64,
+            10_000,
+            /*Arc::clone(*/slow_pool/*)*/,
+        );
+
         Self {
-            ecs: Self::setup_ecs_world(game_mode, num_cpu as u64, &thread_pool),
-            thread_pool,
+            ecs: Self::setup_ecs_world(ecs_role, /*num_cpu as u64*//*, &thread_pool, *//*pools.1*/slowjob/*pools.3*/),
+            thread_pool: pools.2,
         }
     }
 
     /// Creates ecs world and registers all the common components and resources
     // TODO: Split up registering into server and client (e.g. move
     // EventBus<ServerEvent> to the server)
-    fn setup_ecs_world(game_mode: GameMode, num_cpu: u64, thread_pool: &Arc<ThreadPool>) -> specs::World {
+    fn setup_ecs_world(ecs_role: GameMode, /*num_cpu: u64*//*, thread_pool: &Arc<ThreadPool>, */slowjob: SlowJobPool) -> specs::World {
         let mut ecs = specs::World::new();
         // Uids for sync
         ecs.register_sync_marker();
@@ -219,18 +306,24 @@ impl State {
         ecs.insert(crate::build_areas::BuildAreas::default());
         ecs.insert(TerrainChanges::default());
         ecs.insert(EventBus::<LocalEvent>::default());
-        ecs.insert(game_mode);
+        ecs.insert(ecs_role);
         ecs.insert(EventBus::<Outcome>::default());
         ecs.insert(common::CachedSpatialGrid::default());
         ecs.insert(EntitiesDiedLastTick::default());
 
-        let slow_limit = (num_cpu / 2 + num_cpu / 4).max(1);
-        tracing::trace!(?slow_limit, "Slow Thread limit");
+        /* let slow_limit = match game_mode {
+            GameMode::Server | GameMode::Client => num_cpu / 2,
+            GameMode::Singleplayer => num_cpu / 4
+        }.max(1); */
+        // let slow_limit = (num_cpu / 2 + num_cpu / 4).max(1);
+        /* tracing::trace!(?slow_limit, "Slow Thread limit");
+        let thread_pool = slowjob::large_pool(slow_limit.min(64) as usize);
         ecs.insert(SlowJobPool::new(
             slow_limit,
             10_000,
-            Arc::clone(thread_pool),
-        ));
+            /*Arc::clone(*/thread_pool/*)*/,
+        )); */
+        ecs.insert(slowjob);
 
         // TODO: only register on the server
         ecs.insert(EventBus::<ServerEvent>::default());
@@ -254,7 +347,7 @@ impl State {
                 };
                 if let Err(e) = plugin_mgr
                     .execute_event(&ecs_world, &plugin_api::event::PluginLoadEvent {
-                        game_mode,
+                        game_mode: ecs_role,
                     })
                 {
                     tracing::debug!(?e, "Failed to run plugin init");

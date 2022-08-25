@@ -1013,6 +1013,7 @@ impl Renderer {
         );
 
         if self.is_minimized {
+            self.queue.submit(pre_commands.into_iter());
             return Ok(None);
         }
 
@@ -1198,17 +1199,21 @@ impl Renderer {
             // If lost recreate the swap chain
             Err(err @ wgpu::SwapChainError::Lost) => {
                 warn!("{}. Recreating swap chain. A frame will be missed", err);
+                self.queue.submit(pre_commands.into_iter());
                 self.on_resize(self.resolution);
                 return Ok(None);
             },
             Err(wgpu::SwapChainError::Timeout) => {
+                println!("Timeout.");
                 // This will probably be resolved on the next frame
                 // NOTE: we don't log this because it happens very frequently with
                 // PresentMode::Fifo and unlimited FPS on certain machines
+                self.queue.submit(pre_commands.into_iter());
                 return Ok(None);
             },
             Err(err @ wgpu::SwapChainError::Outdated) => {
                 warn!("{}. Recreating the swapchain", err);
+                self.queue.submit(pre_commands.into_iter());
                 self.swap_chain = self.device.create_swap_chain(&self.surface, &self.sc_desc);
                 return Ok(None);
             },

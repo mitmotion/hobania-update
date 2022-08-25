@@ -289,6 +289,7 @@ impl Client {
         runtime: Arc<Runtime>,
         // TODO: refactor to avoid needing to use this out parameter
         mismatched_server_info: &mut Option<ServerInfo>,
+        pools: common_state::Pools,
     ) -> Result<Self, Error> {
         let network = Network::new(Pid::new(), &runtime);
 
@@ -395,7 +396,7 @@ impl Client {
                 ability_map,
             } => {
                 // Initialize `State`
-                let mut state = State::client();
+                let mut state = State::client(pools);
                 // Client-only components
                 state.ecs_mut().register::<comp::Last<CharacterState>>();
                 state.ecs_mut().write_resource::<SlowJobPool>()
@@ -1842,7 +1843,7 @@ impl Client {
             for key in chunks_to_remove {
                 let chunk = self.state.remove_chunk(key);
                 // Drop chunk in a background thread.
-                slowjob.spawn(&"TERRAIN_DROP", move || { drop(chunk); });
+                slowjob.spawn(&"TERRAIN_DROP", async move { drop(chunk); });
             }
             drop(slowjob);
 
