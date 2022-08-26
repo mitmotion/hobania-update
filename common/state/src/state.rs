@@ -175,7 +175,7 @@ impl State {
             (GameMode::Singleplayer, GameMode::Server) => (0, 2, num_cpu / 2/* + num_cpu / 4 */),
             (GameMode::Singleplayer, GameMode::Client) => (1, 2, num_cpu - num_cpu / 2/* + num_cpu / 4 */),
         };
-        let total = total.max(1);
+        let total = total.max(MIN_RECOMMENDED_RAYON_THREADS);
         let cores = core_affinity::get_core_ids().unwrap_or(vec![]).into_iter().skip(start).step_by(step).take(total).collect::<Vec<_>>();
         let floating = total.saturating_sub(cores.len());
         // TODO: NUMA utils
