@@ -25,6 +25,12 @@ impl CellData {
     }
 
     pub fn is_hollow(&self) -> bool { self.attr.get() & HOLLOW != 0 }
+
+    #[inline(always)]
+    pub fn is_glowy(&self) -> bool { self.attr.get() & GLOWY != 0 }
+
+    #[inline(always)]
+    pub fn is_shiny(&self) -> bool { self.attr.get() & SHINY != 0 }
 }
 
 impl Default for CellData {
@@ -73,8 +79,10 @@ impl Cell {
 }
 
 impl Vox for Cell {
+    #[inline(always)]
     fn empty() -> Self { Cell::Empty }
 
+    #[inline(always)]
     fn is_empty(&self) -> bool {
         match self {
             Cell::Filled(_) => false,

@@ -16,6 +16,7 @@ use common::{
     },
     vol::ReadVol,
 };
+use common_base::prof_span;
 use lazy_static::lazy_static;
 use probability::{
     prelude::{source, Gaussian, Inverse},
@@ -113,6 +114,7 @@ pub fn apply_trees_to(
     dynamic_rng: &mut impl Rng,
     /* calendar: Option<&Calendar>, */
 ) {
+    prof_span!("apply_trees_to");
     // TODO: Get rid of this
     #[allow(clippy::large_enum_variant)]
     enum TreeModel {

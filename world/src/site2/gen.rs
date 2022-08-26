@@ -16,6 +16,7 @@ use common::{
     },
     vol::ReadVol,
 };
+use common_base::prof_span;
 use fxhash::FxHasher64;
 use hashbrown::{/*hash_map::Entry, */HashMap};
 use noisy_float::types::n32;
@@ -2858,8 +2859,8 @@ impl Painter<'_> {
                     let aabb = Self::get_bounds(cache, tree, prim);
                     /*if !(aabb.size().w > 8 || aabb.size().h > 8 || aabb.size().d > 16) */{
                     let mut do_segment = || {
-                        let distance = segment.end - segment.start;
-                        let distance_proj = distance / distance.magnitude_squared();
+                        let distance = segment.start - segment.end;
+                        let distance_proj = -distance / distance.magnitude_squared();
                         let segment_start = segment.start - 0.5;
                         if r0 == r1 {
                             let radius_2 = r0 * r0;
@@ -2873,7 +2874,7 @@ impl Painter<'_> {
                                         let pos = pos.as_::<f32>();
                                         let length = pos - segment_start;
                                         let t = length.dot(distance_proj).clamped(0.0, 1.0);
-                                        let diff = distance * t - length;
+                                        let diff = distance * t + length;
                                         diff.magnitude_squared() < radius_2
                                     },
                                     hit,
@@ -2888,7 +2889,7 @@ impl Painter<'_> {
                                         let pos = pos.as_::<f32>();
                                         let length = pos - segment_start;
                                         let t = length.dot(distance_proj).clamped(0.0, 1.0);
-                                        let mut diff = distance * t - length;
+                                        let mut diff = distance * t + length;
                                         diff.z *= z_scale;
                                         diff.magnitude_squared() < radius_2
                                     },
@@ -2905,7 +2906,7 @@ impl Painter<'_> {
                                     let pos = pos.as_::<f32>();
                                     let length = pos - segment_start;
                                     let t = length.dot(distance_proj).clamped(0.0, 1.0);
-                                    let diff = distance * t - length;
+                                    let diff = distance * t + length;
                                     let radius = Lerp::lerp_unclamped(r0, r1, t);
                                     diff.magnitude_squared() < radius * radius
                                 },
@@ -2921,7 +2922,7 @@ impl Painter<'_> {
                                     let pos = pos.as_::<f32>();
                                     let length = pos - segment_start;
                                     let t = length.dot(distance_proj).clamped(0.0, 1.0);
-                                    let mut diff = distance * t - length;
+                                    let mut diff = distance * t + length;
                                     diff.z *= z_scale;
                                     let radius = Lerp::lerp_unclamped(r0, r1, t);
                                     diff.magnitude_squared() < radius * radius
@@ -5698,6 +5699,7 @@ pub fn render_collect<'b, 'c, F: Filler + 'c, Render: FnOnce(&Painter<'b>, &mut 
         fill.sample_at(arena, &mut bounds_cache, prim, prim_tree, render_area, &info, filler)
     }; */
 
+    prof_span!("render");
     render(&painter, &mut fill_fn);
     /* (
         painter.prims.into_inner(),

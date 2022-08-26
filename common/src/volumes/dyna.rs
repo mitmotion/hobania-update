@@ -160,13 +160,13 @@ pub struct ColumnAccess;
 
 impl Access for ColumnAccess {
     fn idx(pos: Vec3<i32>, sz: Vec3<u32>) -> usize {
-        (pos.x * sz.y as i32 * sz.z as i32 + pos.y * sz.z as i32 + pos.z) as usize
+        ((pos.z * sz.y as i32 + pos.y) * sz.x as i32 + pos.x) as usize
     }
 
     fn pos(idx: usize, sz: Vec3<u32>) -> Vec3<i32> {
-        let z = idx as u32 % sz.z;
-        let y = (idx as u32 / sz.z) % sz.y;
-        let x = idx as u32 / (sz.y * sz.z);
+        let x = idx as u32 % sz.x;
+        let y = (idx as u32 / sz.x) % sz.y;
+        let z = idx as u32 / (sz.y * sz.x);
         Vec3::new(x, y, z).map(|e| e as i32)
     }
 }
