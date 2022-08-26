@@ -59,11 +59,11 @@ where
             let flat = &mut flat_[0..(d * wh) as usize];
             // NOTE: We can skip the outside edges because we know they're already empty.
             flat.chunks_exact_mut(wh as usize).skip(1).take(d_ as usize).enumerate().for_each(|(z, flat)| {
-                let z = z as i32;
+                let z = lower_bound.z + z as i32;
                 flat.chunks_exact_mut(w as usize).skip(1).take(h_ as usize).enumerate().for_each(|(y, flat)| {
-                    let y = y as i32;
+                    let y = lower_bound.y + y as i32;
                     flat.into_iter().skip(1).take(w_ as usize).enumerate().for_each(|(x, flat)| {
-                        let x = x as i32;
+                        let x = lower_bound.x + x as i32;
                         *flat = vol.get(Vec3::new(x, y, z)).copied().unwrap_or_else(|_| Cell::empty());
                     });
                 });
@@ -96,7 +96,7 @@ where
 
     let greedy_size = greedy_size.as_::<usize>();
     let greedy_size_cross = greedy_size;
-    let draw_delta = lower_bound + 1;
+    let draw_delta = /*lower_bound + 1*/Vec3::new(1, 1, 1);
 
     let get_light = #[inline(always)] move |flat: &mut _, pos: Vec3<i32>| {
         if flat_get(flat, pos).is_empty() {
@@ -213,11 +213,11 @@ where
             let flat = &mut flat_[0..(d * wh) as usize];
             // NOTE: We can skip the outside edges because we know they're already empty.
             flat.chunks_exact_mut(wh as usize).skip(1).take(d_ as usize).enumerate().for_each(|(z, flat)| {
-                let z = z as i32;
+                let z = lower_bound.z + z as i32;
                 flat.chunks_exact_mut(w as usize).skip(1).take(h_ as usize).enumerate().for_each(|(y, flat)| {
-                    let y = y as i32;
+                    let y = lower_bound.y + y as i32;
                     flat.into_iter().skip(1).take(w_ as usize).enumerate().for_each(|(x, flat)| {
-                        let x = x as i32;
+                        let x = lower_bound.x + x as i32;
                         *flat = vol.get(Vec3::new(x, y, z)).copied().unwrap_or_else(|_| Cell::empty());
                     });
                 });
