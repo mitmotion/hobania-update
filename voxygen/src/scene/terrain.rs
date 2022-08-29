@@ -1386,6 +1386,24 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
         for (locals_offset, (mut response, locals_buffer)) in incoming_chunks.zip(locals_buffer.get_mapped_range_mut().array_chunks_mut::<{ core::mem::size_of::<TerrainLocals>() }>()).enumerate() {
             let pos = response.pos;
             let response_started_tick = response.started_tick;
+
+            // Working around a wgpu bug that tends to leak memory by doing this here, rather than
+            // only if we need to use the mapped buffers...
+
+            // Unmap buffers mapped on other threads (we do this here to avoid
+            // contention with queue submission, as both of these take the device write
+            // lock as of wgpu 0.8.1).
+            //
+            // FIXME: When we upgrade wgpu, reconsider all this.
+            renderer.unmap_instances(&mut response.sprite_instances.1);
+            if let Some(mesh) = &mut response.mesh {
+                let (tex, _) = &mut mesh.col_lights_info;
+                let mut tex = tex.as_mut().expect("The mesh exists, so the texture should too.");
+                mesh.opaque_model.as_mut().map(|model| renderer.unmap_model(model));
+                mesh.fluid_model.as_mut().map(|model| renderer.unmap_model(model));
+                renderer.unmap_model(&mut tex);
+            }
+
             match self.mesh_todo.get(&pos) {
                 // It's the mesh we want, insert the newly finished model into the terrain model
                 // data structure (convert the mesh to a model first of course).
@@ -1450,16 +1468,6 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                                 .allocate(alloc_size)
                                 .expect("Chunk data does not fit in a texture of maximum size.")
                         });
-
-                        // Unmap buffers mapped on other threads (we do this here to avoid
-                        // contention with queue submission, as both of these take the device write
-                        // lock as of wgpu 0.8.1).
-                        //
-                        // FIXME: When we upgrade wgpu, reconsider all this.
-                        renderer.unmap_instances(&mut response.sprite_instances.1);
-                        mesh.opaque_model.as_mut().map(|model| renderer.unmap_model(model));
-                        mesh.fluid_model.as_mut().map(|model| renderer.unmap_model(model));
-                        renderer.unmap_model(&mut tex);
 
                         // NOTE: Cast is safe since the origin was a u16.
                         let atlas_offs = Vec2::new(
