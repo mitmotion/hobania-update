@@ -1387,23 +1387,6 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
             let pos = response.pos;
             let response_started_tick = response.started_tick;
 
-            // Working around a wgpu bug that tends to leak memory by doing this here, rather than
-            // only if we need to use the mapped buffers...
-
-            // Unmap buffers mapped on other threads (we do this here to avoid
-            // contention with queue submission, as both of these take the device write
-            // lock as of wgpu 0.8.1).
-            //
-            // FIXME: When we upgrade wgpu, reconsider all this.
-            renderer.unmap_instances(&mut response.sprite_instances.1);
-            if let Some(mesh) = &mut response.mesh {
-                let (tex, _) = &mut mesh.col_lights_info;
-                let mut tex = tex.as_mut().expect("The mesh exists, so the texture should too.");
-                mesh.opaque_model.as_mut().map(|model| renderer.unmap_model(model));
-                mesh.fluid_model.as_mut().map(|model| renderer.unmap_model(model));
-                renderer.unmap_model(&mut tex);
-            }
-
             match self.mesh_todo.get(&pos) {
                 // It's the mesh we want, insert the newly finished model into the terrain model
                 // data structure (convert the mesh to a model first of course).
@@ -1468,6 +1451,16 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                                 .allocate(alloc_size)
                                 .expect("Chunk data does not fit in a texture of maximum size.")
                         });
+
+                        // Unmap buffers mapped on other threads (we do this here to avoid
+                        // contention with queue submission, as both of these take the device write
+                        // lock as of wgpu 0.8.1).
+                        //
+                        // FIXME: When we upgrade wgpu, reconsider all this.
+                        renderer.unmap_instances(&mut response.sprite_instances.1);
+                        mesh.opaque_model.as_mut().map(|model| renderer.unmap_model(model));
+                        mesh.fluid_model.as_mut().map(|model| renderer.unmap_model(model));
+                        renderer.unmap_model(&mut tex);
 
                         // NOTE: Cast is safe since the origin was a u16.
                         let atlas_offs = Vec2::new(
@@ -1547,9 +1540,9 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                             frustum_last_plane_index: 0,
                         });
                     } else if let Some(chunk) = self.chunks.get_mut(&pos) {
-                        /* // There was an update that didn't require a remesh (probably related to
+                        // There was an update that didn't require a remesh (probably related to
                         // non-glowing sprites) so we just update those.
-                        renderer.unmap_instances(&mut response.sprite_instances.1); */
+                        renderer.unmap_instances(&mut response.sprite_instances.1);
                         chunk.sprite_instances = response.sprite_instances;
                         chunk.blocks_of_interest = response.blocks_of_interest;
                     } else {
