@@ -1547,9 +1547,9 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                             frustum_last_plane_index: 0,
                         });
                     } else if let Some(chunk) = self.chunks.get_mut(&pos) {
-                        // There was an update that didn't require a remesh (probably related to
+                        /* // There was an update that didn't require a remesh (probably related to
                         // non-glowing sprites) so we just update those.
-                        renderer.unmap_instances(&mut response.sprite_instances.1);
+                        renderer.unmap_instances(&mut response.sprite_instances.1); */
                         chunk.sprite_instances = response.sprite_instances;
                         chunk.blocks_of_interest = response.blocks_of_interest;
                     } else {

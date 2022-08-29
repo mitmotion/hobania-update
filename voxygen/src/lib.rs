@@ -7,7 +7,6 @@
     array_methods,
     array_windows,
     array_zip,
-    bool_to_option,
     drain_filter,
     once_cell,
     stmt_expr_attributes,

@@ -7,7 +7,6 @@
     allocator_api,
     array_chunks,
     associated_type_defaults,
-    bool_to_option,
     coerce_unsized,
     dispatch_from_dyn,
     exclusive_wrapper,

@@ -10,7 +10,6 @@
 #![feature(
     arbitrary_enum_discriminant,
     associated_const_equality,
-    bool_to_option,
     generic_associated_types,
     label_break_value,
     option_zip,
