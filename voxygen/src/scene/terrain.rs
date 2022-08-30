@@ -41,6 +41,7 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc,
 };
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tracing::warn;
 use treeculler::{BVol, Frustum, AABB};
 use vek::*;
@@ -134,6 +135,8 @@ pub struct MeshWorkerResponseMesh {
     /// NOTE: These are memory mapped, and must be unmapped!
     /* locals: pipelines::terrain::BoundLocals, */
     col_lights_info: /*ColLightInfo*/(Option<Model<[u8; 4]>>, Vec2<u16>),
+    /// Permit indicating that a certain amount of temporary buffer space is in use.
+    permit: Option<OwnedSemaphorePermit>,
     light_map: LightMapFn,
     glow_map: LightMapFn,
 }
@@ -245,7 +248,7 @@ type V = TerrainChunk;
 
 /// skip_remesh is either None (do the full remesh, including recomputing the
 /// light map), or Some((light_map, glow_map)).
-fn mesh_worker/*<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + 'static>*/(
+async fn mesh_worker/*<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + 'static>*/<'b>(
     pos: Vec2<i32>,
     z_bounds: (f32, f32),
     skip_remesh: Option<(LightMapFn, LightMapFn)>,
@@ -254,13 +257,14 @@ fn mesh_worker/*<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug +
     max_texture_size: u16,
     chunk: Arc<TerrainChunk>,
     range: Aabb<i32>,
-    sprite_data: &HashMap<(SpriteKind, usize), [SpriteData; SPRITE_LOD_LEVELS]>,
-    sprite_config: &SpriteSpec,
+    sprite_data: &'b HashMap<(SpriteKind, usize), [SpriteData; SPRITE_LOD_LEVELS]>,
+    sprite_config: &'b SpriteSpec,
+    mem_semaphore: Arc<Semaphore>,
     create_opaque: impl for<'a> Fn(&'a Mesh<TerrainVertex>) -> Option<Model<TerrainVertex>>,
     create_fluid: impl for<'a> Fn(&'a Mesh<FluidVertex>) -> Option<Model<FluidVertex>>,
     create_instances: impl for<'a> Fn(/* &'a [SpriteInstance] */usize) -> Instances<SpriteInstance>,
     /* create_locals: impl Fn() -> pipelines::terrain::BoundLocals, */
-    create_texture: impl for<'a> Fn(/* wgpu::TextureDescriptor<'a>, wgpu::TextureViewDescriptor<'a>, wgpu::SamplerDescriptor<'a>*//*&'a Mesh<[u8; 4]>*/usize) -> /*Texture + Send + Sync*/Option<Model<[u8; 4]>>,
+    create_texture: impl for<'a> Fn(/* wgpu::TextureDescriptor<'a>, wgpu::TextureViewDescriptor<'a>, wgpu::SamplerDescriptor<'a>*//*&'a Mesh<[u8; 4]>*/usize) -> /*Texture + Send + Sync*/Option<Model<[u8; 4]>> + Send,
 ) -> MeshWorkerResponse {
     span!(_guard, "mesh_worker");
     let (blocks_of_interest, sprite_kinds) = BlocksOfInterest::from_chunk(&chunk)/*default()*/;
@@ -272,21 +276,33 @@ fn mesh_worker/*<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug +
     range.max.z = chunk.get_max_z() + 2;
     let z_bounds = (range.min.z, range.max.z);
 
+    let mut permit = None;
     let mesh;
     let (light_map, glow_map) = if let Some((light_map, glow_map)) = &skip_remesh {
         mesh = None;
         (&**light_map, &**glow_map)
     } else {
+        let permit_ = &mut permit;
         let (opaque_mesh, fluid_mesh, _shadow_mesh, (bounds, col_lights_info, light_map, glow_map)) =
             generate_mesh(
                 &volume,
-                create_texture,
+                move |size| async move {
+                    if size > 0 {
+                        // Allocate a number of texture blocks in MiB, to avoid allocating so many
+                        // temporary buffers that we run out of GPU memory.
+                        let size_mb = (size >> 20) as u32 + 1;
+                        // If for some reason the semaphore is closed, we just won't allocate
+                        // texture space.
+                        *permit_ = Some(Semaphore::acquire_many_owned(mem_semaphore, size_mb).await.ok()?);
+                    }
+                    create_texture(size)
+                },
                 (
                     range,
                     Vec2::new(max_texture_size, max_texture_size),
                     &blocks_of_interest,
                 ),
-            );
+            ).await;
         /* let mut tex_ = Mesh::new();
         *tex_.vertices_mut_vec() = col_lights_info.0;
         let tex = create_texture(&tex_); */
@@ -302,6 +318,7 @@ fn mesh_worker/*<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug +
             fluid_model: create_fluid(&fluid_mesh),
             /* locals: create_locals(), */
             col_lights_info/*: (tex, col_lights_info.1)*/,
+            permit,
             light_map,
             glow_map,
         });
@@ -469,6 +486,8 @@ pub struct Terrain<V: RectRasterableVol = TerrainChunk> {
     mesh_recv: channel::Receiver<MeshWorkerResponse>,
     new_atlas_tx: channel::Sender<Texture>,
     new_atlas_rx: channel::Receiver<Texture>,
+    /// Number of (max) 1 MiB buffers available.
+    mem_semaphore: Arc<Semaphore>,
     mesh_todo: HashMap<Vec2<i32>, ChunkMeshState>,
     mesh_todos_active: Arc<AtomicU64>,
     mesh_recv_overflow: f32,
@@ -711,6 +730,9 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
         // available).
         const EXTRA_ATLAS_COUNT: usize = 1;
 
+        // Number of 1 MiB blocks available for temporary texture maps.
+        const TEXTURE_STAGING_SIZE_MB: usize = /*0x800*/0x100;
+
         // Create a second mpsc pair for offloading atlas allocation to a second thread.  This way,
         // a second thread is usually ready to produce a new atlas the moment we ask for it, so we
         // avoid waiting longer than necessary.  The channel holds just BACKGROUND_ATLASE_COUNT
@@ -735,6 +757,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
             mesh_recv: recv,
             new_atlas_tx,
             new_atlas_rx,
+            mem_semaphore: Arc::new(Semaphore::new(TEXTURE_STAGING_SIZE_MB)),
             mesh_todo: HashMap::default(),
             mesh_todos_active: Arc::new(AtomicU64::new(0)),
             mesh_recv_overflow: 0.0,
@@ -1310,6 +1333,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
             let sprite_data = Arc::clone(&self.sprite_data);
             let sprite_config = Arc::clone(&self.sprite_config);
             let cnt = Arc::clone(&self.mesh_todos_active);
+            let mem_semaphore = Arc::clone(&self.mem_semaphore);
             let create_opaque = renderer.create_model_lazy(wgpu::BufferUsage::VERTEX);
             let create_fluid = renderer.create_model_lazy(wgpu::BufferUsage::VERTEX);
             let create_instances = renderer.create_instances_lazy();
@@ -1336,12 +1360,13 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                         aabb,
                         &sprite_data,
                         &sprite_config,
+                        mem_semaphore,
                         create_opaque,
                         create_fluid,
                         create_instances,
                         /* create_locals, */
                         create_texture,
-                    ));
+                    ).await);
                     cnt.fetch_add(1, Ordering::Relaxed);
                 }
                 /* cnt.fetch_sub(1, Ordering::Relaxed); */
@@ -1369,12 +1394,14 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
         let mesh_recv = &self.mesh_recv;
         let max_recv_count = self.mesh_todos_active.load(Ordering::Relaxed)/*.min(recv_count.floor() as u64)*/;
         let incoming_chunks =
-            std::iter::from_fn(|| mesh_recv.try_recv().ok())
+            std::iter::from_fn(|| mesh_recv.recv().ok())
                 .take(/* recv_count.floor() as usize */max_recv_count as usize);
         self.mesh_todos_active.fetch_sub(max_recv_count, Ordering::Relaxed);
         if max_recv_count > 0 {
         // Construct a buffer for all the chunks we're going to process in this frame.  There might
         // be some unused slots, which is fine.
+        let mut drop_textures = Vec::new();
+        let mut drop_responses = Vec::new();
         let mut locals = /*Arc::new(*/renderer.create_consts_mapped(wgpu::BufferUsage::empty(), max_recv_count as usize)/*)*/;
         let mut locals_bound = renderer.create_terrain_bound_locals(&locals/*, locals_offset */);
         let mut locals_buffer = locals.get_mapped_mut(0, locals.len());
@@ -1396,7 +1423,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                         // Chunk must have been removed, or it was spawned on an old tick. Drop
                         // the mesh in the background since it's either out of date or no longer
                         // needed.
-                        slowjob.spawn(&"TERRAIN_DROP", async move { drop(response); });
+                        drop_responses.push(response);
                         continue;
                     }
 
@@ -1501,7 +1528,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                             },
                         );
                         // Drop image on background thread.
-                        slowjob.spawn(&"TERRAIN_DROP", async move { drop(tex); });
+                        drop_textures.push((tex, mesh.permit));
 
                         // Update the memory mapped locals.
                         let locals_buffer_ =
@@ -1548,7 +1575,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                     } else {
                         // Not sure what happened here, but we should drop the result in the
                         // background.
-                        slowjob.spawn(&"TERRAIN_DROP", async move { drop(response); });
+                        drop_responses.push(response);
                     }
 
                     if response_started_tick == started_tick {
@@ -1559,15 +1586,19 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                 },
                 // Old task, drop the response in the background.
                 None => {
-                    slowjob.spawn(&"TERRAIN_DROP", async move { drop(response); });
+                    drop_responses.push(response);
                 },
             }
         }
         // Drop the memory mapping and unmap the locals.
         drop(locals_buffer);
         renderer.unmap_consts(&mut locals);
-        // Drop buffer on background thread.
-        slowjob.spawn(&"TERRAIN_DROP", async move { drop(locals); });
+        // Drop buffers on background thread.
+        slowjob.spawn(&"TERRAIN_DROP", async move {
+            drop(drop_responses);
+            drop(drop_textures);
+            drop(locals);
+        });
         /* // TODO: Delay submission, don't just submit immediately out of convenience!
         renderer.queue.submit(std::iter::once(encoder.finish())); */
         self.command_buffers.push(encoder.finish());

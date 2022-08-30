@@ -1,5 +1,6 @@
 #![allow(clippy::clone_on_copy)] // TODO: fix after wgpu branch
 
+use core::future::Future;
 use crate::{
     mesh::{
         greedy::{self, GreedyConfig, GreedyMesh},
@@ -330,9 +331,9 @@ type V = TerrainChunk;
 
 #[allow(clippy::type_complexity)]
 #[inline(always)]
-pub fn generate_mesh<'a/*, V: RectRasterableVol<Vox = Block> + ReadVol + Debug + 'static*/>(
+pub async fn generate_mesh<'a/*, V: RectRasterableVol<Vox = Block> + ReadVol + Debug + 'static*/, F: Future<Output=Option<Model<[u8; 4]>>> + 'a>(
     vol: &'a VolGrid2d<V>,
-    create_texture: impl Fn(usize) -> Option<Model<[u8; 4]>>,
+    create_texture: impl FnOnce(usize) -> /*Option<Model<[u8; 4]>>*/F + Send,
     (range, max_texture_size, boi): (Aabb<i32>, Vec2<u16>, &'a BlocksOfInterest),
 ) -> MeshGen<
     TerrainVertex,
@@ -1002,7 +1003,7 @@ pub fn generate_mesh<'a/*, V: RectRasterableVol<Vox = Block> + ReadVol + Debug +
         Vec2::new((wgpu::COPY_BYTES_PER_ROW_ALIGNMENT / 4) as u16, 1),
     );
     // Allocate the fresh mesh.
-    let mut col_lights = create_texture(col_lights_alloc_size);
+    let mut col_lights = create_texture(col_lights_alloc_size).await;
     let col_lights_size = col_lights.as_mut().map(|col_lights| {
         let slice = col_lights.get_mapped_mut(0, col_lights.len());
         let mut buf = slice.get_mapped_range_mut();

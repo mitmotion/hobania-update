@@ -128,6 +128,9 @@ wgpu = { git = "https://github.com/pythonesque/wgpu.git", rev = "50a14ff9d164182
 # wgpu-core = { path = "../wgpu/wgpu-core" }
 # wgpu-types = { path = "../wgpu/wgpu-types" }
 
+executors = { git = "https://github.com/pythonesque/rust-executors.git", rev = "1d08f96cf9c52ed85eda8e0f68b5d43072d39b14" }
+# executors = { path = "../rust-executors/executors" }
+
 # # use the latest fixes in naga (remove when updates trickle down to wgpu-rs)
 # naga = { git = "https://github.com/gfx-rs/naga.git", rev = "3a0f0144112ff621dd7f731bf455adf6cab19164" }
 # # use the latest fixes in gfx (remove when updates trickle down to wgpu-rs)

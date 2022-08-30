@@ -27,7 +27,7 @@ pub fn generate_mesh_base_vol_terrain<'a: 'b, 'b, V: 'a>(
     ),
 ) -> MeshGen<TerrainVertex, TerrainVertex, TerrainVertex, math::Aabb<f32>>
 where
-    V: BaseVol<Vox = Cell> + ReadVol + SizedVol,
+    V: BaseVol<Vox = Cell> + ReadVol + Send + SizedVol,
 {
     assert!(bone_idx <= 15, "Bone index for figures must be in [0, 15]");
     let max_size = greedy.max_size();
@@ -172,7 +172,7 @@ pub fn generate_mesh_base_vol_sprite<'a: 'b, 'b, V: 'a>(
     ),
 ) -> MeshGen<SpriteVertex, SpriteVertex, TerrainVertex, ()>
 where
-    V: BaseVol<Vox = Cell> + ReadVol + SizedVol,
+    V: BaseVol<Vox = Cell> + ReadVol + Send + SizedVol,
 {
     let max_size = greedy.max_size();
     // NOTE: Required because we steal two bits from the normal in the shadow uint
@@ -311,7 +311,7 @@ pub fn generate_mesh_base_vol_particle<'a: 'b, 'b, V: 'a>(
     greedy: &'b mut GreedyMesh<'a>,
 ) -> MeshGen<ParticleVertex, ParticleVertex, TerrainVertex, ()>
 where
-    V: BaseVol<Vox = Cell> + ReadVol + SizedVol,
+    V: BaseVol<Vox = Cell> + ReadVol + Send + SizedVol,
 {
     let max_size = greedy.max_size();
     // NOTE: Required because we steal two bits from the normal in the shadow uint

@@ -81,7 +81,7 @@ pub struct GreedyConfig<D, FV, FA, FL, FG, FO, FS, FP, FT> {
 /// coloring part as a continuation.  When called with a final tile size and
 /// vector, the continuation will consume the color data and write it to the
 /// vector.
-pub type SuspendedMesh<'a> = dyn for<'r> FnOnce(/*&'r mut ColLightInfo*/(&'r mut [[u8; 4]], Vec2<u16>)) + 'a;
+pub type SuspendedMesh<'a> = dyn for<'r> FnOnce(/*&'r mut ColLightInfo*/(&'r mut [[u8; 4]], Vec2<u16>)) + Send + 'a;
 
 /// Abstraction over different atlas allocators. Useful to swap out the
 /// allocator implementation for specific cases (e.g. sprites).
@@ -389,18 +389,18 @@ impl<'a, Allocator: AtlasAllocator> GreedyMesh<'a, Allocator> {
     /// Returns an estimate of the bounds of the current meshed model.
     ///
     /// For more information on the config parameter, see [GreedyConfig].
-    pub fn push<M: PartialEq, D: 'a, V: 'a, FV, FA, FL, FG, FO, FS, FP, FT>(
+    pub fn push<M: PartialEq, D: Send + 'a, V: Send + 'a, FV, FA, FL, FG, FO, FS, FP, FT>(
         &mut self,
         config: GreedyConfig<D, FV, FA, FL, FG, FO, FS, FP, FT>,
     ) where
         FV: for<'r> FnMut(&'r mut D, Vec3<i32>) -> V + 'a,
-        FA: for<'r> FnMut(&'r mut D, Vec3<i32>) -> f32 + 'a,
-        FL: for<'r> FnMut(&'r mut D, Vec3<i32>) -> f32 + 'a,
-        FG: for<'r> FnMut(&'r mut D, Vec3<i32>) -> f32 + 'a,
-        FO: for<'r> FnMut(&'r mut D, Vec3<i32>) -> bool + 'a,
+        FA: for<'r> FnMut(&'r mut D, Vec3<i32>) -> f32 + Send + 'a,
+        FL: for<'r> FnMut(&'r mut D, Vec3<i32>) -> f32 + Send + 'a,
+        FG: for<'r> FnMut(&'r mut D, Vec3<i32>) -> f32 + Send + 'a,
+        FO: for<'r> FnMut(&'r mut D, Vec3<i32>) -> bool + Send + 'a,
         FS: for<'r> FnMut(&'r mut D, Vec3<i32>, V, V, /*Vec3<i32>, */Vec2<Vec3<i32>>) -> Option<(bool, M)>,
         FP: FnMut(Vec2<u16>, Vec2<Vec2<u16>>, Vec3<f32>, Vec2<Vec3<f32>>, Vec3<f32>, &M),
-        FT: for<'r> FnMut(&'r mut D, Vec3<i32>, u8, u8, bool) -> [u8; 4] + 'a,
+        FT: for<'r> FnMut(&'r mut D, Vec3<i32>, u8, u8, bool) -> [u8; 4] + Send + 'a,
     {
         span!(_guard, "push", "GreedyMesh::push");
         let cont = greedy_mesh(
@@ -458,7 +458,7 @@ impl<'a, Allocator: AtlasAllocator> GreedyMesh<'a, Allocator> {
     pub fn max_size(&self) -> Vec2<u16> { self.max_size }
 }
 
-fn greedy_mesh<'a, M: PartialEq, D: 'a, V: 'a, FV, FA, FL, FG, FO, FS, FP, FT, Allocator: AtlasAllocator>(
+fn greedy_mesh<'a, M: PartialEq, D: Send + 'a, V: Send + 'a, FV, FA, FL, FG, FO, FS, FP, FT, Allocator: AtlasAllocator>(
     atlas: &mut Allocator,
     col_lights_size: &mut Vec2<u16>,
     max_size: Vec2<u16>,
@@ -479,13 +479,13 @@ fn greedy_mesh<'a, M: PartialEq, D: 'a, V: 'a, FV, FA, FL, FG, FO, FS, FP, FT, A
 ) -> Box<SuspendedMesh<'a>>
 where
     FV: for<'r> FnMut(&'r mut D, Vec3<i32>) -> V + 'a,
-    FA: for<'r> FnMut(&'r mut D, Vec3<i32>) -> f32 + 'a,
-    FL: for<'r> FnMut(&'r mut D, Vec3<i32>) -> f32 + 'a,
-    FG: for<'r> FnMut(&'r mut D, Vec3<i32>) -> f32 + 'a,
-    FO: for<'r> FnMut(&'r mut D, Vec3<i32>) -> bool + 'a,
+    FA: for<'r> FnMut(&'r mut D, Vec3<i32>) -> f32 + Send + 'a,
+    FL: for<'r> FnMut(&'r mut D, Vec3<i32>) -> f32 + Send + 'a,
+    FG: for<'r> FnMut(&'r mut D, Vec3<i32>) -> f32 + Send + 'a,
+    FO: for<'r> FnMut(&'r mut D, Vec3<i32>) -> bool + Send + 'a,
     FS: for<'r> FnMut(&'r mut D, Vec3<i32>, V, V, /*Vec3<i32>, */Vec2<Vec3<i32>>) -> Option<(bool, M)>,
     FP: FnMut(Vec2<u16>, Vec2<Vec2<u16>>, Vec3<f32>, Vec2<Vec3<f32>>, Vec3<f32>, &M),
-    FT: for<'r> FnMut(&'r mut D, Vec3<i32>, u8, u8, bool) -> [u8; 4] + 'a,
+    FT: for<'r> FnMut(&'r mut D, Vec3<i32>, u8, u8, bool) -> [u8; 4] + Send + 'a,
 {
     span!(_guard, "greedy_mesh");
     // TODO: Collect information to see if we can choose a good value here.

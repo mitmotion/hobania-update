@@ -9,7 +9,7 @@ use core::{
     task,
 };
 use executors::{
-    crossbeam_workstealing_pool::ThreadPool as ThreadPool_,
+    crossbeam_workstealing_pool::{self as executor, ThreadPool as ThreadPool_},
     parker::{LargeThreadData, StaticParker},
     Executor,
 };
@@ -519,7 +519,7 @@ impl SlowJobPool {
             // Repeatedly run until exit; we do things this way to avoid recursion, which might blow
             // our call stack.
             loop {
-                let (name, mut task) = name_task;
+                let (name, /*mut */task) = name_task;
                 let queue_created = task.queue_created;
                 // See the [SlowJob::cancel] method for justification for this step's correctness.
                 //
@@ -527,17 +527,38 @@ impl SlowJobPool {
                 // difference is minor and it makes it easier to assign metrics to canceled tasks
                 // (though maybe we don't want to do that?).
                 let execution_start = Instant::now();
-                if let Some(mut task) = Strong::try_pin_borrow_mut(&mut task)
-                    .ok()
-                    .filter(|task| !task.is_canceled.load(Ordering::Relaxed)) {
-                    // The task was not canceled.
-                    //
+                {
                     // Run the task in its own scope so perf works correctly.
                     common_base::prof_span_alloc!(_guard, &name);
-                    futures::executor::block_on(task.as_mut()/* .instrument({
-                        common_base::prof_span!(span, &name);
-                        span
-                    }) */);
+                    struct Job(Pin<Strong<Queue>>);
+                    impl Future for Job {
+                        type Output = ();
+
+                        fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
+                            if let Some(mut task) = Strong::try_pin_borrow_mut(&mut self.get_mut().0)
+                                .ok()
+                                .filter(|task| !task.is_canceled.load(Ordering::Relaxed)) {
+                                // The task was not canceled.
+                                task.as_mut()/* .instrument({
+                                    common_base::prof_span!(span, &name);
+                                    span
+                                }) */.poll(cx)
+                            } else {
+                                 task::Poll::Ready(())
+                            }
+                        }
+                    }
+                    executor::run_locally(/*async move {
+                        if let Some(mut task) = Strong::try_pin_borrow_mut(&mut task)
+                            .ok()
+                            .filter(|task| !task.is_canceled.load(Ordering::Relaxed)) {
+                            // The task was not canceled.
+                            task.as_mut()/* .instrument({
+                                common_base::prof_span!(span, &name);
+                                span
+                            }) */.await;
+                        }
+                    }*/Job(task)).detach();
                 }
                 let execution_end = Instant::now();
                 let metrics = JobMetrics {
