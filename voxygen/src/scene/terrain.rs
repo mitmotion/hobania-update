@@ -423,12 +423,12 @@ async fn mesh_worker/*<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + D
             }
             (instance_ranges, sprite_instances)
         },
-        mesh/* : mesh.map(|mut mesh| {
-            mesh.opaque_model.as_mut().map(|model| model.unmap());
-            mesh.fluid_model.as_mut().map(|model| model.unmap());
+        mesh: mesh.map(|mut mesh| {
+            /* mesh.opaque_model.as_mut().map(|model| model.unmap());
+            mesh.fluid_model.as_mut().map(|model| model.unmap()); */
             mesh.col_lights_info.0.as_mut().map(|model| model.unmap());
             mesh
-        })*/,
+        }),
         blocks_of_interest,
         started_tick,
     }
@@ -1339,7 +1339,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
             let create_fluid = renderer.create_model_lazy(wgpu::BufferUsage::VERTEX);
             let create_instances = renderer.create_instances_lazy();
             /* let create_locals = renderer.create_terrain_bound_locals(); */
-            let create_texture = renderer./*create_texture_raw*/create_model_lazy_base(wgpu::BufferUsage::COPY_SRC/* | wgpu::BufferUsage::MAP_WRITE */);
+            let create_texture = renderer./*create_texture_raw*/create_model_lazy_base(wgpu::BufferUsage::COPY_SRC | wgpu::BufferUsage::MAP_WRITE);
             /* cnt.fetch_add(1, Ordering::Relaxed); */
             let job = async move {
                 // Since this loads when the task actually *runs*, rather than when it's
@@ -1488,7 +1488,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                         renderer.unmap_instances(&mut response.sprite_instances.1);
                         mesh.opaque_model.as_mut().map(|model| renderer.unmap_model(model));
                         mesh.fluid_model.as_mut().map(|model| renderer.unmap_model(model));
-                        renderer.unmap_model(&mut tex);
+                        /* renderer.unmap_model(&mut tex); */
 
                         // NOTE: Cast is safe since the origin was a u16.
                         let atlas_offs = Vec2::new(
