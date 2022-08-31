@@ -2447,9 +2447,9 @@ dependencies = [
 
 [[package]]
 name = "gpu-alloc"
-version = "0.4.7"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbc1b6ca374e81862526786d9cb42357ce03706ed1b8761730caafd02ab91f3a"
+checksum = "7fc59e5f710e310e76e6707f86c561dd646f69a8876da9131703b2f717de818d"
 dependencies = [
  "bitflags",
  "gpu-alloc-types",
@@ -7631,7 +7631,7 @@ dependencies = [
 [[package]]
 name = "wgpu"
 version = "0.8.0"
-source = "git+https://github.com/pythonesque/wgpu.git?rev=50a14ff9d164182fe7a036664e6f2ce9671643ac#50a14ff9d164182fe7a036664e6f2ce9671643ac"
+source = "git+https://github.com/pythonesque/wgpu.git?rev=c948ade0e723220dacc4cb34e899cac1b1b93422#c948ade0e723220dacc4cb34e899cac1b1b93422"
 dependencies = [
  "arrayvec 0.5.2",
  "js-sys",
@@ -7651,7 +7651,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core"
 version = "0.8.0"
-source = "git+https://github.com/pythonesque/wgpu.git?rev=50a14ff9d164182fe7a036664e6f2ce9671643ac#50a14ff9d164182fe7a036664e6f2ce9671643ac"
+source = "git+https://github.com/pythonesque/wgpu.git?rev=c948ade0e723220dacc4cb34e899cac1b1b93422#c948ade0e723220dacc4cb34e899cac1b1b93422"
 dependencies = [
  "arrayvec 0.5.2",
  "bitflags",
@@ -7692,7 +7692,7 @@ dependencies = [
 [[package]]
 name = "wgpu-types"
 version = "0.8.0"
-source = "git+https://github.com/pythonesque/wgpu.git?rev=50a14ff9d164182fe7a036664e6f2ce9671643ac#50a14ff9d164182fe7a036664e6f2ce9671643ac"
+source = "git+https://github.com/pythonesque/wgpu.git?rev=c948ade0e723220dacc4cb34e899cac1b1b93422#c948ade0e723220dacc4cb34e899cac1b1b93422"
 dependencies = [
  "bitflags",
  "serde",
