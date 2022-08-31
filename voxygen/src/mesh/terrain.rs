@@ -329,6 +329,7 @@ fn calc_light<'a,
 
 type V = TerrainChunk;
 
+#[tracing::instrument(skip_all, name = "<&VolGrid2d as Meshable<_, _>>::generate_mesh")]
 #[allow(clippy::type_complexity)]
 #[inline(always)]
 pub async fn generate_mesh<'a/*, V: RectRasterableVol<Vox = Block> + ReadVol + Debug + 'static*/, F: Future<Output=Option<Model<[u8; 4]>>> + 'a>(
@@ -346,11 +347,11 @@ pub async fn generate_mesh<'a/*, V: RectRasterableVol<Vox = Block> + ReadVol + D
         Arc<dyn Fn(Vec3<i32>) -> f32 + Send + Sync>,
     ),
 > {
-    span!(
+    /* span!(
         _guard,
         "generate_mesh",
         "<&VolGrid2d as Meshable<_, _>>::generate_mesh"
-    );
+    ); */
 
     let mut opaque_limits = None::<Limits>;
     let mut fluid_limits = None::<Limits>;
@@ -1016,8 +1017,8 @@ pub async fn generate_mesh<'a/*, V: RectRasterableVol<Vox = Block> + ReadVol + D
         (
             bounds,
             (col_lights, col_lights_size),
-            Arc::new(light),
-            Arc::new(glow),
+            Arc::new(light) as Arc<dyn Fn(Vec3<i32>) -> f32 + Send + Sync>,
+            Arc::new(glow) as Arc<dyn Fn(Vec3<i32>) -> f32 + Send + Sync>,
         ),
     )
 }

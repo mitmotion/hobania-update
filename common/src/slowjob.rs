@@ -22,7 +22,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
-use tracing::{error, warn/* , Instrument */};
+use tracing::{error, warn, Instrument};
 
 pub type ThreadPool = ThreadPool_<StaticParker<LargeThreadData>>;
 
@@ -275,7 +275,7 @@ impl InternalSlowJobPool {
     where
         F: /*FnOnce()*/Future<Output=()> + Send + 'static,
     {
-        // let f = f.instrument(tracing::info_span!("{}", name));
+        let f = f.instrument(tracing::info_span!("slowjob", name));
         let queue: Pin<Strong<Queue>> = Strong::pin(Task::new(f));
         let mut deque = self.queue
             .entry(name.to_owned())
@@ -527,39 +527,22 @@ impl SlowJobPool {
                 // difference is minor and it makes it easier to assign metrics to canceled tasks
                 // (though maybe we don't want to do that?).
                 let execution_start = Instant::now();
-                {
-                    // Run the task in its own scope so perf works correctly.
-                    common_base::prof_span_alloc!(_guard, &name);
-                    struct Job(Pin<Strong<Queue>>);
-                    impl Future for Job {
-                        type Output = ();
+                struct Job(Pin<Strong<Queue>>);
+                impl Future for Job {
+                    type Output = ();
 
-                        fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
-                            if let Some(mut task) = Strong::try_pin_borrow_mut(&mut self.get_mut().0)
-                                .ok()
-                                .filter(|task| !task.is_canceled.load(Ordering::Relaxed)) {
-                                // The task was not canceled.
-                                task.as_mut()/* .instrument({
-                                    common_base::prof_span!(span, &name);
-                                    span
-                                }) */.poll(cx)
-                            } else {
-                                 task::Poll::Ready(())
-                            }
-                        }
-                    }
-                    executor::run_locally(/*async move {
-                        if let Some(mut task) = Strong::try_pin_borrow_mut(&mut task)
+                    fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
+                        if let Some(mut task) = Strong::try_pin_borrow_mut(&mut self.get_mut().0)
                             .ok()
                             .filter(|task| !task.is_canceled.load(Ordering::Relaxed)) {
                             // The task was not canceled.
-                            task.as_mut()/* .instrument({
-                                common_base::prof_span!(span, &name);
-                                span
-                            }) */.await;
+                            task.as_mut().poll(cx)
+                        } else {
+                             task::Poll::Ready(())
                         }
-                    }*/Job(task)).detach();
+                    }
                 }
+                executor::run_locally(Job(task)).detach();
                 let execution_end = Instant::now();
                 let metrics = JobMetrics {
                     queue_created,

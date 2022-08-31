@@ -248,6 +248,7 @@ type V = TerrainChunk;
 
 /// skip_remesh is either None (do the full remesh, including recomputing the
 /// light map), or Some((light_map, glow_map)).
+#[tracing::instrument(skip_all)]
 async fn mesh_worker/*<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + 'static>*/<'b>(
     pos: Vec2<i32>,
     z_bounds: (f32, f32),
@@ -266,7 +267,7 @@ async fn mesh_worker/*<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + D
     /* create_locals: impl Fn() -> pipelines::terrain::BoundLocals, */
     create_texture: impl for<'a> Fn(/* wgpu::TextureDescriptor<'a>, wgpu::TextureViewDescriptor<'a>, wgpu::SamplerDescriptor<'a>*//*&'a Mesh<[u8; 4]>*/usize) -> /*Texture + Send + Sync*/Option<Model<[u8; 4]>> + Send,
 ) -> MeshWorkerResponse {
-    span!(_guard, "mesh_worker");
+    // span!(_guard, "mesh_worker");
     let (blocks_of_interest, sprite_kinds) = BlocksOfInterest::from_chunk(&chunk)/*default()*/;
 
     let mut range = range;

@@ -60,7 +60,7 @@ wgpu = { version = "=0.8.0", features = ["trace", "cross"] }
 # wgpu-profiler = { path = "../../wgpu-profiler" }
 wgpu-profiler = { git = "https://github.com/pythonesque/wgpu-profiler", rev = "b6b16da077a1aca2fe3a2ceaa3bdcc1bdeb11d74" }
 bytemuck = { version="1.4", features=["derive"] }
-shaderc = "0.8.0"
+shaderc = { git = "https://github.com/pythonesque/shaderc-rs", rev = "f2605a02062834019bedff911aee2fd2998c49f9" }
 # cmake crate used by shaderc, newer version 0.1.46 uses a new cmake command that is not available in our CI cmake version
 # see https://github.com/alexcrichton/cmake-rs/issues/131
 cmake = "=0.1.45"
