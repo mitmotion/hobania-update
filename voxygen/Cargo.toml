@@ -116,6 +116,7 @@ hashbrown = {version = "0.12", features = ["rayon", "serde", "nightly"]}
 image = {version = "0.24", default-features = false, features = ["ico", "png"]}
 lazy_static = "1.4.0"
 native-dialog = { version = "0.6.3", optional = true }
+noisy_float = { version = "0.2", default-features = false }
 num = "0.4"
 ordered-float = { version = "3", default-features = false }
 rand = "0.8"

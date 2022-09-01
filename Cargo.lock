@@ -6930,6 +6930,7 @@ dependencies = [
  "mimalloc",
  "mumble-link",
  "native-dialog",
+ "noisy_float",
  "num 0.4.0",
  "num_cpus",
  "ordered-float 3.0.0",

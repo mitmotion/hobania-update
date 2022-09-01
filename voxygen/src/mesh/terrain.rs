@@ -16,6 +16,7 @@ use common::{
     volumes::vol_grid_2d::{CachedVolGrid2d, VolGrid2d},
 };
 use common_base::span;
+use noisy_float::types::n32;
 use std::{collections::VecDeque, fmt::Debug, sync::Arc};
 use tracing::error;
 use vek::*;
@@ -49,9 +50,10 @@ fn flat_get<'a>(flat: &'a Vec<Block>, w: i32, h: i32, d: i32) -> impl Fn(Vec3<i3
         let z = z + 1;
         flat[((z * wh + y * w + x) as usize)]
         /* unsafe { *flat.get_unchecked((z * wh + y * w + x) as usize) } */
-        /* match flat.get((x * hd + y * d + z) as usize).copied() {
+        /* match flat.get((/*x * hd + y * d + z*/z * wh + y * w + x) as usize).copied() {
             Some(b) => b,
-            None => panic!("x {} y {} z {} d {} h {}", x, y, z, d, h),
+            // None => panic!("x {} y {} z {} d {} h {}", x, y, z, d, h),
+            None => panic!("x {} y {} z {} d {} w {}", x, y, z, d, w),
         } */
     }
 
@@ -104,7 +106,7 @@ fn calc_light<'a,
     let light_map = &mut light_map_[0..(wh_ * d_) as usize];
     let lm_idx = {
         #[inline(always)] move |x, y, z| {
-            (wh_ * z + h_ * x + y) as usize
+            (wh_ * z + w_ * y + x) as usize
         }
     };
     /* // Light propagation queue
@@ -125,34 +127,40 @@ fn calc_light<'a,
         prop_que[usize::from(glow)].push((rpos.x as u8, rpos.y as u8, rpos.z as u16));
     });
 
-    /* // Start sun rays
-    if is_sunlight {
-        for x in 0..outer.size().w {
-            for y in 0..outer.size().h {
+    let flat_get = flat_get(flat, w, h, d);
+
+    // Start sun rays
+    if is_sunlight && outer.size().d > 0 {
+        let prop_queue = &mut prop_que[usize::from(SUNLIGHT)];
+        for y in 0..outer.size().h {
+            for x in 0..outer.size().w {
                 let mut light = SUNLIGHT as f32;
-                for z in (0..outer.size().d).rev() {
-                    let (min_light, attenuation) = vol_cached
-                        .get(outer.min + Vec3::new(x, y, z))
-                        .map_or((0, 0.0), |b| b.get_max_sunlight());
+                light_map[lm_idx(x, y, 0)] = 0;
+                for z in (1..outer.size().d).rev() {
+                    let (min_light, attenuation) = /*vol_cached
+                        .get(outer.min + Vec3::new(x, y, z))*/
+                        flat_get(/*outer.min*/range_delta + Vec3::new(x, y, z))
+                        /* .map_or((0, 0.0), |b| b.get_max_sunlight()); */
+                        .get_max_sunlight();
 
                     if light > min_light as f32 {
                         light = (light - attenuation).max(min_light as f32);
                     }
 
-                    light_map[lm_idx(x, y, z)] = light.floor() as u8;
+                    let light = light/*.floor()*/ as u8;
+                    light_map[lm_idx(x, y, z)] = light;
 
-                    if light <= 0.0 {
+                    if light <= 0 {
                         break;
-                    } else {
-                        prop_que.push_back((x as u8, y as u8, z as u16));
+                    } else /*if light < SUNLIGHT */{
+                        prop_queue./*push_back*/push((x as u8, y as u8, z as u16));
                     }
                 }
             }
         }
-    } */
+    }
 
     // Determines light propagation
-    let flat_get = flat_get(flat, w, h, d);
     let propagate = #[inline(always)] |src: u8,
                      dest: &mut u8,
                      pos: Vec3<i32>,
@@ -312,12 +320,12 @@ fn calc_light<'a,
     let light_map2 = light_map_;
 
     #[inline(always)] move |wpos| {
-        if is_sunlight { return 1.0 }/* else { 0.0 } */
+        /* if is_sunlight { return 1.0 } else { 0.0 } */
         let pos = wpos - min_bounds.min;
         let l = light_map2
             .get(/*lm_idx2*/lm_idx(pos.x, pos.y, pos.z))
             .copied()
-            .unwrap_or(default_light);
+            .unwrap_or(if pos.z < 0 { 0 } else { default_light });
 
         if /* l != OPAQUE && */l != UNKNOWN {
             l as f32 * SUNLIGHT_INV
@@ -354,6 +362,9 @@ pub async fn generate_mesh<'a/*, V: RectRasterableVol<Vox = Block> + ReadVol + D
     ); */
 
     let mut opaque_limits = None::<Limits>;
+    let mut light_start = None;
+    let mut light_end = None;
+    let mut max_sunlight = SUNLIGHT as f32;
     let mut fluid_limits = None::<Limits>;
     let mut air_limits = None::<Limits>;
     let mut flat;
@@ -734,7 +745,7 @@ pub async fn generate_mesh<'a/*, V: RectRasterableVol<Vox = Block> + ReadVol + D
             });
 
             // Compute limits (TODO: see if we can skip this, or make it more precise?).
-            row_kinds.iter().enumerate().for_each(|(z, row)| {
+            row_kinds.iter().zip(flat.chunks_exact(wh as usize)).enumerate().rev().for_each(|(z, (row, flat))| {
                 let z = z as i32 /* + intersection.min.z */- 1;
                 if row & ALL_OPAQUE != 0 {
                     opaque_limits = opaque_limits
@@ -750,6 +761,41 @@ pub async fn generate_mesh<'a/*, V: RectRasterableVol<Vox = Block> + ReadVol + D
                     air_limits = air_limits
                         .map(|l| l.including(z))
                         .or_else(|| Some(Limits::from_value(z)));
+                }
+                if light_start.is_none() && *row != ALL_AIR {
+                    // Start light at the first row not containing only air.
+                    light_start = Some(z);
+                }
+                if light_end.is_none() {
+                    match *row {
+                        ALL_OPAQUE => {
+                            // This is *usually* the end of the road for light, but in some rare cases
+                            // (e.g. giant trees) we can have whole opaque rows with imperfect attenuation.
+                            // Since this case is rare, we are willing to iterate over all blocks to find
+                            // the min attenuation here.
+                            max_sunlight = flat.into_iter().map(|block| {
+                                let (min_light, attenuation) = block.get_max_sunlight();
+                                n32((max_sunlight - attenuation).max(min_light as f32))
+                            }).min().unwrap_or(n32(max_sunlight)).raw().min(max_sunlight);
+                            // dbg!("light_end", z);
+                            if max_sunlight as u8 == 0 {
+                                // Fully opaque, light is over.
+                                light_end = Some(z);
+                            }
+                        },
+                        ALL_LIQUID => {
+                            let (min_light, attenuation) = LIQUID.get_max_sunlight();
+                            max_sunlight = (max_sunlight - attenuation).max(min_light as f32).min(max_sunlight);
+                            if max_sunlight as u8 == 0 {
+                                // Fully opaque, light is over.
+                                light_end = Some(z);
+                            }
+                        },
+                        // We could probably handle mixed opaque/liquid a well, since it's pretty much guaranteed
+                        // to attenuate, but we choose not to since we expect this to be much more
+                        // common than fully opaque chunks.
+                        _ => {},
+                    }
                 }
             });
         }
@@ -810,14 +856,22 @@ pub async fn generate_mesh<'a/*, V: RectRasterableVol<Vox = Block> + ReadVol + D
         })
         // FIXME: Why is Rust forcing me to collect to Vec here?
         .collect::<Vec<_>>();
+    let mut light_range = glow_range;
+    if let Some(light_start) = light_start {
+        light_range.max.z = light_start + range.min.z;
+    }
+    if let Some(light_end) = light_end {
+        // dbg!(light_range, light_end, light_end + range.min.z);
+        light_range.min.z = light_end + range.min.z;
+        // dbg!(glow_range, light_range, light_end, range.min.z);
+    }
     glow_range.min.z = glow_block_min.clamped(glow_range.min.z, glow_range.max.z);
     glow_range.max.z = glow_block_max.clamped(glow_range.min.z, glow_range.max.z);
     /* if glow_range.min.z != glow_range.max.z {
         println!("{:?}", glow_range);
     } */
-
-    let mut light_range = glow_range;
-    light_range.min.z = light_range.max.z;
+    // let mut light_range = glow_range;
+    // light_range.min.z = light_range.max.z;
 
     /* // Sort glowing blocks in decreasing order by glow strength.  This makes it somewhat less
     // likely that a smaller glow will have to be drawn.

@@ -732,7 +732,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
         const EXTRA_ATLAS_COUNT: usize = 1;
 
         // Number of 1 MiB blocks available for temporary texture maps.
-        const TEXTURE_STAGING_SIZE_MB: usize = /*0x800*/0x100;
+        const TEXTURE_STAGING_SIZE_MB: usize = 0x800/*0x100*/;
 
         // Create a second mpsc pair for offloading atlas allocation to a second thread.  This way,
         // a second thread is usually ready to produce a new atlas the moment we ask for it, so we
