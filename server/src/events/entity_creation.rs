@@ -1,4 +1,7 @@
-use crate::{client::Client, persistence::PersistedComponents, sys, Server, StateExt};
+use crate::{
+    client::Client, events::player::handle_client_disconnect, persistence::PersistedComponents,
+    sys, CharacterUpdater, Server, StateExt,
+};
 use common::{
     character::CharacterId,
     comp::{
@@ -7,9 +10,9 @@ use common::{
         aura::{Aura, AuraKind, AuraTarget},
         beam,
         buff::{BuffCategory, BuffData, BuffKind, BuffSource},
-        shockwave, Agent, Alignment, Anchor, Body, Health, Inventory, ItemDrop, LightEmitter,
-        Object, Ori, PidController, Poise, Pos, Projectile, Scale, SkillSet, Stats, Vel,
-        WaypointArea,
+        shockwave, Agent, Alignment, Anchor, Body, DisconnectReason, Health, Inventory, ItemDrop,
+        LightEmitter, Object, Ori, PidController, Poise, Pos, Projectile, Scale, SkillSet, Stats,
+        Vel, WaypointArea,
     },
     event::EventBus,
     lottery::LootSpec,
@@ -30,7 +33,22 @@ pub fn handle_initialize_character(
     entity: EcsEntity,
     character_id: CharacterId,
 ) {
-    server.state.initialize_character_data(entity, character_id);
+    let updater = server.state.ecs().fetch::<CharacterUpdater>();
+    let pending_database_action = updater.has_pending_database_action(character_id);
+    drop(updater);
+
+    if !pending_database_action {
+        server.state.initialize_character_data(entity, character_id);
+    } else {
+        // A character delete or update was somehow initiated after the login commenced,
+        // so disconnect the client without saving any data and abort the login process.
+        handle_client_disconnect(
+            server,
+            entity,
+            DisconnectReason::PendingDatabaseAction,
+            true,
+        );
+    }
 }
 
 pub fn handle_initialize_spectator(server: &mut Server, entity: EcsEntity) {

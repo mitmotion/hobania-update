@@ -218,6 +218,11 @@ pub enum ServerEvent {
         entity: EcsEntity,
         update: comp::MapMarkerChange,
     },
+    DeleteCharacter {
+        entity: EcsEntity,
+        requesting_player_uuid: String,
+        character_id: CharacterId,
+    },
 }
 
 pub struct EventBus<E> {

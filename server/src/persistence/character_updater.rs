@@ -265,6 +265,10 @@ impl CharacterUpdater {
         self.pending_database_actions.keys().copied()
     }
 
+    pub fn has_pending_database_action(&self, character_id: CharacterId) -> bool {
+        self.pending_database_actions.get(&character_id).is_some()
+    }
+
     pub fn process_batch_completion(&mut self, completed_batch_id: u64) {
         self.pending_database_actions.drain_filter(|_, event| {
             matches!(event, PendingDatabaseAction::Submitted {
@@ -335,7 +339,11 @@ impl CharacterUpdater {
         self.last_pending_database_event_id
     }
 
-    pub fn delete_character(&mut self, requesting_player_uuid: String, character_id: CharacterId) {
+    pub fn queue_character_deletion(
+        &mut self,
+        requesting_player_uuid: String,
+        character_id: CharacterId,
+    ) {
         // Insert the delete as a pending database action - if the player has recently
         // logged out this will replace their pending update with a delete which
         // is fine, as the user has actively chosen to delete the character.

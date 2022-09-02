@@ -4,8 +4,9 @@ use crate::{
     presence::Presence, state_ext::StateExt, BattleModeBuffer, Server,
 };
 use common::{
+    character::CharacterId,
     comp,
-    comp::{group, pet::is_tameable},
+    comp::{group, pet::is_tameable, DisconnectReason},
     uid::{Uid, UidAllocator},
 };
 use common_base::span;
@@ -13,6 +14,36 @@ use common_net::msg::{PlayerListUpdate, PresenceKind, ServerGeneral};
 use common_state::State;
 use specs::{saveload::MarkerAllocator, Builder, Entity as EcsEntity, Join, WorldExt};
 use tracing::{debug, error, trace, warn, Instrument};
+
+pub fn handle_character_delete(
+    server: &mut Server,
+    entity: EcsEntity,
+    requesting_player_uuid: String,
+    character_id: CharacterId,
+) {
+    // Can't process a character delete for a player that has an in-game presence,
+    // so kick them out before processing the delete.
+    let has_presence = {
+        let presences = server.state.ecs().read_storage::<Presence>();
+        presences.get(entity).is_some()
+    };
+    if has_presence {
+        warn!(
+            ?requesting_player_uuid,
+            ?character_id,
+            "Character delete received while in-game, disconnecting client."
+        );
+        handle_client_disconnect(
+            server,
+            entity,
+            DisconnectReason::PendingDatabaseAction,
+            true,
+        );
+    }
+
+    let mut updater = server.state.ecs().fetch_mut::<CharacterUpdater>();
+    updater.queue_character_deletion(requesting_player_uuid, character_id);
+}
 
 pub fn handle_exit_ingame(server: &mut Server, entity: EcsEntity) {
     span!(_guard, "handle_exit_ingame");
@@ -112,6 +143,7 @@ fn get_reason_str(reason: &comp::DisconnectReason) -> &str {
         comp::DisconnectReason::NewerLogin => "newer_login",
         comp::DisconnectReason::Kicked => "kicked",
         comp::DisconnectReason::ClientRequested => "client_requested",
+        comp::DisconnectReason::PendingDatabaseAction => "pending_database_action",
     }
 }
 
