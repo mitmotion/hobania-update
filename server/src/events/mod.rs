@@ -172,7 +172,7 @@ impl Server {
                     handle_loaded_character_data(self, entity, components);
                 },
                 ServerEvent::ExitIngame { entity } => {
-                    handle_exit_ingame(self, entity);
+                    handle_exit_ingame(self, entity, false);
                 },
                 ServerEvent::CreateNpc {
                     pos,

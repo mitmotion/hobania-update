@@ -1,5 +1,7 @@
 use crate::{
-    client::Client, events::player::handle_client_disconnect, persistence::PersistedComponents,
+    client::Client,
+    events::player::{handle_client_disconnect, handle_exit_ingame},
+    persistence::PersistedComponents,
     sys, CharacterUpdater, Server, StateExt,
 };
 use common::{
@@ -42,12 +44,7 @@ pub fn handle_initialize_character(
     } else {
         // A character delete or update was somehow initiated after the login commenced,
         // so disconnect the client without saving any data and abort the login process.
-        handle_client_disconnect(
-            server,
-            entity,
-            DisconnectReason::PendingDatabaseAction,
-            true,
-        );
+        handle_exit_ingame(server, entity, true);
     }
 }
 

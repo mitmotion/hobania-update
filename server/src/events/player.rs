@@ -23,6 +23,9 @@ pub fn handle_character_delete(
 ) {
     // Can't process a character delete for a player that has an in-game presence,
     // so kick them out before processing the delete.
+    // NOTE: This relies on StateExt::handle_initialize_character adding the
+    // Presence component to characters during login to detect whether a
+    // character is in-game.
     let has_presence = {
         let presences = server.state.ecs().read_storage::<Presence>();
         presences.get(entity).is_some()
@@ -33,25 +36,24 @@ pub fn handle_character_delete(
             ?character_id,
             "Character delete received while in-game, disconnecting client."
         );
-        handle_client_disconnect(
-            server,
-            entity,
-            DisconnectReason::PendingDatabaseAction,
-            true,
-        );
+        handle_exit_ingame(server, entity, true);
     }
 
     let mut updater = server.state.ecs().fetch_mut::<CharacterUpdater>();
     updater.queue_character_deletion(requesting_player_uuid, character_id);
 }
 
-pub fn handle_exit_ingame(server: &mut Server, entity: EcsEntity) {
+pub fn handle_exit_ingame(server: &mut Server, entity: EcsEntity, skip_persistence: bool) {
     span!(_guard, "handle_exit_ingame");
     let state = server.state_mut();
 
     // Sync the player's character data to the database. This must be done before
     // removing any components from the entity
-    let entity = persist_entity(state, entity);
+    let entity = if !skip_persistence {
+        persist_entity(state, entity)
+    } else {
+        entity
+    };
 
     // Create new entity with just `Client`, `Uid`, `Player`, and `...Stream`
     // components.
