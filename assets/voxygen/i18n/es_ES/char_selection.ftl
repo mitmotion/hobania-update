@@ -1,5 +1,4 @@
 char_selection-loading_characters = Cargando personajes...
-char_selection-delete_permanently = ¿Borrar permanentemente este Personaje?
 char_selection-delete_permanently = ¿Quieres eliminar permanentemente este Personaje?
 char_selection-change_server = Cambiar de Servidor
 char_selection-enter_world = Entrar al Mundo
