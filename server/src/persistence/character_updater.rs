@@ -129,9 +129,9 @@ impl CharacterUpdater {
 
                             if let Err(e) = execute_batch_update(updates.into_iter(), &mut conn) {
                                 error!(
+                                    ?e,
                                     "Error during character batch update, disconnecting all \
-                                     clients to avoid loss of data integrity. Error: {:?}",
-                                    e
+                                     clients to avoid loss of data integrity."
                                 );
                                 disconnect_all_clients_requested_clone
                                     .store(true, Ordering::Relaxed);
@@ -140,9 +140,6 @@ impl CharacterUpdater {
                             if let Err(e) = response_tx
                                 .send(CharacterUpdaterMessage::DatabaseBatchCompletion(batch_id))
                             {
-                                // TODO: Panic here instead? If this fails something's gone very
-                                // wrong and it would prevent players logging in until a server
-                                // restart
                                 error!(?e, "Could not send DatabaseBatchCompletion message");
                             } else {
                                 debug!(
@@ -238,23 +235,33 @@ impl CharacterUpdater {
     /// Adds a character to the list of characters that have recently logged out
     /// and will be persisted in the next batch update.
     pub fn add_pending_logout_update(&mut self, update_data: CharacterUpdateData) {
-        if !self
+        if self
             .disconnect_all_clients_requested
             .load(Ordering::Relaxed)
         {
-            self.pending_database_actions.insert(
-                update_data.0, // CharacterId
-                PendingDatabaseAction::New(PendingDatabaseActionKind::UpdateCharacter(Box::new(
-                    update_data,
-                ))),
-            );
-        } else {
             warn!(
                 "Ignoring request to add pending logout update for character ID {} as there is a \
                  disconnection of all clients in progress",
                 update_data.0
             );
+            return;
         }
+
+        if self.pending_database_actions.contains_key(&update_data.0) {
+            warn!(
+                "Ignoring request to add pending logout update for character ID {} as there is \
+                 already a pending delete for this character",
+                update_data.0
+            );
+            return;
+        }
+
+        self.pending_database_actions.insert(
+            update_data.0, // CharacterId
+            PendingDatabaseAction::New(PendingDatabaseActionKind::UpdateCharacter(Box::new(
+                update_data,
+            ))),
+        );
     }
 
     /// Returns the character IDs of characters that have recently logged out
