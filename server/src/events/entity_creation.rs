@@ -1,8 +1,6 @@
 use crate::{
-    client::Client,
-    events::player::{handle_client_disconnect, handle_exit_ingame},
-    persistence::PersistedComponents,
-    sys, CharacterUpdater, Server, StateExt,
+    client::Client, events::player::handle_exit_ingame, persistence::PersistedComponents, sys,
+    CharacterUpdater, Server, StateExt,
 };
 use common::{
     character::CharacterId,
@@ -12,9 +10,9 @@ use common::{
         aura::{Aura, AuraKind, AuraTarget},
         beam,
         buff::{BuffCategory, BuffData, BuffKind, BuffSource},
-        shockwave, Agent, Alignment, Anchor, Body, DisconnectReason, Health, Inventory, ItemDrop,
-        LightEmitter, Object, Ori, PidController, Poise, Pos, Projectile, Scale, SkillSet, Stats,
-        Vel, WaypointArea,
+        shockwave, Agent, Alignment, Anchor, Body, Health, Inventory, ItemDrop, LightEmitter,
+        Object, Ori, PidController, Poise, Pos, Projectile, Scale, SkillSet, Stats, Vel,
+        WaypointArea,
     },
     event::EventBus,
     lottery::LootSpec,
@@ -22,6 +20,7 @@ use common::{
     rtsim::RtSimEntity,
     uid::Uid,
     util::Dir,
+    ViewDistances,
 };
 use common_net::{msg::ServerGeneral, sync::WorldSyncExt};
 use specs::{Builder, Entity as EcsEntity, WorldExt};
@@ -34,13 +33,21 @@ pub fn handle_initialize_character(
     server: &mut Server,
     entity: EcsEntity,
     character_id: CharacterId,
+    requested_view_distances: ViewDistances,
 ) {
     let updater = server.state.ecs().fetch::<CharacterUpdater>();
     let pending_database_action = updater.has_pending_database_action(character_id);
     drop(updater);
 
     if !pending_database_action {
-        server.state.initialize_character_data(entity, character_id);
+        let clamped_vds = requested_view_distances.clamp(server.settings().max_view_distance);
+        server
+            .state
+            .initialize_character_data(entity, character_id, clamped_vds);
+        // Correct client if its requested VD is too high.
+        if requested_view_distances.terrain != clamped_vds.terrain {
+            server.notify_client(entity, ServerGeneral::SetViewDistance(clamped_vds.terrain));
+        }
     } else {
         // A character delete or update was somehow initiated after the login commenced,
         // so disconnect the client without saving any data and abort the login process.
@@ -48,8 +55,17 @@ pub fn handle_initialize_character(
     }
 }
 
-pub fn handle_initialize_spectator(server: &mut Server, entity: EcsEntity) {
-    server.state.initialize_spectator_data(entity);
+pub fn handle_initialize_spectator(
+    server: &mut Server,
+    entity: EcsEntity,
+    requested_view_distances: ViewDistances,
+) {
+    let clamped_vds = requested_view_distances.clamp(server.settings().max_view_distance);
+    server.state.initialize_spectator_data(entity, clamped_vds);
+    // Correct client if its requested VD is too high.
+    if requested_view_distances.terrain != clamped_vds.terrain {
+        server.notify_client(entity, ServerGeneral::SetViewDistance(clamped_vds.terrain));
+    }
     sys::subscription::initialize_region_subscription(server.state.ecs(), entity);
 }
 

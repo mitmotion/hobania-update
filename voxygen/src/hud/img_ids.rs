@@ -410,6 +410,9 @@ image_ids! {
         mmap_site_town: "voxygen.element.ui.map.buttons.town",
         mmap_site_town_hover: "voxygen.element.ui.map.buttons.town_hover",
         mmap_site_town_bg: "voxygen.element.ui.map.buttons.town_bg",
+        mmap_site_sea_chapel_hover: "voxygen.element.ui.map.buttons.sea_chapel_hover",
+        mmap_site_sea_chapel_bg: "voxygen.element.ui.map.buttons.sea_chapel_bg",
+        mmap_site_sea_chapel: "voxygen.element.ui.map.buttons.sea_chapel",
         mmap_site_dungeon: "voxygen.element.ui.map.buttons.dungeon",
         mmap_site_dungeon_hover: "voxygen.element.ui.map.buttons.dungeon_hover",
         mmap_site_dungeon_bg: "voxygen.element.ui.map.buttons.dungeon_bg",
@@ -545,6 +548,7 @@ image_ids! {
         skill_axe_leap_slash: "voxygen.element.skills.skill_axe_leap_slash",
         skill_bow_jump_burst: "voxygen.element.skills.skill_bow_jump_burst",
         skill_sceptre_aura: "voxygen.element.skills.sceptre_protection",
+        instrument: "voxygen.element.skills.music",
         missing_icon: "voxygen.element.missing_icon_grey",
 
         // Buttons

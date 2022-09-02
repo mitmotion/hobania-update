@@ -258,9 +258,9 @@ impl SessionState {
                     self.hud.clear_cursor();
                     let i18n = global_state.i18n.read();
                     let msg = match result {
-                        TradeResult::Completed => i18n.get("hud.trade.result.completed"),
-                        TradeResult::Declined => i18n.get("hud.trade.result.declined"),
-                        TradeResult::NotEnoughSpace => i18n.get("hud.trade.result.nospace"),
+                        TradeResult::Completed => i18n.get_msg("hud-trade-result-completed"),
+                        TradeResult::Declined => i18n.get_msg("hud-trade-result-declined"),
+                        TradeResult::NotEnoughSpace => i18n.get_msg("hud-trade-result-nospace"),
                     };
                     self.hud.new_message(ChatType::Meta.chat_msg(msg));
                 },
@@ -327,7 +327,7 @@ impl SessionState {
                     let i18n = global_state.i18n.read();
 
                     let message = match time {
-                        0 => String::from(i18n.get("hud.chat.goodbye")),
+                        0 => String::from(i18n.get_msg("hud-chat-goodbye")),
                         _ => i18n
                             .get_msg_ctx("hud-chat-connection_lost", &i18n::fluent_args! {
                                 "time" => time
@@ -343,7 +343,7 @@ impl SessionState {
                 client::Event::Kicked(reason) => {
                     global_state.info_message = Some(format!(
                         "{}: {}",
-                        global_state.i18n.read().get("main.login.kicked"),
+                        global_state.i18n.read().get_msg("main-login-kicked"),
                         reason
                     ));
                     return Ok(TickAction::Disconnect);
@@ -351,12 +351,7 @@ impl SessionState {
                 client::Event::Notification(n) => {
                     self.hud.new_notification(n);
                 },
-                client::Event::SetViewDistance(vd) => {
-                    global_state.settings.graphics.view_distance = vd;
-                    global_state
-                        .settings
-                        .save_to_file_warn(&global_state.config_dir);
-                },
+                client::Event::SetViewDistance(_vd) => {},
                 client::Event::Outcome(outcome) => outcomes.push(outcome),
                 client::Event::CharacterCreated(_) => {},
                 client::Event::CharacterEdited(_) => {},
@@ -1187,7 +1182,7 @@ impl PlayState for SessionState {
                             global_state
                                 .i18n
                                 .read()
-                                .get("common.connection_lost")
+                                .get_msg("common-connection_lost")
                                 .into_owned(),
                         );
                         error!("[session] Failed to tick the scene: {:?}", err);
@@ -1702,7 +1697,11 @@ impl PlayState for SessionState {
                     // Only highlight if interactable
                     target_entity: self.interactable.and_then(Interactable::entity),
                     loaded_distance: client.loaded_distance(),
-                    view_distance: client.view_distance().unwrap_or(1),
+                    terrain_view_distance: client.view_distance().unwrap_or(1),
+                    entity_view_distance: client
+                        .view_distance()
+                        .unwrap_or(1)
+                        .min(global_state.settings.graphics.entity_view_distance),
                     tick: client.get_tick(),
                     gamma: global_state.settings.graphics.gamma,
                     exposure: global_state.settings.graphics.exposure,
@@ -1788,7 +1787,11 @@ impl PlayState for SessionState {
             // Only highlight if interactable
             target_entity: self.interactable.and_then(Interactable::entity),
             loaded_distance: client.loaded_distance(),
-            view_distance: client.view_distance().unwrap_or(1),
+            terrain_view_distance: client.view_distance().unwrap_or(1),
+            entity_view_distance: client
+                .view_distance()
+                .unwrap_or(1)
+                .min(settings.graphics.entity_view_distance),
             tick: client.get_tick(),
             gamma: settings.graphics.gamma,
             exposure: settings.graphics.exposure,

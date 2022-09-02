@@ -26,6 +26,7 @@ use common::{
     resources::{Time, TimeOfDay},
     slowjob::SlowJobPool,
     uid::{Uid, UidAllocator},
+    ViewDistances,
 };
 use common_net::{
     msg::{CharacterInfo, PlayerListUpdate, PresenceKind, ServerGeneral},
@@ -107,14 +108,24 @@ pub trait StateExt {
         index: &world::IndexOwned,
     ) -> EcsEntityBuilder;
     /// Insert common/default components for a new character joining the server
-    fn initialize_character_data(&mut self, entity: EcsEntity, character_id: CharacterId);
+    fn initialize_character_data(
+        &mut self,
+        entity: EcsEntity,
+        character_id: CharacterId,
+        view_distances: ViewDistances,
+    );
     /// Insert common/default components for a new spectator joining the server
-    fn initialize_spectator_data(&mut self, entity: EcsEntity);
+    fn initialize_spectator_data(&mut self, entity: EcsEntity, view_distances: ViewDistances);
     /// Update the components associated with the entity's current character.
     /// Performed after loading component data from the database
     fn update_character_data(&mut self, entity: EcsEntity, components: PersistedComponents);
     /// Iterates over registered clients and send each `ServerMsg`
-    fn validate_chat_msg(&self, player: EcsEntity, msg: &str) -> bool;
+    fn validate_chat_msg(
+        &self,
+        player: EcsEntity,
+        chat_type: &comp::ChatType<comp::Group>,
+        msg: &str,
+    ) -> bool;
     fn send_chat(&self, msg: comp::UnresolvedChatMsg);
     fn notify_players(&self, msg: ServerGeneral);
     fn notify_in_game_clients(&self, msg: ServerGeneral);
@@ -483,10 +494,21 @@ impl StateExt for State {
         self.ecs_mut()
             .create_entity_synced()
             .with(pos)
-            .with(Presence::new(view_distance, PresenceKind::Spectator))
+            .with(Presence::new(
+                ViewDistances {
+                    terrain: view_distance,
+                    entity: view_distance,
+                },
+                PresenceKind::Spectator,
+            ))
     }
 
-    fn initialize_character_data(&mut self, entity: EcsEntity, character_id: CharacterId) {
+    fn initialize_character_data(
+        &mut self,
+        entity: EcsEntity,
+        character_id: CharacterId,
+        view_distances: ViewDistances,
+    ) {
         let spawn_point = self.ecs().read_resource::<SpawnPoint>().0;
 
         if let Some(player_uid) = self.read_component_copied::<Uid>(entity) {
@@ -514,10 +536,9 @@ impl StateExt for State {
             // Make sure physics components are updated
             self.write_component_ignore_entity_dead(entity, comp::ForceUpdate::forced());
 
-            const INITIAL_VD: u32 = 5; //will be changed after login
             self.write_component_ignore_entity_dead(
                 entity,
-                Presence::new(INITIAL_VD, PresenceKind::Character(character_id)),
+                Presence::new(view_distances, PresenceKind::Character(character_id)),
             );
 
             // Tell the client its request was successful.
@@ -527,7 +548,7 @@ impl StateExt for State {
         }
     }
 
-    fn initialize_spectator_data(&mut self, entity: EcsEntity) {
+    fn initialize_spectator_data(&mut self, entity: EcsEntity, view_distances: ViewDistances) {
         let spawn_point = self.ecs().read_resource::<SpawnPoint>().0;
 
         if self.read_component_copied::<Uid>(entity).is_some() {
@@ -540,10 +561,9 @@ impl StateExt for State {
             // Make sure physics components are updated
             self.write_component_ignore_entity_dead(entity, comp::ForceUpdate::forced());
 
-            const INITIAL_VD: u32 = 5; //will be changed after login
             self.write_component_ignore_entity_dead(
                 entity,
-                Presence::new(INITIAL_VD, PresenceKind::Spectator),
+                Presence::new(view_distances, PresenceKind::Spectator),
             );
 
             // Tell the client its request was successful.
@@ -676,7 +696,12 @@ impl StateExt for State {
         }
     }
 
-    fn validate_chat_msg(&self, entity: EcsEntity, msg: &str) -> bool {
+    fn validate_chat_msg(
+        &self,
+        entity: EcsEntity,
+        chat_type: &comp::ChatType<comp::Group>,
+        msg: &str,
+    ) -> bool {
         let mut automod = self.ecs().write_resource::<AutoMod>();
         let Some(client) = self.ecs().read_storage::<Client>().get(entity) else { return true };
         let Some(player) = self.ecs().read_storage::<Player>().get(entity) else { return true };
@@ -688,6 +713,7 @@ impl StateExt for State {
                 .get(entity)
                 .map(|a| a.0),
             Instant::now(),
+            chat_type,
             msg,
         ) {
             Ok(note) => {
@@ -727,7 +753,9 @@ impl StateExt for State {
         if msg.chat_type.uid().map_or(true, |sender| {
             (*ecs.read_resource::<UidAllocator>())
                 .retrieve_entity_internal(sender.0)
-                .map_or(false, |e| self.validate_chat_msg(e, &msg.message))
+                .map_or(false, |e| {
+                    self.validate_chat_msg(e, &msg.chat_type, &msg.message)
+                })
         }) {
             match &msg.chat_type {
                 comp::ChatType::Offline(_)

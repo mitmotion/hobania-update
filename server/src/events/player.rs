@@ -6,7 +6,7 @@ use crate::{
 use common::{
     character::CharacterId,
     comp,
-    comp::{group, pet::is_tameable, DisconnectReason},
+    comp::{group, pet::is_tameable},
     uid::{Uid, UidAllocator},
 };
 use common_base::span;

@@ -443,7 +443,7 @@ impl Controls {
                     // instead of directly showing error message here
                     *info_content = Some(InfoContent::CharacterError(format!(
                         "{}: {}",
-                        i18n.get("common.error"),
+                        i18n.get_msg("common-error"),
                         error
                     )))
                 } else if let Some(InfoContent::CharacterError(_)) = info_content {
@@ -557,7 +557,7 @@ impl Controls {
                                                     .into(),
                                                 Text::new(
                                                     // TODO: Add actual location here
-                                                    i18n.get("char_selection.uncanny_valley"),
+                                                    i18n.get_msg("char_selection-uncanny_valley"),
                                                 )
                                                 .into(),
                                             ]),
@@ -603,7 +603,7 @@ impl Controls {
                             let button = Button::new(
                                 new_character_button,
                                 Container::new(Text::new(
-                                    i18n.get("char_selection.create_new_character"),
+                                    i18n.get_msg("char_selection-create_new_character"),
                                 ))
                                 .width(Length::Fill)
                                 .height(Length::Fill)
@@ -682,7 +682,7 @@ impl Controls {
                 let mut bottom_content = vec![
                     Container::new(neat_button(
                         logout_button,
-                        i18n.get("char_selection.logout").into_owned(),
+                        i18n.get_msg("char_selection-logout").into_owned(),
                         FILL_FRAC_ONE,
                         button_style,
                         Some(Message::Logout),
@@ -696,7 +696,7 @@ impl Controls {
                     bottom_content.push(
                         Container::new(neat_button(
                             spectate_button,
-                            i18n.get("char_selection.spectate").into_owned(),
+                            i18n.get_msg("char_selection-spectate").into_owned(),
                             FILL_FRAC_TWO,
                             button_style,
                             Some(Message::Spectate),
@@ -711,7 +711,7 @@ impl Controls {
                 bottom_content.push(
                     Container::new(neat_button(
                         enter_world_button,
-                        i18n.get("char_selection.enter_world").into_owned(),
+                        i18n.get_msg("char_selection-enter_world").into_owned(),
                         FILL_FRAC_TWO,
                         button_style,
                         selected.map(|_| Message::EnterWorld),
@@ -735,20 +735,20 @@ impl Controls {
                 if let Some(info_content) = info_content {
                     let over_content: Element<_> = match &info_content {
                         InfoContent::Deletion(_) => Column::with_children(vec![
-                            Text::new(i18n.get("char_selection.delete_permanently"))
+                            Text::new(i18n.get_msg("char_selection-delete_permanently"))
                                 .size(fonts.cyri.scale(24))
                                 .into(),
                             Row::with_children(vec![
                                 neat_button(
                                     no_button,
-                                    i18n.get("common.no").into_owned(),
+                                    i18n.get_msg("common-no").into_owned(),
                                     FILL_FRAC_ONE,
                                     button_style,
                                     Some(Message::CancelDeletion),
                                 ),
                                 neat_button(
                                     yes_button,
-                                    i18n.get("common.yes").into_owned(),
+                                    i18n.get_msg("common-yes").into_owned(),
                                     FILL_FRAC_ONE,
                                     button_style,
                                     Some(Message::ConfirmDeletion),
@@ -762,17 +762,17 @@ impl Controls {
                         .spacing(10)
                         .into(),
                         InfoContent::LoadingCharacters => {
-                            Text::new(i18n.get("char_selection.loading_characters"))
+                            Text::new(i18n.get_msg("char_selection-loading_characters"))
                                 .size(fonts.cyri.scale(24))
                                 .into()
                         },
                         InfoContent::CreatingCharacter => {
-                            Text::new(i18n.get("char_selection.creating_character"))
+                            Text::new(i18n.get_msg("char_selection-creating_character"))
                                 .size(fonts.cyri.scale(24))
                                 .into()
                         },
                         InfoContent::EditingCharacter => {
-                            Text::new(i18n.get("char_selection.editing_character"))
+                            Text::new(i18n.get_msg("char_selection-editing_character"))
                                 .size(fonts.cyri.scale(24))
                                 .into()
                         },
@@ -780,7 +780,7 @@ impl Controls {
                             Text::new(error).size(fonts.cyri.scale(24)).into(),
                             Row::with_children(vec![neat_button(
                                 no_button,
-                                i18n.get("common.close").into_owned(),
+                                i18n.get_msg("common-close").into_owned(),
                                 FILL_FRAC_ONE,
                                 button_style,
                                 Some(Message::ClearCharacterListError),
@@ -864,7 +864,7 @@ impl Controls {
                     icon_button(button, selected, msg, img).with_tooltip(
                         tooltip_manager,
                         move || {
-                            let tooltip_text = i18n.get(tooltip_i18n_key);
+                            let tooltip_text = i18n.get_msg(tooltip_i18n_key);
                             tooltip::text(&tooltip_text, tooltip_style)
                         },
                     )
@@ -934,7 +934,7 @@ impl Controls {
                                 matches!(body.species, humanoid::Species::Human),
                                 Message::Species(humanoid::Species::Human),
                                 human_icon,
-                                "common.species.human",
+                                "common-species-human",
                             )
                             .into(),
                             icon_button_tooltip(
@@ -942,7 +942,7 @@ impl Controls {
                                 matches!(body.species, humanoid::Species::Orc),
                                 Message::Species(humanoid::Species::Orc),
                                 orc_icon,
-                                "common.species.orc",
+                                "common-species-orc",
                             )
                             .into(),
                             icon_button_tooltip(
@@ -950,7 +950,7 @@ impl Controls {
                                 matches!(body.species, humanoid::Species::Dwarf),
                                 Message::Species(humanoid::Species::Dwarf),
                                 dwarf_icon,
-                                "common.species.dwarf",
+                                "common-species-dwarf",
                             )
                             .into(),
                         ])
@@ -962,7 +962,7 @@ impl Controls {
                                 matches!(body.species, humanoid::Species::Elf),
                                 Message::Species(humanoid::Species::Elf),
                                 elf_icon,
-                                "common.species.elf",
+                                "common-species-elf",
                             )
                             .into(),
                             icon_button_tooltip(
@@ -970,7 +970,7 @@ impl Controls {
                                 matches!(body.species, humanoid::Species::Draugr),
                                 Message::Species(humanoid::Species::Draugr),
                                 draugr_icon,
-                                "common.species.draugr",
+                                "common-species-draugr",
                             )
                             .into(),
                             icon_button_tooltip(
@@ -978,7 +978,7 @@ impl Controls {
                                 matches!(body.species, humanoid::Species::Danari),
                                 Message::Species(humanoid::Species::Danari),
                                 danari_icon,
-                                "common.species.danari",
+                                "common-species-danari",
                             )
                             .into(),
                         ])
@@ -1001,7 +1001,7 @@ impl Controls {
                                 *mainhand == Some(STARTER_SWORD),
                                 Message::Tool((Some(STARTER_SWORD), None)),
                                 imgs.sword,
-                                "common.weapons.greatsword",
+                                "common-weapons-greatsword",
                             )
                             .into(),
                             icon_button_tooltip(
@@ -1009,7 +1009,7 @@ impl Controls {
                                 *mainhand == Some(STARTER_HAMMER),
                                 Message::Tool((Some(STARTER_HAMMER), None)),
                                 imgs.hammer,
-                                "common.weapons.hammer",
+                                "common-weapons-hammer",
                             )
                             .into(),
                             icon_button_tooltip(
@@ -1017,7 +1017,7 @@ impl Controls {
                                 *mainhand == Some(STARTER_AXE),
                                 Message::Tool((Some(STARTER_AXE), None)),
                                 imgs.axe,
-                                "common.weapons.axe",
+                                "common-weapons-axe",
                             )
                             .into(),
                         ])
@@ -1029,7 +1029,7 @@ impl Controls {
                                 *mainhand == Some(STARTER_SWORDS),
                                 Message::Tool((Some(STARTER_SWORDS), Some(STARTER_SWORDS))),
                                 imgs.swords,
-                                "common.weapons.shortswords",
+                                "common-weapons-shortswords",
                             )
                             .into(),
                             icon_button_tooltip(
@@ -1037,7 +1037,7 @@ impl Controls {
                                 *mainhand == Some(STARTER_BOW),
                                 Message::Tool((Some(STARTER_BOW), None)),
                                 imgs.bow,
-                                "common.weapons.bow",
+                                "common-weapons-bow",
                             )
                             .into(),
                             icon_button_tooltip(
@@ -1045,7 +1045,7 @@ impl Controls {
                                 *mainhand == Some(STARTER_STAFF),
                                 Message::Tool((Some(STARTER_STAFF), None)),
                                 imgs.staff,
-                                "common.weapons.staff",
+                                "common-weapons-staff",
                             )
                             .into(),
                         ])
@@ -1130,7 +1130,7 @@ impl Controls {
 
                 let slider_options = Column::with_children(vec![
                     char_slider(
-                        i18n.get("char_selection.hair_style").into_owned(),
+                        i18n.get_msg("char_selection-hair_style").into_owned(),
                         &mut sliders.hair_style,
                         body.species.num_hair_styles(body.body_type) - 1,
                         body.hair_style,
@@ -1138,7 +1138,7 @@ impl Controls {
                         (fonts, imgs),
                     ),
                     char_slider(
-                        i18n.get("char_selection.hair_color").into_owned(),
+                        i18n.get_msg("char_selection-hair_color").into_owned(),
                         &mut sliders.hair_color,
                         body.species.num_hair_colors() - 1,
                         body.hair_color,
@@ -1146,7 +1146,7 @@ impl Controls {
                         (fonts, imgs),
                     ),
                     char_slider(
-                        i18n.get("char_selection.skin").into_owned(),
+                        i18n.get_msg("char_selection-skin").into_owned(),
                         &mut sliders.skin,
                         body.species.num_skin_colors() - 1,
                         body.skin,
@@ -1154,7 +1154,7 @@ impl Controls {
                         (fonts, imgs),
                     ),
                     char_slider(
-                        i18n.get("char_selection.eyeshape").into_owned(),
+                        i18n.get_msg("char_selection-eyeshape").into_owned(),
                         &mut sliders.eyes,
                         body.species.num_eyes(body.body_type) - 1,
                         body.eyes,
@@ -1162,7 +1162,7 @@ impl Controls {
                         (fonts, imgs),
                     ),
                     char_slider(
-                        i18n.get("char_selection.eye_color").into_owned(),
+                        i18n.get_msg("char_selection-eye_color").into_owned(),
                         &mut sliders.eye_color,
                         body.species.num_eye_colors() - 1,
                         body.eye_color,
@@ -1171,7 +1171,7 @@ impl Controls {
                     ),
                     char_slider_greyable(
                         body.species.num_accessories(body.body_type) > 1,
-                        i18n.get("char_selection.accessories").into_owned(),
+                        i18n.get_msg("char_selection-accessories").into_owned(),
                         &mut sliders.accessory,
                         body.species.num_accessories(body.body_type) - 1,
                         body.accessory,
@@ -1180,7 +1180,7 @@ impl Controls {
                     ),
                     char_slider_greyable(
                         body.species.num_beards(body.body_type) > 1,
-                        i18n.get("char_selection.beard").into_owned(),
+                        i18n.get_msg("char_selection-beard").into_owned(),
                         &mut sliders.beard,
                         body.species.num_beards(body.body_type) - 1,
                         body.beard,
@@ -1203,7 +1203,7 @@ impl Controls {
                 )
                 .on_press(Message::RandomizeCharacter)
                 .with_tooltip(tooltip_manager, move || {
-                    let tooltip_text = i18n.get("common.rand_appearance");
+                    let tooltip_text = i18n.get_msg("common-rand_appearance");
                     tooltip::text(&tooltip_text, tooltip_style)
                 });
 
@@ -1263,7 +1263,7 @@ impl Controls {
 
                 let back = neat_button(
                     back_button,
-                    i18n.get("common.back").into_owned(),
+                    i18n.get_msg("common-back").into_owned(),
                     FILL_FRAC_ONE,
                     button_style,
                     Some(Message::Back),
@@ -1281,7 +1281,7 @@ impl Controls {
                 )
                 .on_press(Message::RandomizeName)
                 .with_tooltip(tooltip_manager, move || {
-                    let tooltip_text = i18n.get("common.rand_name");
+                    let tooltip_text = i18n.get_msg("common-rand_name");
                     tooltip::text(&tooltip_text, tooltip_style)
                 });
 
@@ -1297,7 +1297,7 @@ impl Controls {
                         .fix_aspect_ratio(),
                     TextInput::new(
                         name_input,
-                        &i18n.get("character_window.character_name"),
+                        &i18n.get_msg("character_window-character_name"),
                         name,
                         Message::Name,
                     )
@@ -1321,10 +1321,10 @@ impl Controls {
 
                 let create = neat_button(
                     create_button,
-                    i18n.get(if character_id.is_some() {
-                        "common.confirm"
+                    i18n.get_msg(if character_id.is_some() {
+                        "common-confirm"
                     } else {
-                        "common.create"
+                        "common-create"
                     }),
                     FILL_FRAC_ONE,
                     button_style,
@@ -1334,7 +1334,7 @@ impl Controls {
                 let create: Element<Message> = if name.is_empty() {
                     create
                         .with_tooltip(tooltip_manager, move || {
-                            let tooltip_text = i18n.get("char_selection.create_info_name");
+                            let tooltip_text = i18n.get_msg("char_selection-create_info_name");
                             tooltip::text(&tooltip_text, tooltip_style)
                         })
                         .into()
@@ -1372,10 +1372,10 @@ impl Controls {
         if let Some(mismatched_version) = &self.server_mismatched_version {
             let warning = Text::<IcedRenderer>::new(format!(
                 "{}\n{}: {} {}: {}",
-                i18n.get("char_selection.version_mismatch"),
-                i18n.get("main.login.server_version"),
+                i18n.get_msg("char_selection-version_mismatch"),
+                i18n.get_msg("main-login-server_version"),
                 mismatched_version,
-                i18n.get("main.login.client_version"),
+                i18n.get_msg("main-login-client_version"),
                 *common::util::GIT_HASH
             ))
             .size(self.fonts.cyri.scale(18))

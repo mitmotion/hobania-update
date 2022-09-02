@@ -141,13 +141,21 @@ impl Server {
                 ServerEvent::InitCharacterData {
                     entity,
                     character_id,
-                } => handle_initialize_character(self, entity, character_id),
+                    requested_view_distances,
+                } => handle_initialize_character(
+                    self,
+                    entity,
+                    character_id,
+                    requested_view_distances,
+                ),
+                ServerEvent::InitSpectator(entity, requested_view_distances) => {
+                    handle_initialize_spectator(self, entity, requested_view_distances)
+                },
                 ServerEvent::DeleteCharacter {
                     entity,
                     requesting_player_uuid,
                     character_id,
                 } => handle_character_delete(self, entity, requesting_player_uuid, character_id),
-                ServerEvent::InitSpectator(entity) => handle_initialize_spectator(self, entity),
                 ServerEvent::UpdateCharacterData { entity, components } => {
                     let (
                         body,

@@ -126,6 +126,7 @@ impl Body {
                 quadruped_low::Species::Maneater => 80.0,
                 quadruped_low::Species::Sandshark => 160.0,
                 quadruped_low::Species::Hakulaq => 140.0,
+                quadruped_low::Species::Dagon => 140.0,
                 quadruped_low::Species::Lavadrake => 100.0,
                 quadruped_low::Species::Icedrake => 100.0,
                 quadruped_low::Species::Basilisk => 90.0,
@@ -1049,6 +1050,9 @@ pub fn is_strafing(data: &JoinData<'_>, update: &StateUpdate) -> bool {
     // TODO: Don't always check `character.is_aimed()`, allow the frontend to
     // control whether the player strafes during an aimed `CharacterState`.
     (update.character.is_aimed() || update.should_strafe) && data.body.can_strafe()
+    // no strafe with music instruments equipped in ActiveMainhand
+    && !matches!(unwrap_tool_data(data, EquipSlot::ActiveMainhand),
+        Some((ToolKind::Instrument, _)))
 }
 
 /// Returns tool and components

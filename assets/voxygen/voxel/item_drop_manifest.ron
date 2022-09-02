@@ -397,6 +397,15 @@
     // Picks
     Simple("common.items.tool.pickaxe_stone"): "voxel.weapon.tool.pickaxe_green-0",
     Simple("common.items.tool.pickaxe_steel"): "voxel.weapon.tool.pickaxe_green-1",
+    // Instruments
+    Simple("common.items.tool.instruments.bass"): "voxel.weapon.tool.bass",
+    Simple("common.items.tool.instruments.flute"): "voxel.weapon.tool.flute",
+    Simple("common.items.tool.instruments.harp"): "voxel.weapon.tool.harp",
+    Simple("common.items.tool.instruments.perc"): "voxel.weapon.tool.perc",
+    Simple("common.items.tool.instruments.kalimba"): "voxel.weapon.tool.kalimba",
+    Simple("common.items.tool.instruments.melodica"): "voxel.weapon.tool.melodica",
+    Simple("common.items.tool.instruments.lute"): "voxel.weapon.tool.lute",
+    Simple("common.items.tool.instruments.sitar"): "voxel.weapon.tool.sitar",
     // Other
     Simple("common.items.utility.coins"): "voxel.object.v-coin",
     Simple("common.items.utility.collar"): "voxel.object.collar",
@@ -734,6 +743,7 @@
     Simple("common.items.armor.misc.neck.gem_of_resilience"): "voxel.armor.misc.neck.resilience_gem",
     Simple("common.items.armor.misc.neck.shell"): "voxel.armor.misc.neck.shell",
     Simple("common.items.armor.misc.neck.amethyst"): "voxel.armor.misc.neck.amethyst",
+    Simple("common.items.armor.misc.neck.abyssal_gorget"): "voxel.armor.misc.neck.abyssal_gorget",
     Simple("common.items.armor.misc.neck.diamond"): "voxel.armor.misc.neck.diamond",
     Simple("common.items.armor.cultist.necklace"): "voxel.armor.cultist.necklace",
     Simple("common.items.armor.misc.neck.ruby"): "voxel.armor.misc.neck.ruby",
@@ -844,6 +854,8 @@
     Simple("common.items.crafting_ing.animal_misc.grim_eyeball"): "voxel.sprite.crafting_ing.animal_misc.grim_eyeball",
     Simple("common.items.flowers.plant_fiber"): "voxel.sprite.crafting_ing.plant_fiber",
     Simple("common.items.flowers.moonbell"): "voxel.sprite.flowers.moonbell",
+    Simple("common.items.crafting_ing.abyssal_heart"): "voxel.sprite.crafting_ing.abyssal_heart",
+    Simple("common.items.crafting_ing.coral_branch"): "voxel.sprite.crafting_ing.coral_branch",
     Simple("common.items.flowers.pyrebloom"): "voxel.sprite.flowers.pyrebloom",
     Simple("common.items.flowers.wild_flax"): "voxel.sprite.flowers.flax",
     Simple("common.items.crafting_ing.cotton_boll"): "voxel.sprite.crafting_ing.cotton_boll",

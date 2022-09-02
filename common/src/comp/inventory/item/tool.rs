@@ -35,6 +35,9 @@ pub enum ToolKind {
     /// biting)
     Natural,
     /// This is an placeholder item, it is used by non-humanoid npcs to attack
+    /// Music Instruments
+    Instrument,
+    /// This is an placeholder item, it is used by non-humanoid npcs to attack
     Empty,
 }
 
@@ -55,6 +58,7 @@ impl ToolKind {
             ToolKind::Debug => "debug",
             ToolKind::Farming => "farming",
             ToolKind::Pick => "pickaxe",
+            ToolKind::Instrument => "instrument",
             ToolKind::Empty => "empty",
         }
     }

@@ -11,6 +11,7 @@ common-controls = Kontroller
 common-video = Grafik
 common-sound = Ljud
 common-chat = Chatt
+common-networking = Nätverk
 common-resume = Återgå
 common-characters = Rollpersoner
 common-close = Stäng
@@ -40,6 +41,7 @@ common-video_settings = Grafikinställningar
 common-sound_settings = Ljudinställningar
 common-language_settings = Språkinställningar
 common-chat_settings = Chattinställningar
+common-networking_settings = Nätverksinställningar
 common-connection_lost =
     Anslutningen förlorades!
     Startade servern om?
@@ -72,6 +74,7 @@ common-tool-debug = Felsökning
 common-tool-farming = Jordbruksredskap
 common-tool-pick = Hacka
 common-tool-mining = Gruvgrävande
+common-weapons-instrument = Instrument
 common-kind-modular_component = Modulär komponent
 common-kind-modular_component_partial = Komponent
 common-kind-glider = Glidare

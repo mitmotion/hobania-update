@@ -61,27 +61,27 @@ pub enum SettingsTab {
 impl SettingsTab {
     fn name_key(&self) -> &str {
         match self {
-            SettingsTab::Interface => "common.interface",
-            SettingsTab::Chat => "common.chat",
-            SettingsTab::Gameplay => "common.gameplay",
-            SettingsTab::Controls => "common.controls",
-            SettingsTab::Video => "common.video",
-            SettingsTab::Sound => "common.sound",
-            SettingsTab::Lang => "common.languages",
-            SettingsTab::Networking => "common.networking",
+            SettingsTab::Interface => "common-interface",
+            SettingsTab::Chat => "common-chat",
+            SettingsTab::Gameplay => "common-gameplay",
+            SettingsTab::Controls => "common-controls",
+            SettingsTab::Video => "common-video",
+            SettingsTab::Sound => "common-sound",
+            SettingsTab::Lang => "common-languages",
+            SettingsTab::Networking => "common-networking",
         }
     }
 
     fn title_key(&self) -> &str {
         match self {
-            SettingsTab::Interface => "common.interface_settings",
-            SettingsTab::Chat => "common.chat_settings",
-            SettingsTab::Gameplay => "common.gameplay_settings",
-            SettingsTab::Controls => "common.controls_settings",
-            SettingsTab::Video => "common.video_settings",
-            SettingsTab::Sound => "common.sound_settings",
-            SettingsTab::Lang => "common.language_settings",
-            SettingsTab::Networking => "common.networking_settings",
+            SettingsTab::Interface => "common-interface_settings",
+            SettingsTab::Chat => "common-chat_settings",
+            SettingsTab::Gameplay => "common-gameplay_settings",
+            SettingsTab::Controls => "common-controls_settings",
+            SettingsTab::Video => "common-video_settings",
+            SettingsTab::Sound => "common-sound_settings",
+            SettingsTab::Lang => "common-language_settings",
+            SettingsTab::Networking => "common-networking_settings",
         }
     }
 }
@@ -93,6 +93,7 @@ pub struct SettingsWindow<'a> {
     imgs: &'a Imgs,
     fonts: &'a Fonts,
     localized_strings: &'a Localization,
+    server_view_distance_limit: Option<u32>,
     fps: f32,
     #[conrod(common_builder)]
     common: widget::CommonBuilder,
@@ -105,6 +106,7 @@ impl<'a> SettingsWindow<'a> {
         imgs: &'a Imgs,
         fonts: &'a Fonts,
         localized_strings: &'a Localization,
+        server_view_distance_limit: Option<u32>,
         fps: f32,
     ) -> Self {
         Self {
@@ -113,6 +115,7 @@ impl<'a> SettingsWindow<'a> {
             imgs,
             fonts,
             localized_strings,
+            server_view_distance_limit,
             fps,
             common: widget::CommonBuilder::default(),
         }
@@ -191,7 +194,7 @@ impl<'a> Widget for SettingsWindow<'a> {
         Text::new(
             &self
                 .localized_strings
-                .get(self.show.settings_tab.title_key()),
+                .get_msg(self.show.settings_tab.title_key()),
         )
         .mid_top_with_margin_on(state.ids.frame, 3.0)
         .font_id(self.fonts.cyri.conrod_id)
@@ -220,7 +223,7 @@ impl<'a> Widget for SettingsWindow<'a> {
             });
         }
         for (i, settings_tab) in SettingsTab::iter().enumerate() {
-            let tab_name = self.localized_strings.get(settings_tab.name_key());
+            let tab_name = self.localized_strings.get_msg(settings_tab.name_key());
             let mut button = Button::image(if self.show.settings_tab == settings_tab {
                 self.imgs.selection
             } else {
@@ -299,11 +302,17 @@ impl<'a> Widget for SettingsWindow<'a> {
                 }
             },
             SettingsTab::Video => {
-                for change in
-                    video::Video::new(global_state, imgs, fonts, localized_strings, self.fps)
-                        .top_left_with_margins_on(state.ids.settings_content_align, 0.0, 0.0)
-                        .wh_of(state.ids.settings_content_align)
-                        .set(state.ids.video, ui)
+                for change in video::Video::new(
+                    global_state,
+                    imgs,
+                    fonts,
+                    localized_strings,
+                    self.server_view_distance_limit,
+                    self.fps,
+                )
+                .top_left_with_margins_on(state.ids.settings_content_align, 0.0, 0.0)
+                .wh_of(state.ids.settings_content_align)
+                .set(state.ids.video, ui)
                 {
                     events.push(Event::SettingsChange(change.into()));
                 }
@@ -327,11 +336,16 @@ impl<'a> Widget for SettingsWindow<'a> {
                 }
             },
             SettingsTab::Networking => {
-                for change in
-                    networking::Networking::new(global_state, imgs, fonts, localized_strings)
-                        .top_left_with_margins_on(state.ids.settings_content_align, 0.0, 0.0)
-                        .wh_of(state.ids.settings_content_align)
-                        .set(state.ids.networking, ui)
+                for change in networking::Networking::new(
+                    global_state,
+                    imgs,
+                    fonts,
+                    localized_strings,
+                    self.server_view_distance_limit,
+                )
+                .top_left_with_margins_on(state.ids.settings_content_align, 0.0, 0.0)
+                .wh_of(state.ids.settings_content_align)
+                .set(state.ids.networking, ui)
                 {
                     events.push(Event::SettingsChange(change.into()));
                 }
