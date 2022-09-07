@@ -106,10 +106,10 @@ impl State {
             GameMode::Client => "c",
             GameMode::Singleplayer => "sp",
         };
-        let rayon_threads = match game_mode {
+        let rayon_threads = /*match game_mode {
             GameMode::Server | GameMode::Client => num_cpu / 2,
             GameMode::Singleplayer => num_cpu / 4,
-        }/*num_cpu*/.max(common::consts::MIN_RECOMMENDED_RAYON_THREADS);
+        }*/num_cpu.max(common::consts::MIN_RECOMMENDED_RAYON_THREADS);
         let rayon_pool = Arc::new(
             ThreadPoolBuilder::new()
                 .num_threads(rayon_threads)

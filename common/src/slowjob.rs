@@ -569,6 +569,11 @@ impl SlowJobPool {
                     // times or something in case we have more tasks to execute).
                     return;
                 };
+                // Hint to scheduler to run any other threads that are currently waiting, since
+                // slowjobs are, well, slow :)  i.e. the cost of yielding should be very small
+                // compared to the cost of actually running the job for *almost* every job on the
+                // pool (and for jobs for which this isn't true, we should probably batch them up).
+                std::thread::yield_now();
             }
         });
     }
