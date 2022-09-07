@@ -101,20 +101,39 @@ impl State {
     pub fn pools(game_mode: GameMode) -> Pools {
         let num_cpu = num_cpus::get()/* - 1*/;
 
-        let thread_name_infix = match game_mode {
-            GameMode::Server => "s",
-            GameMode::Client => "c",
-            GameMode::Singleplayer => "sp",
+        let (thread_name_infix, rayon_offset) = match game_mode {
+            // The server does work on both the main thread and the rayon pool, but not at the same
+            // time, so there's no reason to hold back a core from rayon.  It does effectively no
+            // other non-slowjob, non-rayon work that blocks the main thread.
+            GameMode::Server => ("s", 0),
+            // The client does work on both the main thread and the rayon pool, but not at the same
+            // time.  It does run some other non-slowjob and non-rayon threads, but none of them
+            // block work on the main thread.
+            GameMode::Client => ("c", 0),
+            // Singleplayer does work on both the main thread and the rayon pool; unlike the server
+            // and client cases, the rayon work may interfere with work on one of the main threads,
+            // since the server and client don't coordinate their rayon work.  Therefore, we
+            // reserve a core for the main thread(s) from both slowjob and rayon tasks.  Since many
+            // CPUs can't afford to lose an entire core during the common periods when the server
+            // and client are not interfering with each other, we still spawn an extra rayon thread
+            // in this case, but leave it floating so the OS can schedule it.
+            GameMode::Singleplayer => ("sp", /*2*/1),
         };
         let rayon_threads = /*match game_mode {
             GameMode::Server | GameMode::Client => num_cpu / 2,
             GameMode::Singleplayer => num_cpu / 4,
         }*/num_cpu.max(common::consts::MIN_RECOMMENDED_RAYON_THREADS);
+        let core_ids = /*(rayon_threads >= 16).then(|| */core_affinity::get_core_ids().unwrap_or(vec![])/*).unwrap_or(vec![])*/;
         let rayon_pool = Arc::new(
             ThreadPoolBuilder::new()
-                .num_threads(rayon_threads)
+                .num_threads(rayon_threads/*.saturating_sub(rayon_offset)*/)
                 // .thread_name(move |i| format!("rayon-{}", i))
                 .thread_name(move |i| format!("rayon-{}-{}", thread_name_infix, i))
+                .start_handler(move |i| {
+                    if let Some(&core_id) = i.checked_sub(rayon_offset).and_then(|i| core_ids.get(i)) {
+                        core_affinity::set_for_current(core_id);
+                    }
+                })
                 .build()
                 .unwrap(),
         );
@@ -136,6 +155,8 @@ impl State {
             /*Arc::clone(*/slow_pool/*)*/,
         ); */
 
+        // We always reserve at least one non-slowjob core, if possible, to make sure systems get a
+        // chance to run unobstructed.
         (num_cpu - 1/*slow_limit*//* as u64*/, game_mode, rayon_pool/*, slowjob*/)
     }
 
@@ -172,8 +193,8 @@ impl State {
         let (start, step, total) = match (game_mode, ecs_role) {
             (_, GameMode::Singleplayer) => todo!("Singleplayer is not a valid ECS role (yet)"),
             (GameMode::Server | GameMode::Client, _) => (0, 1, num_cpu),
-            (GameMode::Singleplayer, GameMode::Server) => (0, 2, num_cpu / 2/* + num_cpu / 4 */),
-            (GameMode::Singleplayer, GameMode::Client) => (1, 2, num_cpu - num_cpu / 2/* + num_cpu / 4 */),
+            (GameMode::Singleplayer, GameMode::Client) => (0, 2, num_cpu - num_cpu / 2/* + num_cpu / 4 */),
+            (GameMode::Singleplayer, GameMode::Server) => (1, 2, num_cpu / 2/* + num_cpu / 4 */),
         };
         let total = total.max(common::consts::MIN_RECOMMENDED_RAYON_THREADS);
         let cores = core_affinity::get_core_ids().unwrap_or(vec![]).into_iter().skip(start).step_by(step).take(total).collect::<Vec<_>>();

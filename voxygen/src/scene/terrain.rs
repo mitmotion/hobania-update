@@ -294,7 +294,7 @@ async fn mesh_worker/*<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + D
                         let size_mb = (size >> 20) as u32 + 1;
                         // If for some reason the semaphore is closed, we just won't allocate
                         // texture space.
-                        *permit_ = Some(Semaphore::acquire_many_owned(mem_semaphore, size_mb).await.ok()?);
+                        /* *permit_ = Some(Semaphore::acquire_many_owned(mem_semaphore, size_mb).await.ok()?); */
                     }
                     create_texture(size)
                 },
