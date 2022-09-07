@@ -11,6 +11,7 @@ use std::{
 use structopt::StructOpt;
 use tokio::runtime::Runtime;
 use vek::*;
+use common_state::State;
 use veloren_client::{addr::ConnectionArgs, Client};
 
 #[derive(Clone, Copy, StructOpt)]
@@ -108,16 +109,19 @@ fn run_client(
         hostname: "localhost".into(),
     };
     let runtime_clone = Arc::clone(&runtime);
+    // NOTE: use a no-auth server
     let mut client = runtime
-        .block_on(Client::new(addr, runtime_clone, &mut None))
+        .block_on(Client::new(
+            addr,
+            runtime_clone,
+            &mut None,
+            common_state::State::pools(common::resources::GameMode::Client),
+            &username,
+            "",
+            |_| false,
+        ))
         .expect("Failed to connect to the server");
     client.set_view_distance(opt.vd);
-
-    // Login
-    // NOTE: use a no-auth server
-    runtime
-        .block_on(client.register(username.clone(), String::new(), |_| false))
-        .expect("Failed to log in");
 
     let mut clock = common::clock::Clock::new(Duration::from_secs_f32(1.0 / 30.0));
 

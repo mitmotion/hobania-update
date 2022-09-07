@@ -2,17 +2,20 @@ use crate::{
     client::Client,
     login_provider::{LoginProvider, PendingLogin},
     metrics::PlayerMetrics,
+    sys::sentinel::TrackedStorages,
     EditableSettings, Settings,
 };
 use common::{
-    comp::{Admin, Player, Stats},
+    comp::{self, Admin, Player, Stats},
     event::{EventBus, ServerEvent},
+    recipe::{default_component_recipe_book, default_recipe_book},
+    resources::TimeOfDay,
     uid::{Uid, UidAllocator},
 };
 use common_ecs::{Job, Origin, Phase, System};
 use common_net::msg::{
     CharacterInfo, ClientRegister, DisconnectReason, PlayerInfo, PlayerListUpdate, RegisterError,
-    ServerGeneral,
+    ServerGeneral, ServerInit, WorldMapMsg,
 };
 use hashbrown::{hash_map, HashMap};
 use plugin_api::Health;
@@ -41,6 +44,11 @@ pub struct ReadData<'a> {
     player_metrics: ReadExpect<'a, PlayerMetrics>,
     settings: ReadExpect<'a, Settings>,
     editable_settings: ReadExpect<'a, EditableSettings>,
+    time_of_day: Read<'a, TimeOfDay>,
+    material_stats: ReadExpect<'a, comp::item::MaterialStatManifest>,
+    ability_map: ReadExpect<'a, comp::item::tool::AbilityMap>,
+    map: ReadExpect<'a, WorldMapMsg>,
+    trackers: TrackedStorages<'a>,
     _healths: ReadStorage<'a, Health>, // used by plugin feature
     _plugin_mgr: ReadPlugin<'a>,       // used by plugin feature
     _uid_allocator: Read<'a, UidAllocator>, // used by plugin feature

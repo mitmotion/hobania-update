@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 ### Fixed
+- Moderators and admins are no longer blocked from logging in when there are too many players.
 
 ## [0.13.0] - 2022-07-23
 
