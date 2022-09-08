@@ -83,7 +83,7 @@ use common::{
     terrain::{TerrainChunk, TerrainChunkSize},
     vol::RectRasterableVol,
 };
-use common_ecs::run_now;
+use common_ecs::{dispatch, run_now};
 use common_net::{
     msg::{
         ClientType, DisconnectReason, ServerGeneral, ServerInfo, ServerInit, ServerMsg, WorldMapMsg,
@@ -100,7 +100,7 @@ use persistence::{
 };
 use prometheus::Registry;
 use prometheus_hyper::Server as PrometheusServer;
-use specs::{join::Join, Builder, Entity as EcsEntity, Entity, SystemData, WorldExt};
+use specs::{join::Join, Builder, DispatcherBuilder, Entity as EcsEntity, Entity, SystemData, WorldExt};
 use std::{
     i32,
     ops::{Deref, DerefMut},
@@ -741,7 +741,7 @@ impl Server {
         let before_sync = Instant::now();
 
         // 6) Synchronise clients with the new state of the world.
-        sys::run_sync_systems(self.state.ecs_mut());
+        sys::run_sync_systems(&mut self.state);
 
         let before_world_tick = Instant::now();
 
@@ -755,7 +755,13 @@ impl Server {
         // perform client disconnections have been processed. This ensures that any
         // items on the ground are deleted.
         if let Some(DisconnectType::WithoutPersistence) = disconnect_type {
-            run_now::<terrain::Sys>(self.state.ecs_mut());
+            // NOTE: We build a dispatcher to avoid running in the global thread pool, although
+            // that's not exactly our biggest concern.
+            let mut dispatch_builder =
+                DispatcherBuilder::new().with_pool(Arc::clone(&self.state.thread_pool()));
+            dispatch::<terrain::Sys>(&mut dispatch_builder, &[]);
+            let mut dispatcher = dispatch_builder.build();
+            dispatcher.dispatch(&self.state.ecs());
         }
 
         // Prevent anchor entity chains which are not currently supported
@@ -995,6 +1001,10 @@ impl Server {
         let end_of_server_tick = Instant::now();
 
         // 8) Update Metrics
+        //
+        // NOTE: This system may not use parallelism currently, since it would execute in the
+        // global pool and uses run_now!  If we want to parallelize it, we should explicitly do so
+        // within our thread pool.
         run_now::<sys::metrics::Sys>(self.state.ecs());
 
         {

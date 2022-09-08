@@ -16,11 +16,14 @@ pub mod terrain_sync;
 pub mod waypoint;
 pub mod wiring;
 
+use common_base::span;
 use common_ecs::{dispatch, run_now, System};
+use common_state::State;
 use common_systems::{melee, projectile};
-use specs::DispatcherBuilder;
+use specs::{DispatcherBuilder, WorldExt};
 use std::{
     marker::PhantomData,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -42,15 +45,34 @@ pub fn add_server_systems(dispatch_builder: &mut DispatcherBuilder) {
     dispatch::<chunk_send::Sys>(dispatch_builder, &[]);
 }
 
-pub fn run_sync_systems(ecs: &mut specs::World) {
+pub fn run_sync_systems(state: &mut State) {
+    span!(_guard, "run_sync_systems");
+
+    // Create and run a dispatcher for ecs systems that synchronize state.
+    span!(guard, "create dispatcher");
+    let mut dispatch_builder =
+        DispatcherBuilder::new().with_pool(Arc::clone(&state.thread_pool()));
+
     // Setup for entity sync
-    // If I'm not mistaken, these two could be ran in parallel
-    run_now::<sentinel::Sys>(ecs);
-    run_now::<subscription::Sys>(ecs);
+    dispatch::<sentinel::Sys>(&mut dispatch_builder, &[]);
+    dispatch::<subscription::Sys>(&mut dispatch_builder, &[]);
 
     // Sync
-    run_now::<terrain_sync::Sys>(ecs);
-    run_now::<entity_sync::Sys>(ecs);
+    dispatch::<terrain_sync::Sys>(&mut dispatch_builder, &[]);
+    dispatch::<entity_sync::Sys>(&mut dispatch_builder, &[&sentinel::Sys::sys_name(), &subscription::Sys::sys_name()]);
+
+    // This dispatches all the systems in parallel.
+    let mut dispatcher = dispatch_builder.build();
+    drop(guard);
+
+    let ecs = state.ecs_mut();
+    span!(guard, "run systems");
+    dispatcher.dispatch(ecs);
+    drop(guard);
+
+    span!(guard, "maintain ecs");
+    ecs.maintain();
+    drop(guard);
 }
 
 /// Used to schedule systems to run at an interval
