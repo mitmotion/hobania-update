@@ -7632,7 +7632,7 @@ dependencies = [
 [[package]]
 name = "wgpu"
 version = "0.8.0"
-source = "git+https://github.com/pythonesque/wgpu.git?rev=c948ade0e723220dacc4cb34e899cac1b1b93422#c948ade0e723220dacc4cb34e899cac1b1b93422"
+source = "git+https://github.com/pythonesque/wgpu.git?rev=6f547242ea4bd649d874b6d19240f80ad0a752ad#6f547242ea4bd649d874b6d19240f80ad0a752ad"
 dependencies = [
  "arrayvec 0.5.2",
  "js-sys",
@@ -7652,7 +7652,7 @@ dependencies = [
 [[package]]
 name = "wgpu-core"
 version = "0.8.0"
-source = "git+https://github.com/pythonesque/wgpu.git?rev=c948ade0e723220dacc4cb34e899cac1b1b93422#c948ade0e723220dacc4cb34e899cac1b1b93422"
+source = "git+https://github.com/pythonesque/wgpu.git?rev=6f547242ea4bd649d874b6d19240f80ad0a752ad#6f547242ea4bd649d874b6d19240f80ad0a752ad"
 dependencies = [
  "arrayvec 0.5.2",
  "bitflags",
@@ -7693,7 +7693,7 @@ dependencies = [
 [[package]]
 name = "wgpu-types"
 version = "0.8.0"
-source = "git+https://github.com/pythonesque/wgpu.git?rev=c948ade0e723220dacc4cb34e899cac1b1b93422#c948ade0e723220dacc4cb34e899cac1b1b93422"
+source = "git+https://github.com/pythonesque/wgpu.git?rev=6f547242ea4bd649d874b6d19240f80ad0a752ad#6f547242ea4bd649d874b6d19240f80ad0a752ad"
 dependencies = [
  "bitflags",
  "serde",
