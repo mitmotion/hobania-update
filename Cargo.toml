@@ -123,7 +123,7 @@ nativeBuildInputs = ["pkg-config"]
 vek = { git = "https://github.com/yoanlcq/vek.git", rev = "84d5cb65841d46599a986c5477341bea4456be26" }
 # patch wgpu so we can use wgpu-profiler crate
 # wgpu = { git = "https://github.com/gfx-rs/wgpu.git", rev = "a92b8549a8e2cb9dac781bafc5ed32828f3caf46" }
-wgpu = { git = "https://github.com/pythonesque/wgpu.git", rev = "6f547242ea4bd649d874b6d19240f80ad0a752ad" }
+wgpu = { git = "https://github.com/pythonesque/wgpu.git", rev = "c78c3fe3f05e20d897740607a462dc540e3816a8" }
 # wgpu = { path = "../wgpu/wgpu" }
 # wgpu-core = { path = "../wgpu/wgpu-core" }
 # wgpu-types = { path = "../wgpu/wgpu-types" }
