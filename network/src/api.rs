@@ -67,9 +67,9 @@ pub enum ParticipantEvent {
 pub struct Participant {
     local_pid: Pid,
     remote_pid: Pid,
-    a2b_open_stream_s: Mutex<mpsc::UnboundedSender<A2bStreamOpen>>,
-    b2a_stream_opened_r: Mutex<mpsc::UnboundedReceiver<Stream>>,
-    b2a_event_r: Mutex<mpsc::UnboundedReceiver<ParticipantEvent>>,
+    a2b_open_stream_s: mpsc::UnboundedSender<A2bStreamOpen>,
+    b2a_stream_opened_r: mpsc::UnboundedReceiver<Stream>,
+    b2a_event_r: mpsc::UnboundedReceiver<ParticipantEvent>,
     b2a_bandwidth_stats_r: watch::Receiver<f32>,
     a2s_disconnect_s: A2sDisconnect,
 }
@@ -195,9 +195,9 @@ pub struct StreamParams {
 pub struct Network {
     local_pid: Pid,
     participant_disconnect_sender: Arc<Mutex<HashMap<Pid, A2sDisconnect>>>,
-    listen_sender: Mutex<mpsc::UnboundedSender<(ListenAddr, oneshot::Sender<io::Result<()>>)>>,
-    connect_sender: Mutex<mpsc::UnboundedSender<A2sConnect>>,
-    connected_receiver: Mutex<mpsc::UnboundedReceiver<Participant>>,
+    listen_sender: mpsc::UnboundedSender<(ListenAddr, oneshot::Sender<io::Result<()>>)>,
+    connect_sender: mpsc::UnboundedSender<A2sConnect>,
+    connected_receiver: mpsc::UnboundedReceiver<Participant>,
     shutdown_network_s: Option<oneshot::Sender<oneshot::Sender<()>>>,
 }
 
@@ -300,9 +300,9 @@ impl Network {
         Self {
             local_pid: participant_id,
             participant_disconnect_sender,
-            listen_sender: Mutex::new(listen_sender),
-            connect_sender: Mutex::new(connect_sender),
-            connected_receiver: Mutex::new(connected_receiver),
+            listen_sender,
+            connect_sender,
+            connected_receiver,
             shutdown_network_s: Some(shutdown_network_s),
         }
     }
@@ -342,10 +342,7 @@ impl Network {
     pub async fn listen(&self, address: ListenAddr) -> Result<(), NetworkError> {
         let (s2a_result_s, s2a_result_r) = oneshot::channel::<io::Result<()>>();
         debug!(?address, "listening on address");
-        self.listen_sender
-            .lock()
-            .await
-            .send((address, s2a_result_s))?;
+        self.listen_sender.send((address, s2a_result_s))?;
         match s2a_result_r.await? {
             //waiting guarantees that we either listened successfully or get an error like port in
             // use
@@ -401,10 +398,7 @@ impl Network {
         let (pid_sender, pid_receiver) =
             oneshot::channel::<Result<Participant, NetworkConnectError>>();
         debug!(?address, "Connect to address");
-        self.connect_sender
-            .lock()
-            .await
-            .send((address, pid_sender))?;
+        self.connect_sender.send((address, pid_sender))?;
         let participant = match pid_receiver.await? {
             Ok(p) => p,
             Err(e) => return Err(NetworkError::ConnectFailed(e)),
@@ -454,11 +448,9 @@ impl Network {
     /// [`listen`]: crate::api::Network::listen
     /// [`ListenAddr`]: crate::api::ListenAddr
     #[instrument(name="network", skip(self), fields(p = %self.local_pid))]
-    pub async fn connected(&self) -> Result<Participant, NetworkError> {
+    pub async fn connected(&mut self) -> Result<Participant, NetworkError> {
         let participant = self
             .connected_receiver
-            .lock()
-            .await
             .recv()
             .await
             .ok_or(NetworkError::NetworkClosed)?;
@@ -536,9 +528,9 @@ impl Participant {
         Self {
             local_pid,
             remote_pid,
-            a2b_open_stream_s: Mutex::new(a2b_open_stream_s),
-            b2a_stream_opened_r: Mutex::new(b2a_stream_opened_r),
-            b2a_event_r: Mutex::new(b2a_event_r),
+            a2b_open_stream_s,
+            b2a_stream_opened_r,
+            b2a_event_r,
             b2a_bandwidth_stats_r,
             a2s_disconnect_s: Arc::new(Mutex::new(Some(a2s_disconnect_s))),
         }
@@ -600,12 +592,10 @@ impl Participant {
     ) -> Result<Stream, ParticipantError> {
         debug_assert!(prio <= network_protocol::HIGHEST_PRIO, "invalid prio");
         let (p2a_return_stream_s, p2a_return_stream_r) = oneshot::channel::<Stream>();
-        if let Err(e) = self.a2b_open_stream_s.lock().await.send((
-            prio,
-            promises,
-            bandwidth,
-            p2a_return_stream_s,
-        )) {
+        if let Err(e) =
+            self.a2b_open_stream_s
+                .send((prio, promises, bandwidth, p2a_return_stream_s))
+        {
             debug!(?e, "bParticipant is already closed, notifying");
             return Err(ParticipantError::ParticipantDisconnected);
         }
@@ -657,8 +647,8 @@ impl Participant {
     /// [`connected`]: Network::connected
     /// [`open`]: Participant::open
     #[instrument(name="network", skip(self), fields(p = %self.local_pid))]
-    pub async fn opened(&self) -> Result<Stream, ParticipantError> {
-        match self.b2a_stream_opened_r.lock().await.recv().await {
+    pub async fn opened(&mut self) -> Result<Stream, ParticipantError> {
+        match self.b2a_stream_opened_r.recv().await {
             Some(stream) => {
                 let sid = stream.sid;
                 debug!(?sid, "Receive opened stream");
@@ -794,8 +784,8 @@ impl Participant {
     /// ```
     ///
     /// [`ParticipantEvent`]: crate::api::ParticipantEvent
-    pub async fn fetch_event(&self) -> Result<ParticipantEvent, ParticipantError> {
-        match self.b2a_event_r.lock().await.recv().await {
+    pub async fn fetch_event(&mut self) -> Result<ParticipantEvent, ParticipantError> {
+        match self.b2a_event_r.recv().await {
             Some(event) => Ok(event),
             None => {
                 debug!("event_receiver failed, closing participant");
@@ -811,16 +801,13 @@ impl Participant {
     ///
     /// [`ParticipantEvent`]: crate::api::ParticipantEvent
     /// [`fetch_event`]: Participant::fetch_event
-    pub fn try_fetch_event(&self) -> Result<Option<ParticipantEvent>, ParticipantError> {
-        match &mut self.b2a_event_r.try_lock() {
-            Ok(b2a_event_r) => match b2a_event_r.try_recv() {
-                Ok(event) => Ok(Some(event)),
-                Err(mpsc::error::TryRecvError::Empty) => Ok(None),
-                Err(mpsc::error::TryRecvError::Disconnected) => {
-                    Err(ParticipantError::ParticipantDisconnected)
-                },
+    pub fn try_fetch_event(&mut self) -> Result<Option<ParticipantEvent>, ParticipantError> {
+        match self.b2a_event_r.try_recv() {
+            Ok(event) => Ok(Some(event)),
+            Err(mpsc::error::TryRecvError::Empty) => Ok(None),
+            Err(mpsc::error::TryRecvError::Disconnected) => {
+                Err(ParticipantError::ParticipantDisconnected)
             },
-            Err(_) => Ok(None),
         }
     }
 
@@ -914,7 +901,7 @@ impl Stream {
     /// [`recv`]: Stream::recv
     /// [`Serialized`]: Serialize
     #[inline]
-    pub fn send<M: Serialize>(&mut self, msg: M) -> Result<(), StreamError> {
+    pub fn send<M: Serialize>(&self, msg: M) -> Result<(), StreamError> {
         self.send_raw_move(Message::serialize(&msg, self.params()))
     }
 
@@ -966,7 +953,7 @@ impl Stream {
     /// [`compress`]: lz_fear::raw::compress2
     /// [`Message::serialize`]: crate::message::Message::serialize
     #[inline]
-    pub fn send_raw(&mut self, message: &Message) -> Result<(), StreamError> {
+    pub fn send_raw(&self, message: &Message) -> Result<(), StreamError> {
         self.send_raw_move(Message {
             data: message.data.clone(),
             #[cfg(feature = "compression")]
@@ -974,7 +961,7 @@ impl Stream {
         })
     }
 
-    fn send_raw_move(&mut self, message: Message) -> Result<(), StreamError> {
+    fn send_raw_move(&self, message: Message) -> Result<(), StreamError> {
         if self.send_closed.load(Ordering::Relaxed) {
             return Err(StreamError::StreamClosed);
         }

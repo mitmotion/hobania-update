@@ -6844,6 +6844,7 @@ dependencies = [
  "lazy_static",
  "noise",
  "num_cpus",
+ "parking_lot 0.12.0",
  "portpicker",
  "prometheus",
  "prometheus-hyper",

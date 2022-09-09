@@ -293,7 +293,7 @@ impl Client {
     ) -> Result<Self, Error> {
         let network = Network::new(Pid::new(), &runtime);
 
-        let participant = match addr {
+        let mut participant = match addr {
             ConnectionArgs::Tcp {
                 hostname,
                 prefer_ipv6,
@@ -316,7 +316,7 @@ impl Client {
         };
 
         let stream = participant.opened().await?;
-        let mut ping_stream = participant.opened().await?;
+        let ping_stream = participant.opened().await?;
         let mut register_stream = participant.opened().await?;
         let character_screen_stream = participant.opened().await?;
         let in_game_stream = participant.opened().await?;
@@ -2514,7 +2514,7 @@ impl Client {
         }
 
         // ignore network events
-        while let Some(Ok(Some(event))) = self.participant.as_ref().map(|p| p.try_fetch_event()) {
+        while let Some(Ok(Some(event))) = self.participant.as_mut().map(|p| p.try_fetch_event()) {
             trace!(?event, "received network event");
         }
 

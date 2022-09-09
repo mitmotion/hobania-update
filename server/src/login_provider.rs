@@ -98,15 +98,15 @@ impl LoginProvider {
         PendingLogin { pending_r }
     }
 
-    pub fn login(
-        &mut self,
+    pub(crate) fn login<R>(
         pending: &mut PendingLogin,
         #[cfg(feature = "plugins")] world: &EcsWorld,
         #[cfg(feature = "plugins")] plugin_manager: &PluginMgr,
         admins: &HashMap<Uuid, AdminRecord>,
         whitelist: &HashMap<Uuid, WhitelistRecord>,
         banlist: &HashMap<Uuid, BanEntry>,
-    ) -> Option<Result<(String, Uuid), RegisterError>> {
+        player_count_exceeded: impl FnOnce(String, Uuid) -> (bool, R),
+    ) -> Option<Result<R, RegisterError>> {
         match pending.pending_r.try_recv() {
             Ok(Err(e)) => Some(Err(e)),
             Ok(Ok((username, uuid))) => {
@@ -142,6 +142,9 @@ impl LoginProvider {
                 {
                     // Plugin player join hooks execute for all players, but are only allowed to
                     // filter non-admins.
+                    //
+                    // We also run it before checking player count, to avoid lock contention in the
+                    // plugin.
                     match plugin_manager.execute_event(world, &PlayerJoinEvent {
                         player_name: username.clone(),
                         player_id: *uuid.as_bytes(),
@@ -161,8 +164,13 @@ impl LoginProvider {
                     };
                 }
 
-                info!(?username, "New User");
-                Some(Ok((username, uuid)))
+                // non-admins can only join if the player count has not been exceeded.
+                let (player_count_exceeded, res) = player_count_exceeded(username, uuid);
+                if admin.is_none() && player_count_exceeded {
+                    return Some(Err(RegisterError::TooManyPlayers));
+                }
+
+                Some(Ok(res))
             },
             Err(oneshot::error::TryRecvError::Closed) => {
                 error!("channel got closed to early, this shouldn't happen");

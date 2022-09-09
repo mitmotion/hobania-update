@@ -2,7 +2,7 @@ use crate::{Client, ClientType, ServerInfo};
 use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use futures_util::future::FutureExt;
 use network::{Network, Participant, Promises};
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 use tokio::{runtime::Runtime, select, sync::oneshot};
 use tracing::{debug, error, trace, warn};
 
@@ -14,7 +14,6 @@ pub(crate) struct ServerInfoPacket {
 pub(crate) type IncomingClient = Client;
 
 pub(crate) struct ConnectionHandler {
-    _network: Arc<Network>,
     thread_handle: Option<tokio::task::JoinHandle<()>>,
     pub client_receiver: Receiver<IncomingClient>,
     pub info_requester_receiver: Receiver<Sender<ServerInfoPacket>>,
@@ -27,8 +26,6 @@ pub(crate) struct ConnectionHandler {
 /// and time
 impl ConnectionHandler {
     pub fn new(network: Network, runtime: &Runtime) -> Self {
-        let network = Arc::new(network);
-        let network_clone = Arc::clone(&network);
         let (stop_sender, stop_receiver) = oneshot::channel();
 
         let (client_sender, client_receiver) = unbounded::<IncomingClient>();
@@ -36,14 +33,13 @@ impl ConnectionHandler {
             bounded::<Sender<ServerInfoPacket>>(1);
 
         let thread_handle = Some(runtime.spawn(Self::work(
-            network_clone,
+            network,
             client_sender,
             info_requester_sender,
             stop_receiver,
         )));
 
         Self {
-            _network: network,
             thread_handle,
             client_receiver,
             info_requester_receiver,
@@ -52,7 +48,7 @@ impl ConnectionHandler {
     }
 
     async fn work(
-        network: Arc<Network>,
+        mut network: Network,
         client_sender: Sender<IncomingClient>,
         info_requester_sender: Sender<Sender<ServerInfoPacket>>,
         stop_receiver: oneshot::Receiver<()>,
