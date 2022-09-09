@@ -19,6 +19,7 @@ common-base = { package = "veloren-common-base", path = "../base" }
 core_affinity = "0.5"
 rayon = "1.5"
 num_cpus = "1.0"
+thread-priority = { version = "0.9.2" }
 tracing = { version = "0.1", default-features = false }
 vek = { version = "0.15.8", features = ["serde"] }
 

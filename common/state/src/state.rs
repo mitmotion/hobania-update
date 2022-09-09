@@ -35,6 +35,7 @@ use specs::{
     storage::{MaskedStorage as EcsMaskedStorage, Storage as EcsStorage},
     Component, DispatcherBuilder, Entity as EcsEntity, WorldExt,
 };
+use thread_priority::{ThreadBuilder, ThreadPriority};
 use std::sync::Arc;
 use vek::*;
 
@@ -124,11 +125,28 @@ impl State {
             GameMode::Singleplayer => num_cpu / 4,
         }*/num_cpu.max(common::consts::MIN_RECOMMENDED_RAYON_THREADS);
         let core_ids = /*(rayon_threads >= 16).then(|| */core_affinity::get_core_ids().unwrap_or(vec![])/*).unwrap_or(vec![])*/;
+        let core_count = core_ids.len();
         let rayon_pool = Arc::new(
             ThreadPoolBuilder::new()
                 .num_threads(rayon_threads/*.saturating_sub(rayon_offset)*/)
                 // .thread_name(move |i| format!("rayon-{}", i))
                 .thread_name(move |i| format!("rayon-{}-{}", thread_name_infix, i))
+                .spawn_handler(move |thread| {
+                    let mut b = ThreadBuilder::default();
+                    if let Some(name) = thread.name() {
+                        b = b.name(name.to_owned());
+                    }
+                    if let Some(stack_size) = thread.stack_size() {
+                        b = b.stack_size(stack_size);
+                    }
+                    // pinned rayon threads run with high priority
+                    let index = thread.index();
+                    if index.checked_sub(rayon_offset).map_or(false, |i| i < core_count) {
+                        b = b.priority(ThreadPriority::Max);
+                    }
+                    b.spawn_careless(|| thread.run())?;
+                    Ok(())
+                })
                 .start_handler(move |i| {
                     if let Some(&core_id) = i.checked_sub(rayon_offset).and_then(|i| core_ids.get(i)) {
                         core_affinity::set_for_current(core_id);
