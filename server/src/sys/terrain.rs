@@ -34,6 +34,7 @@ use common_ecs::{Job, Origin, Phase, System};
 use common_net::msg::ServerGeneral;
 use common_state::TerrainChanges;
 use comp::Behavior;
+use rayon::iter::ParallelIterator;
 use specs::{Entities, Join, Read, ReadExpect, ReadStorage, Write, WriteExpect, WriteStorage};
 use std::sync::Arc;
 use vek::*;
@@ -310,29 +311,27 @@ impl<'a> System<'a> for Sys {
         );
 
         // Remove chunks that are too far from players.
-        let mut chunks_to_remove = Vec::new();
-        terrain
-            .iter()
-            .map(|(k, _)| k)
+        let chunks_to_remove = terrain
+            .par_keys()
+            .copied()
             // Don't check every chunk every tick (spread over 16 ticks)
             .filter(|k| k.x.unsigned_abs() % 4 + (k.y.unsigned_abs() % 4) * 4 == (tick.0 % 16) as u32)
             // There shouldn't be to many pending chunks so we will just check them all
-            .chain(chunk_generator.pending_chunks())
-            .for_each(|chunk_key| {
+            .chain(chunk_generator.par_pending_chunks())
+            .filter(|chunk_key| {
                 let mut should_drop = true;
 
                 // For each player with a position, calculate the distance.
                 for (presence, pos) in (&presences, &positions).join() {
-                    if chunk_in_vd(pos.0, chunk_key, &terrain, presence.view_distance) {
+                    if chunk_in_vd(pos.0, *chunk_key, &terrain, presence.view_distance) {
                         should_drop = false;
                         break;
                     }
                 }
 
-                if should_drop {
-                    chunks_to_remove.push(chunk_key);
-                }
-            });
+                !should_drop
+            })
+            .collect::<Vec<_>>();
 
         for key in chunks_to_remove {
             // Register the unloading of this chunk from terrain persistence

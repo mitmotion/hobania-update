@@ -30,6 +30,13 @@ impl<V: RectRasterableVol> VolGrid2d<V> {
     }
 
     #[inline(always)]
+    pub fn par_keys(&self) -> hashbrown::hash_map::rayon::ParKeys<Vec2<i32>, Arc<V>>
+        where V: Send + Sync,
+    {
+        self.chunks.par_keys()
+    }
+
+    #[inline(always)]
     pub fn chunk_offs(pos: Vec3<i32>) -> Vec3<i32> {
         let offs = Vec2::<i32>::from(pos).map2(V::RECT_SIZE, |e, sz| e & (sz - 1) as i32);
         Vec3::new(offs.x, offs.y, pos.z)

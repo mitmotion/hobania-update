@@ -12,6 +12,7 @@ use common::{
     resources::TimeOfDay,
     uid::{Uid, UidAllocator},
 };
+use common_base::prof_span;
 use common_ecs::{Job, Origin, Phase, System};
 use common_net::msg::{
     CharacterInfo, ClientRegister, DisconnectReason, PlayerInfo, PlayerListUpdate, RegisterError,
@@ -109,13 +110,15 @@ impl<'a> System<'a> for Sys {
         //
         // Big enough that we hopefully won't have to reallocate.
         //
-        // Also includes a list of logins to retry, since we happen to update those
-        // around the same time that we update the new players list.
+        // Also includes a list of logins to retry and finished_pending, since we
+        // happen to update those around the same time that we update the new
+        // players list.
         //
         // NOTE: stdlib mutex is more than good enough on Linux and (probably) Windows,
         // but not Mac.
         let new_players = parking_lot::Mutex::new((
             HashMap::<_, (_, _, _, _)>::with_capacity(capacity),
+            Vec::with_capacity(capacity),
             Vec::with_capacity(capacity),
         ));
 
@@ -153,21 +156,20 @@ impl<'a> System<'a> for Sys {
         // It will be overwritten in ServerExt::update_character_data.
         let battle_mode = read_data.settings.gameplay.battle_mode.default_mode();
 
-        let finished_pending = (
+        (
             &read_data.entities,
             &read_data.uids,
             &clients,
             !players.mask(),
             &mut pending_logins,
         )
-            .par_join()
-            .fold_with(
-                // (Finished pending entity list, emitter)
-                (vec![], OptionClone(None)),
-                |(mut finished_pending, mut server_emitter_), (entity, uid, client, _, pending)| {
-                    let server_emitter = server_emitter_
-                        .0
-                        .get_or_insert_with(|| read_data.server_event_bus.emitter());
+            .join()
+            // NOTE: Required because Specs has very poor work splitting for sparse joins.
+            .par_bridge()
+            .for_each_init(
+                || read_data.server_event_bus.emitter(),
+                |server_emitter, (entity, uid, client, _, pending)| {
+                    prof_span!("msg::register login");
                     if let Err(e) = || -> Result<(), crate::error::Error> {
                         // Destructure new_players_guard last so it gets dropped before the other
                         // three.
@@ -229,9 +231,9 @@ impl<'a> System<'a> for Sys {
                         ) {
                             None => return Ok(()),
                             Some(r) => {
-                                finished_pending.push(entity);
                                 match r {
                                     Err(e) => {
+                                        new_players.lock().2.push(entity);
                                         // NOTE: Done only on error to avoid doing extra work within
                                         // the lock.
                                         trace!(?e, "pending login returned error");
@@ -249,7 +251,8 @@ impl<'a> System<'a> for Sys {
                             },
                         };
 
-                        let (new_players_by_uuid, retries) = &mut *new_players_guard;
+                        let (new_players_by_uuid, retries, finished_pending) = &mut *new_players_guard;
+                        finished_pending.push(entity);
                         // Check if the user logged in before us during this tick (this is why we
                         // need the lock held).
                         let uuid = player.uuid();
@@ -355,16 +358,13 @@ impl<'a> System<'a> for Sys {
                     }() {
                         trace!(?e, "failed to process register");
                     }
-                    (finished_pending, server_emitter_)
                 },
-            )
-            .map(|(finished_pending, _server_emitter)| finished_pending)
-            .collect::<Vec<_>>();
-        finished_pending.into_iter().flatten().for_each(|e| {
+            );
+        let (new_players, retries, finished_pending) = new_players.into_inner();
+        finished_pending.into_iter().for_each(|e| {
             // Remove all entities in finished_pending from pending_logins.
             pending_logins.remove(e);
         });
-        let (new_players, retries) = new_players.into_inner();
 
         // Insert retry attempts back into pending_logins to be processed next tick
         for (entity, pending) in retries {

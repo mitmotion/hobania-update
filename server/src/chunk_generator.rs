@@ -6,6 +6,7 @@ use common::{
     terrain::TerrainChunk,
 };
 use hashbrown::{hash_map::Entry, HashMap};
+use rayon::iter::ParallelIterator;
 use specs::Entity as EcsEntity;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -80,6 +81,10 @@ impl ChunkGenerator {
 
     pub fn pending_chunks(&self) -> impl Iterator<Item = Vec2<i32>> + '_ {
         self.pending_chunks.keys().copied()
+    }
+
+    pub fn par_pending_chunks(&self) -> impl rayon::iter::ParallelIterator<Item = Vec2<i32>> + '_ {
+        self.pending_chunks.par_keys().copied()
     }
 
     pub fn cancel_if_pending(&mut self, key: Vec2<i32>) {
