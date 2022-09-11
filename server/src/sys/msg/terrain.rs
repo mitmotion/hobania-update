@@ -11,7 +11,7 @@ use common::{
 };
 use common_ecs::{Job, Origin, ParMode, Phase, System};
 use common_net::msg::{ClientGeneral, ServerGeneral};
-use rayon::iter::ParallelIterator;
+use rayon::prelude::*;
 use specs::{Entities, Join, ParJoin, Read, ReadExpect, ReadStorage, Write, WriteStorage};
 use tracing::{debug, trace};
 
@@ -53,7 +53,9 @@ impl<'a> System<'a> for Sys {
     ) {
         job.cpu_stats.measure(ParMode::Rayon);
         let mut new_chunk_requests = (&entities, &mut clients, (&presences).maybe())
-            .par_join()
+            .join()
+            // NOTE: Required because Specs has very poor work splitting for sparse joins.
+            .par_bridge()
             .map_init(
                 || (chunk_send_bus.emitter(), server_event_bus.emitter()),
                 |(chunk_send_emitter, server_emitter), (entity, client, maybe_presence)| {

@@ -266,15 +266,9 @@ impl World {
             Some(sampler) => (/*base_z as i32, */sampler.column_gen.sim_chunk, sampler),
             // Some((base_z, sim_chunk)) => (base_z as i32, sim_chunk),
             None => {
-                return Ok((
-                    TerrainChunk::new(
-                        CONFIG.sea_level as i32,
-                        water,
-                        air,
-                        TerrainChunkMeta::void(),
-                    ),
-                    ChunkSupplement::default(),
-                ));
+                // NOTE: This is necessary in order to generate a handful of chunks at the edges of
+                // the map.
+                return Ok((self.sim().generate_oob_chunk(), ChunkSupplement::default()));
             },
         };
 

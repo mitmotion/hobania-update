@@ -17,7 +17,7 @@ use common::{
         TimeOfDay,
     },
     slowjob::{self, SlowJobPool},
-    terrain::{Block, TerrainChunk, TerrainGrid},
+    terrain::{Block, MapSizeLg, TerrainChunk, TerrainGrid},
     time::DayPeriod,
     trade::Trades,
     vol::{ReadVol, WriteVol},
@@ -179,12 +179,16 @@ impl State {
     }
 
     /// Create a new `State` in client mode.
-    pub fn client(pools: Pools) -> Self { Self::new(GameMode::Client, pools) }
+    pub fn client(pools: Pools, map_size_lg: MapSizeLg, default_chunk: Arc<TerrainChunk>) -> Self {
+        Self::new(GameMode::Client, pools, map_size_lg, default_chunk)
+    }
 
     /// Create a new `State` in server mode.
-    pub fn server(pools: Pools) -> Self { Self::new(GameMode::Server, pools) }
+    pub fn server(pools: Pools, map_size_lg: MapSizeLg, default_chunk: Arc<TerrainChunk>) -> Self {
+        Self::new(GameMode::Server, pools, map_size_lg, default_chunk)
+    }
 
-    pub fn new(ecs_role: GameMode, pools: Pools) -> Self {
+    pub fn new(ecs_role: GameMode, pools: Pools, map_size_lg: MapSizeLg, default_chunk: Arc<TerrainChunk>) -> Self {
         /* let thread_name_infix = match game_mode {
             GameMode::Server => "s",
             GameMode::Client => "c",
@@ -243,7 +247,7 @@ impl State {
         );
 
         Self {
-            ecs: Self::setup_ecs_world(ecs_role, /*num_cpu as u64*//*, &thread_pool, *//*pools.1*/slowjob/*pools.3*/),
+            ecs: Self::setup_ecs_world(ecs_role, /*num_cpu as u64*//*, &thread_pool, *//*pools.1*/slowjob/*pools.3*/, map_size_lg, default_chunk),
             thread_pool: pools.2,
         }
     }
@@ -251,7 +255,12 @@ impl State {
     /// Creates ecs world and registers all the common components and resources
     // TODO: Split up registering into server and client (e.g. move
     // EventBus<ServerEvent> to the server)
-    fn setup_ecs_world(ecs_role: GameMode, /*num_cpu: u64*//*, thread_pool: &Arc<ThreadPool>, */slowjob: SlowJobPool) -> specs::World {
+    fn setup_ecs_world(
+        ecs_role: GameMode, /*num_cpu: u64*//*, thread_pool: &Arc<ThreadPool>, */
+        slowjob: SlowJobPool,
+        map_size_lg: MapSizeLg,
+        default_chunk: Arc<TerrainChunk>,
+    ) -> specs::World {
         let mut ecs = specs::World::new();
         // Uids for sync
         ecs.register_sync_marker();
@@ -340,7 +349,7 @@ impl State {
         ecs.insert(Time(0.0));
         ecs.insert(DeltaTime(0.0));
         ecs.insert(PlayerEntity(None));
-        ecs.insert(TerrainGrid::new().unwrap());
+        ecs.insert(TerrainGrid::new(map_size_lg, default_chunk).unwrap());
         ecs.insert(BlockChange::default());
         ecs.insert(crate::build_areas::BuildAreas::default());
         ecs.insert(TerrainChanges::default());

@@ -31,7 +31,7 @@ struct Opt {
 fn main() {
     let opt = Opt::from_args();
     // Start logging
-    common_frontend::init_stdout(None);
+    let _guards = common_frontend::init_stdout(None);
     // Run clients and stuff
     //
     // NOTE:  "swarm0" is assumed to be an admin already
@@ -49,6 +49,8 @@ fn main() {
 
     let finished_init = Arc::new(AtomicU32::new(0));
     let runtime = Arc::new(Runtime::new().unwrap());
+    let mut pools = common_state::State::pools(common::resources::GameMode::Client);
+    pools.0 = 0;
 
     // TODO: calculate and log the required chunks per second to maintain the
     // selected scenario with full vd loaded
@@ -58,6 +60,7 @@ fn main() {
         0,
         to_adminify,
         &runtime,
+        &pools,
         opt,
         &finished_init,
     );
@@ -68,14 +71,13 @@ fn main() {
             index as u32,
             Vec::new(),
             &runtime,
+            &pools,
             opt,
             &finished_init,
         );
     });
 
-    loop {
-        thread::sleep(Duration::from_secs_f32(1.0));
-    }
+    std::thread::park();
 }
 
 fn run_client_new_thread(
@@ -83,13 +85,15 @@ fn run_client_new_thread(
     index: u32,
     to_adminify: Vec<String>,
     runtime: &Arc<Runtime>,
+    pools: &common_state::Pools,
     opt: Opt,
     finished_init: &Arc<AtomicU32>,
 ) {
     let runtime = Arc::clone(runtime);
+    let pools = pools.clone();
     let finished_init = Arc::clone(finished_init);
     thread::spawn(move || {
-        if let Err(err) = run_client(username, index, to_adminify, runtime, opt, finished_init) {
+        if let Err(err) = run_client(username, index, to_adminify, pools, runtime, opt, finished_init) {
             tracing::error!("swarm member {} exited with an error: {:?}", index, err);
         }
     });
@@ -99,29 +103,34 @@ fn run_client(
     username: String,
     index: u32,
     to_adminify: Vec<String>,
+    pools: common_state::Pools,
     runtime: Arc<Runtime>,
     opt: Opt,
     finished_init: Arc<AtomicU32>,
 ) -> Result<(), veloren_client::Error> {
-    // Connect to localhost
-    let addr = ConnectionArgs::Tcp {
-        prefer_ipv6: false,
-        hostname: "localhost".into(),
+    let mut client = loop {
+        // Connect to localhost
+        let addr = ConnectionArgs::Tcp {
+            prefer_ipv6: false,
+            hostname: "localhost".into(),
+        };
+        let runtime_clone = Arc::clone(&runtime);
+        // NOTE: use a no-auth server
+        match runtime
+            .block_on(Client::new(
+                addr,
+                runtime_clone,
+                &mut None,
+                pools.clone(),
+                &username,
+                "",
+                |_| false,
+            )) {
+                Err(e) => tracing::warn!(?e, "Client {} disconnected", index),
+                Ok(client) => break client,
+            }
     };
-    let runtime_clone = Arc::clone(&runtime);
-    // NOTE: use a no-auth server
-    let mut client = runtime
-        .block_on(Client::new(
-            addr,
-            runtime_clone,
-            &mut None,
-            common_state::State::pools(common::resources::GameMode::Client),
-            &username,
-            "",
-            |_| false,
-        ))
-        .expect("Failed to connect to the server");
-    client.set_view_distance(opt.vd);
+    drop(pools);
 
     let mut clock = common::clock::Clock::new(Duration::from_secs_f32(1.0 / 30.0));
 
@@ -164,6 +173,8 @@ fn run_client(
             .id
             .expect("Why is this an option?"),
     );
+
+    client.set_view_distance(opt.vd);
 
     // If this is the admin client then adminify the other swarm members
     if !to_adminify.is_empty() {

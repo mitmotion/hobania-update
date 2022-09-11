@@ -60,6 +60,14 @@ impl ChunkGenerator {
             let index = index.as_index_ref();
             let payload = world
                 .generate_chunk(index, key, || cancel.load(Ordering::Relaxed), Some(time))
+                // FIXME: Since only the first entity who cancels a chunk is notified, we end up
+                // delaying chunk re-requests for up to 3 seconds for other clients, which isn't
+                // great.  We *could* store all the other requesting clients here, but it could
+                // bloat memory a lot.  Currently, this isn't much of an issue because we rarely
+                // have large numbers of pending chunks, so most of them are likely to be nearby an
+                // actual player most of the time, but that will eventually change.  In the future,
+                // some solution that always pushes chunk updates to players (rather than waiting
+                // for explicit requests) should adequately solve this kind of issue.
                 .map_err(|_| entity);
             let _ = chunk_tx.send((key, payload));
         });

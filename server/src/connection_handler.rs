@@ -14,6 +14,12 @@ pub(crate) struct ServerInfoPacket {
 pub(crate) type IncomingClient = Client;
 
 pub(crate) struct ConnectionHandler {
+    /// We never actually use this, but if it's dropped before the network has a chance to exit,
+    /// it won't block the main thread, and if it is dropped after the network thread ends, it
+    /// will drop the network here (rather than delaying the network thread).  So it emulates
+    /// the effects of storing the network in an Arc, without us losing mutability in the network
+    /// thread.
+    _network_receiver: oneshot::Receiver<Network>,
     thread_handle: Option<tokio::task::JoinHandle<()>>,
     pub client_receiver: Receiver<IncomingClient>,
     pub info_requester_receiver: Receiver<Sender<ServerInfoPacket>>,
@@ -27,6 +33,7 @@ pub(crate) struct ConnectionHandler {
 impl ConnectionHandler {
     pub fn new(network: Network, runtime: &Runtime) -> Self {
         let (stop_sender, stop_receiver) = oneshot::channel();
+        let (network_sender, _network_receiver) = oneshot::channel();
 
         let (client_sender, client_receiver) = unbounded::<IncomingClient>();
         let (info_requester_sender, info_requester_receiver) =
@@ -37,6 +44,7 @@ impl ConnectionHandler {
             client_sender,
             info_requester_sender,
             stop_receiver,
+            network_sender,
         )));
 
         Self {
@@ -44,15 +52,24 @@ impl ConnectionHandler {
             client_receiver,
             info_requester_receiver,
             stop_sender: Some(stop_sender),
+            _network_receiver,
         }
     }
 
     async fn work(
-        mut network: Network,
+        network: Network,
         client_sender: Sender<IncomingClient>,
         info_requester_sender: Sender<Sender<ServerInfoPacket>>,
         stop_receiver: oneshot::Receiver<()>,
+        network_sender: oneshot::Sender<Network>,
     ) {
+        // Emulate the effects of storing the network in an Arc, without losing mutability.
+        let mut network_sender = Some(network_sender);
+        let mut network = drop_guard::guard(network, move |network| {
+            // If the network receiver was already dropped, we just drop the network here, just
+            // like Arc, so we don't care about the result.
+            let _ = network_sender.take().expect("Only used once in drop").send(network);
+        });
         let mut stop_receiver = stop_receiver.fuse();
         loop {
             let participant = match select!(

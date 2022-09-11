@@ -1074,7 +1074,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                         for i in -1..2 {
                             for j in -1..2 {
                                 neighbours &= terrain
-                                    .contains_key(pos + Vec2::new(i, j));
+                                    .contains_key_real(pos + Vec2::new(i, j));
                             }
                         }
 
@@ -1170,7 +1170,7 @@ impl/*<V: RectRasterableVol>*/ Terrain<V> {
                     for i in -1..2 {
                         for j in -1..2 {
                             neighbours &= terrain
-                                .contains_key(neighbour_chunk_pos + Vec2::new(i, j));
+                                .contains_key_real(neighbour_chunk_pos + Vec2::new(i, j));
                         }
                     }
                     if neighbours {

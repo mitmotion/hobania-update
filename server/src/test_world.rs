@@ -42,6 +42,15 @@ impl World {
     #[inline(always)]
     pub const fn map_size_lg(&self) -> MapSizeLg { DEFAULT_WORLD_CHUNKS_LG }
 
+    pub fn generate_oob_chunk(&self) -> TerrainChunk {
+        TerrainChunk::new(
+            0,
+            Block::new(BlockKind::Water, Rgb::zero()),
+            Block::air(SpriteKind::Empty),
+            TerrainChunkMeta::void(),
+        )
+    }
+
     pub fn generate_chunk(
         &self,
         _index: IndexRef,

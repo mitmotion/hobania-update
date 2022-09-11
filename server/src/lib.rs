@@ -238,7 +238,43 @@ impl Server {
 
         let battlemode_buffer = BattleModeBuffer::default();
 
-        let mut state = State::server(pools);
+        #[cfg(feature = "worldgen")]
+        let (world, index) = World::generate(
+            settings.world_seed,
+            WorldOpts {
+                seed_elements: true,
+                world_file: if let Some(ref opts) = settings.map_file {
+                    opts.clone()
+                } else {
+                    // Load default map from assets.
+                    FileOpts::LoadAsset(DEFAULT_WORLD_MAP.into())
+                },
+                calendar: Some(settings.calendar_mode.calendar_now()),
+            },
+            &pools.2,
+        );
+        #[cfg(not(feature = "worldgen"))]
+        let (world, index) = World::generate(settings.world_seed);
+
+        #[cfg(feature = "worldgen")]
+        let map = world.get_map_data(index.as_index_ref(), &pools.2);
+        #[cfg(not(feature = "worldgen"))]
+        let map = WorldMapMsg {
+            dimensions_lg: Vec2::zero(),
+            max_height: 1.0,
+            rgba: Grid::new(Vec2::new(1, 1), 1),
+            horizons: [(vec![0], vec![0]), (vec![0], vec![0])],
+            alt: Grid::new(Vec2::new(1, 1), 1),
+            sites: Vec::new(),
+            pois: Vec::new(),
+            default_chunk: Arc::new(world.generate_oob_chunk()),
+        };
+
+        let mut state = State::server(
+            pools,
+            world.sim().map_size_lg(),
+            Arc::clone(&map.default_chunk),
+        );
         state.ecs_mut().insert(battlemode_buffer);
         state.ecs_mut().insert(settings.clone());
         state.ecs_mut().insert(editable_settings);
@@ -291,6 +327,7 @@ impl Server {
             let pool = state.ecs_mut().write_resource::<SlowJobPool>();
             pool.configure(&"CHUNK_GENERATOR", |n| n / 2 + n / 4);
             pool.configure(&"CHUNK_SERIALIZER", |n| n / 2);
+            pool.configure(&"CHUNK_DROP", |_n| 1);
         }
         state
             .ecs_mut()
@@ -364,40 +401,6 @@ impl Server {
         debug!(?banned_words_count);
         trace!(?banned_words);
         state.ecs_mut().insert(AliasValidator::new(banned_words));
-
-        #[cfg(feature = "worldgen")]
-        let (world, index) = World::generate(
-            settings.world_seed,
-            WorldOpts {
-                seed_elements: true,
-                world_file: if let Some(ref opts) = settings.map_file {
-                    opts.clone()
-                } else {
-                    // Load default map from assets.
-                    FileOpts::LoadAsset(DEFAULT_WORLD_MAP.into())
-                },
-                calendar: Some(settings.calendar_mode.calendar_now()),
-            },
-            state.thread_pool(),
-        );
-
-        #[cfg(feature = "worldgen")]
-        let map = world.get_map_data(index.as_index_ref(), state.thread_pool());
-
-        #[cfg(not(feature = "worldgen"))]
-        let (world, index) = World::generate(settings.world_seed);
-        #[cfg(not(feature = "worldgen"))]
-        let map = WorldMapMsg {
-            dimensions_lg: Vec2::zero(),
-            max_height: 1.0,
-            rgba: Grid::new(Vec2::new(1, 1), 1),
-            horizons: [(vec![0], vec![0]), (vec![0], vec![0])],
-            sea_level: 0.0,
-            alt: Grid::new(Vec2::new(1, 1), 1),
-            sites: Vec::new(),
-            pois: Vec::new(),
-        };
-
         state.ecs_mut().insert(map);
 
         #[cfg(feature = "worldgen")]
@@ -802,10 +805,10 @@ impl Server {
                             // so, we delete them. We check for
                             // `home_chunk` in order to avoid duplicating
                             // the entity under some circumstances.
-                            terrain.get_key(chunk_key).is_none() && terrain.get_key(*hc).is_none()
+                            terrain.get_key_real(chunk_key).is_none() && terrain.get_key_real(*hc).is_none()
                         },
                         Some(Anchor::Entity(entity)) => !self.state.ecs().is_alive(*entity),
-                        None => terrain.get_key(chunk_key).is_none(),
+                        None => terrain.get_key_real(chunk_key).is_none(),
                     }
                 })
                 .map(|(entity, _, _, _)| entity)

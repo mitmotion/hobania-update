@@ -29,7 +29,15 @@ pub fn setup() -> State {
     state.ecs_mut().insert(MaterialStatManifest::with_empty());
     state.ecs_mut().read_resource::<Time>();
     state.ecs_mut().read_resource::<DeltaTime>();
-    state.ecs_mut().insert(TerrainGrid::new());
+    state.ecs_mut().insert(TerrainGrid::new(
+            DEFAULT_MAP_SIZE_LG,
+            TerrainChunk::new(
+                0,
+                Block::new(BlockKind::Water, Rgb::zero()),
+                Block::air(SpriteKind::Empty),
+                TerrainChunkMeta::void(),
+            )
+        ));
     for x in 0..2 {
         for y in 0..2 {
             generate_chunk(&mut state, Vec2::new(x, y));
