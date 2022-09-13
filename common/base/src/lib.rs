@@ -43,6 +43,22 @@ macro_rules! plot {
 #[cfg(feature = "tracy")]
 pub use tracy_client::plot;
 
+#[cfg(feature = "tracy")]
+#[macro_export]
+macro_rules! set_thread_name {
+    ($name:expr) => {
+        $crate::tracy_client::Client::running()
+            .expect("set_thread_name! without a running Client")
+            .set_thread_name($name);
+    };
+}
+
+#[cfg(not(feature = "tracy"))]
+#[macro_export]
+macro_rules! set_thread_name {
+    ($name:expr) => {};
+}
+
 // https://discordapp.com/channels/676678179678715904/676685797524766720/723358438943621151
 #[cfg(not(feature = "tracy"))]
 #[macro_export]

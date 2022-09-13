@@ -162,6 +162,8 @@ impl State {
                     Ok(())
                 })
                 .start_handler(move |i| {
+                    let name = format!("rayon-{}-{}", thread_name_infix, i);
+                    common_base::set_thread_name!(&name);
                     if let Some(&core_id) = i.checked_sub(rayon_offset + tokio_count).and_then(|i| core_ids_.get(i)) {
                         core_affinity::set_for_current(core_id);
                     }
@@ -208,6 +210,8 @@ impl State {
                     if tokio_count > 0 {
                         static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
                         let index = ATOMIC_ID.fetch_add(1, Ordering::SeqCst) % tokio_count;
+                        let name = format!("tokio-{}-{}", thread_name_infix, index);
+                        common_base::set_thread_name!(&name);
                         if let Some(&core_id) = index.checked_add(num_cpu - tokio_count - 1).and_then(|i| core_ids_.get(i)) {
                             core_affinity::set_for_current(core_id);
                         }
