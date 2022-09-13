@@ -212,7 +212,6 @@ impl Server {
         editable_settings: EditableSettings,
         database_settings: DatabaseSettings,
         data_dir: &std::path::Path,
-        runtime: Arc<Runtime>,
         pools: common_state::Pools,
     ) -> Result<Self, Error> {
         info!("Server data dir is: {}", data_dir.display());
@@ -251,13 +250,13 @@ impl Server {
                 },
                 calendar: Some(settings.calendar_mode.calendar_now()),
             },
-            &pools.2,
+            &pools.rayon_pool,
         );
         #[cfg(not(feature = "worldgen"))]
         let (world, index) = World::generate(settings.world_seed);
 
         #[cfg(feature = "worldgen")]
-        let map = world.get_map_data(index.as_index_ref(), &pools.2);
+        let map = world.get_map_data(index.as_index_ref(), &pools.rayon_pool);
         #[cfg(not(feature = "worldgen"))]
         let map = WorldMapMsg {
             dimensions_lg: Vec2::zero(),
@@ -270,6 +269,7 @@ impl Server {
             default_chunk: Arc::new(world.generate_oob_chunk()),
         };
 
+        let runtime = Arc::clone(&pools.runtime);
         let mut state = State::server(
             pools,
             world.sim().map_size_lg(),

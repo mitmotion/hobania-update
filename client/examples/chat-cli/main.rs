@@ -50,11 +50,15 @@ fn main() {
     };
 
     // Create a client.
-    let mut client = runtime
+    let pools = common_state::State::pools(
+        common::resources::GameMode::Client,
+        tokio::runtime::Builder::new_multi_thread(),
+    );
+    let mut client = pools.runtime
         .block_on(Client::new(
             addr,
-            runtime2,
             &mut None,
+            pools.clone(),
             &username,
             &password,
             |provider| provider == "https://auth.veloren.net",

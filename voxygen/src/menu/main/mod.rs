@@ -22,7 +22,7 @@ use common_base::span;
 use i18n::LocalizationHandle;
 use scene::Scene;
 use std::sync::Arc;
-use tokio::runtime;
+use tokio::Builder;
 use tracing::error;
 use ui::{Event as MainMenuEvent, MainMenuUi};
 
@@ -104,7 +104,7 @@ impl PlayState for MainMenuState {
                             "".to_owned(),
                             ConnectionArgs::Mpsc(14004),
                             &mut self.init,
-                            &global_state.tokio_runtime,
+                            &pools.runtime,
                             &global_state.i18n,
                             Some(pools),
                         );
@@ -300,7 +300,6 @@ impl PlayState for MainMenuState {
                         password,
                         connection_args,
                         &mut self.init,
-                        &global_state.tokio_runtime,
                         &global_state.i18n,
                         None,
                     );
@@ -331,7 +330,8 @@ impl PlayState for MainMenuState {
                 },
                 #[cfg(feature = "singleplayer")]
                 MainMenuEvent::StartSingleplayer => {
-                    let singleplayer = Singleplayer::new(&global_state.tokio_runtime);
+
+                    let singleplayer = Singleplayer::new();
 
                     global_state.singleplayer = Some(singleplayer);
                 },
@@ -500,7 +500,6 @@ fn attempt_login(
     password: String,
     connection_args: ConnectionArgs,
     init: &mut InitState,
-    runtime: &Arc<runtime::Runtime>,
     localized_strings: &LocalizationHandle,
     pools: Option<common_state::Pools>,
 ) {
@@ -533,7 +532,12 @@ fn attempt_login(
             username,
             password,
             Arc::clone(runtime),
-            pools.unwrap_or_else(|| common_state::State::pools(common::resources::GameMode::Client)),
+            pools.unwrap_or_else(|| {
+                common_state::State::pools(
+                    common::resources::GameMode::Client,
+                    tokio::runtime::Builder::new_multi_thread(),
+                )
+            }),
         ));
     }
 }

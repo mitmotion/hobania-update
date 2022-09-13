@@ -46,29 +46,28 @@ pub fn main() {
 
 pub struct BotClient {
     settings: Settings,
-    runtime: Arc<Runtime>,
+    pools: common_state::Pools,
     server_info: ServerInfo,
     bot_clients: HashMap<String, Client>,
     clock: Clock,
 }
 
 pub fn make_client(
-    runtime: &Arc<Runtime>,
+    pools: &common_state::Pools,
     server: &str,
     server_info: &mut Option<ServerInfo>,
     username: &str,
     password: &str,
 ) -> Option<Client> {
-    let runtime_clone = Arc::clone(runtime);
     let addr = ConnectionArgs::Tcp {
         prefer_ipv6: false,
         hostname: server.to_owned(),
     };
-    runtime
+    pools.runtime
         .block_on(Client::new(
             addr,
-            runtime_clone,
             server_info,
+            pools.clone(),
             username,
             password,
             |_| true,
@@ -78,15 +77,18 @@ pub fn make_client(
 
 impl BotClient {
     pub fn new(settings: Settings) -> BotClient {
-        let runtime = Arc::new(Runtime::new().unwrap());
+        let pools = common_state::State::pools(
+            common::resources::GameMode::Client,
+            tokio::runtime::Builder::new_multi_thread(),
+        );
         let mut server_info = None;
         // Don't care if we connect, just trying to grab the server info.
-        let _ = make_client(&runtime, &settings.server, &mut server_info, "", "");
+        let _ = make_client(&pools, &settings.server, &mut server_info, "", "");
         let server_info = server_info.expect("Failed to connect to server.");
         let clock = Clock::new(Duration::from_secs_f64(1.0 / 60.0));
         BotClient {
             settings,
-            runtime,
+            pools,
             server_info,
             bot_clients: HashMap::new(),
             clock,
@@ -142,7 +144,7 @@ impl BotClient {
                 {
                     continue;
                 }
-                match self.runtime.block_on(authc.register(username, password)) {
+                match self.pools.runtime.block_on(authc.register(username, password)) {
                     Ok(()) => {
                         self.settings.bot_logins.push(BotCreds {
                             username: username.to_string(),
@@ -171,15 +173,13 @@ impl BotClient {
             .cloned()
             .collect();
         for cred in creds.iter() {
-            let runtime = Arc::clone(&self.runtime);
-
             let server = &self.settings.server;
             // TODO: log the clients in in parallel instead of in series
             let client = self
                 .bot_clients
                 .entry(cred.username.clone())
                 .or_insert_with(|| {
-                    make_client(&runtime, server, &mut None, &cred.username, &cred.password)
+                    make_client(&self.pools, server, &mut None, &cred.username, &cred.password)
                         .expect("Failed to connect to server")
                 });
 

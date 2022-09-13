@@ -411,10 +411,7 @@ pub struct Window {
 }
 
 impl Window {
-    pub fn new(
-        settings: &Settings,
-        runtime: &tokio::runtime::Runtime,
-    ) -> Result<(Window, EventLoop), Error> {
+    pub fn new(settings: &Settings) -> Result<(Window, EventLoop), Error> {
         let event_loop = EventLoop::new();
 
         let size = settings.graphics.window_size;
@@ -434,7 +431,7 @@ impl Window {
 
         let window = win_builder.build(&event_loop).unwrap();
 
-        let renderer = Renderer::new(&window, settings.graphics.render_mode.clone(), runtime)?;
+        let renderer = Renderer::new(&window, settings.graphics.render_mode.clone())?;
 
         let keypress_map = HashMap::new();
 

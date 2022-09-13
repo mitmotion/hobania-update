@@ -1640,6 +1640,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 
 [[package]]
+name = "drop_guard"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c4a817d8b683f6e649aed359aab0c47a875377516bb5791d0f7e46d9066d209"
+
+[[package]]
 name = "egui"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6561,6 +6567,7 @@ dependencies = [
  "hashbrown 0.12.0",
  "image",
  "num 0.4.0",
+ "num_cpus",
  "quinn",
  "rayon",
  "ron 0.7.0",
@@ -6718,6 +6725,7 @@ dependencies = [
  "specs",
  "tar",
  "thread-priority",
+ "tokio",
  "toml",
  "tracing",
  "vek 0.15.8",
@@ -6836,6 +6844,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "crossbeam-channel",
+ "drop_guard",
  "enumset",
  "futures-util",
  "hashbrown 0.12.0",

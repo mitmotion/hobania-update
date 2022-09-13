@@ -12,7 +12,6 @@ use std::{
     thread::{self, JoinHandle},
     time::Duration,
 };
-use tokio::runtime::Runtime;
 use tracing::{error, info, trace, warn};
 
 const TPS: u64 = 30;
@@ -30,7 +29,7 @@ pub struct Singleplayer {
 }
 
 impl Singleplayer {
-    pub fn new(runtime: &Arc<Runtime>) -> Self {
+    pub fn new() -> Self {
         let (stop_server_s, stop_server_r) = unbounded();
 
         // Determine folder to save server data in
@@ -100,18 +99,19 @@ impl Singleplayer {
         let (result_sender, result_receiver) = bounded(1);
 
         let builder = thread::Builder::new().name("singleplayer-server-thread".into());
-        let runtime = Arc::clone(runtime);
         let thread = builder
             .spawn(move || {
                 trace!("starting singleplayer server thread");
 
-                let pools = common_state::State::pools(common::resources::GameMode::Singleplayer);
+                let pools = common_state::State::pools(
+                    common::resources::GameMode::Singleplayer,
+                    tokio::runtime::Builder::new_multi_thread(),
+                );
                 let (server, init_result) = match Server::new(
                     settings2,
                     editable_settings,
                     database_settings,
                     &server_data_dir,
-                    runtime,
                     pools.clone(),
                 ) {
                     Ok(server) => (Some(server), Ok(pools)),

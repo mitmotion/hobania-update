@@ -415,10 +415,12 @@ impl<'a> System<'a> for Sys {
                 chunk
             })
         }).collect::<Vec<_>>();
-        // Drop chunks in a background thread.
-        slow_jobs.spawn(&"CHUNK_DROP", async move {
-            drop(chunks_to_remove);
-        });
+        if !chunks_to_remove.is_empty() {
+            // Drop chunks in a background thread.
+            slow_jobs.spawn(&"CHUNK_DROP", async move {
+                drop(chunks_to_remove);
+            });
+        }
     }
 }
 

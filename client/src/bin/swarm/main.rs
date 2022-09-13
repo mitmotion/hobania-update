@@ -9,7 +9,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 use structopt::StructOpt;
-use tokio::runtime::Runtime;
+use tokio::runtime::{self, Runtime};
 use vek::*;
 use common_state::State;
 use veloren_client::{addr::ConnectionArgs, Client};
@@ -48,9 +48,12 @@ fn main() {
     let to_adminify = usernames.clone();
 
     let finished_init = Arc::new(AtomicU32::new(0));
-    let runtime = Arc::new(Runtime::new().unwrap());
-    let mut pools = common_state::State::pools(common::resources::GameMode::Client);
-    pools.0 = 0;
+    let mut builder = runtime::Builder::new_multi_thread();
+    builder
+        .max_blocking_threads(opt.size as usize + 1)
+        .thread_name("swarm");
+    let mut pools = common_state::State::pools(common::resources::GameMode::Client, builder);
+    pools.slowjob_threads = 0;
 
     // TODO: calculate and log the required chunks per second to maintain the
     // selected scenario with full vd loaded
@@ -59,7 +62,6 @@ fn main() {
         admin_username,
         0,
         to_adminify,
-        &runtime,
         &pools,
         opt,
         &finished_init,
@@ -70,7 +72,6 @@ fn main() {
             name,
             index as u32,
             Vec::new(),
-            &runtime,
             &pools,
             opt,
             &finished_init,
@@ -84,16 +85,15 @@ fn run_client_new_thread(
     username: String,
     index: u32,
     to_adminify: Vec<String>,
-    runtime: &Arc<Runtime>,
     pools: &common_state::Pools,
     opt: Opt,
     finished_init: &Arc<AtomicU32>,
 ) {
-    let runtime = Arc::clone(runtime);
+    let runtime = Arc::clone(&pools.runtime);
     let pools = pools.clone();
     let finished_init = Arc::clone(finished_init);
     thread::spawn(move || {
-        if let Err(err) = run_client(username, index, to_adminify, pools, runtime, opt, finished_init) {
+        if let Err(err) = run_client(username, index, to_adminify, pools, opt, finished_init) {
             tracing::error!("swarm member {} exited with an error: {:?}", index, err);
         }
     });
@@ -104,112 +104,123 @@ fn run_client(
     index: u32,
     to_adminify: Vec<String>,
     pools: common_state::Pools,
-    runtime: Arc<Runtime>,
     opt: Opt,
     finished_init: Arc<AtomicU32>,
 ) -> Result<(), veloren_client::Error> {
-    let mut client = loop {
-        // Connect to localhost
-        let addr = ConnectionArgs::Tcp {
-            prefer_ipv6: false,
-            hostname: "localhost".into(),
-        };
-        let runtime_clone = Arc::clone(&runtime);
-        // NOTE: use a no-auth server
-        match runtime
-            .block_on(Client::new(
-                addr,
-                runtime_clone,
-                &mut None,
-                pools.clone(),
-                &username,
-                "",
-                |_| false,
-            )) {
-                Err(e) => tracing::warn!(?e, "Client {} disconnected", index),
-                Ok(client) => break client,
-            }
-    };
-    drop(pools);
-
     let mut clock = common::clock::Clock::new(Duration::from_secs_f32(1.0 / 30.0));
 
     let mut tick = |client: &mut Client| -> Result<(), veloren_client::Error> {
         clock.tick();
         client.tick_network(clock.dt())?;
+        client.cleanup();
         Ok(())
     };
 
-    // Wait for character list to load
-    client.load_character_list();
-    while client.character_list().loading {
-        tick(&mut client)?;
-    }
+    let mut run = || -> Result<_, veloren_client::Error> {
+        // Connect to localhost
+        let addr = ConnectionArgs::Tcp {
+            prefer_ipv6: false,
+            hostname: "localhost".into(),
+        };
+        // NOTE: use a no-auth server
+        let mut client = pools.runtime.block_on(Client::new(
+                addr,
+                &mut None,
+                pools.clone(),
+                &username,
+                "",
+                |_| false,
+            ))?;
+        tracing::info!("Client {} connected", index);
 
-    // Create character if none exist
-    if client.character_list().characters.is_empty() {
-        client.create_character(
-            username.clone(),
-            Some("common.items.weapons.sword.starter".into()),
-            None,
-            body(),
-        );
-
+        // Wait for character list to load
         client.load_character_list();
-
-        while client.character_list().loading || client.character_list().characters.is_empty() {
+        while client.character_list().loading {
             tick(&mut client)?;
         }
-    }
+        tracing::info!("Client {} loaded character list", index);
 
-    // Select the first character
-    client.request_character(
-        client
-            .character_list()
-            .characters
-            .first()
-            .expect("Just created new character if non were listed!!!")
-            .character
-            .id
-            .expect("Why is this an option?"),
-    );
+        // Create character if none exist
+        if client.character_list().characters.is_empty() {
+            client.create_character(
+                username.clone(),
+                Some("common.items.weapons.sword.starter".into()),
+                None,
+                body(),
+            );
 
-    client.set_view_distance(opt.vd);
+            client.load_character_list();
 
-    // If this is the admin client then adminify the other swarm members
-    if !to_adminify.is_empty() {
-        // Wait for other clients to connect
-        loop {
-            tick(&mut client)?;
-            // NOTE: it's expected that each swarm member will have a unique alias
-            let players = client.players().collect::<HashSet<&str>>();
-            if to_adminify
-                .iter()
-                .all(|name| players.contains(&name.as_str()))
-            {
-                break;
+            while client.character_list().loading || client.character_list().characters.is_empty() {
+                tick(&mut client)?;
             }
         }
-        // Assert that we are a moderator (assumes we are an admin if so)
-        assert!(
-            client.is_moderator(),
-            "The user needs to ensure \"{}\" is registered as an admin on the server",
-            username
-        );
-        // Send commands to adminify others
-        to_adminify.iter().for_each(|name| {
-            client.send_command("adminify".into(), vec![name.into(), "admin".into()])
-        });
-    }
+        tracing::info!("Client {} found or created character", index);
 
-    // Wait for moderator
-    while !client.is_moderator() {
-        tick(&mut client)?;
-    }
+        client.set_view_distance(opt.vd);
+
+        // Select the first character
+        client.request_character(
+            client
+                .character_list()
+                .characters
+                .first()
+                .expect("Just created new character if non were listed!!!")
+                .character
+                .id
+                .expect("Why is this an option?"),
+        );
+
+        // If this is the admin client then adminify the other swarm members
+        if !to_adminify.is_empty() {
+            // Wait for other clients to connect
+            loop {
+                tick(&mut client)?;
+                // NOTE: it's expected that each swarm member will have a unique alias
+                let players = client.players().collect::<HashSet<&str>>();
+                if to_adminify
+                    .iter()
+                    .all(|name| players.contains(&name.as_str()))
+                {
+                    break;
+                }
+            }
+            // Assert that we are a moderator (assumes we are an admin if so)
+            assert!(
+                client.is_moderator(),
+                "The user needs to ensure \"{}\" is registered as an admin on the server",
+                username
+            );
+            // Send commands to adminify others
+            to_adminify.iter().for_each(|name| {
+                client.send_command("adminify".into(), vec![name.into(), "admin".into()])
+            });
+        }
+
+        // Wait for moderator
+        while !client.is_moderator() {
+            tick(&mut client)?;
+        }
+        client.clear_terrain();
+        client.request_player_physics(false);
+
+        Ok(client)
+    };
+
+    let mut client = loop {
+        match run() {
+            Err(e) => tracing::warn!(?e, "Client {} disconnected", index),
+            Ok(client) => {
+                thread::sleep(Duration::from_secs(1));
+                break client
+            },
+        }
+    };
+    drop(pools);
 
     finished_init.fetch_add(1, Ordering::Relaxed);
     // Wait for initialization of all other swarm clients to finish
-    while !finished_init.load(Ordering::Relaxed) == opt.size {
+    while finished_init.load(Ordering::Relaxed) != opt.size {
         tick(&mut client)?;
     }
 

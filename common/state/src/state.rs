@@ -36,7 +36,7 @@ use specs::{
     Component, DispatcherBuilder, Entity as EcsEntity, WorldExt,
 };
 use thread_priority::{ThreadBuilder, ThreadPriority};
-use std::sync::Arc;
+use std::sync::{atomic::{AtomicUsize, Ordering}, Arc};
 use vek::*;
 
 /// How much faster should an in-game day be compared to a real day?
@@ -95,36 +95,50 @@ pub struct State {
     thread_pool: Arc<ThreadPool>,
 }
 
-pub type Pools = (usize, GameMode/*u64*/, Arc<ThreadPool>/*, slowjob::SlowJobPool*/);
-
+#[derive(Clone,Debug)]
+pub struct Pools {
+    pub slowjob_threads: usize,
+    game_mode: GameMode,
+    pub rayon_pool: Arc<ThreadPool>,
+    pub runtime: Arc<tokio::runtime::Runtime>,
+    /* slowjob: slowjob::SlowJobPool,*/
+}
 
 impl State {
-    pub fn pools(game_mode: GameMode) -> Pools {
+    pub fn pools(game_mode: GameMode, mut tokio_builder: tokio::runtime::Builder) -> Pools {
         let num_cpu = num_cpus::get()/* - 1*/;
 
-        let (thread_name_infix, rayon_offset) = match game_mode {
+        let (thread_name_infix, rayon_offset, tokio_count) = match game_mode {
             // The server does work on both the main thread and the rayon pool, but not at the same
             // time, so there's no reason to hold back a core from rayon.  It does effectively no
-            // other non-slowjob, non-rayon work that blocks the main thread.
-            GameMode::Server => ("s", 0),
+            // other non-slowjob, non-rayon work that blocks the main thread, but we do want to
+            // leave num_cpu / 4 cores available for tokio, since otherwise TCP buffers can build
+            // up to unreasonable degrees.
+            GameMode::Server => ("s", 0, num_cpu / 4),
             // The client does work on both the main thread and the rayon pool, but not at the same
             // time.  It does run some other non-slowjob and non-rayon threads, but none of them
-            // block work on the main thread.
-            GameMode::Client => ("c", 0),
+            // block work on the main thread.  It does not do enough networking for it to be worth
+            // dedicating anything to the tokio pool.
+            GameMode::Client => ("c", 0, 0),
             // Singleplayer does work on both the main thread and the rayon pool; unlike the server
             // and client cases, the rayon work may interfere with work on one of the main threads,
             // since the server and client don't coordinate their rayon work.  Therefore, we
             // reserve a core for the main thread(s) from both slowjob and rayon tasks.  Since many
             // CPUs can't afford to lose an entire core during the common periods when the server
             // and client are not interfering with each other, we still spawn an extra rayon thread
-            // in this case, but leave it floating so the OS can schedule it.
-            GameMode::Singleplayer => ("sp", /*2*/1),
+            // in this case, but leave it floating so the OS can schedule it.  Of course,
+            // singleplayer need not devote any resources to the tokio pool, as it's not expected
+            // to be in use.
+            GameMode::Singleplayer => ("sp", /*2*/1, 0),
         };
         let rayon_threads = /*match game_mode {
             GameMode::Server | GameMode::Client => num_cpu / 2,
             GameMode::Singleplayer => num_cpu / 4,
-        }*/num_cpu.max(common::consts::MIN_RECOMMENDED_RAYON_THREADS);
+        }*/num_cpu/*.saturating_sub(tokio_count)*/.max(common::consts::MIN_RECOMMENDED_RAYON_THREADS);
         let core_ids = /*(rayon_threads >= 16).then(|| */core_affinity::get_core_ids().unwrap_or(vec![])/*).unwrap_or(vec![])*/;
+        // Don't pin rayon threads to the cores expected to be used by tokio threads.
+        /* core_ids.truncate(core_ids.len() - tokio_count); */
+        let mut core_ids_ = core_ids.clone();
         let core_count = core_ids.len();
         let rayon_pool = Arc::new(
             ThreadPoolBuilder::new()
@@ -141,14 +155,14 @@ impl State {
                     }
                     // pinned rayon threads run with high priority
                     let index = thread.index();
-                    if index.checked_sub(rayon_offset).map_or(false, |i| i < core_count) {
+                    if index.checked_sub(rayon_offset + tokio_count).map_or(false, |i| i < core_count) {
                         b = b.priority(ThreadPriority::Max);
                     }
                     b.spawn_careless(|| thread.run())?;
                     Ok(())
                 })
                 .start_handler(move |i| {
-                    if let Some(&core_id) = i.checked_sub(rayon_offset).and_then(|i| core_ids.get(i)) {
+                    if let Some(&core_id) = i.checked_sub(rayon_offset + tokio_count).and_then(|i| core_ids_.get(i)) {
                         core_affinity::set_for_current(core_id);
                     }
                 })
@@ -173,9 +187,49 @@ impl State {
             /*Arc::clone(*/slow_pool/*)*/,
         ); */
 
+        // Setup tokio runtime
+        use tokio::runtime::Builder;
+
+        // TODO: evaluate std::thread::available_concurrency as a num_cpus replacement
+        let cores = num_cpus::get();
+        // We don't need that many threads in the async pool, at least 2 but generally
+        // 25% of all available will do
+        let mut core_ids_ = core_ids.clone();
+        let runtime = Arc::new(
+            tokio_builder
+                .enable_all()
+                .worker_threads(tokio_count.max(common::consts::MIN_RECOMMENDED_TOKIO_THREADS))
+                .thread_name_fn(move || {
+                    static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
+                    let id = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);
+                    format!("tokio-{}-{}", thread_name_infix, id)
+                })
+                .on_thread_start(move || {
+                    if tokio_count > 0 {
+                        static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
+                        let index = ATOMIC_ID.fetch_add(1, Ordering::SeqCst) % tokio_count;
+                        if let Some(&core_id) = index.checked_add(num_cpu - tokio_count - 1).and_then(|i| core_ids_.get(i)) {
+                            core_affinity::set_for_current(core_id);
+                        }
+                    }
+                })
+                .build()
+                .unwrap(),
+        );
+
         // We always reserve at least one non-slowjob core, if possible, to make sure systems get a
-        // chance to run unobstructed.
-        (num_cpu - 1/*slow_limit*//* as u64*/, game_mode, rayon_pool/*, slowjob*/)
+        // chance to run unobstructed.  We also leave any dedicated tokio threads their own
+        // reserved cores, since networking is quite latency critical on a server.
+        //
+        // Note that for all n > 1, n - n / 4 - 1 > 0 (using integer arithmetic), which is fine
+        // since we require at least 2 hardware threads.
+        Pools {
+            slowjob_threads: num_cpu - tokio_count - 1/*slow_limit*//* as u64*/,
+            game_mode,
+            rayon_pool,
+            runtime,
+            /*slowjob,*/
+        }
     }
 
     /// Create a new `State` in client mode.
@@ -195,8 +249,8 @@ impl State {
             GameMode::Singleplayer => "sp",
         }; */
 
-        let num_cpu = /*num_cpus::get()*/pools.0/* / 2 + pools.0 / 4*/;
-        let game_mode = pools.1;
+        let num_cpu = /*num_cpus::get()*/pools.slowjob_threads/* / 2 + pools.0 / 4*/;
+        let game_mode = pools.game_mode;
         /* let rayon_threads = match game_mode {
             GameMode::Server | GameMode::Client => num_cpu/* / 2*/,
             GameMode::Singleplayer => num_cpu/* / 4*// 2,
@@ -248,7 +302,7 @@ impl State {
 
         Self {
             ecs: Self::setup_ecs_world(ecs_role, /*num_cpu as u64*//*, &thread_pool, *//*pools.1*/slowjob/*pools.3*/, map_size_lg, default_chunk),
-            thread_pool: pools.2,
+            thread_pool: pools.rayon_pool,
         }
     }
 

@@ -11,7 +11,6 @@ use std::{
     },
     time::Duration,
 };
-use tokio::runtime;
 use tracing::{trace, warn};
 
 #[derive(Debug)]
@@ -47,7 +46,6 @@ impl ClientInit {
         connection_args: ConnectionArgs,
         username: String,
         password: String,
-        runtime: Arc<runtime::Runtime>,
         pools: common_state::Pools,
     ) -> Self {
         let (tx, rx) = unbounded();
@@ -55,9 +53,7 @@ impl ClientInit {
         let cancel = Arc::new(AtomicBool::new(false));
         let cancel2 = Arc::clone(&cancel);
 
-        let runtime2 = Arc::clone(&runtime);
-
-        runtime.spawn(async move {
+        pools.runtime.spawn(async move {
             let trust_fn = |auth_server: &str| {
                 let _ = tx.send(Msg::IsAuthTrusted(auth_server.to_string()));
                 trust_rx
@@ -76,7 +72,6 @@ impl ClientInit {
                 let mut mismatched_server_info = None;
                 match Client::new(
                     connection_args.clone(),
-                    Arc::clone(&runtime2),
                     &mut mismatched_server_info,
                     pools.clone(),
                     &username,
@@ -87,8 +82,7 @@ impl ClientInit {
                 {
                     Ok(client) => {
                         let _ = tx.send(Msg::Done(Ok(client)));
-                        drop(pools);
-                        tokio::task::block_in_place(move || drop(runtime2));
+                        tokio::task::block_in_place(move || drop(pools));
                         return;
                     },
                     Err(ClientError::NetworkErr(NetworkError::ConnectFailed(
@@ -112,9 +106,8 @@ impl ClientInit {
             // address and all the attempts timed out.
             let _ = tx.send(Msg::Done(Err(last_err.unwrap_or(Error::ServerNotFound))));
 
-            drop(pools);
             // Safe drop runtime
-            tokio::task::block_in_place(move || drop(runtime2));
+            tokio::task::block_in_place(move || drop(pools));
         });
 
         ClientInit {
