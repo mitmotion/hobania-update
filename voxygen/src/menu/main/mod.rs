@@ -22,7 +22,6 @@ use common_base::span;
 use i18n::LocalizationHandle;
 use scene::Scene;
 use std::sync::Arc;
-use tokio::Builder;
 use tracing::error;
 use ui::{Event as MainMenuEvent, MainMenuUi};
 
@@ -104,7 +103,6 @@ impl PlayState for MainMenuState {
                             "".to_owned(),
                             ConnectionArgs::Mpsc(14004),
                             &mut self.init,
-                            &pools.runtime,
                             &global_state.i18n,
                             Some(pools),
                         );
@@ -531,7 +529,6 @@ fn attempt_login(
             connection_args,
             username,
             password,
-            Arc::clone(runtime),
             pools.unwrap_or_else(|| {
                 common_state::State::pools(
                     common::resources::GameMode::Client,

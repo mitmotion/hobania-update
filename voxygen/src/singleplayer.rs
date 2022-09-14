@@ -162,6 +162,7 @@ impl Drop for Singleplayer {
 fn run_server(mut server: Server, stop_server_r: Receiver<()>, paused: Arc<AtomicBool>) {
     info!("Starting server-cli...");
 
+    Arc::clone(&server.runtime()).block_on(async {
     // Set up an fps clock
     let mut clock = Clock::new(Duration::from_secs_f64(1.0 / TPS as f64));
 
@@ -174,7 +175,7 @@ fn run_server(mut server: Server, stop_server_r: Receiver<()>, paused: Arc<Atomi
         }
 
         // Wait for the next tick.
-        clock.tick();
+        clock.tick().await;
 
         // Skip updating the server if it's paused
         if paused.load(Ordering::SeqCst) && server.number_of_players() < 2 {
@@ -198,4 +199,5 @@ fn run_server(mut server: Server, stop_server_r: Receiver<()>, paused: Arc<Atomi
         // Clean up the server after a tick.
         server.cleanup();
     }
+    });
 }

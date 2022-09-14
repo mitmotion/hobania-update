@@ -53,7 +53,7 @@ impl ClientInit {
         let cancel = Arc::new(AtomicBool::new(false));
         let cancel2 = Arc::clone(&cancel);
 
-        pools.runtime.spawn(async move {
+        pools.clone().runtime.spawn(async move {
             let trust_fn = |auth_server: &str| {
                 let _ = tx.send(Msg::IsAuthTrusted(auth_server.to_string()));
                 trust_rx

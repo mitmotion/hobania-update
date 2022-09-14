@@ -64,6 +64,7 @@ rayon = "1.5"
 roots = "0.0.6"
 spin_sleep = "1.0"
 tracing = { version = "0.1", default-features = false }
+tokio = { version = "1.14", default-features = false, features = ["time", "rt"] }
 uuid = { version = "0.8.1", default-features = false, features = ["serde", "v4"] }
 rand = "0.8"
 fxhash = "0.2.1"

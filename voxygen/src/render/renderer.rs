@@ -198,6 +198,7 @@ impl Renderer {
     pub fn new(
         window: &winit::window::Window,
         mode: RenderMode,
+        runtime: &tokio::runtime::Runtime,
     ) -> Result<Self, RenderError> {
         let (pipeline_modes, mut other_modes) = mode.split();
         // Enable seamless cubemaps globally, where available--they are essentially a
@@ -310,9 +311,6 @@ impl Renderer {
 
             path
         });
-
-        let runtime = runtime::Builder::new_current_thread().build()
-            .expect("Failed to create single-threaded tokio runtime (for renderer initialization).");
 
         let (device, queue) = runtime.block_on(adapter.request_device(
             &wgpu::DeviceDescriptor {

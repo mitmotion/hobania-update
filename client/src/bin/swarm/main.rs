@@ -89,17 +89,16 @@ fn run_client_new_thread(
     opt: Opt,
     finished_init: &Arc<AtomicU32>,
 ) {
-    let runtime = Arc::clone(&pools.runtime);
-    let pools = pools.clone();
+    let pools_ = pools.clone();
     let finished_init = Arc::clone(finished_init);
-    thread::spawn(move || {
-        if let Err(err) = run_client(username, index, to_adminify, pools, opt, finished_init) {
+    pools.runtime.spawn(async move {
+        if let Err(err) = run_client(username, index, to_adminify, pools_, opt, finished_init).await {
             tracing::error!("swarm member {} exited with an error: {:?}", index, err);
         }
     });
 }
 
-fn run_client(
+async fn run_client(
     username: String,
     index: u32,
     to_adminify: Vec<String>,
@@ -108,110 +107,115 @@ fn run_client(
     finished_init: Arc<AtomicU32>,
 ) -> Result<(), veloren_client::Error> {
     let mut clock = common::clock::Clock::new(Duration::from_secs_f32(1.0 / 30.0));
-
-    let mut tick = |client: &mut Client| -> Result<(), veloren_client::Error> {
-        clock.tick();
+    async fn tick<'a>(client: &'a mut Client, clock: &'a mut common::clock::Clock) -> Result<(), veloren_client::Error> {
+        clock.tick_slow().await;
         client.tick_network(clock.dt())?;
         client.cleanup();
         Ok(())
-    };
-
-    let mut run = || -> Result<_, veloren_client::Error> {
-        // Connect to localhost
-        let addr = ConnectionArgs::Tcp {
-            prefer_ipv6: false,
-            hostname: "localhost".into(),
-        };
-        // NOTE: use a no-auth server
-        let mut client = pools.runtime.block_on(Client::new(
-                addr,
-                &mut None,
-                pools.clone(),
-                &username,
-                "",
-                |_| false,
-            ))?;
-        tracing::info!("Client {} connected", index);
-
-        // Wait for character list to load
-        client.load_character_list();
-        while client.character_list().loading {
-            tick(&mut client)?;
-        }
-        tracing::info!("Client {} loaded character list", index);
-
-        // Create character if none exist
-        if client.character_list().characters.is_empty() {
-            client.create_character(
-                username.clone(),
-                Some("common.items.weapons.sword.starter".into()),
-                None,
-                body(),
-            );
-
-            client.load_character_list();
-
-            while client.character_list().loading || client.character_list().characters.is_empty() {
-                tick(&mut client)?;
-            }
-        }
-        tracing::info!("Client {} found or created character", index);
-
-        client.set_view_distance(opt.vd);
-
-        // Select the first character
-        client.request_character(
-            client
-                .character_list()
-                .characters
-                .first()
-                .expect("Just created new character if non were listed!!!")
-                .character
-                .id
-                .expect("Why is this an option?"),
-        );
-
-        // If this is the admin client then adminify the other swarm members
-        if !to_adminify.is_empty() {
-            // Wait for other clients to connect
-            loop {
-                tick(&mut client)?;
-                // NOTE: it's expected that each swarm member will have a unique alias
-                let players = client.players().collect::<HashSet<&str>>();
-                if to_adminify
-                    .iter()
-                    .all(|name| players.contains(&name.as_str()))
-                {
-                    break;
-                }
-            }
-            // Assert that we are a moderator (assumes we are an admin if so)
-            assert!(
-                client.is_moderator(),
-                "The user needs to ensure \"{}\" is registered as an admin on the server",
-                username
-            );
-            // Send commands to adminify others
-            to_adminify.iter().for_each(|name| {
-                client.send_command("adminify".into(), vec![name.into(), "admin".into()])
-            });
-        }
-
-        // Wait for moderator
-        while !client.is_moderator() {
-            tick(&mut client)?;
-        }
-        client.clear_terrain();
-        client.request_player_physics(false);
-
-        Ok(client)
-    };
+    }
 
     let mut client = loop {
-        match run() {
-            Err(e) => tracing::warn!(?e, "Client {} disconnected", index),
+        let pools = &pools;
+        let to_adminify = &*to_adminify;
+        let username = &username;
+        let clock = &mut clock;
+        let run = move || async move {
+            // Connect to localhost
+            let addr = ConnectionArgs::Tcp {
+                prefer_ipv6: false,
+                hostname: "localhost".into(),
+            };
+            // NOTE: use a no-auth server
+            let mut client = Client::new(
+                    addr,
+                    &mut None,
+                    pools.clone(),
+                    &username,
+                    "",
+                    |_| false,
+                ).await?;
+            tracing::info!("Client {} connected", index);
+
+            // Wait for character list to load
+            client.load_character_list();
+            while client.character_list().loading {
+                tick(&mut client, clock).await?;
+            }
+            tracing::info!("Client {} loaded character list", index);
+
+            // Create character if none exist
+            if client.character_list().characters.is_empty() {
+                client.create_character(
+                    username.clone(),
+                    Some("common.items.weapons.sword.starter".into()),
+                    None,
+                    body(),
+                );
+
+                client.load_character_list();
+
+                while client.character_list().loading || client.character_list().characters.is_empty() {
+                    tick(&mut client, clock).await?;
+                }
+            }
+            tracing::info!("Client {} found or created character", index);
+
+            client.set_view_distance(opt.vd);
+
+            // Select the first character
+            client.request_character(
+                client
+                    .character_list()
+                    .characters
+                    .first()
+                    .expect("Just created new character if non were listed!!!")
+                    .character
+                    .id
+                    .expect("Why is this an option?"),
+            );
+
+            // If this is the admin client then adminify the other swarm members
+            if !to_adminify.is_empty() {
+                // Wait for other clients to connect
+                loop {
+                    tick(&mut client, clock).await?;
+                    // NOTE: it's expected that each swarm member will have a unique alias
+                    let players = client.players().collect::<HashSet<&str>>();
+                    if to_adminify
+                        .iter()
+                        .all(|name| players.contains(&name.as_str()))
+                    {
+                        break;
+                    }
+                }
+                // Assert that we are a moderator (assumes we are an admin if so)
+                assert!(
+                    client.is_moderator(),
+                    "The user needs to ensure \"{}\" is registered as an admin on the server",
+                    username
+                );
+                // Send commands to adminify others
+                to_adminify.iter().for_each(|name| {
+                    client.send_command("adminify".into(), vec![name.into(), "admin".into()])
+                });
+            }
+
+            // Wait for moderator
+            while !client.is_moderator() {
+                tick(&mut client, clock).await?;
+            }
+            client.clear_terrain();
+            client.request_player_physics(false);
+
+            Ok::<_, veloren_client::Error>(client)
+        };
+
+        match run().await {
+            Err(e) => {
+                tokio::time::sleep(Duration::from_secs(1));
+                tracing::warn!(?e, "Client {} disconnected", index)
+            },
             Ok(client) => {
-                thread::sleep(Duration::from_secs(1));
                 break client
             },
         }
@@ -221,7 +225,7 @@ fn run_client(
     finished_init.fetch_add(1, Ordering::Relaxed);
     // Wait for initialization of all other swarm clients to finish
     while finished_init.load(Ordering::Relaxed) != opt.size {
-        tick(&mut client)?;
+        tick(&mut client, &mut clock).await?;
     }
 
     // Use this check so this is only printed once
@@ -239,7 +243,7 @@ fn run_client(
     loop {
         // TODO: doesn't seem to produce an error when server is shutdown (process keeps
         // running)
-        tick(&mut client)?;
+        tick(&mut client, &mut clock).await?;
         let entity = client.entity();
         // Move or stay still depending on specified options
         // TODO: make sure server cheat protections aren't triggering

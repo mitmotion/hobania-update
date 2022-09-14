@@ -6636,6 +6636,7 @@ dependencies = [
  "spin_sleep",
  "structopt",
  "strum",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "uuid",

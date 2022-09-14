@@ -185,6 +185,7 @@ fn main() -> io::Result<()> {
     // Wait for a tick so we don't start with a zero dt
 
     let mut tick_no = 0u64;
+    server.runtime().clone().block_on(async {
     loop {
         tick_no += 1;
         span!(guard, "work");
@@ -260,10 +261,11 @@ fn main() -> io::Result<()> {
 
         drop(guard);
         // Wait for the next tick.
-        clock.tick();
+        clock.tick().await;
         #[cfg(feature = "tracy")]
         common_base::tracy_client::frame_mark();
     }
+    });
 
     Ok(())
 }

@@ -228,9 +228,15 @@ fn main() {
     i18n.read().log_missing_entries();
     i18n.set_english_fallback(settings.language.use_english_fallback);
 
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .max_blocking_threads(1)
+        .enable_time()
+        .build()
+        .expect("Failed to create tokio runtime.");
+
     // Create window
     use veloren_voxygen::{error::Error, render::RenderError};
-    let (mut window, event_loop) = match Window::new(&settings) {
+    let (mut window, event_loop) = match Window::new(&settings, &runtime) {
         Ok(ok) => ok,
         // Custom panic message when a graphics backend could not be found
         Err(Error::RenderError(RenderError::CouldNotFindAdapter)) => {
@@ -267,6 +273,7 @@ fn main() {
         audio,
         profile,
         window,
+        runtime,
         #[cfg(feature = "egui-ui")]
         egui_state,
         lazy_init,

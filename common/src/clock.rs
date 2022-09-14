@@ -1,4 +1,5 @@
 use common_base::span;
+use core::future::Future;
 use ordered_float::NotNan;
 use std::{
     collections::VecDeque,
@@ -92,8 +93,18 @@ impl Clock {
         }
     }
 
+    pub async fn tick(&mut self) {
+        self.tick_inner(|duration| async move { spin_sleep::sleep(duration); }).await;
+    }
+
+    pub async fn tick_slow(&mut self) {
+        self.tick_inner(tokio::time::sleep).await;
+    }
+
     /// Do not modify without asking @xMAC94x first!
-    pub fn tick(&mut self) {
+    pub async fn tick_inner<F>(&mut self, sleep: impl FnOnce(Duration) -> F)
+        where F: Future<Output=()>,
+    {
         span!(_guard, "tick", "Clock::tick");
         span!(guard, "clock work");
         let current_sys_time = Instant::now();
@@ -105,7 +116,7 @@ impl Clock {
         drop(guard);
         // Attempt to sleep to fill the gap.
         if let Some(sleep_dur) = self.target_dt.checked_sub(busy_delta) {
-            spin_sleep::sleep(sleep_dur);
+            sleep(sleep_dur).await;
         }
 
         let after_sleep_sys_time = Instant::now();

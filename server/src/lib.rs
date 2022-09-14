@@ -634,6 +634,12 @@ impl Server {
         self.state.ecs().fetch::<DataDir>()
     }
 
+    /// Get a reference to the client's runtime thread pool. This pool should be
+    /// used for any computationally expensive operations that run outside
+    /// of the main thread (i.e., threads that block on I/O operations are
+    /// exempt).
+    pub fn runtime(&self) -> &Arc<Runtime> { &self.runtime }
+
     /// Get a reference to the server's game state.
     pub fn state(&self) -> &State { &self.state }
 

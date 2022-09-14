@@ -260,7 +260,7 @@ fn handle_main_events_cleared(
         global_state
             .clock
             .set_target_dt(Duration::from_secs_f64(1.0 / target_fps as f64));
-        global_state.clock.tick();
+        global_state.runtime.block_on(global_state.clock.tick_slow());
         drop(guard);
         #[cfg(feature = "tracy")]
         common_base::tracy_client::frame_mark();
