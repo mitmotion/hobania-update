@@ -53,29 +53,9 @@ impl PostProcessLayout {
                 },
                 count: None,
             },
-            // Depth source
-            wgpu::BindGroupLayoutEntry {
-                binding: 2,
-                visibility: wgpu::ShaderStage::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 3,
-                visibility: wgpu::ShaderStage::FRAGMENT,
-                ty: wgpu::BindingType::Sampler {
-                    filtering: true,
-                    comparison: false,
-                },
-                count: None,
-            },
             // Locals
             wgpu::BindGroupLayoutEntry {
-                binding: 4,
+                binding: 2,
                 visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
@@ -90,7 +70,7 @@ impl PostProcessLayout {
             bind_entries.push(
                 // src bloom
                 wgpu::BindGroupLayoutEntry {
-                    binding: 5,
+                    binding: 3,
                     visibility: wgpu::ShaderStage::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -114,10 +94,8 @@ impl PostProcessLayout {
         &self,
         device: &wgpu::Device,
         src_color: &wgpu::TextureView,
-        src_depth: &wgpu::TextureView,
         src_bloom: Option<&wgpu::TextureView>,
         sampler: &wgpu::Sampler,
-        depth_sampler: &wgpu::Sampler,
         locals: &Consts<Locals>,
     ) -> BindGroup {
         let mut entries = vec![
@@ -131,14 +109,6 @@ impl PostProcessLayout {
             },
             wgpu::BindGroupEntry {
                 binding: 2,
-                resource: wgpu::BindingResource::TextureView(src_depth),
-            },
-            wgpu::BindGroupEntry {
-                binding: 3,
-                resource: wgpu::BindingResource::Sampler(depth_sampler),
-            },
-            wgpu::BindGroupEntry {
-                binding: 4,
                 resource: locals.buf().as_entire_binding(),
             },
         ];
@@ -150,7 +120,7 @@ impl PostProcessLayout {
                 // TODO: if there is no upscaling we can do the last bloom upsampling in post
                 // process to save a pass and the need for the final full size bloom render target
                 wgpu::BindGroupEntry {
-                    binding: 5,
+                    binding: 3,
                     resource: wgpu::BindingResource::TextureView(src_bloom),
                 },
             );

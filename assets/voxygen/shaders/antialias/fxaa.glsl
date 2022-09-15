@@ -117,12 +117,7 @@ void texcoords(vec2 fragCoord, vec2 resolution,
 }
 
 
-vec4 aa_apply(
-    texture2D tex, sampler smplr,
-    texture2D depth_tex, sampler depth_smplr,
-    vec2 fragCoord,
-    vec2 resolution
-) {
+vec4 aa_apply(texture2D tex, sampler smplr, vec2 fragCoord, vec2 resolution) {
     mediump vec2 v_rgbNW;
     mediump vec2 v_rgbNE;
     mediump vec2 v_rgbSW;
@@ -130,7 +125,7 @@ vec4 aa_apply(
     mediump vec2 v_rgbM;
 
     #ifdef EXPERIMENTAL_BETTERAA
-        float fxaa_scale = textureSize(sampler2D(tex, smplr), 0).x / 1000.0;
+        float fxaa_scale = textureSize(sampler2D(tex, smplr), 0).x / 900.0;
     #else
         float fxaa_scale = FXAA_SCALE;
     #endif

@@ -47,10 +47,8 @@ impl Locals {
         let postprocess_bind = layouts.postprocess.bind(
             device,
             tgt_color_pp_view,
-            tgt_depth_view,
             bloom.as_ref().map(|b| b.final_tgt_view),
             sampler,
-            depth_sampler,
             &postprocess_locals,
         );
 
@@ -94,10 +92,8 @@ impl Locals {
         self.postprocess_bind = layouts.postprocess.bind(
             device,
             tgt_color_pp_view,
-            tgt_depth_view,
             bloom.as_ref().map(|b| b.final_tgt_view),
             sampler,
-            depth_sampler,
             &self.postprocess,
         );
         self.bloom_binds = bloom.map(|bloom| {
