@@ -14,6 +14,7 @@
     generic_const_exprs,
     generic_arg_infer,
     label_break_value,
+    let_chains,
     option_zip,
     portable_simd,
     slice_as_chunks,

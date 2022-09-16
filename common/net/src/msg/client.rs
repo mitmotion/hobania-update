@@ -2,7 +2,7 @@ use super::{world_msg::SiteId, PingMsg};
 use common::{
     character::CharacterId,
     comp,
-    comp::{Skill, SkillGroupKind},
+    comp::Skill,
     terrain::block::Block,
 };
 use serde::{Deserialize, Serialize};
@@ -76,7 +76,6 @@ pub enum ClientGeneral {
         ori: comp::Ori,
     },
     UnlockSkill(Skill),
-    UnlockSkillGroup(SkillGroupKind),
     RequestSiteInfo(SiteId),
     UpdateMapMarker(comp::MapMarkerChange),
     //Only in Game, via terrain stream
@@ -133,7 +132,6 @@ impl ClientMsg {
                         | ClientGeneral::LodZoneRequest { .. }
                         | ClientGeneral::UnlockSkill(_)
                         | ClientGeneral::RequestSiteInfo(_)
-                        | ClientGeneral::UnlockSkillGroup(_)
                         | ClientGeneral::RequestPlayerPhysics { .. }
                         | ClientGeneral::RequestLossyTerrainCompression { .. }
                         | ClientGeneral::UpdateMapMarker(_) => {
