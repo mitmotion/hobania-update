@@ -7,6 +7,7 @@ use common::{
     calendar::Calendar,
     character::{self, CharacterItem},
     comp::{self, invite::InviteKind, item::MaterialStatManifest},
+    event::UpdateCharacterMetadata,
     lod,
     outcome::Outcome,
     recipe::{ComponentRecipeBook, RecipeBook},
@@ -135,8 +136,8 @@ impl SerializedTerrainChunk<'_> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerGeneral<'a> {
     //Character Screen related
-    /// An error occurred while loading character data
-    CharacterDataLoadError(String),
+    /// Result of loading character data
+    CharacterDataLoadResult(Result<UpdateCharacterMetadata, String>),
     /// A list of characters belonging to the a authenticated player was sent
     CharacterListUpdate(Vec<CharacterItem>),
     /// An error occurred while creating or deleting a character
@@ -292,7 +293,7 @@ impl ServerMsg<'_> {
                 registered
                     && match g {
                         //Character Screen related
-                        ServerGeneral::CharacterDataLoadError(_)
+                        ServerGeneral::CharacterDataLoadResult(_)
                         | ServerGeneral::CharacterListUpdate(_)
                         | ServerGeneral::CharacterActionError(_)
                         | ServerGeneral::CharacterEdited(_)

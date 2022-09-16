@@ -139,7 +139,11 @@ impl Server {
                     entity,
                     character_id,
                 } => handle_initialize_character(self, entity, character_id),
-                ServerEvent::UpdateCharacterData { entity, components } => {
+                ServerEvent::UpdateCharacterData {
+                    entity,
+                    components,
+                    metadata,
+                } => {
                     let (
                         body,
                         stats,
@@ -160,7 +164,7 @@ impl Server {
                         active_abilities,
                         map_marker,
                     };
-                    handle_loaded_character_data(self, entity, components);
+                    handle_loaded_character_data(self, entity, components, metadata);
                 },
                 ServerEvent::ExitIngame { entity } => {
                     cancel_trade_for(self, entity);

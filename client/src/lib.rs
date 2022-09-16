@@ -32,7 +32,7 @@ use common::{
         GroupManip, InputKind, InventoryAction, InventoryEvent, InventoryUpdateEvent,
         MapMarkerChange, UtteranceKind,
     },
-    event::{EventBus, LocalEvent},
+    event::{EventBus, LocalEvent, UpdateCharacterMetadata},
     grid::Grid,
     link::Is,
     lod,
@@ -107,6 +107,7 @@ pub enum Event {
     Outcome(Outcome),
     CharacterCreated(CharacterId),
     CharacterEdited(CharacterId),
+    CharacterJoined(UpdateCharacterMetadata),
     CharacterError(String),
     MapMarker(comp::MapMarkerUpdate),
 }
@@ -889,7 +890,6 @@ impl Client {
                     | ClientGeneral::UnlockSkillGroup(_)
                     | ClientGeneral::RequestPlayerPhysics { .. }
                     | ClientGeneral::RequestLossyTerrainCompression { .. }
-                    | ClientGeneral::AcknowledgePersistenceLoadError
                     | ClientGeneral::UpdateMapMarker(_) => {
                         #[cfg(feature = "tracy")]
                         {
@@ -1660,10 +1660,6 @@ impl Client {
         }))
     }
 
-    pub fn acknolwedge_persistence_load_error(&mut self) {
-        self.send_msg(ClientGeneral::AcknowledgePersistenceLoadError)
-    }
-
     /// Execute a single client tick, handle input and update the game state by
     /// the given duration.
     pub fn tick(
@@ -2405,7 +2401,11 @@ impl Client {
                 warn!("CharacterActionError: {:?}.", error);
                 events.push(Event::CharacterError(error));
             },
-            ServerGeneral::CharacterDataLoadError(error) => {
+            ServerGeneral::CharacterDataLoadResult(Ok(metadata)) => {
+                trace!("Handling join result by server");
+                events.push(Event::CharacterJoined(metadata));
+            },
+            ServerGeneral::CharacterDataLoadResult(Err(error)) => {
                 trace!("Handling join error by server");
                 self.presence = None;
                 self.clean_state();
