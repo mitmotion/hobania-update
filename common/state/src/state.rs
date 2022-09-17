@@ -145,7 +145,7 @@ impl State {
                 .num_threads(rayon_threads/*.saturating_sub(rayon_offset)*/)
                 // .thread_name(move |i| format!("rayon-{}", i))
                 .thread_name(move |i| format!("rayon-{}-{}", thread_name_infix, i))
-                .spawn_handler(move |thread| {
+                /* .spawn_handler(move |thread| {
                     let mut b = ThreadBuilder::default();
                     if let Some(name) = thread.name() {
                         b = b.name(name.to_owned());
@@ -160,10 +160,37 @@ impl State {
                     }
                     b.spawn_careless(|| thread.run())?;
                     Ok(())
-                })
+                }) */
                 .start_handler(move |i| {
                     let name = format!("rayon-{}-{}", thread_name_infix, i);
                     common_base::set_thread_name!(&name);
+                    // We use a different i for assigning cores...
+                    let i = if i == 0 {
+                        // We always want our first core to be the one reserved for Rayon, if
+                        // possible.  This turns out to be the *last* core assigned to Rayon,
+                        // in cases where it's actually pinned.  For example, on a server with 8
+                        // cores...
+                        //
+                        // * [] will be reserved for the main thread
+                        // * [6,7] will be reserved for tokio (num_cpu / 4)
+                        // * [0,1,2,3,4] will have pinned server slowjobs *and* pinned rayon tasks
+                        //   (of low priority/normal priority, respectively).
+                        // * [5] will be reserved just for rayon.
+                        //
+                        // Since indices have (rayon_offset + tokio_count) subtracted from them to
+                        // find the core, this works out to just putting the first thread "last."
+                        rayon_threads - 1
+                    } else {
+                        // The first few tasks spawned are often join/split operations, which tend
+                        // to not be computationally intensive but which we don't want preempted
+                        // with no way to get them back.  So we try to put these on the *unpinned*
+                        // rayon threads--i.e. the rayon_offset reserved for the main thread(s) and
+                        // tokio_count threads reserved for tokio.  These are at the *beginning*,
+                        // of the rayon indices, so we use those in order.  Additionally, we
+                        // continue to use them in order after that, since the pinned rayon ids
+                        // follow immediately afterwards.
+                        i - 1
+                    };
                     if let Some(&core_id) = i.checked_sub(rayon_offset + tokio_count).and_then(|i| core_ids_.get(i)) {
                         core_affinity::set_for_current(core_id);
                     }
@@ -247,11 +274,11 @@ impl State {
     }
 
     pub fn new(ecs_role: GameMode, pools: Pools, map_size_lg: MapSizeLg, default_chunk: Arc<TerrainChunk>) -> Self {
-        /* let thread_name_infix = match game_mode {
+        let thread_name_infix = match ecs_role {
             GameMode::Server => "s",
             GameMode::Client => "c",
             GameMode::Singleplayer => "sp",
-        }; */
+        };
 
         let num_cpu = /*num_cpus::get()*/pools.slowjob_threads/* / 2 + pools.0 / 4*/;
         let game_mode = pools.game_mode;
@@ -280,7 +307,29 @@ impl State {
         let cores = core_affinity::get_core_ids().unwrap_or(vec![]).into_iter().skip(start).step_by(step).take(total).collect::<Vec<_>>();
         let floating = total.saturating_sub(cores.len());
         // TODO: NUMA utils
-        let slow_pool = slowjob::ThreadPool::with_affinity(&cores, floating, slowjob::large());
+        let slow_pool = slowjob::ThreadPoolBuilder::new()
+            .thread_name(move |i| format!("slowjob-{}-{}", thread_name_infix, i))
+            .spawn_handler(move |thread| {
+                let mut b = ThreadBuilder::default();
+                if let Some(name) = thread.name() {
+                    b = b.name(name.to_owned());
+                }
+                if let Some(stack_size) = thread.stack_size() {
+                    b = b.stack_size(stack_size);
+                }
+                // pinned slowjob threads run with low priority
+                let index = thread.index();
+                if index < floating {
+                    b = b.priority(ThreadPriority::Min);
+                }
+                b.spawn_careless(|| thread.run())?;
+                Ok(())
+            })
+            .start_handler(move |i| {
+                let name = format!("slowjob-{}-{}", thread_name_infix, i);
+                common_base::set_thread_name!(&name);
+            })
+            .build_with_affinity(&cores, floating, slowjob::large());
         /* let slow_pool = if cores.is_empty() {
             // We need *some* workers, so just start on all cores.
             slowjob::large_pool(1)/*slow_limit.min(64)/* as usize */)*/

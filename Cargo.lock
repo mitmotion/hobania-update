@@ -1837,7 +1837,7 @@ checksum = "77f3309417938f28bf8228fcff79a4a37103981e3e186d2ccd19c74b38f4eb71"
 [[package]]
 name = "executors"
 version = "0.9.0"
-source = "git+https://github.com/pythonesque/rust-executors.git?rev=1d08f96cf9c52ed85eda8e0f68b5d43072d39b14#1d08f96cf9c52ed85eda8e0f68b5d43072d39b14"
+source = "git+https://github.com/pythonesque/rust-executors.git?rev=db84d362eca5575e982a580f6dd11207a090fc8e#db84d362eca5575e982a580f6dd11207a090fc8e"
 dependencies = [
  "arr_macro",
  "async-task",

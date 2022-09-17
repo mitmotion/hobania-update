@@ -14,6 +14,7 @@ use common::{
     terrain::TerrainGrid,
     vol::ReadVol,
 };
+use common_base::prof_span;
 use common_ecs::{Job, Origin, Phase, System};
 use common_net::msg::{ClientGeneral, ServerGeneral};
 use common_state::{BlockChange, BuildAreas};
@@ -392,8 +393,11 @@ impl<'a> System<'a> for Sys {
             // NOTE: Required because Specs has very poor work splitting for sparse joins.
             .par_bridge()
             .map_init(
-                || server_event_bus.emitter(),
-                |server_emitter, (
+                || {
+                    prof_span!(guard, "in_game rayon job");
+                    (server_event_bus.emitter(), guard)
+                },
+                |(server_emitter, _guard), (
                     entity,
                     client,
                     mut maybe_presence,

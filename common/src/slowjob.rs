@@ -13,7 +13,7 @@ use executors::{
     parker::{LargeThreadData, StaticParker},
     Executor,
 };
-pub use executors::parker::large;
+pub use executors::{builder::ThreadPoolBuilder, parker::large};
 use hashbrown::{hash_map::Entry, HashMap};
 use pin_project_lite::pin_project;
 // use rayon::ThreadPool;
