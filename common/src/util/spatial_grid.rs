@@ -1,28 +1,35 @@
+use core::sync::atomic::{AtomicU32, Ordering};
 use vek::*;
 
+pub type MapMut = dashmap::DashMap<Vec2<i32>, Vec<specs::Entity>>;
+pub type MapRef = dashmap::ReadOnlyView<Vec2<i32>, Vec<specs::Entity>>;
+
 #[derive(Debug)]
-pub struct SpatialGrid {
-    // Uses two scales of grids so that we can have a hard limit on how far to search in the
-    // smaller grid
-    grid: hashbrown::HashMap<Vec2<i32>, Vec<specs::Entity>>,
-    large_grid: hashbrown::HashMap<Vec2<i32>, Vec<specs::Entity>>,
-    // Log base 2 of the cell size of the spatial grid
+pub struct SpatialGridInner<Map, Radius> {
+    /// Uses two scales of grids so that we can have a hard limit on how far to search in the
+    /// smaller grid
+    grid: Map,
+    large_grid: Map,
+    /// Log base 2 of the cell size of the spatial grid
     lg2_cell_size: usize,
-    // Log base 2 of the cell size of the large spatial grid
+    /// Log base 2 of the cell size of the large spatial grid
     lg2_large_cell_size: usize,
-    // Entities with a radius over this value are store in the coarser large_grid
-    // This is the amount of buffer space we need to add when finding the intersections with cells
-    // in the regular grid
+    /// Entities with a radius over this value are store in the coarser large_grid
+    /// This is the amount of buffer space we need to add when finding the intersections with cells
+    /// in the regular grid
     radius_cutoff: u32,
-    // Stores the largest radius of the entities in the large_grid
-    // This is the amount of buffer space we need to add when finding the intersections with cells
-    // in the larger grid
-    // note: could explore some distance field type thing for querying whether there are large
-    // entities nearby that necessitate expanding the cells searched for collision (and querying
-    // how much it needs to be expanded)
-    // TODO: log this to metrics?
-    largest_large_radius: u32,
+    /// Stores the largest radius of the entities in the large_grid
+    /// This is the amount of buffer space we need to add when finding the intersections with cells
+    /// in the larger grid
+    /// note: could explore some distance field type thing for querying whether there are large
+    /// entities nearby that necessitate expanding the cells searched for collision (and querying
+    /// how much it needs to be expanded)
+    /// TODO: log this to metrics?
+    largest_large_radius: Radius,
 }
+
+pub type SpatialGrid = SpatialGridInner<MapMut, AtomicU32>;
+pub type SpatialGridRef = SpatialGridInner<MapRef, u32>;
 
 impl SpatialGrid {
     pub fn new(lg2_cell_size: usize, lg2_large_cell_size: usize, radius_cutoff: u32) -> Self {
@@ -32,28 +39,55 @@ impl SpatialGrid {
             lg2_cell_size,
             lg2_large_cell_size,
             radius_cutoff,
-            largest_large_radius: radius_cutoff,
+            largest_large_radius: radius_cutoff.into(),
         }
     }
 
     /// Add an entity at the provided 2d pos into the spatial grid
-    pub fn insert(&mut self, pos: Vec2<i32>, radius: u32, entity: specs::Entity) {
+    pub fn insert(&self, pos: Vec2<i32>, radius: u32, entity: specs::Entity) {
         if radius <= self.radius_cutoff {
             let cell = pos.map(|e| e >> self.lg2_cell_size);
             self.grid.entry(cell).or_default().push(entity);
         } else {
             let cell = pos.map(|e| e >> self.lg2_large_cell_size);
             self.large_grid.entry(cell).or_default().push(entity);
-            self.largest_large_radius = self.largest_large_radius.max(radius);
+            // NOTE: Relaxed ordering is sufficient, because max is a monotonic function (for the
+            // duration of shared write access to the map; clear takes &mut so it's okay that it's
+            // not monotonic).  We don't need to order this operation with anything else, either,
+            // because all interesting map operations require unique access to Self to perform,
+            // which axiomatically synchronizes with the end of all prior shared borrows.
+            //
+            // TODO: Verify that intrinsics lower intelligently to a priority update on CPUs (since
+            // the intrinsic seems targeted at GPUs).
+            self.largest_large_radius.fetch_max(radius, Ordering::Relaxed);
         }
     }
 
+    pub fn into_read_only(self) -> SpatialGridRef {
+        SpatialGridInner {
+            grid: self.grid.into_read_only(),
+            large_grid: self.large_grid.into_read_only(),
+            lg2_cell_size: self.lg2_cell_size,
+            lg2_large_cell_size: self.lg2_large_cell_size,
+            radius_cutoff: self.radius_cutoff,
+            largest_large_radius: self.largest_large_radius.into_inner(),
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.grid.clear();
+        self.large_grid.clear();
+        self.largest_large_radius = self.radius_cutoff.into();
+    }
+}
+
+impl SpatialGridRef {
     /// Get an iterator over the entities overlapping the provided axis aligned
     /// bounding region.
     /// NOTE: for best optimization of the iterator use
     /// `for_each` rather than a for loop.
     pub fn in_aabr<'a>(&'a self, aabr: Aabr<i32>) -> impl Iterator<Item = specs::Entity> + 'a {
-        let iter = |max_entity_radius, grid: &'a hashbrown::HashMap<_, _>, lg2_cell_size| {
+        let iter = |max_entity_radius, grid: &'a MapRef, lg2_cell_size| {
             // Add buffer for other entity radius
             let min = aabr.min - max_entity_radius as i32;
             let max = aabr.max + max_entity_radius as i32;
@@ -100,9 +134,14 @@ impl SpatialGrid {
         self.in_aabr(aabr)
     }
 
-    pub fn clear(&mut self) {
-        self.grid.clear();
-        self.large_grid.clear();
-        self.largest_large_radius = self.radius_cutoff;
+    pub fn into_inner(self) -> SpatialGrid {
+        SpatialGridInner {
+            grid: self.grid.into_inner(),
+            large_grid: self.large_grid.into_inner(),
+            lg2_cell_size: self.lg2_cell_size,
+            lg2_large_cell_size: self.lg2_large_cell_size,
+            radius_cutoff: self.radius_cutoff,
+            largest_large_radius: self.largest_large_radius.into(),
+        }
     }
 }

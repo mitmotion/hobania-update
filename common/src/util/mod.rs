@@ -38,4 +38,4 @@ pub use dir::*;
 pub use option::either_with;
 pub use plane::Plane;
 pub use projection::Projection;
-pub use spatial_grid::SpatialGrid;
+pub use spatial_grid::{SpatialGrid, SpatialGridRef};

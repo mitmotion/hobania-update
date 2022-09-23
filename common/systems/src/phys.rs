@@ -15,7 +15,7 @@ use common::{
     states,
     terrain::{Block, BlockKind, TerrainGrid},
     uid::Uid,
-    util::{Projection, SpatialGrid},
+    util::{Projection, SpatialGrid, SpatialGridRef},
     vol::{BaseVol, ReadVol},
 };
 use common_base::{prof_span, span};
@@ -146,56 +146,57 @@ impl<'a> PhysicsData<'a> {
     /// Add/reset physics state components
     fn reset(&mut self) {
         span!(_guard, "Add/reset physics state components");
-        for (entity, _, _, _, _) in (
+        (
             &self.read.entities,
-            &self.read.colliders,
-            &self.write.positions,
-            &self.write.velocities,
-            &self.write.orientations,
+            self.read.colliders.mask(),
+            self.write.positions.mask(),
+            self.write.velocities.mask(),
+            self.write.orientations.mask(),
         )
             .join()
-        {
-            let _ = self
-                .write
-                .physics_states
-                .entry(entity)
-                .map(|e| e.or_insert_with(Default::default));
-        }
+            .for_each(|(entity, _, _, _, _)| {
+                let _ = self
+                    .write
+                    .physics_states
+                    .entry(entity)
+                    .map(|e| e.or_insert_with(Default::default));
+            });
     }
 
     fn maintain_pushback_cache(&mut self) {
         span!(_guard, "Maintain pushback cache");
         // Add PreviousPhysCache for all relevant entities
-        for entity in (
+        (
             &self.read.entities,
-            &self.read.colliders,
-            &self.write.velocities,
-            &self.write.positions,
-            !&self.write.previous_phys_cache,
+            self.read.colliders.mask(),
+            self.write.velocities.mask(),
+            self.write.positions.mask(),
+            !self.write.previous_phys_cache.mask(),
         )
             .join()
             .map(|(e, _, _, _, _)| e)
             .collect::<Vec<_>>()
-        {
-            let _ = self
-                .write
-                .previous_phys_cache
-                .insert(entity, PreviousPhysCache {
-                    velocity_dt: Vec3::zero(),
-                    center: Vec3::zero(),
-                    collision_boundary: 0.0,
-                    scale: 0.0,
-                    scaled_radius: 0.0,
-                    neighborhood_radius: 0.0,
-                    origins: None,
-                    pos: None,
-                    ori: Quaternion::identity(),
-                });
-        }
+            .into_iter()
+            .for_each(|entity| {
+                let _ = self
+                    .write
+                    .previous_phys_cache
+                    .insert(entity, PreviousPhysCache {
+                        velocity_dt: Vec3::zero(),
+                        center: Vec3::zero(),
+                        collision_boundary: 0.0,
+                        scale: 0.0,
+                        scaled_radius: 0.0,
+                        neighborhood_radius: 0.0,
+                        origins: None,
+                        pos: None,
+                        ori: Quaternion::identity(),
+                    });
+            });
 
         // Update PreviousPhysCache
-        for (_, vel, position, ori, mut phys_cache, collider, scale, cs) in (
-            &self.read.entities,
+        (
+            /* &self.read.entities, */
             &self.write.velocities,
             &self.write.positions,
             &self.write.orientations,
@@ -204,73 +205,78 @@ impl<'a> PhysicsData<'a> {
             self.read.scales.maybe(),
             self.read.char_states.maybe(),
         )
-            .join()
-        {
-            let scale = scale.map(|s| s.0).unwrap_or(1.0);
-            let z_limits = calc_z_limit(cs, collider);
-            let (z_min, z_max) = z_limits;
-            let (z_min, z_max) = (z_min * scale, z_max * scale);
-            let half_height = (z_max - z_min) / 2.0;
+            .par_join()
+            .for_each(
+                |(/* _, */ vel, position, ori, mut phys_cache, collider, scale, cs)| {
+                    let scale = scale.map(|s| s.0).unwrap_or(1.0);
+                    let z_limits = calc_z_limit(cs, collider);
+                    let (z_min, z_max) = z_limits;
+                    let (z_min, z_max) = (z_min * scale, z_max * scale);
+                    let half_height = (z_max - z_min) / 2.0;
 
-            phys_cache.velocity_dt = vel.0 * self.read.dt.0;
-            let entity_center = position.0 + Vec3::new(0.0, 0.0, z_min + half_height);
-            let flat_radius = collider.bounding_radius() * scale;
-            let radius = (flat_radius.powi(2) + half_height.powi(2)).sqrt();
+                    phys_cache.velocity_dt = vel.0 * self.read.dt.0;
+                    let entity_center = position.0 + Vec3::new(0.0, 0.0, z_min + half_height);
+                    let flat_radius = collider.bounding_radius() * scale;
+                    let radius = (flat_radius.powi(2) + half_height.powi(2)).sqrt();
 
-            // Move center to the middle between OLD and OLD+VEL_DT
-            // so that we can reduce the collision_boundary.
-            phys_cache.center = entity_center + phys_cache.velocity_dt / 2.0;
-            phys_cache.collision_boundary = radius + (phys_cache.velocity_dt / 2.0).magnitude();
-            phys_cache.scale = scale;
-            phys_cache.scaled_radius = flat_radius;
+                    // Move center to the middle between OLD and OLD+VEL_DT
+                    // so that we can reduce the collision_boundary.
+                    phys_cache.center = entity_center + phys_cache.velocity_dt / 2.0;
+                    phys_cache.collision_boundary =
+                        radius + (phys_cache.velocity_dt / 2.0).magnitude();
+                    phys_cache.scale = scale;
+                    phys_cache.scaled_radius = flat_radius;
 
-            let neighborhood_radius = match collider {
-                Collider::CapsulePrism { radius, .. } => radius * scale,
-                Collider::Voxel { .. } | Collider::Volume(_) | Collider::Point => flat_radius,
-            };
-            phys_cache.neighborhood_radius = neighborhood_radius;
+                    let neighborhood_radius = match collider {
+                        Collider::CapsulePrism { radius, .. } => radius * scale,
+                        Collider::Voxel { .. } | Collider::Volume(_) | Collider::Point => {
+                            flat_radius
+                        },
+                    };
+                    phys_cache.neighborhood_radius = neighborhood_radius;
 
-            let ori = ori.to_quat();
-            let origins = match collider {
-                Collider::CapsulePrism { p0, p1, .. } => {
-                    let a = p1 - p0;
-                    let len = a.magnitude();
-                    // If origins are close enough, our capsule prism is cylinder
-                    // with one origin which we don't even need to rotate.
-                    //
-                    // Other advantage of early-return is that we don't
-                    // later divide by zero and return NaN
-                    if len < f32::EPSILON * 10.0 {
-                        Some((*p0, *p0))
-                    } else {
-                        // Apply orientation to origins of prism.
-                        //
-                        // We do this by building line between them,
-                        // rotate it and then split back to origins.
-                        // (Otherwise we will need to do the same with each
-                        // origin).
-                        //
-                        // Cast it to 3d and then convert it back to 2d
-                        // to apply quaternion.
-                        let a = a.with_z(0.0);
-                        let a = ori * a;
-                        let a = a.xy();
-                        // Previous operation could shrink x and y coordinates
-                        // if orientation had Z parameter.
-                        // Make sure we have the same length as before
-                        // (and scale it, while we on it).
-                        let a = a.normalized() * scale * len;
-                        let p0 = -a / 2.0;
-                        let p1 = a / 2.0;
+                    let ori = ori.to_quat();
+                    let origins = match collider {
+                        Collider::CapsulePrism { p0, p1, .. } => {
+                            let a = p1 - p0;
+                            let len = a.magnitude();
+                            // If origins are close enough, our capsule prism is cylinder
+                            // with one origin which we don't even need to rotate.
+                            //
+                            // Other advantage of early-return is that we don't
+                            // later divide by zero and return NaN
+                            if len < f32::EPSILON * 10.0 {
+                                Some((*p0, *p0))
+                            } else {
+                                // Apply orientation to origins of prism.
+                                //
+                                // We do this by building line between them,
+                                // rotate it and then split back to origins.
+                                // (Otherwise we will need to do the same with each
+                                // origin).
+                                //
+                                // Cast it to 3d and then convert it back to 2d
+                                // to apply quaternion.
+                                let a = a.with_z(0.0);
+                                let a = ori * a;
+                                let a = a.xy();
+                                // Previous operation could shrink x and y coordinates
+                                // if orientation had Z parameter.
+                                // Make sure we have the same length as before
+                                // (and scale it, while we on it).
+                                let a = a.normalized() * scale * len;
+                                let p0 = -a / 2.0;
+                                let p1 = a / 2.0;
 
-                        Some((p0, p1))
-                    }
+                                Some((p0, p1))
+                            }
+                        },
+                        Collider::Voxel { .. } | Collider::Volume(_) | Collider::Point => None,
+                    };
+                    phys_cache.origins = origins;
+                    phys_cache.ori = ori;
                 },
-                Collider::Voxel { .. } | Collider::Volume(_) | Collider::Point => None,
-            };
-            phys_cache.origins = origins;
-            phys_cache.ori = ori;
-        }
+            );
     }
 
     fn construct_spatial_grid(&mut self) -> SpatialGrid {
@@ -292,27 +298,28 @@ impl<'a> PhysicsData<'a> {
         let lg2_cell_size = 5;
         let lg2_large_cell_size = 6;
         let radius_cutoff = 8;
-        let mut spatial_grid = SpatialGrid::new(lg2_cell_size, lg2_large_cell_size, radius_cutoff);
-        for (entity, pos, phys_cache, _, _) in (
+        let spatial_grid = SpatialGrid::new(lg2_cell_size, lg2_large_cell_size, radius_cutoff);
+        (
             &read.entities,
             &write.positions,
             &write.previous_phys_cache,
             write.velocities.mask(),
-            !&read.projectiles, // Not needed because they are skipped in the inner loop below
+            !read.projectiles.mask(), /* Not needed because they are skipped in the inner loop
+                                       * below */
         )
-            .join()
-        {
-            // Note: to not get too fine grained we use a 2D grid for now
-            let radius_2d = phys_cache.scaled_radius.ceil() as u32;
-            let pos_2d = pos.0.xy().map(|e| e as i32);
-            const POS_TRUNCATION_ERROR: u32 = 1;
-            spatial_grid.insert(pos_2d, radius_2d + POS_TRUNCATION_ERROR, entity);
-        }
+            .par_join()
+            .for_each(|(entity, pos, phys_cache, _, _)| {
+                // Note: to not get too fine grained we use a 2D grid for now
+                let radius_2d = phys_cache.scaled_radius.ceil() as u32;
+                let pos_2d = pos.0.xy().map(|e| e as i32);
+                const POS_TRUNCATION_ERROR: u32 = 1;
+                spatial_grid.insert(pos_2d, radius_2d + POS_TRUNCATION_ERROR, entity);
+            });
 
         spatial_grid
     }
 
-    fn apply_pushback(&mut self, job: &mut Job<Sys>, spatial_grid: &SpatialGrid) {
+    fn apply_pushback(&mut self, job: &mut Job<Sys>, spatial_grid: &SpatialGridRef) {
         span!(_guard, "Apply pushback");
         job.cpu_stats.measure(ParMode::Rayon);
         let PhysicsData {
@@ -529,30 +536,30 @@ impl<'a> PhysicsData<'a> {
         let lg2_cell_size = 7; // 128
         let lg2_large_cell_size = 8; // 256
         let radius_cutoff = 64;
-        let mut spatial_grid = SpatialGrid::new(lg2_cell_size, lg2_large_cell_size, radius_cutoff);
+        let spatial_grid = SpatialGrid::new(lg2_cell_size, lg2_large_cell_size, radius_cutoff);
         // TODO: give voxel colliders their own component type
-        for (entity, pos, collider, ori) in (
+        (
             &read.entities,
             &write.positions,
             &read.colliders,
             &write.orientations,
         )
-            .join()
-        {
-            let vol = match collider {
-                Collider::Voxel { id } => voxel_colliders_manifest.colliders.get(id),
-                Collider::Volume(vol) => Some(&**vol),
-                _ => None,
-            };
+            .par_join()
+            .for_each(|(entity, pos, collider, ori)| {
+                let vol = match collider {
+                    Collider::Voxel { id } => voxel_colliders_manifest.colliders.get(id),
+                    Collider::Volume(vol) => Some(&**vol),
+                    _ => None,
+                };
 
-            if let Some(vol) = vol {
-                let sphere = voxel_collider_bounding_sphere(vol, pos, ori);
-                let radius = sphere.radius.ceil() as u32;
-                let pos_2d = sphere.center.xy().map(|e| e as i32);
-                const POS_TRUNCATION_ERROR: u32 = 1;
-                spatial_grid.insert(pos_2d, radius + POS_TRUNCATION_ERROR, entity);
-            }
-        }
+                if let Some(vol) = vol {
+                    let sphere = voxel_collider_bounding_sphere(vol, pos, ori);
+                    let radius = sphere.radius.ceil() as u32;
+                    let pos_2d = sphere.center.xy().map(|e| e as i32);
+                    const POS_TRUNCATION_ERROR: u32 = 1;
+                    spatial_grid.insert(pos_2d, radius + POS_TRUNCATION_ERROR, entity);
+                }
+            });
 
         spatial_grid
     }
@@ -560,7 +567,7 @@ impl<'a> PhysicsData<'a> {
     fn handle_movement_and_terrain(
         &mut self,
         job: &mut Job<Sys>,
-        voxel_collider_spatial_grid: &SpatialGrid,
+        voxel_collider_spatial_grid: &SpatialGridRef,
     ) {
         let PhysicsData {
             ref read,
@@ -610,7 +617,7 @@ impl<'a> PhysicsData<'a> {
             &write.physics_states,
             &read.masses,
             &read.densities,
-            !&read.is_ridings,
+            !read.is_ridings.mask(),
         )
             .par_join()
             .for_each_init(
@@ -694,19 +701,19 @@ impl<'a> PhysicsData<'a> {
         // Update cached 'old' physics values to the current values ready for the next
         // tick
         prof_span!(guard, "record ori into phys_cache");
-        for (pos, ori, previous_phys_cache, _) in (
+        (
             &write.positions,
             &write.orientations,
             &mut write.previous_phys_cache,
-            &read.colliders,
+            read.colliders.mask(),
         )
-            .join()
-        {
-            // Note: updating ori with the rest of the cache values above was attempted but
-            // it did not work (investigate root cause?)
-            previous_phys_cache.pos = Some(*pos);
-            previous_phys_cache.ori = ori.to_quat();
-        }
+            .par_join()
+            .for_each(|(pos, ori, previous_phys_cache, _)| {
+                // Note: updating ori with the rest of the cache values above was attempted but
+                // it did not work (investigate root cause?)
+                previous_phys_cache.pos = Some(*pos);
+                previous_phys_cache.ori = ori.to_quat();
+            });
         drop(guard);
     }
 
@@ -714,7 +721,7 @@ impl<'a> PhysicsData<'a> {
         job: &mut Job<Sys>,
         read: &PhysicsRead,
         write: &mut PhysicsWrite,
-        voxel_collider_spatial_grid: &SpatialGrid,
+        voxel_collider_spatial_grid: &SpatialGridRef,
         terrain_like_entities: bool,
     ) {
         let (positions, velocities, previous_phys_cache, orientations) = (
@@ -1240,27 +1247,27 @@ impl<'a> PhysicsData<'a> {
         write.outcomes.emitter().emit_many(outcomes);
 
         prof_span!(guard, "write deferred pos and vel");
-        for (_, pos, vel, ori, pos_vel_ori_defer, _) in (
-            &read.entities,
+        (
+            /* &read.entities, */
             &mut write.positions,
             &mut write.velocities,
             &mut write.orientations,
             &mut write.pos_vel_ori_defers,
             &read.colliders,
         )
-            .join()
-            .filter(|tuple| tuple.5.is_voxel() == terrain_like_entities)
-        {
-            if let Some(new_pos) = pos_vel_ori_defer.pos.take() {
-                *pos = new_pos;
-            }
-            if let Some(new_vel) = pos_vel_ori_defer.vel.take() {
-                *vel = new_vel;
-            }
-            if let Some(new_ori) = pos_vel_ori_defer.ori.take() {
-                *ori = new_ori;
-            }
-        }
+            .par_join()
+            .filter(|tuple| tuple./*5*/4.is_voxel() == terrain_like_entities)
+            .for_each(|(/* _, */ pos, vel, ori, pos_vel_ori_defer, _)| {
+                if let Some(new_pos) = pos_vel_ori_defer.pos.take() {
+                    *pos = new_pos;
+                }
+                if let Some(new_vel) = pos_vel_ori_defer.vel.take() {
+                    *vel = new_vel;
+                }
+                if let Some(new_ori) = pos_vel_ori_defer.ori.take() {
+                    *ori = new_ori;
+                }
+            });
         drop(guard);
 
         let mut event_emitter = read.event_bus.emitter();
@@ -1276,7 +1283,11 @@ impl<'a> PhysicsData<'a> {
             ref mut write,
         } = self;
 
-        let spatial_grid = &mut write.cached_spatial_grid.0;
+        // Borrow checker dance, since transferring away from a read only view requires
+        // &mut self.
+        let mut spatial_grid = core::mem::take(&mut *write.cached_spatial_grid)
+            .0
+            .into_inner();
         spatial_grid.clear();
         (
             &read.entities,
@@ -1284,7 +1295,7 @@ impl<'a> PhysicsData<'a> {
             read.scales.maybe(),
             read.colliders.maybe(),
         )
-            .join()
+            .par_join()
             .for_each(|(entity, pos, scale, collider)| {
                 let scale = scale.map(|s| s.0).unwrap_or(1.0);
                 let radius_2d =
@@ -1293,6 +1304,8 @@ impl<'a> PhysicsData<'a> {
                 const POS_TRUNCATION_ERROR: u32 = 1;
                 spatial_grid.insert(pos_2d, radius_2d + POS_TRUNCATION_ERROR, entity);
             });
+
+        write.cached_spatial_grid.0 = spatial_grid.into_read_only();
     }
 }
 
@@ -1321,10 +1334,12 @@ impl<'a> System<'a> for Sys {
         // entities.
         physics_data.maintain_pushback_cache();
 
-        let spatial_grid = physics_data.construct_spatial_grid();
+        let spatial_grid = physics_data.construct_spatial_grid().into_read_only();
         physics_data.apply_pushback(job, &spatial_grid);
 
-        let voxel_collider_spatial_grid = physics_data.construct_voxel_collider_spatial_grid();
+        let voxel_collider_spatial_grid = physics_data
+            .construct_voxel_collider_spatial_grid()
+            .into_read_only();
         physics_data.handle_movement_and_terrain(job, &voxel_collider_spatial_grid);
 
         // Spatial grid used by other systems
