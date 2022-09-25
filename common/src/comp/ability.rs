@@ -675,7 +675,7 @@ impl CharacterAbility {
                 update.energy.current() >= *energy_cost
             },
             CharacterAbility::LeapMelee { energy_cost, .. } => {
-                update.vel.0.z >= 0.0 && update.energy.try_change_by(-*energy_cost).is_ok()
+                data.vel.0.z >= 0.0 && update.energy.try_change_by(-*energy_cost).is_ok()
             },
             CharacterAbility::BasicAura {
                 energy_cost,

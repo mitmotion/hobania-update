@@ -178,6 +178,7 @@ impl State {
         ecs.register::<comp::BeamSegment>();
         ecs.register::<comp::Alignment>();
         ecs.register::<comp::LootOwner>();
+        ecs.register::<comp::MovementState>();
 
         // Register components send from clients -> server
         ecs.register::<comp::Controller>();

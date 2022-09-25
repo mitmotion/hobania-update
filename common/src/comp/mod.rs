@@ -32,6 +32,7 @@ pub mod invite;
 pub mod loot_owner;
 #[cfg(not(target_arch = "wasm32"))] pub mod melee;
 #[cfg(not(target_arch = "wasm32"))] mod misc;
+#[cfg(not(target_arch = "wasm32"))] mod movement;
 #[cfg(not(target_arch = "wasm32"))] pub mod ori;
 #[cfg(not(target_arch = "wasm32"))] pub mod pet;
 #[cfg(not(target_arch = "wasm32"))] mod phys;
@@ -95,6 +96,7 @@ pub use self::{
     loot_owner::LootOwner,
     melee::{Melee, MeleeConstructor},
     misc::Object,
+    movement::{MovementKind, MovementState, OriUpdate},
     ori::Ori,
     pet::Pet,
     phys::{

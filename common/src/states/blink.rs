@@ -1,5 +1,5 @@
 use crate::{
-    comp::{character_state::OutputEvents, CharacterState, StateUpdate},
+    comp::{character_state::OutputEvents, CharacterState, StateUpdate, MovementKind},
     event::ServerEvent,
     states::{
         behavior::{CharacterBehavior, JoinData},
@@ -59,9 +59,10 @@ impl CharacterBehavior for Data {
                                 max_range: Some(self.static_data.max_range),
                             });
                         } else if let Some(pos) = input_attr.select_pos {
-                            update.pos.0 = pos;
+                            update.movement = update.movement.with_movement(MovementKind::Teleport { pos });
                         } else {
-                            update.pos.0 += *data.inputs.look_dir * 25.0;
+                            let pos = data.pos.0 + *data.inputs.look_dir * 25.0;
+                            update.movement = update.movement.with_movement(MovementKind::Teleport { pos });
                         }
                     }
                     // Transitions to recover section of stage

@@ -2,9 +2,8 @@ use crate::{
     comp::{
         character_state::OutputEvents,
         skills::{ClimbSkill::*, Skill, SKILL_MODIFIERS},
-        CharacterState, Climb, InputKind, Ori, StateUpdate,
+        CharacterState, Climb, InputKind, Ori, StateUpdate, MovementKind, OriUpdate,
     },
-    consts::GRAVITY,
     event::LocalEvent,
     states::{
         behavior::{CharacterBehavior, JoinData},
@@ -82,14 +81,6 @@ impl CharacterBehavior for Data {
             update.character = CharacterState::Idle(idle::Data::default());
             return update;
         };
-        // Move player
-        update.vel.0 += Vec2::broadcast(data.dt.0)
-            * data.inputs.move_dir
-            * if update.vel.0.magnitude_squared() < self.static_data.movement_speed.powi(2) {
-                self.static_data.movement_speed.powi(2)
-            } else {
-                0.0
-            };
 
         // Expend energy if climbing
         let energy_use = match climb {
@@ -107,28 +98,33 @@ impl CharacterBehavior for Data {
         }
 
         // Set orientation direction based on wall direction
-        if let Some(ori_dir) = Dir::from_unnormalized(Vec2::from(wall_dir).into()) {
+        let new_ori = if let Some(ori_dir) = Dir::from_unnormalized(Vec2::from(wall_dir).into()) {
             // Smooth orientation
-            update.ori = update.ori.slerped_towards(
+            data.ori.slerped_towards(
                 Ori::from(ori_dir),
                 if data.physics.on_ground.is_some() {
                     9.0
                 } else {
                     2.0
                 } * data.dt.0,
-            );
+            )
+        } else {
+            *data.ori
         };
 
         // Apply Vertical Climbing Movement
-        match climb {
-            Climb::Down => {
-                update.vel.0.z += data.dt.0 * (GRAVITY - self.static_data.movement_speed.powi(2))
-            },
-            Climb::Up => {
-                update.vel.0.z += data.dt.0 * (GRAVITY + self.static_data.movement_speed.powi(2))
-            },
-            Climb::Hold => update.vel.0.z += data.dt.0 * GRAVITY,
-        }
+        let dir = data.inputs.move_dir.with_z(match climb {
+            Climb::Down => -1.0,
+            Climb::Up => 1.0,
+            Climb::Hold => 0.0,
+        });
+        let accel = if data.vel.0.magnitude_squared() < self.static_data.movement_speed.powi(2) {
+            self.static_data.movement_speed.powi(2)
+        } else {
+            0.0
+        };
+
+        update.movement = update.movement.with_movement(MovementKind::Climb { dir, accel }).with_ori_update(OriUpdate::New(new_ori));
 
         update
     }

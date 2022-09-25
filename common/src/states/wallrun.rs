@@ -1,6 +1,6 @@
 use super::utils::*;
 use crate::{
-    comp::{character_state::OutputEvents, CharacterState, StateUpdate},
+    comp::{character_state::OutputEvents, CharacterState, StateUpdate, MovementKind},
     states::{
         behavior::{CharacterBehavior, JoinData},
         idle,
@@ -23,12 +23,11 @@ impl CharacterBehavior for Data {
         handle_climb(data, &mut update);
 
         {
-            let lift = WALLRUN_ANTIGRAV;
-            update.vel.0.z += data.dt.0
-                * lift
-                * (Vec2::<f32>::from(update.vel.0).magnitude() * 0.075)
-                    .min(1.0)
-                    .max(0.2);
+            let lift = WALLRUN_ANTIGRAV
+            * (Vec2::<f32>::from(data.vel.0).magnitude() * 0.075)
+                .min(1.0)
+                .max(0.2);
+            update.movement = update.movement.with_movement(MovementKind::SlowFall { lift });
         }
 
         // fall off wall, hit ground, or enter water

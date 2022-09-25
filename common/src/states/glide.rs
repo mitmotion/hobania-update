@@ -2,7 +2,7 @@ use super::utils::handle_climb;
 use crate::{
     comp::{
         character_state::OutputEvents, fluid_dynamics::angle_of_attack, inventory::slot::EquipSlot,
-        CharacterState, Ori, StateUpdate, Vel,
+        CharacterState, Ori, StateUpdate, Vel, OriUpdate,
     },
     event::LocalEvent,
     outcome::Outcome,
@@ -144,7 +144,7 @@ impl CharacterBehavior for Data {
                     .unwrap_or_else(|| self.ori.slerped_towards(self.ori.uprighted(), slerp_s))
             };
 
-            update.ori = {
+            update.movement = update.movement.with_ori_update(OriUpdate::New({
                 let slerp_s = {
                     let angle = data.ori.look_dir().angle_between(*data.inputs.look_dir);
                     let rate = 0.2 * data.body.base_ori_rate() * PI / angle;
@@ -183,12 +183,12 @@ impl CharacterBehavior for Data {
                     )
                 };
 
-                update.ori.slerped_towards(
+                data.ori.slerped_towards(
                     ori.to_horizontal()
                         .prerotated(rot_from_drag * rot_from_accel),
                     slerp_s,
                 )
-            };
+            }));
             update.character = CharacterState::Glide(Self {
                 ori,
                 last_vel: *data.vel,

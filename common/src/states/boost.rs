@@ -1,5 +1,5 @@
 use crate::{
-    comp::{character_state::OutputEvents, CharacterState, StateUpdate},
+    comp::{character_state::OutputEvents, CharacterState, StateUpdate, MovementKind},
     states::{
         behavior::{CharacterBehavior, JoinData},
         utils::*,
@@ -8,6 +8,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use vek::*;
 
 /// Separated out to condense update portions of character state
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -36,11 +37,12 @@ impl CharacterBehavior for Data {
 
         if self.timer < self.static_data.movement_duration {
             // Movement
-            if self.static_data.only_up {
-                update.vel.0.z += self.static_data.speed * data.dt.0;
+            let dir = if self.static_data.only_up {
+                Vec3::unit_z()
             } else {
-                update.vel.0 += *data.inputs.look_dir * self.static_data.speed * data.dt.0;
-            }
+                *data.inputs.look_dir
+            };
+            update.movement = update.movement.with_movement(MovementKind::Boost { dir, accel: self.static_data.speed });
             update.character = CharacterState::Boost(Data {
                 timer: tick_attack_or_default(data, self.timer, None),
                 ..*self
@@ -50,12 +52,8 @@ impl CharacterBehavior for Data {
             if input_is_pressed(data, self.static_data.ability_info.input) {
                 reset_state(self, data, output_events, &mut update);
             } else {
-                update.vel.0 = update.vel.0.try_normalized().unwrap_or_default()
-                    * update
-                        .vel
-                        .0
-                        .magnitude()
-                        .min(self.static_data.max_exit_velocity);
+                let speed = data.vel.0.magnitude().min(self.static_data.max_exit_velocity);
+                update.movement = update.movement.with_movement(MovementKind::ChangeSpeed { speed });
                 update.character = CharacterState::Wielding(wielding::Data { is_sneaking: false });
             }
         }

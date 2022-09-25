@@ -272,6 +272,7 @@ impl StateExt for State {
             .with(comp::Buffs::default())
             .with(comp::Combo::default())
             .with(comp::Auras::default())
+            .with(comp::MovementState::default())
     }
 
     fn create_object(&mut self, pos: comp::Pos, object: comp::object::Body) -> EcsEntityBuilder {
@@ -330,7 +331,8 @@ impl StateExt for State {
             .with(comp::Stats::new("Airship".to_string()))
             .with(comp::SkillSet::default())
             .with(comp::ActiveAbilities::default())
-            .with(comp::Combo::default());
+            .with(comp::Combo::default())
+            .with(comp::MovementState::default());
 
         if mountable {
             // TODO: Re-add mounting check
@@ -535,6 +537,7 @@ impl StateExt for State {
             self.write_component_ignore_entity_dead(entity, comp::Buffs::default());
             self.write_component_ignore_entity_dead(entity, comp::Auras::default());
             self.write_component_ignore_entity_dead(entity, comp::Combo::default());
+            self.write_component_ignore_entity_dead(entity, comp::MovementState::default());
 
             // Make sure physics components are updated
             self.write_component_ignore_entity_dead(entity, comp::ForceUpdate::forced());

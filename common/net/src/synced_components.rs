@@ -53,13 +53,14 @@ macro_rules! synced_components {
             // remove it from that and then see if it's used for anything else and try to move
             // to only being synced for the client's entity.
             skill_set: SkillSet,
+            loot_owner: LootOwner,
 
             // Synced to the client only for its own entity
 
             combo: Combo,
             active_abilities: ActiveAbilities,
             can_build: CanBuild,
-            loot_owner: LootOwner,
+            movement_state: MovementState,
         }
     };
 }
@@ -215,6 +216,10 @@ impl NetSync for SkillSet {
     const SYNC_FROM: SyncFrom = SyncFrom::AnyEntity;
 }
 
+impl NetSync for LootOwner {
+    const SYNC_FROM: SyncFrom = SyncFrom::AnyEntity;
+}
+
 // These are synced only from the client's own entity.
 
 impl NetSync for Combo {
@@ -229,6 +234,6 @@ impl NetSync for CanBuild {
     const SYNC_FROM: SyncFrom = SyncFrom::ClientEntity;
 }
 
-impl NetSync for LootOwner {
-    const SYNC_FROM: SyncFrom = SyncFrom::AnyEntity;
+impl NetSync for MovementState {
+    const SYNC_FROM: SyncFrom = SyncFrom::ClientEntity;
 }

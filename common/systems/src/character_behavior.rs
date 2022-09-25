@@ -7,8 +7,8 @@ use common::{
     comp::{
         self, character_state::OutputEvents, inventory::item::MaterialStatManifest,
         ActiveAbilities, Beam, Body, CharacterState, Combo, Controller, Density, Energy, Health,
-        Inventory, InventoryManip, Mass, Melee, Ori, PhysicsState, Poise, Pos, SkillSet,
-        StateUpdate, Stats, Vel,
+        Inventory, InventoryManip, Mass, Melee, MovementState, Ori, PhysicsState, Poise, Pos,
+        SkillSet, StateUpdate, Stats, Vel,
     },
     event::{EventBus, LocalEvent, ServerEvent},
     link::Is,
@@ -48,6 +48,9 @@ pub struct ReadData<'a> {
     alignments: ReadStorage<'a, comp::Alignment>,
     terrain: ReadExpect<'a, TerrainGrid>,
     inventories: ReadStorage<'a, Inventory>,
+    positions: ReadStorage<'a, Pos>,
+    velocities: ReadStorage<'a, Vel>,
+    orientations: ReadStorage<'a, Ori>,
 }
 
 /// ## Character Behavior System
@@ -60,13 +63,11 @@ impl<'a> System<'a> for Sys {
     type SystemData = (
         ReadData<'a>,
         WriteStorage<'a, CharacterState>,
-        WriteStorage<'a, Pos>,
-        WriteStorage<'a, Vel>,
-        WriteStorage<'a, Ori>,
         WriteStorage<'a, Density>,
         WriteStorage<'a, Energy>,
         WriteStorage<'a, Controller>,
         WriteStorage<'a, Poise>,
+        WriteStorage<'a, MovementState>,
         Read<'a, EventBus<Outcome>>,
     );
 
@@ -79,13 +80,11 @@ impl<'a> System<'a> for Sys {
         (
             read_data,
             mut character_states,
-            mut positions,
-            mut velocities,
-            mut orientations,
             mut densities,
             mut energies,
             mut controllers,
             mut poises,
+            mut movements,
             outcomes,
         ): Self::SystemData,
     ) {
@@ -101,9 +100,7 @@ impl<'a> System<'a> for Sys {
             entity,
             uid,
             mut char_state,
-            pos,
-            vel,
-            ori,
+            (pos, vel, ori, mut movement),
             mass,
             density,
             energy,
@@ -118,9 +115,12 @@ impl<'a> System<'a> for Sys {
             &read_data.entities,
             &read_data.uids,
             &mut character_states,
-            &mut positions,
-            &mut velocities,
-            &mut orientations,
+            (
+                &read_data.positions,
+                &read_data.velocities,
+                &read_data.orientations,
+                &mut movements,
+            ),
             &read_data.masses,
             &mut densities,
             &mut energies,
@@ -179,6 +179,7 @@ impl<'a> System<'a> for Sys {
                 pos,
                 vel,
                 ori,
+                movement: &mut movement,
                 mass,
                 density,
                 energy,
@@ -257,9 +258,9 @@ impl Sys {
         };
 
         // These components use a different type of change detection.
-        *join.pos = state_update.pos;
-        *join.vel = state_update.vel;
-        *join.ori = state_update.ori;
+        // TODO: Would the above comment also apply to movement state? It used to apply
+        // to pos/vel/ori
+        *join.movement = state_update.movement;
 
         join.controller
             .queued_inputs

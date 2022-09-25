@@ -1,7 +1,7 @@
 use crate::{
     comp::{
         inventory::item::armor::Friction, item::ConsumableKind, ControlAction, Density, Energy,
-        InputAttr, InputKind, Ori, Pos, Vel,
+        InputAttr, InputKind, MovementState,
     },
     event::{LocalEvent, ServerEvent},
     states::{
@@ -19,9 +19,7 @@ use strum::Display;
 /// Data returned from character behavior fn's to Character Behavior System.
 pub struct StateUpdate {
     pub character: CharacterState,
-    pub pos: Pos,
-    pub vel: Vel,
-    pub ori: Ori,
+    pub movement: MovementState,
     pub density: Density,
     pub energy: Energy,
     pub swap_equipped_weapons: bool,
@@ -48,9 +46,7 @@ impl<'a> OutputEvents<'a> {
 impl From<&JoinData<'_>> for StateUpdate {
     fn from(data: &JoinData) -> Self {
         StateUpdate {
-            pos: *data.pos,
-            vel: *data.vel,
-            ori: *data.ori,
+            movement: MovementState::default(),
             density: *data.density,
             energy: *data.energy,
             swap_equipped_weapons: false,

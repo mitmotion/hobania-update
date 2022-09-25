@@ -3,8 +3,8 @@ use common::{
         body::ship::figuredata::{VoxelCollider, VOXEL_COLLIDER_MANIFEST},
         fluid_dynamics::{Fluid, LiquidKind, Wings},
         inventory::item::armor::Friction,
-        Body, CharacterState, Collider, Density, Immovable, Mass, Ori, PhysicsState, Pos,
-        PosVelOriDefer, PreviousPhysCache, Projectile, Scale, Stats, Sticky, Vel,
+        Body, CharacterState, Collider, Density, Immovable, Mass, MovementState, Ori, PhysicsState,
+        Pos, PosVelOriDefer, PreviousPhysCache, Projectile, Scale, Stats, Sticky, Vel,
     },
     consts::{AIR_DENSITY, FRIC_GROUND, GRAVITY},
     event::{EventBus, ServerEvent},
@@ -124,6 +124,7 @@ pub struct PhysicsRead<'a> {
     densities: ReadStorage<'a, Density>,
     stats: ReadStorage<'a, Stats>,
     outcomes: Read<'a, EventBus<Outcome>>,
+    movements: ReadStorage<'a, MovementState>,
 }
 
 #[derive(SystemData)]
@@ -1356,6 +1357,17 @@ impl<'a> System<'a> for Sys {
                     ref read,
                     ref mut write,
                 } = physics_data;
+
+                (
+                    &read.movements,
+                    &mut write.positions,
+                    &mut write.velocities,
+                    &mut write.orientations,
+                )
+                    .par_join()
+                    .for_each(|(movement, pos, vel, ori)| {
+                        movement.handle_movement(&read.dt, pos, vel, ori);
+                    });
 
                 let (spatial_grid, voxel_collider_spatial_grid) = rayon::join(
                     || {

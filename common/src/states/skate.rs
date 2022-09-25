@@ -2,7 +2,7 @@ use super::utils::*;
 use crate::{
     comp::{
         character_state::OutputEvents, item::armor::Friction, CharacterState, InventoryAction,
-        StateUpdate,
+        StateUpdate, MovementKind, OriUpdate,
     },
     states::{
         behavior::{CharacterBehavior, JoinData},
@@ -46,7 +46,7 @@ impl CharacterBehavior for Data {
         } else {
             let plane_ori = data.inputs.look_dir.xy();
             let orthogonal = vek::Vec2::new(plane_ori.y, -plane_ori.x);
-            update.ori = vek::Vec3::new(plane_ori.x, plane_ori.y, 0.0).into();
+            let new_ori = vek::Vec3::new(plane_ori.x, plane_ori.y, 0.0).into();
             let current_planar_velocity = data.vel.0.xy().magnitude();
             let long_input = data.inputs.move_dir.dot(plane_ori);
             let lat_input = data.inputs.move_dir.dot(orthogonal);
@@ -79,8 +79,7 @@ impl CharacterBehavior for Data {
             if let CharacterState::Skate(skate_data) = &mut update.character {
                 skate_data.turn = orthogonal.dot(data.vel.0.xy());
             }
-            let delta_vel = acceleration * data.inputs.move_dir;
-            update.vel.0 += vek::Vec3::new(delta_vel.x, delta_vel.y, 0.0);
+            update.movement = update.movement.with_movement(MovementKind::Ground { dir: data.inputs.move_dir, accel: acceleration }).with_ori_update(OriUpdate::New(new_ori));
         }
 
         update

@@ -9,7 +9,7 @@ use crate::{
         quadruped_low, quadruped_medium, quadruped_small,
         skills::{Skill, SwimSkill, SKILL_MODIFIERS},
         theropod, Body, CharacterAbility, CharacterState, Density, InputAttr, InputKind,
-        InventoryAction, StateUpdate,
+        InventoryAction, StateUpdate, MovementKind, OriUpdate,
     },
     consts::{FRIC_GROUND, GRAVITY, MAX_PICKUP_RANGE},
     event::{LocalEvent, ServerEvent},
@@ -370,34 +370,34 @@ fn basic_move(data: &JoinData<'_>, update: &mut StateUpdate, efficiency: f32) {
     } * efficiency;
 
     // Should ability to backpedal be separate from ability to strafe?
-    update.vel.0 += Vec2::broadcast(data.dt.0)
-        * accel
-        * if data.body.can_strafe() {
-            data.inputs.move_dir
-                * if is_strafing(data, update) {
-                    Lerp::lerp(
-                        Vec2::from(update.ori)
-                            .try_normalized()
-                            .unwrap_or_else(Vec2::zero)
-                            .dot(
-                                data.inputs
-                                    .move_dir
-                                    .try_normalized()
-                                    .unwrap_or_else(Vec2::zero),
-                            )
-                            .add(1.0)
-                            .div(2.0)
-                            .max(0.0),
-                        1.0,
-                        data.body.reverse_move_factor(),
-                    )
-                } else {
-                    1.0
-                }
-        } else {
-            let fw = Vec2::from(update.ori);
-            fw * data.inputs.move_dir.dot(fw).max(0.0)
-        };
+    let dir = if data.body.can_strafe() {
+        data.inputs.move_dir
+    } else {
+        Vec2::from(*data.ori)
+    };
+    let accel_mod = if is_strafing(data, update) {
+        Lerp::lerp(
+            Vec2::from(*data.ori)
+                .try_normalized()
+                .unwrap_or_else(Vec2::zero)
+                .dot(
+                    data.inputs
+                        .move_dir
+                        .try_normalized()
+                        .unwrap_or_else(Vec2::zero),
+                )
+                .add(1.0)
+                .div(2.0)
+                .max(0.0),
+            1.0,
+            data.body.reverse_move_factor(),
+        )
+    } else {
+        data.inputs.move_dir.dot(dir).max(0.0)
+    };
+    let accel = accel * accel_mod;
+
+    update.movement = update.movement.with_movement(MovementKind::Ground { dir, accel });
 }
 
 /// Handles forced movement
@@ -413,10 +413,11 @@ pub fn handle_forced_movement(
                 // FRIC_GROUND temporarily used to normalize things around expected values
                 data.body.base_accel() * block.get_traction() * block.get_friction() / FRIC_GROUND
             }) {
-                update.vel.0 += Vec2::broadcast(data.dt.0)
-                    * accel
-                    * (data.inputs.move_dir * 0.5 + Vec2::from(update.ori) * 1.5)
-                    * strength;
+                // TODO: Remove * 2.0 with changes made in sword branch, added as hack for now to keep same behavior
+                let accel = accel * strength * 2.0;
+                // TODO: Remove move_dir portion with changes made in sword branch, added as hack for now to keep same behavior
+                let dir = data.inputs.move_dir * 0.5 + Vec2::from(*data.ori) * 1.5;
+                update.movement = update.movement.with_movement(MovementKind::Ground { dir, accel });
             }
         },
         ForcedMovement::Leap {
@@ -426,26 +427,12 @@ pub fn handle_forced_movement(
             direction,
         } => {
             let dir = direction.get_2d_dir(data);
-            // Apply jumping force
-            update.vel.0 = Vec3::new(
-                dir.x,
-                dir.y,
-                vertical,
-            )
-                // Multiply decreasing amount linearly over time (with average of 1)
-                * 2.0 * progress
-                // Apply direction
-                + Vec3::from(dir)
-                // Multiply by forward leap strength
-                * forward
-                // Control forward movement based on look direction.
-                // This allows players to stop moving forward when they
-                // look downward at target
-                * (1.0 - data.inputs.look_dir.z.abs());
-        },
-        ForcedMovement::Hover { move_input } => {
-            update.vel.0 = Vec3::new(data.vel.0.x, data.vel.0.y, 0.0)
-                + move_input * data.inputs.move_dir.try_normalized().unwrap_or_default();
+            // Control forward movement based on look direction.
+            // This allows players to stop moving forward when they
+            // look downward at target
+            let forward = forward * (1.0 - data.inputs.look_dir.z.abs());
+
+            update.movement = update.movement.with_movement(MovementKind::Leap { dir, vertical, forward, progress });
         },
     }
 }
@@ -494,22 +481,24 @@ pub fn handle_orientation(
         }
         * data.dt.0;
     // very rough guess
-    let ticks_from_target_guess = ori_absdiff(&update.ori, &target_ori) / half_turns_per_tick;
+    let ticks_from_target_guess = ori_absdiff(data.ori, &target_ori) / half_turns_per_tick;
     let instantaneous = ticks_from_target_guess < 1.0;
-    update.ori = if instantaneous {
+    let new_ori = if instantaneous {
         target_ori
     } else {
         let target_fraction = {
             // Angle factor used to keep turning rate approximately constant by
             // counteracting slerp turning more with a larger angle
-            let angle_factor = 2.0 / (1.0 - update.ori.dot(target_ori)).sqrt();
+            let angle_factor = 2.0 / (1.0 - data.ori.dot(target_ori)).sqrt();
 
             half_turns_per_tick * angle_factor
         };
-        update
+        data
             .ori
             .slerped_towards(target_ori, target_fraction.min(1.0))
     };
+
+    update.movement = update.movement.with_ori_update(OriUpdate::New(new_ori));
 }
 
 /// Updates components to move player as if theyre swimming
@@ -532,7 +521,7 @@ fn swim_move(
         let dir = if data.body.can_strafe() {
             data.inputs.move_dir
         } else {
-            let fw = Vec2::from(update.ori);
+            let fw = Vec2::from(*data.ori);
             fw * data.inputs.move_dir.dot(fw).max(0.0)
         };
 
@@ -543,12 +532,9 @@ fn swim_move(
             data.inputs.move_z
         };
 
-        update.vel.0 += Vec3::broadcast(data.dt.0)
-            * Vec3::new(dir.x, dir.y, move_z)
-                .try_normalized()
-                .unwrap_or_default()
-            * water_accel
-            * (submersion - 0.2).clamp(0.0, 1.0).powi(2);
+        let dir = Vec3::new(dir.x, dir.y, move_z);
+        let accel = water_accel * (submersion - 0.2).clamp(0.0, 1.0).powi(2);
+        update.movement = update.movement.with_movement(MovementKind::Swim { dir, accel });
 
         true
     } else {
@@ -575,11 +561,11 @@ pub fn fly_move(data: &JoinData<'_>, update: &mut StateUpdate, efficiency: f32) 
         handle_orientation(data, update, efficiency, None);
 
         // Elevation control
-        match data.body {
+        let lift = match data.body {
             // flappy flappy
             Body::Dragon(_) | Body::BirdLarge(_) | Body::BirdMedium(_) => {
                 let anti_grav = GRAVITY * (1.0 + data.inputs.move_z.min(0.0));
-                update.vel.0.z += data.dt.0 * (anti_grav + accel * data.inputs.move_z.max(0.0));
+                anti_grav + accel * data.inputs.move_z.max(0.0)
             },
             // floaty floaty
             Body::Ship(ship) if ship.can_fly() => {
@@ -601,20 +587,22 @@ pub fn fly_move(data: &JoinData<'_>, update: &mut StateUpdate, efficiency: f32) 
                     update.density.0 =
                         regulate_density(def_density * 0.5, def_density * 1.5, def_density, 0.5).0;
                 };
+                // TODO: Make ships actually specify a lift instead of hacking density
+                0.0
             },
             // oopsie woopsie
             // TODO: refactor to make this state impossible
-            _ => {},
+            _ => 0.0,
         };
 
-        update.vel.0 += Vec2::broadcast(data.dt.0)
-            * accel
-            * if data.body.can_strafe() {
-                data.inputs.move_dir
-            } else {
-                let fw = Vec2::from(update.ori);
-                fw * data.inputs.move_dir.dot(fw).max(0.0)
-            };
+        let dir = if data.body.can_strafe() {
+            data.inputs.move_dir
+        } else {
+            let fw = Vec2::from(*data.ori);
+            fw * data.inputs.move_dir.dot(fw).max(0.0)
+        };
+
+        update.movement = update.movement.with_movement(MovementKind::Flight { lift, dir, accel });
 
         true
     } else {
@@ -1194,9 +1182,6 @@ pub enum ForcedMovement {
         forward: f32,
         progress: f32,
         direction: MovementDirection,
-    },
-    Hover {
-        move_input: f32,
     },
 }
 

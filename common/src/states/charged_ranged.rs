@@ -112,7 +112,7 @@ impl CharacterBehavior for Data {
                         get_crit_data(data, self.static_data.ability_info);
                     let buff_strength = get_buff_strength(data, self.static_data.ability_info);
                     // Gets offsets
-                    let body_offsets = data.body.projectile_offsets(update.ori.look_vec());
+                    let body_offsets = data.body.projectile_offsets(data.ori.look_vec());
                     let pos = Pos(data.pos.0 + body_offsets);
                     let projectile = arrow.create_projectile(
                         Some(*data.uid),

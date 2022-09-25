@@ -40,6 +40,7 @@ use common::{
     outcome::Outcome,
     recipe::{ComponentRecipeBook, RecipeBook},
     resources::{GameMode, PlayerEntity, TimeOfDay},
+    slowjob::SlowJobPool,
     spiral::Spiral2d,
     terrain::{
         block::Block, map::MapConfig, neighbors, site::DungeonKindMeta, BiomeKind, SiteKindMeta,
@@ -383,6 +384,10 @@ impl Client {
             *state.ecs_mut().write_resource() = PlayerEntity(Some(entity));
             state.ecs_mut().insert(material_stats);
             state.ecs_mut().insert(ability_map);
+            state
+                .ecs_mut()
+                .write_resource::<SlowJobPool>()
+                .configure("CHUNK_DROP", |_n| 1);
 
             let map_size = map_size_lg.chunks();
             let max_height = world_map.max_height;

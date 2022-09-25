@@ -157,8 +157,8 @@ impl CharacterBehavior for Data {
                         let pitch = xy_dir.rotation_between(look_dir);
 
                         Ori::from(Vec3::new(
-                            update.ori.look_vec().x,
-                            update.ori.look_vec().y,
+                            data.ori.look_vec().x,
+                            data.ori.look_vec().y,
                             0.0,
                         ))
                         .prerotated(pitch)
@@ -169,7 +169,7 @@ impl CharacterBehavior for Data {
                     let body_offsets = beam_offsets(
                         data.body,
                         data.inputs.look_dir,
-                        update.ori.look_vec(),
+                        data.ori.look_vec(),
                         rel_vel,
                         data.physics.on_ground,
                     );

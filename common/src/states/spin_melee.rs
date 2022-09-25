@@ -1,5 +1,5 @@
 use crate::{
-    comp::{character_state::OutputEvents, CharacterState, Melee, MeleeConstructor, StateUpdate},
+    comp::{character_state::OutputEvents, CharacterState, Melee, MeleeConstructor, StateUpdate, MovementKind},
     consts::GRAVITY,
     states::{
         behavior::{CharacterBehavior, JoinData},
@@ -9,7 +9,6 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use vek::Vec3;
 
 /// Separated out to condense update portions of character state
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -62,8 +61,13 @@ impl CharacterBehavior for Data {
         match self.static_data.movement_behavior {
             MovementBehavior::ForwardGround | MovementBehavior::Stationary => {},
             MovementBehavior::AxeHover => {
-                let new_vel_z = update.vel.0.z + GRAVITY * data.dt.0 * 0.5;
-                update.vel.0 = Vec3::new(0.0, 0.0, new_vel_z) + data.inputs.move_dir * 5.0;
+                update.movement = update.movement.with_movement(if data.physics.on_ground.is_some() {
+                    // TODO: Just remove axehover entirely with axe rework, it's really janky
+                    // TODO: Should 5 even be used here, or should body accel be used? Maybe just call handle_move?
+                    MovementKind::Ground { dir: data.inputs.move_dir, accel: 5.0 }
+                } else {
+                    MovementKind::SlowFall { lift: GRAVITY * 0.5 }
+                });
             },
             MovementBehavior::Walking => {
                 handle_move(data, &mut update, 0.2);
