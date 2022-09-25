@@ -4,7 +4,7 @@ use crate::{
         character_state::OutputEvents,
         inventory::loadout_builder::{self, LoadoutBuilder},
         skillset::skills,
-        Behavior, BehaviorCapability, CharacterState, Projectile, StateUpdate,
+        Behavior, BehaviorCapability, CharacterState, Projectile, ProjectileOwned, StateUpdate,
     },
     event::{LocalEvent, ServerEvent},
     outcome::Outcome,
@@ -162,15 +162,17 @@ impl CharacterBehavior for Data {
                             .0;
 
                         // If a duration is specified, create a projectile component for the npc
-                        let projectile = self.static_data.duration.map(|duration| Projectile {
+                        let projectile = self.static_data.duration.map(|duration| (ProjectileOwned {
                             hit_solid: Vec::new(),
                             hit_entity: Vec::new(),
                             time_left: duration,
+                        },
+                        Projectile {
                             owner: Some(*data.uid),
                             ignore_group: true,
                             is_sticky: false,
                             is_point: false,
-                        });
+                        }));
 
                         // Send server event to create npc
                         output_events.emit_server(ServerEvent::CreateNpc {

@@ -12,6 +12,7 @@ use common::{
     mounting::Rider,
     outcome::Outcome,
     resources::DeltaTime,
+    slowjob::SlowJobPool,
     states,
     terrain::{Block, BlockKind, TerrainGrid},
     uid::Uid,
@@ -107,6 +108,7 @@ pub struct PhysicsRead<'a> {
     entities: Entities<'a>,
     uids: ReadStorage<'a, Uid>,
     terrain: ReadExpect<'a, TerrainGrid>,
+    slowjob: ReadExpect<'a, SlowJobPool>,
     dt: Read<'a, DeltaTime>,
     event_bus: Read<'a, EventBus<ServerEvent>>,
     scales: ReadStorage<'a, Scale>,
@@ -121,6 +123,7 @@ pub struct PhysicsRead<'a> {
     character_states: ReadStorage<'a, CharacterState>,
     densities: ReadStorage<'a, Density>,
     stats: ReadStorage<'a, Stats>,
+    outcomes: Read<'a, EventBus<Outcome>>,
 }
 
 #[derive(SystemData)]
@@ -133,7 +136,6 @@ pub struct PhysicsWrite<'a> {
     pos_vel_ori_defers: WriteStorage<'a, PosVelOriDefer>,
     orientations: WriteStorage<'a, Ori>,
     previous_phys_cache: WriteStorage<'a, PreviousPhysCache>,
-    outcomes: Read<'a, EventBus<Outcome>>,
 }
 
 #[derive(SystemData)]
@@ -142,68 +144,75 @@ pub struct PhysicsData<'a> {
     write: PhysicsWrite<'a>,
 }
 
-impl<'a> PhysicsData<'a> {
+impl<'a> PhysicsRead<'a> {
     /// Add/reset physics state components
-    fn reset(&mut self) {
+    fn reset(
+        &self,
+        positions: &WriteStorage<'a, Pos>,
+        velocities: &WriteStorage<'a, Vel>,
+        orientations: &WriteStorage<'a, Ori>,
+        physics_states: &mut WriteStorage<'a, PhysicsState>,
+    ) {
         span!(_guard, "Add/reset physics state components");
         (
-            &self.read.entities,
-            self.read.colliders.mask(),
-            self.write.positions.mask(),
-            self.write.velocities.mask(),
-            self.write.orientations.mask(),
+            &self.entities,
+            self.colliders.mask(),
+            positions.mask(),
+            velocities.mask(),
+            orientations.mask(),
         )
             .join()
             .for_each(|(entity, _, _, _, _)| {
-                let _ = self
-                    .write
-                    .physics_states
+                let _ = physics_states
                     .entry(entity)
                     .map(|e| e.or_insert_with(Default::default));
             });
     }
 
-    fn maintain_pushback_cache(&mut self) {
+    fn maintain_pushback_cache(
+        &self,
+        positions: &WriteStorage<'a, Pos>,
+        velocities: &WriteStorage<'a, Vel>,
+        orientations: &WriteStorage<'a, Ori>,
+        previous_phys_cache: &mut WriteStorage<'a, PreviousPhysCache>,
+    ) {
         span!(_guard, "Maintain pushback cache");
         // Add PreviousPhysCache for all relevant entities
         (
-            &self.read.entities,
-            self.read.colliders.mask(),
-            self.write.velocities.mask(),
-            self.write.positions.mask(),
-            !self.write.previous_phys_cache.mask(),
+            &self.entities,
+            self.colliders.mask(),
+            velocities.mask(),
+            positions.mask(),
+            !previous_phys_cache.mask(),
         )
             .join()
             .map(|(e, _, _, _, _)| e)
             .collect::<Vec<_>>()
             .into_iter()
             .for_each(|entity| {
-                let _ = self
-                    .write
-                    .previous_phys_cache
-                    .insert(entity, PreviousPhysCache {
-                        velocity_dt: Vec3::zero(),
-                        center: Vec3::zero(),
-                        collision_boundary: 0.0,
-                        scale: 0.0,
-                        scaled_radius: 0.0,
-                        neighborhood_radius: 0.0,
-                        origins: None,
-                        pos: None,
-                        ori: Quaternion::identity(),
-                    });
+                let _ = previous_phys_cache.insert(entity, PreviousPhysCache {
+                    velocity_dt: Vec3::zero(),
+                    center: Vec3::zero(),
+                    collision_boundary: 0.0,
+                    scale: 0.0,
+                    scaled_radius: 0.0,
+                    neighborhood_radius: 0.0,
+                    origins: None,
+                    pos: None,
+                    ori: Quaternion::identity(),
+                });
             });
 
         // Update PreviousPhysCache
         (
             /* &self.read.entities, */
-            &self.write.velocities,
-            &self.write.positions,
-            &self.write.orientations,
-            &mut self.write.previous_phys_cache,
-            &self.read.colliders,
-            self.read.scales.maybe(),
-            self.read.char_states.maybe(),
+            velocities,
+            positions,
+            orientations,
+            previous_phys_cache,
+            &self.colliders,
+            self.scales.maybe(),
+            self.char_states.maybe(),
         )
             .par_join()
             .for_each(
@@ -214,7 +223,7 @@ impl<'a> PhysicsData<'a> {
                     let (z_min, z_max) = (z_min * scale, z_max * scale);
                     let half_height = (z_max - z_min) / 2.0;
 
-                    phys_cache.velocity_dt = vel.0 * self.read.dt.0;
+                    phys_cache.velocity_dt = vel.0 * self.dt.0;
                     let entity_center = position.0 + Vec3::new(0.0, 0.0, z_min + half_height);
                     let flat_radius = collider.bounding_radius() * scale;
                     let radius = (flat_radius.powi(2) + half_height.powi(2)).sqrt();
@@ -279,12 +288,14 @@ impl<'a> PhysicsData<'a> {
             );
     }
 
-    fn construct_spatial_grid(&mut self) -> SpatialGrid {
+    fn construct_spatial_grid(
+        &self,
+        positions: &WriteStorage<'a, Pos>,
+        velocities: &WriteStorage<'a, Vel>,
+        capacity: (usize, usize),
+        /* previous_phys_cache: &WriteStorage<'a, PreviousPhysCache>, */
+    ) -> SpatialGrid {
         span!(_guard, "Construct spatial grid");
-        let PhysicsData {
-            ref read,
-            ref write,
-        } = self;
         // NOTE: i32 places certain constraints on how far out collision works
         // NOTE: uses the radius of the entity and their current position rather than
         // the radius of their bounding sphere for the current frame of movement
@@ -298,19 +309,24 @@ impl<'a> PhysicsData<'a> {
         let lg2_cell_size = 5;
         let lg2_large_cell_size = 6;
         let radius_cutoff = 8;
-        let spatial_grid = SpatialGrid::new(lg2_cell_size, lg2_large_cell_size, radius_cutoff);
+        let mut spatial_grid =
+            SpatialGrid::new(lg2_cell_size, lg2_large_cell_size, radius_cutoff, capacity);
         (
-            &read.entities,
-            &write.positions,
-            &write.previous_phys_cache,
-            write.velocities.mask(),
-            !read.projectiles.mask(), /* Not needed because they are skipped in the inner loop
+            &self.entities,
+            positions,
+            /* previous_phys_cache, */
+            velocities.mask(),
+            &self.colliders,
+            self.scales.maybe(),
+            !self.projectiles.mask(), /* Not needed because they are skipped in the inner loop
                                        * below */
         )
-            .par_join()
-            .for_each(|(entity, pos, phys_cache, _, _)| {
+            ./*par_join*/join()
+            .for_each(|(entity, pos, /*phys_cache, */_, collider, scale, _)| {
+                let scale = scale.map(|s| s.0).unwrap_or(1.0);
+                let scaled_radius = collider.bounding_radius() * scale;
                 // Note: to not get too fine grained we use a 2D grid for now
-                let radius_2d = phys_cache.scaled_radius.ceil() as u32;
+                let radius_2d = /*phys_cache.*/scaled_radius.ceil() as u32;
                 let pos_2d = pos.0.xy().map(|e| e as i32);
                 const POS_TRUNCATION_ERROR: u32 = 1;
                 spatial_grid.insert(pos_2d, radius_2d + POS_TRUNCATION_ERROR, entity);
@@ -319,30 +335,34 @@ impl<'a> PhysicsData<'a> {
         spatial_grid
     }
 
-    fn apply_pushback(&mut self, job: &mut Job<Sys>, spatial_grid: &SpatialGridRef) {
+    fn apply_pushback(
+        &self,
+        job: &mut Job<Sys>,
+        spatial_grid: &SpatialGridRef,
+        physics_metrics: &mut WriteExpect<'a, PhysicsMetrics>,
+        physics_states: &mut WriteStorage<'a, PhysicsState>,
+        positions: &WriteStorage<'a, Pos>,
+        velocities: &mut WriteStorage<'a, Vel>,
+        previous_phys_cache: &WriteStorage<'a, PreviousPhysCache>,
+    ) {
         span!(_guard, "Apply pushback");
         job.cpu_stats.measure(ParMode::Rayon);
-        let PhysicsData {
-            ref read,
-            ref mut write,
-        } = self;
-        let (positions, previous_phys_cache) = (&write.positions, &write.previous_phys_cache);
         let metrics = (
-            &read.entities,
+            &self.entities,
             positions,
-            &mut write.velocities,
+            velocities,
             previous_phys_cache,
-            &read.masses,
-            &read.colliders,
-            read.is_ridings.maybe(),
-            read.stickies.maybe(),
-            read.immovables.maybe(),
-            &mut write.physics_states,
+            &self.masses,
+            &self.colliders,
+            self.is_ridings.maybe(),
+            self.stickies.maybe(),
+            self.immovables.maybe(),
+            physics_states,
             // TODO: if we need to avoid collisions for other things consider
             // moving whether it should interact into the collider component
             // or into a separate component.
-            read.projectiles.maybe(),
-            read.char_states.maybe(),
+            self.projectiles.maybe(),
+            self.char_states.maybe(),
         )
             .par_join()
             .map_init(
@@ -397,11 +417,11 @@ impl<'a> PhysicsData<'a> {
                     spatial_grid
                         .in_circle_aabr(query_center, query_radius)
                         .filter_map(|entity| {
-                            let uid = read.uids.get(entity)?;
+                            let uid = self.uids.get(entity)?;
                             let pos = positions.get(entity)?;
                             let previous_cache = previous_phys_cache.get(entity)?;
-                            let mass = read.masses.get(entity)?;
-                            let collider = read.colliders.get(entity)?;
+                            let mass = self.masses.get(entity)?;
+                            let collider = self.colliders.get(entity)?;
 
                             Some((
                                 entity,
@@ -410,8 +430,8 @@ impl<'a> PhysicsData<'a> {
                                 previous_cache,
                                 mass,
                                 collider,
-                                read.char_states.get(entity),
-                                read.is_ridings.get(entity),
+                                self.char_states.get(entity),
+                                self.is_ridings.get(entity),
                             ))
                         })
                         .for_each(
@@ -498,7 +518,7 @@ impl<'a> PhysicsData<'a> {
                         );
 
                     // Change velocity
-                    vel.0 += vel_delta * read.dt.0;
+                    vel.0 += vel_delta * self.dt.0;
 
                     // Metrics
                     PhysicsMetrics {
@@ -513,18 +533,17 @@ impl<'a> PhysicsData<'a> {
                 entity_entity_collisions: old.entity_entity_collisions
                     + new.entity_entity_collisions,
             });
-        write.physics_metrics.entity_entity_collision_checks =
-            metrics.entity_entity_collision_checks;
-        write.physics_metrics.entity_entity_collisions = metrics.entity_entity_collisions;
+        physics_metrics.entity_entity_collision_checks = metrics.entity_entity_collision_checks;
+        physics_metrics.entity_entity_collisions = metrics.entity_entity_collisions;
     }
 
-    fn construct_voxel_collider_spatial_grid(&mut self) -> SpatialGrid {
+    fn construct_voxel_collider_spatial_grid(
+        &self,
+        positions: &WriteStorage<'a, Pos>,
+        orientations: &WriteStorage<'a, Ori>,
+        capacity: (usize, usize),
+    ) -> SpatialGrid {
         span!(_guard, "Construct voxel collider spatial grid");
-        let PhysicsData {
-            ref read,
-            ref write,
-        } = self;
-
         let voxel_colliders_manifest = VOXEL_COLLIDER_MANIFEST.read();
 
         // NOTE: i32 places certain constraints on how far out collision works
@@ -536,15 +555,16 @@ impl<'a> PhysicsData<'a> {
         let lg2_cell_size = 7; // 128
         let lg2_large_cell_size = 8; // 256
         let radius_cutoff = 64;
-        let spatial_grid = SpatialGrid::new(lg2_cell_size, lg2_large_cell_size, radius_cutoff);
+        let mut spatial_grid =
+            SpatialGrid::new(lg2_cell_size, lg2_large_cell_size, radius_cutoff, capacity);
         // TODO: give voxel colliders their own component type
         (
-            &read.entities,
-            &write.positions,
-            &read.colliders,
-            &write.orientations,
+            &self.entities,
+            positions,
+            &self.colliders,
+            orientations,
         )
-            .par_join()
+            ./*par_join*/join()
             .for_each(|(entity, pos, collider, ori)| {
                 let vol = match collider {
                     Collider::Voxel { id } => voxel_colliders_manifest.colliders.get(id),
@@ -563,7 +583,9 @@ impl<'a> PhysicsData<'a> {
 
         spatial_grid
     }
+}
 
+impl<'a> PhysicsData<'a> {
     fn handle_movement_and_terrain(
         &mut self,
         job: &mut Job<Sys>,
@@ -707,7 +729,7 @@ impl<'a> PhysicsData<'a> {
             &mut write.previous_phys_cache,
             read.colliders.mask(),
         )
-            .par_join()
+            .join()
             .for_each(|(pos, ori, previous_phys_cache, _)| {
                 // Note: updating ori with the rest of the cache values above was attempted but
                 // it did not work (investigate root cause?)
@@ -746,6 +768,7 @@ impl<'a> PhysicsData<'a> {
             &mut write.pos_vel_ori_defers,
             previous_phys_cache,
             !&read.is_ridings,
+            read.projectiles.maybe(),
         )
             .par_join()
             .filter(|tuple| tuple.3.is_voxel() == terrain_like_entities)
@@ -769,6 +792,7 @@ impl<'a> PhysicsData<'a> {
                     pos_vel_ori_defer,
                     previous_cache,
                     _,
+                    projectile,
                 )| {
                     let mut land_on_ground = None;
                     let mut outcomes = Vec::new();
@@ -931,11 +955,9 @@ impl<'a> PhysicsData<'a> {
 
                             // TODO: Not all projectiles should count as sticky!
                             if sticky.is_some() {
-                                if let Some((projectile, body)) = read
-                                    .projectiles
-                                    .get(entity)
+                                if let Some((projectile, body)) = projectile
                                     .filter(|_| vel.0.magnitude_squared() > 1.0 && block.is_some())
-                                    .zip(read.bodies.get(entity).copied())
+                                    .zip(body.copied())
                                 {
                                     outcomes.push(Outcome::ProjectileHit {
                                         pos: pos.0 + pos_delta * dist,
@@ -1212,6 +1234,11 @@ impl<'a> PhysicsData<'a> {
                     }
                     if vel != old_vel {
                         pos_vel_ori_defer.vel = Some(vel);
+                        // Moving this logic here instead of the projectile system allows it to
+                        // avoid writing to ori.
+                        if projectile.is_some() && let Some(dir) = Ori::from_unnormalized_vec(vel.0) {
+                            ori = dir;
+                        }
                     } else {
                         pos_vel_ori_defer.vel = None;
                     }
@@ -1244,7 +1271,7 @@ impl<'a> PhysicsData<'a> {
         drop(guard);
         job.cpu_stats.measure(ParMode::Single);
 
-        write.outcomes.emitter().emit_many(outcomes);
+        read.outcomes.emitter().emit_many(outcomes);
 
         prof_span!(guard, "write deferred pos and vel");
         (
@@ -1255,7 +1282,7 @@ impl<'a> PhysicsData<'a> {
             &mut write.pos_vel_ori_defers,
             &read.colliders,
         )
-            .par_join()
+            .join()
             .filter(|tuple| tuple./*5*/4.is_voxel() == terrain_like_entities)
             .for_each(|(/* _, */ pos, vel, ori, pos_vel_ori_defer, _)| {
                 if let Some(new_pos) = pos_vel_ori_defer.pos.take() {
@@ -1276,26 +1303,20 @@ impl<'a> PhysicsData<'a> {
         });
     }
 
-    fn update_cached_spatial_grid(&mut self) {
+    fn update_cached_spatial_grid(&mut self, mut spatial_grid: SpatialGrid) {
         span!(_guard, "Update cached spatial grid");
         let PhysicsData {
             ref read,
             ref mut write,
         } = self;
 
-        // Borrow checker dance, since transferring away from a read only view requires
-        // &mut self.
-        let mut spatial_grid = core::mem::take(&mut *write.cached_spatial_grid)
-            .0
-            .into_inner();
-        spatial_grid.clear();
         (
             &read.entities,
             &write.positions,
             read.scales.maybe(),
             read.colliders.maybe(),
         )
-            .par_join()
+            .join()
             .for_each(|(entity, pos, scale, collider)| {
                 let scale = scale.map(|s| s.0).unwrap_or(1.0);
                 let radius_2d =
@@ -1317,33 +1338,112 @@ impl<'a> System<'a> for Sys {
     const PHASE: Phase = Phase::Create;
 
     fn run(job: &mut Job<Self>, mut physics_data: Self::SystemData) {
-        physics_data.reset();
+        // Borrow checker dance, since transferring away from a read only view requires
+        // &mut self.
+        let mut cached_spatial_grid = core::mem::take(&mut *physics_data.write.cached_spatial_grid)
+            .0
+            .into_inner();
+        // Initialize grids to twice the cached grid's capacity, since entity
+        // distribution will rarely change much from tick to tick.
+        let grid_capacity = cached_spatial_grid.len();
+        let grid_capacity = (
+            grid_capacity.0.saturating_mul(2),
+            grid_capacity.1.saturating_mul(2),
+        );
+        rayon::join(
+            || {
+                let PhysicsData {
+                    ref read,
+                    ref mut write,
+                } = physics_data;
 
-        // Apply pushback
-        //
-        // Note: We now do this first because we project velocity ahead. This is slighty
-        // imperfect and implies that we might get edge-cases where entities
-        // standing right next to the edge of a wall may get hit by projectiles
-        // fired into the wall very close to them. However, this sort of thing is
-        // already possible with poorly-defined hitboxes anyway so it's not too
-        // much of a concern.
-        //
-        // If this situation becomes a problem, this code should be integrated with the
-        // terrain collision code below, although that's not trivial to do since
-        // it means the step needs to take into account the speeds of both
-        // entities.
-        physics_data.maintain_pushback_cache();
+                let (spatial_grid, voxel_collider_spatial_grid) = rayon::join(
+                    || {
+                        let (spatial_grid, ()) = rayon::join(
+                            || {
+                                read.construct_spatial_grid(
+                                    &write.positions,
+                                    &write.velocities,
+                                    grid_capacity,
+                                )
+                                .into_read_only()
+                            },
+                            || {
+                                rayon::join(
+                                    || {
+                                        read.reset(
+                                            &write.positions,
+                                            &write.velocities,
+                                            &write.orientations,
+                                            &mut write.physics_states,
+                                        );
+                                    },
+                                    || {
+                                        read.maintain_pushback_cache(
+                                            &write.positions,
+                                            &write.velocities,
+                                            &write.orientations,
+                                            &mut write.previous_phys_cache,
+                                        );
+                                    },
+                                );
+                            },
+                        );
 
-        let spatial_grid = physics_data.construct_spatial_grid().into_read_only();
-        physics_data.apply_pushback(job, &spatial_grid);
+                        // Apply pushback
+                        //
+                        // Note: We now do this first because we project velocity ahead. This is
+                        // slighty imperfect and implies that we might get
+                        // edge-cases where entities standing right next to
+                        // the edge of a wall may get hit by projectiles
+                        // fired into the wall very close to them. However, this sort of thing is
+                        // already possible with poorly-defined hitboxes anyway so it's not too
+                        // much of a concern.
+                        //
+                        // If this situation becomes a problem, this code should be integrated with
+                        // the terrain collision code below, although that's
+                        // not trivial to do since it means the step needs
+                        // to take into account the speeds of both entities.
+                        read.apply_pushback(
+                            job,
+                            &spatial_grid,
+                            &mut write.physics_metrics,
+                            &mut write.physics_states,
+                            &write.positions,
+                            &mut write.velocities,
+                            &write.previous_phys_cache,
+                        );
+                        spatial_grid
+                    },
+                    || {
+                        read.construct_voxel_collider_spatial_grid(
+                            &write.positions,
+                            &write.orientations,
+                            // Almost certainly overkill since most chunks won't contain a
+                            // collider, but probably not worth altering.
+                            grid_capacity,
+                        )
+                        .into_read_only()
+                    },
+                );
 
-        let voxel_collider_spatial_grid = physics_data
-            .construct_voxel_collider_spatial_grid()
-            .into_read_only();
-        physics_data.handle_movement_and_terrain(job, &voxel_collider_spatial_grid);
+                physics_data.handle_movement_and_terrain(job, &voxel_collider_spatial_grid);
+
+                physics_data.read.slowjob.spawn("CHUNK_DROP", move || {
+                    drop(spatial_grid);
+                    drop(voxel_collider_spatial_grid);
+                });
+            },
+            || {
+                cached_spatial_grid.clear();
+            },
+        );
 
         // Spatial grid used by other systems
-        physics_data.update_cached_spatial_grid();
+        //
+        // TODO: Consider inserting only the difference so we can update in parallel,
+        // rather than clearing and reinserting everything.
+        physics_data.update_cached_spatial_grid(cached_spatial_grid);
     }
 }
 

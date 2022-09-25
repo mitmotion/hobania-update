@@ -104,7 +104,7 @@ pub use self::{
     player::DisconnectReason,
     player::{AliasError, Player, MAX_ALIAS_LEN},
     poise::{Poise, PoiseChange, PoiseState},
-    projectile::{Projectile, ProjectileConstructor},
+    projectile::{Projectile, ProjectileConstructor, ProjectileOwned},
     shockwave::{Shockwave, ShockwaveHitEntities},
     skillset::{
         skills::{self, Skill},

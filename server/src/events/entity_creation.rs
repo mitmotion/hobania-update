@@ -8,8 +8,8 @@ use common::{
         beam,
         buff::{BuffCategory, BuffData, BuffKind, BuffSource},
         shockwave, Agent, Alignment, Anchor, Body, Health, Inventory, ItemDrop, LightEmitter,
-        Object, Ori, PidController, Poise, Pos, Projectile, Scale, SkillSet, Stats, Vel,
-        WaypointArea,
+        Object, Ori, PidController, Poise, Pos, Projectile, ProjectileOwned, Scale, SkillSet,
+        Stats, Vel, WaypointArea,
     },
     event::{EventBus, UpdateCharacterMetadata},
     lottery::LootSpec,
@@ -93,7 +93,7 @@ pub fn handle_create_npc(
     loot: LootSpec<String>,
     home_chunk: Option<Anchor>,
     rtsim_entity: Option<RtSimEntity>,
-    projectile: Option<Projectile>,
+    projectile: Option<(ProjectileOwned, Projectile)>,
 ) {
     let entity = server
         .state
@@ -125,8 +125,8 @@ pub fn handle_create_npc(
         entity
     };
 
-    let entity = if let Some(projectile) = projectile {
-        entity.with(projectile)
+    let entity = if let Some((projectile_owned, projectile)) = projectile {
+        entity.with(projectile_owned).with(projectile)
     } else {
         entity
     };
@@ -207,7 +207,7 @@ pub fn handle_shoot(
     dir: Dir,
     body: Body,
     light: Option<LightEmitter>,
-    projectile: Projectile,
+    projectile: (ProjectileOwned, Projectile),
     speed: f32,
     object: Option<Object>,
 ) {

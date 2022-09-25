@@ -1,8 +1,13 @@
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::AtomicU32;
+use smallvec::SmallVec;
 use vek::*;
 
-pub type MapMut = dashmap::DashMap<Vec2<i32>, Vec<specs::Entity>>;
-pub type MapRef = dashmap::ReadOnlyView<Vec2<i32>, Vec<specs::Entity>>;
+// NOTE: (Vec2<i32>, [specs::Entity; 6]) should fit in a cacheline, reducing false sharing if we
+// ever decide to directly update the SmallVecs.
+type EntityVec = SmallVec<[specs::Entity; 6]>;
+
+pub type MapMut = /*dashmap::DashMap*/hashbrown::HashMap<Vec2<i32>, EntityVec>;
+pub type MapRef = /*dashmap::ReadOnlyView*/hashbrown::HashMap<Vec2<i32>, EntityVec>;
 
 #[derive(Debug)]
 pub struct SpatialGridInner<Map, Radius> {
@@ -32,10 +37,10 @@ pub type SpatialGrid = SpatialGridInner<MapMut, AtomicU32>;
 pub type SpatialGridRef = SpatialGridInner<MapRef, u32>;
 
 impl SpatialGrid {
-    pub fn new(lg2_cell_size: usize, lg2_large_cell_size: usize, radius_cutoff: u32) -> Self {
+    pub fn new(lg2_cell_size: usize, lg2_large_cell_size: usize, radius_cutoff: u32, (capacity, large_capacity): (usize, usize)) -> Self {
         Self {
-            grid: Default::default(),
-            large_grid: Default::default(),
+            grid: MapMut::with_capacity(capacity),
+            large_grid: MapMut::with_capacity(large_capacity),
             lg2_cell_size,
             lg2_large_cell_size,
             radius_cutoff,
@@ -43,8 +48,12 @@ impl SpatialGrid {
         }
     }
 
+    pub fn len(&self) -> (usize, usize) {
+        (self.grid.len(), self.large_grid.len())
+    }
+
     /// Add an entity at the provided 2d pos into the spatial grid
-    pub fn insert(&self, pos: Vec2<i32>, radius: u32, entity: specs::Entity) {
+    pub fn insert(&mut self, pos: Vec2<i32>, radius: u32, entity: specs::Entity) {
         if radius <= self.radius_cutoff {
             let cell = pos.map(|e| e >> self.lg2_cell_size);
             self.grid.entry(cell).or_default().push(entity);
@@ -59,14 +68,16 @@ impl SpatialGrid {
             //
             // TODO: Verify that intrinsics lower intelligently to a priority update on CPUs (since
             // the intrinsic seems targeted at GPUs).
-            self.largest_large_radius.fetch_max(radius, Ordering::Relaxed);
+            /* self.largest_large_radius.fetch_max(radius, Ordering::Relaxed); */
+            let largest_radius = self.largest_large_radius.get_mut();
+            *largest_radius = (*largest_radius).max(radius);
         }
     }
 
     pub fn into_read_only(self) -> SpatialGridRef {
         SpatialGridInner {
-            grid: self.grid.into_read_only(),
-            large_grid: self.large_grid.into_read_only(),
+            grid: self.grid/*.into_read_only()*/,
+            large_grid: self.large_grid/*.into_read_only()*/,
             lg2_cell_size: self.lg2_cell_size,
             lg2_large_cell_size: self.lg2_large_cell_size,
             radius_cutoff: self.radius_cutoff,
@@ -136,8 +147,8 @@ impl SpatialGridRef {
 
     pub fn into_inner(self) -> SpatialGrid {
         SpatialGridInner {
-            grid: self.grid.into_inner(),
-            large_grid: self.large_grid.into_inner(),
+            grid: self.grid/*.into_inner()*/,
+            large_grid: self.large_grid/*.into_inner()*/,
             lg2_cell_size: self.lg2_cell_size,
             lg2_large_cell_size: self.lg2_large_cell_size,
             radius_cutoff: self.radius_cutoff,

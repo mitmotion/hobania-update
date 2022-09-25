@@ -14,7 +14,7 @@ impl Default for CachedSpatialGrid {
         let lg2_large_cell_size = 6; // 64
         let radius_cutoff = 8;
 
-        let spatial_grid = SpatialGrid::new(lg2_cell_size, lg2_large_cell_size, radius_cutoff).into_read_only();
+        let spatial_grid = SpatialGrid::new(lg2_cell_size, lg2_large_cell_size, radius_cutoff, (0, 0)).into_read_only();
 
         Self(spatial_grid)
     }

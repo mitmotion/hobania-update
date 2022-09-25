@@ -72,7 +72,7 @@ pub trait StateExt {
         pos: comp::Pos,
         vel: comp::Vel,
         body: comp::Body,
-        projectile: comp::Projectile,
+        projectile: (comp::ProjectileOwned, comp::Projectile),
     ) -> EcsEntityBuilder;
     /// Build a shockwave entity
     fn create_shockwave(
@@ -343,7 +343,7 @@ impl StateExt for State {
         pos: comp::Pos,
         vel: comp::Vel,
         body: comp::Body,
-        projectile: comp::Projectile,
+        (projectile_owned, projectile): (comp::ProjectileOwned, comp::Projectile),
     ) -> EcsEntityBuilder {
         let mut projectile_base = self
             .ecs_mut()
@@ -363,7 +363,10 @@ impl StateExt for State {
             projectile_base = projectile_base.with(body.collider())
         }
 
-        projectile_base.with(projectile).with(body)
+        projectile_base
+            .with(projectile_owned)
+            .with(projectile)
+            .with(body)
     }
 
     fn create_shockwave(

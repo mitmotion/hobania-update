@@ -20,10 +20,9 @@ use common::{
 use common_base::prof_span;
 use common_ecs::{Job, Origin, ParMode, Phase, System};
 use hashbrown::HashMap;
-use rayon::iter::ParallelIterator;
 use specs::{
-    saveload::MarkerAllocator, shred::ResourceId, Entities, Entity, Join, ParJoin, Read,
-    ReadExpect, ReadStorage, SystemData, World, WriteStorage,
+    saveload::MarkerAllocator, shred::ResourceId, Entities, Entity, Join, Read, ReadExpect,
+    ReadStorage, SystemData, World, WriteStorage,
 };
 use std::time::Duration;
 
@@ -71,59 +70,30 @@ impl<'a> System<'a> for Sys {
         // removes burning, but campfires don't have healths/stats/energies/buffs, so
         // this needs a separate loop.
         job.cpu_stats.measure(ParMode::Rayon);
-        let to_put_out_campfires = (
+        let light_emitters_mask = light_emitters.mask().clone();
+        prof_span!(guard_, "buff campfire deactivate");
+        (
             &read_data.entities,
-            &bodies,
+            &mut bodies,
             &read_data.physics_states,
-            &light_emitters, //to improve iteration speed
+            light_emitters_mask, //to improve iteration speed
         )
-            .par_join()
-            .map_init(
-                || {
-                    prof_span!(guard, "buff campfire deactivate");
-                    guard
-                },
-                |_guard, (entity, body, physics_state, _)| {
-                    if matches!(*body, Body::Object(object::Body::CampfireLit))
-                        && matches!(
-                            physics_state.in_fluid,
-                            Some(Fluid::Liquid {
-                                kind: LiquidKind::Water,
-                                ..
-                            })
-                        )
-                    {
-                        Some(entity)
-                    } else {
-                        None
-                    }
-                },
-            )
-            .fold(Vec::new, |mut to_put_out_campfires, put_out_campfire| {
-                put_out_campfire.map(|put| to_put_out_campfires.push(put));
-                to_put_out_campfires
+            .join()
+            .filter(|(_, body, physics_state, _)| {
+                matches!(&**body, Body::Object(object::Body::CampfireLit))
+                    && matches!(
+                        physics_state.in_fluid,
+                        Some(Fluid::Liquid {
+                            kind: LiquidKind::Water,
+                            ..
+                        })
+                    )
             })
-            .reduce(
-                Vec::new,
-                |mut to_put_out_campfires_a, mut to_put_out_campfires_b| {
-                    to_put_out_campfires_a.append(&mut to_put_out_campfires_b);
-                    to_put_out_campfires_a
-                },
-            );
-        job.cpu_stats.measure(ParMode::Single);
-        {
-            prof_span!(_guard, "write deferred campfire deletion");
-            // Assume that to_put_out_campfires is near to zero always, so this access isn't
-            // slower than parallel checking above
-            for e in to_put_out_campfires {
-                {
-                    bodies
-                        .get_mut(e)
-                        .map(|mut body| *body = Body::Object(object::Body::Campfire));
-                    light_emitters.remove(e);
-                }
-            }
-        }
+            .for_each(|(e, mut body, _, _)| {
+                *body = Body::Object(object::Body::Campfire);
+                light_emitters.remove(e);
+            });
+        drop(guard_);
 
         for (entity, mut buff_comp, mut stat, health, energy, physics_state) in (
             &read_data.entities,

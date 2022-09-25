@@ -3,20 +3,21 @@ use common::{
     comp::{
         agent::{Sound, SoundKind},
         projectile, Alignment, Body, CharacterState, Combo, Energy, Group, Health, Inventory, Ori,
-        PhysicsState, Player, Pos, Projectile, Stats, Vel,
+        PhysicsState, Player, Pos, Projectile, ProjectileOwned, Stats, Vel,
     },
     event::{Emitter, EventBus, ServerEvent},
     outcome::Outcome,
     resources::{DeltaTime, Time},
     uid::{Uid, UidAllocator},
-    util::Dir,
     GroupTarget,
 };
+use common_base::prof_span;
 use common_ecs::{Job, Origin, Phase, System};
 use rand::{thread_rng, Rng};
+use rayon::iter::ParallelIterator;
 use specs::{
-    saveload::MarkerAllocator, shred::ResourceId, Entities, Entity as EcsEntity, Join, Read,
-    ReadStorage, SystemData, World, WriteStorage,
+    saveload::MarkerAllocator, shred::ResourceId, Entities, Entity as EcsEntity, Join, ParJoin,
+    Read, ReadStorage, SystemData, World, WriteStorage,
 };
 use std::time::Duration;
 use vek::*;
@@ -25,6 +26,8 @@ use vek::*;
 pub struct ReadData<'a> {
     time: Read<'a, Time>,
     entities: Entities<'a>,
+    projectiles: ReadStorage<'a, Projectile>,
+    orientations: ReadStorage<'a, Ori>,
     players: ReadStorage<'a, Player>,
     dt: Read<'a, DeltaTime>,
     uid_allocator: Read<'a, UidAllocator>,
@@ -50,8 +53,7 @@ pub struct Sys;
 impl<'a> System<'a> for Sys {
     type SystemData = (
         ReadData<'a>,
-        WriteStorage<'a, Ori>,
-        WriteStorage<'a, Projectile>,
+        WriteStorage<'a, ProjectileOwned>,
         Read<'a, EventBus<Outcome>>,
     );
 
@@ -59,23 +61,26 @@ impl<'a> System<'a> for Sys {
     const ORIGIN: Origin = Origin::Common;
     const PHASE: Phase = Phase::Create;
 
-    fn run(
-        _job: &mut Job<Self>,
-        (read_data, mut orientations, mut projectiles, outcomes): Self::SystemData,
-    ) {
-        let mut server_emitter = read_data.server_bus.emitter();
-        let mut outcomes_emitter = outcomes.emitter();
-
+    fn run(_job: &mut Job<Self>, (read_data, mut projectiles, outcomes): Self::SystemData) {
         // Attacks
-        'projectile_loop: for (entity, pos, physics, vel, mut projectile) in (
+        (
             &read_data.entities,
             &read_data.positions,
             &read_data.physics_states,
             &read_data.velocities,
+            &read_data.projectiles,
+            // TODO: Investigate whether the `maybe` are actually necessary here.
+            (&read_data.orientations).maybe(),
+            (&read_data.bodies).maybe(),
             &mut projectiles,
         )
-            .join()
-        {
+        .par_join()
+        .for_each_init(
+        || {
+            prof_span!(guard, "projectile rayon job");
+            (read_data.server_bus.emitter(), outcomes.emitter(), guard)
+        },
+        |(server_emitter, outcomes_emitter, _guard), (entity, pos, physics, vel, projectile, ori, body, projectile_write)| {
             let projectile_owner = projectile
                 .owner
                 .and_then(|uid| read_data.uid_allocator.retrieve_entity_internal(uid.into()));
@@ -117,19 +122,21 @@ impl<'a> System<'a> for Sys {
                     continue;
                 }
 
-                let projectile = &mut *projectile;
+                let projectile_write = &mut *projectile_write;
 
                 let entity_of =
                     |uid: Uid| read_data.uid_allocator.retrieve_entity_internal(uid.into());
-                for effect in projectile.hit_entity.drain(..) {
+                for effect in projectile_write.hit_entity.drain(..) {
                     let owner = projectile.owner.and_then(entity_of);
                     let projectile_info = ProjectileInfo {
                         entity,
                         effect,
                         owner_uid: projectile.owner,
                         owner,
-                        ori: orientations.get(entity),
+                        ori,
                         pos,
+                        vel,
+                        body,
                     };
 
                     let target = entity_of(other);
@@ -137,7 +144,7 @@ impl<'a> System<'a> for Sys {
                         uid: other,
                         entity: target,
                         target_group,
-                        ori: target.and_then(|target| orientations.get(target)),
+                        ori: target.and_then(|target| read_data.orientations.get(target)),
                     };
 
                     dispatch_hit(
@@ -145,19 +152,19 @@ impl<'a> System<'a> for Sys {
                         projectile_target_info,
                         &read_data,
                         &mut projectile_vanished,
-                        &mut outcomes_emitter,
-                        &mut server_emitter,
+                        outcomes_emitter,
+                        server_emitter,
                     );
                 }
 
                 if projectile_vanished {
-                    continue 'projectile_loop;
+                    return;
                 }
             }
 
             if physics.on_surface().is_some() {
-                let projectile = &mut *projectile;
-                for effect in projectile.hit_solid.drain(..) {
+                let projectile_write = &mut *projectile_write;
+                for effect in projectile_write.hit_solid.drain(..) {
                     match effect {
                         projectile::Effect::Explode(e) => {
                             // We offset position a little back on the way,
@@ -167,8 +174,7 @@ impl<'a> System<'a> for Sys {
                             // TODO: orientation of fallen projectile is
                             // fragile heuristic for direction, find more
                             // robust method.
-                            let projectile_direction = orientations
-                                .get(entity)
+                            let projectile_direction = ori
                                 .map_or_else(Vec3::zero, |ori| ori.look_vec());
                             let offset = -0.2 * projectile_direction;
                             server_emitter.emit(ServerEvent::Explosion {
@@ -193,22 +199,18 @@ impl<'a> System<'a> for Sys {
                 }
 
                 if projectile_vanished {
-                    continue 'projectile_loop;
-                }
-            } else if let Some(ori) = orientations.get_mut(entity) {
-                if let Some(dir) = Dir::from_unnormalized(vel.0) {
-                    *ori = dir.into();
+                    return;
                 }
             }
 
-            if projectile.time_left == Duration::default() {
+            if projectile_write.time_left == Duration::default() {
                 server_emitter.emit(ServerEvent::Delete(entity));
             }
-            projectile.time_left = projectile
+            projectile_write.time_left = projectile_write
                 .time_left
                 .checked_sub(Duration::from_secs_f32(read_data.dt.0))
                 .unwrap_or_default();
-        }
+        });
     }
 }
 
@@ -218,7 +220,9 @@ struct ProjectileInfo<'a> {
     owner_uid: Option<Uid>,
     owner: Option<EcsEntity>,
     ori: Option<&'a Ori>,
+    body: Option<&'a Body>,
     pos: &'a Pos,
+    vel: &'a Vel,
 }
 
 struct ProjectileTargetInfo<'a> {
@@ -258,7 +262,6 @@ fn dispatch_hit(
             };
 
             let owner = projectile_info.owner;
-            let projectile_entity = projectile_info.entity;
 
             let attacker_info =
                 owner
@@ -285,14 +288,11 @@ fn dispatch_hit(
             };
 
             // TODO: Is it possible to have projectile without body??
-            if let Some(&body) = read_data.bodies.get(projectile_entity) {
+            if let Some(&body) = projectile_info.body {
                 outcomes_emitter.emit(Outcome::ProjectileHit {
                     pos: target_pos,
                     body,
-                    vel: read_data
-                        .velocities
-                        .get(projectile_entity)
-                        .map_or(Vec3::zero(), |v| v.0),
+                    vel: projectile_info.vel.0,
                     source: projectile_info.owner_uid,
                     target: read_data.uids.get(target).copied(),
                 });

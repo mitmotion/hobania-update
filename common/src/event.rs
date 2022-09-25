@@ -78,7 +78,7 @@ pub enum ServerEvent {
         dir: Dir,
         body: comp::Body,
         light: Option<comp::LightEmitter>,
-        projectile: comp::Projectile,
+        projectile: (comp::ProjectileOwned, comp::Projectile),
         speed: f32,
         object: Option<comp::Object>,
     },
@@ -148,7 +148,7 @@ pub enum ServerEvent {
         anchor: Option<comp::Anchor>,
         loot: LootSpec<String>,
         rtsim_entity: Option<RtSimEntity>,
-        projectile: Option<comp::Projectile>,
+        projectile: Option<(comp::ProjectileOwned, comp::Projectile)>,
     },
     CreateShip {
         pos: Pos,

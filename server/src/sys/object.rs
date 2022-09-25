@@ -71,7 +71,7 @@ impl<'a> System<'a> for Sys {
                         const ENABLE_RECURSIVE_FIREWORKS: bool = true;
                         if ENABLE_RECURSIVE_FIREWORKS {
                             use common::{
-                                comp::{object, Body, LightEmitter, Projectile},
+                                comp::{object, Body, LightEmitter, Projectile, ProjectileOwned},
                                 util::Dir,
                             };
                             use rand::Rng;
@@ -121,15 +121,19 @@ impl<'a> System<'a> for Sys {
                                         strength: 2.0,
                                         col: Rgb::new(1.0, 1.0, 0.0),
                                     }),
-                                    projectile: Projectile {
-                                        hit_solid: Vec::new(),
-                                        hit_entity: Vec::new(),
-                                        time_left: Duration::from_secs(60),
-                                        owner: *owner,
-                                        ignore_group: true,
-                                        is_sticky: true,
-                                        is_point: true,
-                                    },
+                                    projectile: (
+                                        ProjectileOwned {
+                                            hit_solid: Vec::new(),
+                                            hit_entity: Vec::new(),
+                                            time_left: Duration::from_secs(60),
+                                        },
+                                        Projectile {
+                                            owner: *owner,
+                                            ignore_group: true,
+                                            is_sticky: true,
+                                            is_point: true,
+                                        },
+                                    ),
                                     speed,
                                     object: Some(Object::Firework {
                                         owner: *owner,

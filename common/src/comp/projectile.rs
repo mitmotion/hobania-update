@@ -23,11 +23,6 @@ pub enum Effect {
 
 #[derive(Clone, Debug)]
 pub struct Projectile {
-    // TODO: use SmallVec for these effects
-    pub hit_solid: Vec<Effect>,
-    pub hit_entity: Vec<Effect>,
-    /// Time left until the projectile will despawn
-    pub time_left: Duration,
     pub owner: Option<Uid>,
     /// Whether projectile collides with entities in the same group as its
     /// owner
@@ -38,7 +33,23 @@ pub struct Projectile {
     pub is_point: bool,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProjectileOwned {
+    /// TODO: use SmallVec for these effects
+    pub hit_solid: Vec<Effect>,
+    pub hit_entity: Vec<Effect>,
+    /// Time left until the projectile will despawn
+    ///
+    /// TODO: Remove this, we can calculate this from an initial time which we
+    /// can store in the regular component.
+    pub time_left: Duration,
+}
+
 impl Component for Projectile {
+    type Storage = specs::DenseVecStorage<Self>;
+}
+
+impl Component for ProjectileOwned {
     type Storage = specs::DenseVecStorage<Self>;
 }
 
@@ -103,7 +114,7 @@ impl ProjectileConstructor {
         crit_chance: f32,
         crit_mult: f32,
         buff_strength: f32,
-    ) -> Projectile {
+    ) -> (ProjectileOwned, Projectile) {
         let instance = rand::random();
         use ProjectileConstructor::*;
         match self {
@@ -145,15 +156,19 @@ impl ProjectileConstructor {
                     .with_effect(knockback)
                     .with_combo_increment();
 
-                Projectile {
-                    hit_solid: vec![Effect::Stick, Effect::Bonk],
-                    hit_entity: vec![Effect::Attack(attack), Effect::Vanish],
-                    time_left: Duration::from_secs(15),
-                    owner,
-                    ignore_group: true,
-                    is_sticky: true,
-                    is_point: true,
-                }
+                (
+                    ProjectileOwned {
+                        hit_solid: vec![Effect::Stick, Effect::Bonk],
+                        hit_entity: vec![Effect::Attack(attack), Effect::Vanish],
+                        time_left: Duration::from_secs(15),
+                    },
+                    Projectile {
+                        owner,
+                        ignore_group: true,
+                        is_sticky: true,
+                        is_point: true,
+                    },
+                )
             },
             Fireball {
                 damage,
@@ -193,15 +208,19 @@ impl ProjectileConstructor {
                     reagent: Some(Reagent::Red),
                     min_falloff,
                 };
-                Projectile {
-                    hit_solid: vec![Effect::Explode(explosion.clone()), Effect::Vanish],
-                    hit_entity: vec![Effect::Explode(explosion), Effect::Vanish],
-                    time_left: Duration::from_secs(10),
-                    owner,
-                    ignore_group: true,
-                    is_sticky: true,
-                    is_point: true,
-                }
+                (
+                    ProjectileOwned {
+                        hit_solid: vec![Effect::Explode(explosion.clone()), Effect::Vanish],
+                        hit_entity: vec![Effect::Explode(explosion), Effect::Vanish],
+                        time_left: Duration::from_secs(10),
+                    },
+                    Projectile {
+                        owner,
+                        ignore_group: true,
+                        is_sticky: true,
+                        is_point: true,
+                    },
+                )
             },
             Frostball {
                 damage,
@@ -227,15 +246,19 @@ impl ProjectileConstructor {
                     reagent: Some(Reagent::White),
                     min_falloff,
                 };
-                Projectile {
-                    hit_solid: vec![Effect::Explode(explosion.clone()), Effect::Vanish],
-                    hit_entity: vec![Effect::Explode(explosion), Effect::Vanish],
-                    time_left: Duration::from_secs(10),
-                    owner,
-                    ignore_group: true,
-                    is_sticky: true,
-                    is_point: true,
-                }
+                (
+                    ProjectileOwned {
+                        hit_solid: vec![Effect::Explode(explosion.clone()), Effect::Vanish],
+                        hit_entity: vec![Effect::Explode(explosion), Effect::Vanish],
+                        time_left: Duration::from_secs(10),
+                    },
+                    Projectile {
+                        owner,
+                        ignore_group: true,
+                        is_sticky: true,
+                        is_point: true,
+                    },
+                )
             },
             Poisonball {
                 damage,
@@ -274,15 +297,19 @@ impl ProjectileConstructor {
                     reagent: Some(Reagent::Purple),
                     min_falloff,
                 };
-                Projectile {
-                    hit_solid: vec![Effect::Explode(explosion.clone()), Effect::Vanish],
-                    hit_entity: vec![Effect::Explode(explosion), Effect::Vanish],
-                    time_left: Duration::from_secs(10),
-                    owner,
-                    ignore_group: true,
-                    is_sticky: true,
-                    is_point: true,
-                }
+                (
+                    ProjectileOwned {
+                        hit_solid: vec![Effect::Explode(explosion.clone()), Effect::Vanish],
+                        hit_entity: vec![Effect::Explode(explosion), Effect::Vanish],
+                        time_left: Duration::from_secs(10),
+                    },
+                    Projectile {
+                        owner,
+                        ignore_group: true,
+                        is_sticky: true,
+                        is_point: true,
+                    },
+                )
             },
             NecroticSphere {
                 damage,
@@ -308,25 +335,33 @@ impl ProjectileConstructor {
                     reagent: Some(Reagent::Purple),
                     min_falloff,
                 };
-                Projectile {
-                    hit_solid: vec![Effect::Explode(explosion.clone()), Effect::Vanish],
-                    hit_entity: vec![Effect::Explode(explosion), Effect::Vanish],
+                (
+                    ProjectileOwned {
+                        hit_solid: vec![Effect::Explode(explosion.clone()), Effect::Vanish],
+                        hit_entity: vec![Effect::Explode(explosion), Effect::Vanish],
+                        time_left: Duration::from_secs(10),
+                    },
+                    Projectile {
+                        owner,
+                        ignore_group: true,
+                        is_sticky: true,
+                        is_point: true,
+                    },
+                )
+            },
+            Possess => (
+                ProjectileOwned {
+                    hit_solid: vec![Effect::Stick],
+                    hit_entity: vec![Effect::Stick, Effect::Possess],
                     time_left: Duration::from_secs(10),
+                },
+                Projectile {
                     owner,
-                    ignore_group: true,
+                    ignore_group: false,
                     is_sticky: true,
                     is_point: true,
-                }
-            },
-            Possess => Projectile {
-                hit_solid: vec![Effect::Stick],
-                hit_entity: vec![Effect::Stick, Effect::Possess],
-                time_left: Duration::from_secs(10),
-                owner,
-                ignore_group: false,
-                is_sticky: true,
-                is_point: true,
-            },
+                },
+            ),
             ClayRocket {
                 damage,
                 radius,
@@ -363,15 +398,19 @@ impl ProjectileConstructor {
                     reagent: Some(Reagent::Red),
                     min_falloff,
                 };
-                Projectile {
-                    hit_solid: vec![Effect::Explode(explosion.clone()), Effect::Vanish],
-                    hit_entity: vec![Effect::Explode(explosion), Effect::Vanish],
-                    time_left: Duration::from_secs(10),
-                    owner,
-                    ignore_group: true,
-                    is_sticky: true,
-                    is_point: true,
-                }
+                (
+                    ProjectileOwned {
+                        hit_solid: vec![Effect::Explode(explosion.clone()), Effect::Vanish],
+                        hit_entity: vec![Effect::Explode(explosion), Effect::Vanish],
+                        time_left: Duration::from_secs(10),
+                    },
+                    Projectile {
+                        owner,
+                        ignore_group: true,
+                        is_sticky: true,
+                        is_point: true,
+                    },
+                )
             },
             Snowball {
                 damage,
@@ -396,15 +435,19 @@ impl ProjectileConstructor {
                     reagent: Some(Reagent::White),
                     min_falloff,
                 };
-                Projectile {
-                    hit_solid: vec![],
-                    hit_entity: vec![Effect::Explode(explosion), Effect::Vanish],
-                    time_left: Duration::from_secs(120),
-                    owner,
-                    ignore_group: true,
-                    is_sticky: false,
-                    is_point: false,
-                }
+                (
+                    ProjectileOwned {
+                        hit_solid: vec![],
+                        hit_entity: vec![Effect::Explode(explosion), Effect::Vanish],
+                        time_left: Duration::from_secs(120),
+                    },
+                    Projectile {
+                        owner,
+                        ignore_group: true,
+                        is_sticky: false,
+                        is_point: false,
+                    },
+                )
             },
             ExplodingPumpkin {
                 damage,
@@ -453,15 +496,19 @@ impl ProjectileConstructor {
                     reagent: Some(Reagent::Red),
                     min_falloff,
                 };
-                Projectile {
-                    hit_solid: vec![Effect::Explode(explosion.clone()), Effect::Vanish],
-                    hit_entity: vec![Effect::Explode(explosion), Effect::Vanish],
-                    time_left: Duration::from_secs(10),
-                    owner,
-                    ignore_group: true,
-                    is_sticky: true,
-                    is_point: true,
-                }
+                (
+                    ProjectileOwned {
+                        hit_solid: vec![Effect::Explode(explosion.clone()), Effect::Vanish],
+                        hit_entity: vec![Effect::Explode(explosion), Effect::Vanish],
+                        time_left: Duration::from_secs(10),
+                    },
+                    Projectile {
+                        owner,
+                        ignore_group: true,
+                        is_sticky: true,
+                        is_point: true,
+                    },
+                )
             },
             DagonBomb {
                 damage,
@@ -510,15 +557,19 @@ impl ProjectileConstructor {
                     reagent: Some(Reagent::Blue),
                     min_falloff,
                 };
-                Projectile {
-                    hit_solid: vec![Effect::Explode(explosion.clone()), Effect::Vanish],
-                    hit_entity: vec![Effect::Explode(explosion), Effect::Vanish],
-                    time_left: Duration::from_secs(10),
-                    owner,
-                    ignore_group: true,
-                    is_sticky: true,
-                    is_point: true,
-                }
+                (
+                    ProjectileOwned {
+                        hit_solid: vec![Effect::Explode(explosion.clone()), Effect::Vanish],
+                        hit_entity: vec![Effect::Explode(explosion), Effect::Vanish],
+                        time_left: Duration::from_secs(10),
+                    },
+                    Projectile {
+                        owner,
+                        ignore_group: true,
+                        is_sticky: true,
+                        is_point: true,
+                    },
+                )
             },
         }
     }
