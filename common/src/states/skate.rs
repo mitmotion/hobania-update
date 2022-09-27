@@ -8,6 +8,7 @@ use crate::{
         behavior::{CharacterBehavior, JoinData},
         idle,
     },
+    util::Dir,
 };
 use serde::{Deserialize, Serialize};
 
@@ -79,7 +80,8 @@ impl CharacterBehavior for Data {
             if let CharacterState::Skate(skate_data) = &mut update.character {
                 skate_data.turn = orthogonal.dot(data.vel.0.xy());
             }
-            update.movement = update.movement.with_movement(MovementKind::Ground { dir: data.inputs.move_dir, accel: acceleration }).with_ori_update(OriUpdate::New(new_ori));
+            let dir = Dir::from_unnormalized(data.inputs.move_dir.with_z(0.0));
+            update.movement = update.movement.with_movement(MovementKind::Ground { dir, accel: acceleration }).with_ori_update(OriUpdate::New(new_ori));
         }
 
         update

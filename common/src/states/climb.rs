@@ -113,11 +113,11 @@ impl CharacterBehavior for Data {
         };
 
         // Apply Vertical Climbing Movement
-        let dir = data.inputs.move_dir.with_z(match climb {
+        let dir = Dir::from_unnormalized(data.inputs.move_dir.with_z(match climb {
             Climb::Down => -1.0,
             Climb::Up => 1.0,
             Climb::Hold => 0.0,
-        });
+        }));
         let accel = if data.vel.0.magnitude_squared() < self.static_data.movement_speed.powi(2) {
             self.static_data.movement_speed.powi(2)
         } else {

@@ -2,6 +2,7 @@ use crate::{
     comp::{Ori, Pos, Vel},
     consts::GRAVITY,
     resources::DeltaTime,
+    util::Dir,
 };
 use serde::{Deserialize, Serialize};
 use specs::{Component, DerefFlaggedStorage};
@@ -22,32 +23,32 @@ pub enum MovementKind {
     },
     Flight {
         lift: f32,
-        dir: Vec2<f32>,
+        dir: Option<Dir>,
         accel: f32,
     },
     Swim {
-        dir: Vec3<f32>,
+        dir: Option<Dir>,
         accel: f32,
     },
     Leap {
-        dir: Vec2<f32>,
+        dir: Option<Dir>,
         vertical: f32,
         forward: f32,
         progress: f32,
     },
     Ground {
-        dir: Vec2<f32>,
+        dir: Option<Dir>,
         accel: f32,
     },
     Climb {
-        dir: Vec3<f32>,
+        dir: Option<Dir>,
         accel: f32,
     },
     Teleport {
         pos: Vec3<f32>,
     },
     Boost {
-        dir: Vec3<f32>,
+        dir: Option<Dir>,
         accel: f32,
     },
     ChangeSpeed {
@@ -79,12 +80,12 @@ impl MovementState {
                 vel.0.z += dt.0 * lift;
             },
             MovementKind::Flight { lift, dir, accel } => {
-                let dir = dir.try_normalized().unwrap_or_default();
+                let dir = dir.map(|d| d.xy()).unwrap_or_default();
                 vel.0.z += dt.0 * lift;
                 vel.0 += dir * accel * dt.0;
             },
             MovementKind::Swim { dir, accel } => {
-                let dir = dir.try_normalized().unwrap_or_default();
+                let dir = dir.map(|d| *d).unwrap_or_default();
                 vel.0 += dir * accel * dt.0;
             },
             MovementKind::Leap {
@@ -93,7 +94,7 @@ impl MovementState {
                 forward,
                 progress,
             } => {
-                let dir = dir.try_normalized().unwrap_or_default();
+                let dir = dir.map(|d| d.xy()).unwrap_or_default();
                 let progress = progress.clamp(0.0, 1.0);
                 // TODO: Make this += instead of =, will require changing magnitude of strengths
                 // probably, and potentially other behavior too Multiplication
@@ -101,17 +102,17 @@ impl MovementState {
                 vel.0 = dir.mul(forward).with_z(vertical * progress * 2.0);
             },
             MovementKind::Ground { dir, accel } => {
-                let dir = dir.try_normalized().unwrap_or_default();
+                let dir = dir.map(|d| d.xy()).unwrap_or_default();
                 vel.0 += dir * accel * dt.0;
             },
             MovementKind::Climb { dir, accel } => {
-                let dir = dir.try_normalized().unwrap_or_default();
+                let dir = dir.map(|d| *d).unwrap_or_default();
                 vel.0.z += GRAVITY * dt.0;
                 vel.0 += dir * accel * dt.0;
             },
             MovementKind::Teleport { pos: new_pos } => pos.0 = new_pos,
             MovementKind::Boost { dir, accel } => {
-                let dir = dir.try_normalized().unwrap_or_default();
+                let dir = dir.map(|d| *d).unwrap_or_default();
                 vel.0 += dir * accel * dt.0;
             },
             MovementKind::ChangeSpeed { speed } => {

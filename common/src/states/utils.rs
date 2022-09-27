@@ -370,11 +370,11 @@ fn basic_move(data: &JoinData<'_>, update: &mut StateUpdate, efficiency: f32) {
     } * efficiency;
 
     // Should ability to backpedal be separate from ability to strafe?
-    let dir = if data.body.can_strafe() {
+    let dir = Dir::from_unnormalized(if data.body.can_strafe() {
         data.inputs.move_dir
     } else {
         Vec2::from(*data.ori)
-    };
+    }.with_z(0.0));
     let accel_mod = if is_strafing(data, update) {
         Lerp::lerp(
             Vec2::from(*data.ori)
@@ -393,7 +393,7 @@ fn basic_move(data: &JoinData<'_>, update: &mut StateUpdate, efficiency: f32) {
             data.body.reverse_move_factor(),
         )
     } else {
-        data.inputs.move_dir.dot(dir).max(0.0)
+        data.inputs.move_dir.dot(dir.unwrap_or_default().xy()).max(0.0)
     };
     let accel = accel * accel_mod;
 
@@ -416,7 +416,7 @@ pub fn handle_forced_movement(
                 // TODO: Remove * 2.0 with changes made in sword branch, added as hack for now to keep same behavior
                 let accel = accel * strength * 2.0;
                 // TODO: Remove move_dir portion with changes made in sword branch, added as hack for now to keep same behavior
-                let dir = data.inputs.move_dir * 0.5 + Vec2::from(*data.ori) * 1.5;
+                let dir = Dir::from_unnormalized((data.inputs.move_dir * 0.5 + Vec2::from(*data.ori) * 1.5).with_z(0.0));
                 update.movement = update.movement.with_movement(MovementKind::Ground { dir, accel });
             }
         },
@@ -426,7 +426,7 @@ pub fn handle_forced_movement(
             progress,
             direction,
         } => {
-            let dir = direction.get_2d_dir(data);
+            let dir = Dir::from_unnormalized(direction.get_2d_dir(data).with_z(0.0));
             // Control forward movement based on look direction.
             // This allows players to stop moving forward when they
             // look downward at target
@@ -532,7 +532,7 @@ fn swim_move(
             data.inputs.move_z
         };
 
-        let dir = Vec3::new(dir.x, dir.y, move_z);
+        let dir = Dir::from_unnormalized(Vec3::new(dir.x, dir.y, move_z));
         let accel = water_accel * (submersion - 0.2).clamp(0.0, 1.0).powi(2);
         update.movement = update.movement.with_movement(MovementKind::Swim { dir, accel });
 
@@ -595,12 +595,12 @@ pub fn fly_move(data: &JoinData<'_>, update: &mut StateUpdate, efficiency: f32) 
             _ => 0.0,
         };
 
-        let dir = if data.body.can_strafe() {
+        let dir = Dir::from_unnormalized(if data.body.can_strafe() {
             data.inputs.move_dir
         } else {
             let fw = Vec2::from(*data.ori);
             fw * data.inputs.move_dir.dot(fw).max(0.0)
-        };
+        }.with_z(0.0));
 
         update.movement = update.movement.with_movement(MovementKind::Flight { lift, dir, accel });
 

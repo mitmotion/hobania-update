@@ -6,6 +6,7 @@ use crate::{
         utils::*,
         wielding,
     },
+    util::Dir,
 };
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -64,7 +65,8 @@ impl CharacterBehavior for Data {
                 update.movement = update.movement.with_movement(if data.physics.on_ground.is_some() {
                     // TODO: Just remove axehover entirely with axe rework, it's really janky
                     // TODO: Should 5 even be used here, or should body accel be used? Maybe just call handle_move?
-                    MovementKind::Ground { dir: data.inputs.move_dir, accel: 5.0 }
+                    let dir = Dir::from_unnormalized(data.inputs.move_dir.with_z(0.0));
+                    MovementKind::Ground { dir, accel: 5.0 }
                 } else {
                     MovementKind::SlowFall { lift: GRAVITY * 0.5 }
                 });

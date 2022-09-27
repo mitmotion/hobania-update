@@ -5,6 +5,7 @@ use crate::{
         utils::*,
         wielding,
     },
+    util::Dir,
 };
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -37,11 +38,11 @@ impl CharacterBehavior for Data {
 
         if self.timer < self.static_data.movement_duration {
             // Movement
-            let dir = if self.static_data.only_up {
+            let dir = Dir::from_unnormalized(if self.static_data.only_up {
                 Vec3::unit_z()
             } else {
                 *data.inputs.look_dir
-            };
+            });
             update.movement = update.movement.with_movement(MovementKind::Boost { dir, accel: self.static_data.speed });
             update.character = CharacterState::Boost(Data {
                 timer: tick_attack_or_default(data, self.timer, None),
