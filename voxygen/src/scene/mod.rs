@@ -528,7 +528,7 @@ impl Scene {
             let on_ground = ecs
                 .read_storage::<comp::PhysicsState>()
                 .get(scene_data.viewpoint_entity)
-                .map(|p| p.on_ground.is_some());
+                .map(|p| p.state.on_ground.is_some());
 
             let (viewpoint_height, viewpoint_eye_height) = scene_data
                 .state

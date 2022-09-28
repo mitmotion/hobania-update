@@ -9,7 +9,7 @@ use crate::{
 };
 use client::Client;
 use common::{
-    comp::{Body, CharacterState, PhysicsState, Pos, Vel},
+    comp::{Body, CharacterState, PhysicsState, PhysicsStateFast, Pos, Vel},
     resources::DeltaTime,
     terrain::{BlockKind, TerrainChunk},
     vol::ReadVol,
@@ -72,6 +72,7 @@ impl EventMapper for MovementEventMapper {
             .join()
             .filter(|(_, e_pos, ..)| (e_pos.0.distance_squared(cam_pos)) < SFX_DIST_LIMIT_SQR)
         {
+            let physics = &physics.state;
             if let Some(character) = character {
                 let internal_state = self.event_history.entry(entity).or_default();
 
@@ -187,7 +188,7 @@ impl MovementEventMapper {
     /// `SfxEvent`'s which we attach sounds to
     fn map_movement_event(
         character_state: &CharacterState,
-        physics_state: &PhysicsState,
+        physics_state: &PhysicsStateFast,
         previous_state: &PreviousEntityState,
         vel: Vec3<f32>,
         underfoot_block_kind: BlockKind,
@@ -228,7 +229,7 @@ impl MovementEventMapper {
 
     /// Maps a limited set of movements for other non-humanoid entities
     fn map_non_humanoid_movement_event(
-        physics_state: &PhysicsState,
+        physics_state: &PhysicsStateFast,
         vel: Vec3<f32>,
         underfoot_block_kind: BlockKind,
     ) -> SfxEvent {
@@ -250,7 +251,7 @@ impl MovementEventMapper {
 
     /// Maps a limited set of movements for quadruped entities
     fn map_quadruped_movement_event(
-        physics_state: &PhysicsState,
+        physics_state: &PhysicsStateFast,
         vel: Vec3<f32>,
         underfoot_block_kind: BlockKind,
     ) -> SfxEvent {

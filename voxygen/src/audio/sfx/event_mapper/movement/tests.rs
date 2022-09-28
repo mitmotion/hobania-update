@@ -3,7 +3,7 @@ use crate::audio::sfx::SfxEvent;
 use common::{
     comp::{
         bird_large, humanoid, quadruped_medium, quadruped_small, Body, CharacterState, InputKind,
-        Ori, PhysicsState,
+        Ori, PhysicsStateFast,
     },
     states,
     terrain::{Block, BlockKind},
@@ -94,7 +94,7 @@ fn same_previous_event_elapsed_emits() {
 fn maps_idle() {
     let result = MovementEventMapper::map_movement_event(
         &CharacterState::Idle(states::idle::Data::default()),
-        &PhysicsState {
+        &PhysicsStateFast {
             on_ground: Some(Block::empty()),
             ..Default::default()
         },
@@ -116,7 +116,7 @@ fn maps_idle() {
 fn maps_run_with_sufficient_velocity() {
     let result = MovementEventMapper::map_movement_event(
         &CharacterState::Idle(states::idle::Data::default()),
-        &PhysicsState {
+        &PhysicsStateFast {
             on_ground: Some(Block::empty()),
             ..Default::default()
         },
@@ -138,7 +138,7 @@ fn maps_run_with_sufficient_velocity() {
 fn does_not_map_run_with_insufficient_velocity() {
     let result = MovementEventMapper::map_movement_event(
         &CharacterState::Idle(states::idle::Data::default()),
-        &PhysicsState {
+        &PhysicsStateFast {
             on_ground: Some(Block::empty()),
             ..Default::default()
         },
@@ -193,7 +193,7 @@ fn maps_roll() {
             is_sneaking: false,
             was_combo: None,
         }),
-        &PhysicsState {
+        &PhysicsStateFast {
             on_ground: Some(Block::empty()),
             ..Default::default()
         },
@@ -215,7 +215,7 @@ fn maps_roll() {
 fn maps_land_on_ground_to_run() {
     let result = MovementEventMapper::map_movement_event(
         &CharacterState::Idle(states::idle::Data::default()),
-        &PhysicsState {
+        &PhysicsStateFast {
             on_ground: Some(Block::empty()),
             ..Default::default()
         },
@@ -255,7 +255,7 @@ fn maps_glide() {
 #[test]
 fn maps_quadrupeds_running() {
     let result = MovementEventMapper::map_non_humanoid_movement_event(
-        &PhysicsState {
+        &PhysicsStateFast {
             on_ground: Some(Block::empty()),
             ..Default::default()
         },

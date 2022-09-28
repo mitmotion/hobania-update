@@ -184,7 +184,7 @@ fn react_if_on_fire(bdata: &mut BehaviorData) -> bool {
 
     if is_on_fire
         && bdata.agent_data.body.map_or(false, |b| b.is_humanoid())
-        && bdata.agent_data.physics_state.on_ground.is_some()
+        && bdata.agent_data.physics_state.state.on_ground.is_some()
         && bdata
             .rng
             .gen_bool((2.0 * bdata.read_data.dt.0).clamp(0.0, 1.0) as f64)

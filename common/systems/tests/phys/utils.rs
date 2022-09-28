@@ -2,11 +2,12 @@ use common::{
     comp::{
         inventory::item::MaterialStatManifest,
         skills::{GeneralSkill, Skill},
-        Auras, Buffs, CharacterState, Collider, Combo, Controller, Energy, Health, Ori, Pos, Stats,
-        Vel,
+        Auras, Buffs, CharacterState, Collider, Combo, Controller, Energy, Health, MovementState,
+        Ori, Pos, Stats, Vel,
     },
     resources::{DeltaTime, GameMode, Time},
     skillset_builder::SkillSetBuilder,
+    slowjob::SlowJobPool,
     terrain::{
         Block, BlockKind, MapSizeLg, SpriteKind, TerrainChunk, TerrainChunkMeta, TerrainGrid,
     },
@@ -42,6 +43,10 @@ pub fn setup() -> State {
         Arc::new(TerrainChunk::water(0)),
     );
     state.ecs_mut().insert(MaterialStatManifest::with_empty());
+    state
+        .ecs_mut()
+        .write_resource::<SlowJobPool>()
+        .configure("CHUNK_DROP", |_n| 1);
     state.ecs_mut().read_resource::<Time>();
     state.ecs_mut().read_resource::<DeltaTime>();
     for x in 0..2 {
@@ -117,6 +122,7 @@ pub fn create_player(state: &mut State) -> Entity {
         .with(body)
         .with(Controller::default())
         .with(CharacterState::default())
+        .with(MovementState::default())
         .with(Buffs::default())
         .with(Combo::default())
         .with(Auras::default())

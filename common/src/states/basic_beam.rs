@@ -164,14 +164,14 @@ impl CharacterBehavior for Data {
                         .prerotated(pitch)
                     };
                     // Velocity relative to the current ground
-                    let rel_vel = data.vel.0 - data.physics.ground_vel;
+                    let rel_vel = data.vel.0 - data.physics.state.ground_vel;
                     // Gets offsets
                     let body_offsets = beam_offsets(
                         data.body,
                         data.inputs.look_dir,
                         data.ori.look_vec(),
                         rel_vel,
-                        data.physics.on_ground,
+                        data.physics.state.on_ground,
                     );
                     let pos = Pos(data.pos.0 + body_offsets);
 

@@ -226,6 +226,11 @@ pub enum ServerEvent {
         entity: EcsEntity,
         update: comp::MapMarkerChange,
     },
+    /// FIXME: Remove this hack!  It is only used for dousing flames.
+    UpdateBody {
+        entity: EcsEntity,
+        new_body: comp::Body,
+    },
 }
 
 pub struct EventBus<E> {

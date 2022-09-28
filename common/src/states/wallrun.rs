@@ -33,9 +33,9 @@ impl CharacterBehavior for Data {
         // fall off wall, hit ground, or enter water
         // TODO: Rugged way to determine when state change occurs and we need to leave
         // this state
-        if data.physics.on_wall.is_none()
-            || data.physics.on_ground.is_some()
-            || data.physics.in_liquid().is_some()
+        if data.physics.state.on_wall.is_none()
+            || data.physics.state.on_ground.is_some()
+            || data.physics.state.in_liquid().is_some()
         {
             update.character = CharacterState::Idle(idle::Data::default());
         }

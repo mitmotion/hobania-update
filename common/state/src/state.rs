@@ -575,7 +575,8 @@ impl State {
             match event {
                 LocalEvent::Jump(entity, impulse) => {
                     if let Some(vel) = velocities.get_mut(entity) {
-                        vel.0.z = impulse + physics.get(entity).map_or(0.0, |ps| ps.ground_vel.z);
+                        vel.0.z =
+                            impulse + physics.get(entity).map_or(0.0, |ps| ps.state.ground_vel.z);
                     }
                 },
                 LocalEvent::ApplyImpulse { entity, impulse } => {

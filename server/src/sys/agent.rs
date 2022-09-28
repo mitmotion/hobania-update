@@ -134,7 +134,7 @@ impl<'a> System<'a> for Sys {
                     let is_gliding = matches!(
                         read_data.char_states.get(entity),
                         Some(CharacterState::GlideWield(_) | CharacterState::Glide(_))
-                    ) && physics_state.on_ground.is_none();
+                    ) && physics_state.state.on_ground.is_none();
 
                     if let Some(pid) = agent.position_pid_controller.as_mut() {
                         pid.add_measurement(read_data.time.0, pos.0);
@@ -150,8 +150,8 @@ impl<'a> System<'a> for Sys {
                     let traversal_config = TraversalConfig {
                         node_tolerance,
                         slow_factor,
-                        on_ground: physics_state.on_ground.is_some(),
-                        in_liquid: physics_state.in_liquid().is_some(),
+                        on_ground: physics_state.state.on_ground.is_some(),
+                        in_liquid: physics_state.state.in_liquid().is_some(),
                         min_tgt_dist: 1.0,
                         can_climb: body.map_or(false, Body::can_climb),
                         can_fly: body.map_or(false, |b| b.fly_thrust().is_some()),

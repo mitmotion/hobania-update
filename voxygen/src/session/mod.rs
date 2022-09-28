@@ -1061,6 +1061,7 @@ impl PlayState for SessionState {
                         let fluid = ecs
                             .read_storage::<comp::PhysicsState>()
                             .get(entity)?
+                            .state
                             .in_fluid?;
                         ecs.read_storage::<Vel>()
                             .get(entity)
@@ -1220,7 +1221,7 @@ impl PlayState for SessionState {
                 let in_fluid = ecs
                     .read_storage::<comp::PhysicsState>()
                     .get(entity)
-                    .and_then(|state| state.in_fluid);
+                    .and_then(|state| state.state.in_fluid);
                 let character_state = ecs
                     .read_storage::<comp::CharacterState>()
                     .get(entity)

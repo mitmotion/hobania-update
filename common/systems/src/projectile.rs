@@ -86,7 +86,7 @@ impl<'a> System<'a> for Sys {
                 .and_then(|uid| read_data.uid_allocator.retrieve_entity_internal(uid.into()));
 
             let mut rng = thread_rng();
-            if physics.on_surface().is_none() && rng.gen_bool(0.05) {
+            if physics.state.on_surface().is_none() && rng.gen_bool(0.05) {
                 server_emitter.emit(ServerEvent::Sound {
                     sound: Sound::new(SoundKind::Projectile, pos.0, 4.0, read_data.time.0),
                 });
@@ -162,7 +162,7 @@ impl<'a> System<'a> for Sys {
                 }
             }
 
-            if physics.on_surface().is_some() {
+            if physics.state.on_surface().is_some() {
                 let projectile_write = &mut *projectile_write;
                 for effect in projectile_write.hit_solid.drain(..) {
                     match effect {

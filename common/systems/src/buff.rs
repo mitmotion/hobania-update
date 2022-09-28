@@ -31,6 +31,7 @@ pub struct ReadData<'a> {
     entities: Entities<'a>,
     dt: Read<'a, DeltaTime>,
     server_bus: Read<'a, EventBus<ServerEvent>>,
+    bodies: ReadStorage<'a, Body>,
     inventories: ReadStorage<'a, Inventory>,
     healths: ReadStorage<'a, Health>,
     energies: ReadStorage<'a, Energy>,
@@ -48,7 +49,6 @@ impl<'a> System<'a> for Sys {
         ReadData<'a>,
         WriteStorage<'a, Buffs>,
         WriteStorage<'a, Stats>,
-        WriteStorage<'a, Body>,
         WriteStorage<'a, LightEmitter>,
     );
 
@@ -58,7 +58,7 @@ impl<'a> System<'a> for Sys {
 
     fn run(
         job: &mut Job<Self>,
-        (read_data, mut buffs, mut stats, mut bodies, mut light_emitters): Self::SystemData,
+        (read_data, mut buffs, mut stats, mut light_emitters): Self::SystemData,
     ) {
         let mut server_emitter = read_data.server_bus.emitter();
         let dt = read_data.dt.0;
@@ -74,7 +74,7 @@ impl<'a> System<'a> for Sys {
         prof_span!(guard_, "buff campfire deactivate");
         (
             &read_data.entities,
-            &mut bodies,
+            &read_data.bodies,
             &read_data.physics_states,
             light_emitters_mask, //to improve iteration speed
         )
@@ -82,16 +82,19 @@ impl<'a> System<'a> for Sys {
             .filter(|(_, body, physics_state, _)| {
                 matches!(&**body, Body::Object(object::Body::CampfireLit))
                     && matches!(
-                        physics_state.in_fluid,
+                        physics_state.state.in_fluid,
                         Some(Fluid::Liquid {
                             kind: LiquidKind::Water,
                             ..
                         })
                     )
             })
-            .for_each(|(e, mut body, _, _)| {
-                *body = Body::Object(object::Body::Campfire);
-                light_emitters.remove(e);
+            .for_each(|(entity, _, _, _)| {
+                server_emitter.emit(ServerEvent::UpdateBody {
+                    entity,
+                    new_body: Body::Object(object::Body::Campfire),
+                });
+                light_emitters.remove(entity);
             });
         drop(guard_);
 
@@ -108,7 +111,7 @@ impl<'a> System<'a> for Sys {
             // Apply buffs to entity based off of their current physics_state
             if let Some(physics_state) = physics_state {
                 if matches!(
-                    physics_state.on_ground.and_then(|b| b.get_sprite()),
+                    physics_state.state.on_ground.and_then(|b| b.get_sprite()),
                     Some(SpriteKind::EnsnaringVines) | Some(SpriteKind::EnsnaringWeb)
                 ) {
                     // If on ensnaring vines, apply ensnared debuff
@@ -123,7 +126,7 @@ impl<'a> System<'a> for Sys {
                     });
                 }
                 if matches!(
-                    physics_state.on_ground.and_then(|b| b.get_sprite()),
+                    physics_state.state.on_ground.and_then(|b| b.get_sprite()),
                     Some(SpriteKind::SeaUrchin)
                 ) {
                     // If touching Sea Urchin apply Bleeding buff
@@ -138,7 +141,7 @@ impl<'a> System<'a> for Sys {
                     });
                 }
                 if matches!(
-                    physics_state.in_fluid,
+                    physics_state.state.in_fluid,
                     Some(Fluid::Liquid {
                         kind: LiquidKind::Lava,
                         ..
@@ -155,7 +158,7 @@ impl<'a> System<'a> for Sys {
                         )),
                     });
                 } else if matches!(
-                    physics_state.in_fluid,
+                    physics_state.state.in_fluid,
                     Some(Fluid::Liquid {
                         kind: LiquidKind::Water,
                         ..

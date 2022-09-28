@@ -4,7 +4,8 @@ use common::{
         fluid_dynamics::{Fluid, LiquidKind, Wings},
         inventory::item::armor::Friction,
         Body, CharacterState, Collider, Density, Immovable, Mass, MovementState, Ori, PhysicsState,
-        Pos, PosVelOriDefer, PreviousPhysCache, Projectile, Scale, Stats, Sticky, Vel,
+        PhysicsStateFast, Pos, PosVelOriDefer, PreviousPhysCache, Projectile, Scale, Stats, Sticky,
+        Vel,
     },
     consts::{AIR_DENSITY, FRIC_GROUND, GRAVITY},
     event::{EventBus, ServerEvent},
@@ -388,7 +389,7 @@ impl<'a> PhysicsRead<'a> {
                 )| {
                     let is_sticky = sticky.is_some();
                     let is_immovable = immovable.is_some();
-                    let is_mid_air = physics.on_surface().is_none();
+                    let is_mid_air = physics.state.on_surface().is_none();
                     let mut entity_entity_collision_checks = 0;
                     let mut entity_entity_collisions = 0;
 
@@ -667,7 +668,7 @@ impl<'a> PhysicsData<'a> {
                     // Apply physics only if in a loaded chunk
                     if in_loaded_chunk
                     // And not already stuck on a block (e.g., for arrows)
-                    && !(physics_state.on_surface().is_some() && sticky.is_some())
+                    && !(physics_state.state.on_surface().is_some() && sticky.is_some())
                     {
                         // Clamp dt to an effective 10 TPS, to prevent gravity
                         // from slamming the players into the floor when
@@ -675,7 +676,7 @@ impl<'a> PhysicsData<'a> {
                         // to lag (as observed in the 0.9 release party).
                         let dt = DeltaTime(read.dt.0.min(0.1));
 
-                        match physics_state.in_fluid {
+                        match physics_state.state.in_fluid {
                             None => {
                                 vel.0.z -= dt.0 * GRAVITY;
                             },
@@ -814,8 +815,8 @@ impl<'a> PhysicsData<'a> {
 
                     if let Some(state) = character_state {
                         let footwear = state.footwear().unwrap_or(Friction::Normal);
-                        if footwear != physics_state.footwear {
-                            physics_state.footwear = footwear;
+                        if footwear != physics_state.state.footwear {
+                            physics_state.state.footwear = footwear;
                         }
                     }
 
@@ -849,7 +850,7 @@ impl<'a> PhysicsData<'a> {
                     // velocities or entirely broken position snapping.
                     let mut tgt_pos = pos.0 + pos_delta;
 
-                    let was_on_ground = physics_state.on_ground.is_some();
+                    let was_on_ground = physics_state.state.on_ground.is_some();
                     let block_snap =
                         body.map_or(false, |b| !matches!(b, Body::Object(_) | Body::Ship(_)));
                     let climbing =
@@ -876,7 +877,7 @@ impl<'a> PhysicsData<'a> {
                                 &mut cpos,
                                 tgt_pos,
                                 &mut vel,
-                                physics_state,
+                                &mut physics_state.state,
                                 Vec3::zero(),
                                 &read.dt,
                                 was_on_ground,
@@ -909,7 +910,7 @@ impl<'a> PhysicsData<'a> {
                                 &mut cpos,
                                 tgt_pos,
                                 &mut vel,
-                                physics_state,
+                                &mut physics_state.state,
                                 Vec3::zero(),
                                 &read.dt,
                                 was_on_ground,
@@ -921,8 +922,8 @@ impl<'a> PhysicsData<'a> {
                             );
 
                             // Sticky things shouldn't move when on a surface
-                            if physics_state.on_surface().is_some() && sticky.is_some() {
-                                vel.0 = physics_state.ground_vel;
+                            if physics_state.state.on_surface().is_some() && sticky.is_some() {
+                                vel.0 = physics_state.state.ground_vel;
                             }
 
                             tgt_pos = cpos.0;
@@ -982,13 +983,13 @@ impl<'a> PhysicsData<'a> {
                                     > block_rpos.xy().map(|e| e.abs()).reduce_partial_max()
                                 {
                                     if block_rpos.z > 0.0 {
-                                        physics_state.on_ground = block.copied();
+                                        physics_state.state.on_ground = block.copied();
                                     } else {
-                                        physics_state.on_ceiling = true;
+                                        physics_state.state.on_ceiling = true;
                                     }
                                     vel.0.z = 0.0;
                                 } else {
-                                    physics_state.on_wall =
+                                    physics_state.state.on_wall =
                                         Some(if block_rpos.x.abs() > block_rpos.y.abs() {
                                             vel.0.x = 0.0;
                                             Vec3::unit_x() * -block_rpos.x.signum()
@@ -1000,11 +1001,11 @@ impl<'a> PhysicsData<'a> {
 
                                 // Sticky things shouldn't move
                                 if sticky.is_some() {
-                                    vel.0 = physics_state.ground_vel;
+                                    vel.0 = physics_state.state.ground_vel;
                                 }
                             }
 
-                            physics_state.in_fluid = read
+                            physics_state.state.in_fluid = read
                                 .terrain
                                 .get(pos.0.map(|e| e.floor() as i32))
                                 .ok()
@@ -1015,7 +1016,7 @@ impl<'a> PhysicsData<'a> {
                                         vel: Vel::zero(),
                                     })
                                 })
-                                .or_else(|| match physics_state.in_fluid {
+                                .or_else(|| match physics_state.state.in_fluid {
                                     Some(Fluid::Liquid { .. }) | None => Some(Fluid::Air {
                                         elevation: pos.0.z,
                                         vel: Vel::default(),
@@ -1113,7 +1114,7 @@ impl<'a> PhysicsData<'a> {
                                         return;
                                     }
 
-                                    let mut physics_state_delta = physics_state.clone();
+                                    let mut physics_state_delta = physics_state.state;
                                     // deliberately don't use scale yet here, because the
                                     // 11.0/0.8 thing is
                                     // in the comp::Scale for visual reasons
@@ -1191,7 +1192,7 @@ impl<'a> PhysicsData<'a> {
                                     // based on the most
                                     // recent terrain that collision was attempted with
                                     if physics_state_delta.on_ground.is_some() {
-                                        physics_state.ground_vel = vel_other;
+                                        physics_state.state.ground_vel = vel_other;
 
                                         // Rotate if on ground
                                         ori = ori.rotated(
@@ -1199,16 +1200,16 @@ impl<'a> PhysicsData<'a> {
                                                 * previous_cache_other.ori.inverse(),
                                         );
                                     }
-                                    physics_state.on_ground =
-                                        physics_state.on_ground.or(physics_state_delta.on_ground);
-                                    physics_state.on_ceiling |= physics_state_delta.on_ceiling;
-                                    physics_state.on_wall = physics_state.on_wall.or_else(|| {
+                                    physics_state.state.on_ground =
+                                        physics_state.state.on_ground.or(physics_state_delta.on_ground);
+                                    physics_state.state.on_ceiling |= physics_state_delta.on_ceiling;
+                                    physics_state.state.on_wall = physics_state.state.on_wall.or_else(|| {
                                         physics_state_delta
                                             .on_wall
                                             .map(|dir| ori_from.mul_direction(dir))
                                     });
-                                    physics_state.in_fluid = match (
-                                        physics_state.in_fluid,
+                                    physics_state.state.in_fluid = match (
+                                        physics_state.state.in_fluid,
                                         physics_state_delta.in_fluid,
                                     ) {
                                         (Some(x), Some(y)) => x
@@ -1467,7 +1468,7 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
     pos: &mut Pos,
     tgt_pos: Vec3<f32>,
     vel: &mut Vel,
-    physics_state: &mut PhysicsState,
+    physics_state: &mut PhysicsStateFast,
     ground_vel: Vec3<f32>,
     dt: &DeltaTime,
     was_on_ground: bool,

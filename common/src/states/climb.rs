@@ -60,9 +60,9 @@ impl CharacterBehavior for Data {
 
         // If no wall is in front of character or we stopped climbing;
         let (wall_dir, climb) = if let (Some(wall_dir), Some(climb), None) = (
-            data.physics.on_wall,
+            data.physics.state.on_wall,
             data.inputs.climb,
-            data.physics.on_ground,
+            data.physics.state.on_ground,
         ) {
             (wall_dir, climb)
         } else {
@@ -102,7 +102,7 @@ impl CharacterBehavior for Data {
             // Smooth orientation
             data.ori.slerped_towards(
                 Ori::from(ori_dir),
-                if data.physics.on_ground.is_some() {
+                if data.physics.state.on_ground.is_some() {
                     9.0
                 } else {
                     2.0

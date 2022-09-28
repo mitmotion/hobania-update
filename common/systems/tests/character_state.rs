@@ -3,7 +3,7 @@ mod tests {
     use common::{
         comp::{
             item::MaterialStatManifest, skills::GeneralSkill, CharacterState, Controller, Energy,
-            Ori, PhysicsState, Poise, Pos, Skill, Stats, Vel,
+            MovementState, Ori, PhysicsState, Poise, Pos, Skill, Stats, Vel,
         },
         resources::{DeltaTime, GameMode, Time},
         terrain::{MapSizeLg, TerrainChunk},
@@ -51,6 +51,7 @@ mod tests {
             .ecs_mut()
             .create_entity()
             .with(CharacterState::Idle(common::states::idle::Data::default()))
+            .with(MovementState::default())
             .with(Pos(Vec3::zero()))
             .with(Vel::default())
             .with(ori)
@@ -105,11 +106,22 @@ mod tests {
                 Ori::from_unnormalized_vec(testcases[i].0).unwrap_or_default(),
             ));
         }
-        tick(&mut state, Duration::from_secs_f32(0.033));
-        let results = state.ecs().read_storage::<Ori>();
+        let dt = 0.033;
+        tick(&mut state, Duration::from_secs_f32(dt));
+        let movement = state.ecs().read_storage::<MovementState>();
+        let pos = state.ecs().read_storage::<Pos>();
+        let vel = state.ecs().read_storage::<Vel>();
+        let ori = state.ecs().read_storage::<Ori>();
+        let dt = DeltaTime(dt);
         for i in 0..TESTCASES {
             if let Some(e) = entities[i] {
-                let result = Dir::from(*results.get(e).expect("Ori missing"));
+                let mut pos = *pos.get(e).expect("Pos missing");
+                let mut vel = *vel.get(e).expect("Vel missing");
+                let mut ori = *ori.get(e).expect("Ori missing");
+                if let Some(movement) = movement.get(e) {
+                    movement.handle_movement(&dt, &mut pos, &mut vel, &mut ori);
+                }
+                let result = Dir::from(ori);
                 assert!(result.abs_diff_eq(&testcases[i].1, 0.0005));
                 // println!("{:?}", result);
             }

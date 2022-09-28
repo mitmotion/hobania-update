@@ -706,17 +706,17 @@ fn selected_entity_window(
                             .spacing([40.0, 4.0])
                             .striped(true)
                             .show(ui, |ui| {
-                                two_col_row(ui, "On Ground", physics_state.on_ground.map_or("None".to_owned(), |x| format!("{:?}", x)));
-                                two_col_row(ui, "On Ceiling", (if physics_state.on_ceiling { "True" } else { "False " }).to_string());
-                                two_col_row(ui, "On Wall", physics_state.on_wall.map_or("-".to_owned(), |x| format!("{:.1},{:.1},{:.1}", x.x, x.y, x.z )));
+                                two_col_row(ui, "On Ground", physics_state.state.on_ground.map_or("None".to_owned(), |x| format!("{:?}", x)));
+                                two_col_row(ui, "On Ceiling", (if physics_state.state.on_ceiling { "True" } else { "False " }).to_string());
+                                two_col_row(ui, "On Wall", physics_state.state.on_wall.map_or("-".to_owned(), |x| format!("{:.1},{:.1},{:.1}", x.x, x.y, x.z )));
                                 two_col_row(ui, "Touching Entities", physics_state.touch_entities.len().to_string());
-                                two_col_row(ui, "In Fluid", match physics_state.in_fluid {
+                                two_col_row(ui, "In Fluid", match physics_state.state.in_fluid {
 
                                     Some(Fluid::Air { elevation, .. }) => format!("Air (Elevation: {:.1})", elevation),
                                     Some(Fluid::Liquid { depth, kind, .. }) => format!("{:?} (Depth: {:.1})", kind, depth),
                                     _ => "None".to_owned() });
                                 });
-                                two_col_row(ui, "Footwear", match physics_state.footwear{ Friction::Ski => "Ski", Friction::Skate => "Skate", /* Friction::Snowshoe => "Snowshoe", Friction::Spikes => "Spikes", */ Friction::Normal=>"Normal",}.to_string());
+                                two_col_row(ui, "Footwear", match physics_state.state.footwear{ Friction::Ski => "Ski", Friction::Skate => "Skate", /* Friction::Snowshoe => "Snowshoe", Friction::Spikes => "Spikes", */ Friction::Normal=>"Normal",}.to_string());
                             });
                 }
             });

@@ -170,18 +170,25 @@ impl Component for Immovable {
     type Storage = DerefFlaggedStorage<Self, NullStorage<Self>>;
 }
 
-// PhysicsState
-#[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
-pub struct PhysicsState {
+/// Cheaply copyable components of PhysicsState used for most delta
+/// computations.
+#[derive(Clone, Copy, Default, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PhysicsStateFast {
     pub on_ground: Option<Block>,
     pub on_ceiling: bool,
     pub on_wall: Option<Vec3<f32>>,
-    pub touch_entities: HashSet<Uid>,
     pub in_fluid: Option<Fluid>,
     pub ground_vel: Vec3<f32>,
     pub footwear: Friction,
     pub skating_last_height: f32,
     pub skating_active: bool,
+}
+
+// PhysicsState
+#[derive(Default, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PhysicsState {
+    pub state: PhysicsStateFast,
+    pub touch_entities: HashSet<Uid>,
 }
 
 impl PhysicsState {
@@ -191,12 +198,17 @@ impl PhysicsState {
         touch_entities.clear();
         *self = Self {
             touch_entities,
-            ground_vel: self.ground_vel, /* Preserved, since it's the velocity of the last
-                                          * contact point */
-            ..Self::default()
+            state: PhysicsStateFast {
+                ground_vel: self.state.ground_vel, /* Preserved, since it's the velocity of the
+                                                    * last
+                                                    * contact point */
+                ..Default::default()
+            },
         }
     }
+}
 
+impl PhysicsStateFast {
     pub fn on_surface(&self) -> Option<Vec3<f32>> {
         self.on_ground
             .map(|_| -Vec3::unit_z())

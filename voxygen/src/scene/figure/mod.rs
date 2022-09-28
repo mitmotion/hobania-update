@@ -767,6 +767,7 @@ impl FigureMgr {
             .join()
             .enumerate()
         {
+            let physics = &physics.state;
             // Velocity relative to the current ground
             let rel_vel = anim::vek::Vec3::<f32>::from(vel.0 - physics.ground_vel);
 

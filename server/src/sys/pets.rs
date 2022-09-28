@@ -54,7 +54,7 @@ impl<'a> System<'a> for Sys {
             .filter(|(_, owner_pos, owner_physics, pet_pos)| {
                 // Don't teleport pets to the player if they're in the air, nobody wants
                 // pets to go splat :(
-                owner_physics.on_ground.is_some()
+                owner_physics.state.on_ground.is_some()
                     && owner_pos.0.distance_squared(pet_pos.0) > LOST_PET_DISTANCE_THRESHOLD.powi(2)
             })
             .map(|(entity, owner_pos, _, _)| (entity, *owner_pos))

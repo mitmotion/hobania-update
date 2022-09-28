@@ -23,6 +23,7 @@ const POISE_REGEN_ACCEL: f32 = 2.0;
 #[derive(SystemData)]
 pub struct ReadData<'a> {
     entities: Entities<'a>,
+    stats: ReadStorage<'a, Stats>,
     dt: Read<'a, DeltaTime>,
     time: Read<'a, Time>,
     server_bus: Read<'a, EventBus<ServerEvent>>,
@@ -39,7 +40,6 @@ pub struct Sys;
 impl<'a> System<'a> for Sys {
     type SystemData = (
         ReadData<'a>,
-        WriteStorage<'a, Stats>,
         WriteStorage<'a, SkillSet>,
         WriteStorage<'a, Health>,
         WriteStorage<'a, Poise>,
@@ -56,7 +56,6 @@ impl<'a> System<'a> for Sys {
         _job: &mut Job<Self>,
         (
             read_data,
-            stats,
             mut skill_sets,
             mut healths,
             mut poises,
@@ -72,7 +71,7 @@ impl<'a> System<'a> for Sys {
         // Update stats
         for (entity, stats, mut health, pos, mut energy, inventory) in (
             &read_data.entities,
-            &stats,
+            &read_data.stats,
             &mut healths,
             &read_data.positions,
             &mut energies,

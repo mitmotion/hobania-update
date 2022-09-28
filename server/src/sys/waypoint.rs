@@ -55,7 +55,7 @@ impl<'a> System<'a> for Sys {
         )
             .join()
         {
-            if physics.map_or(true, |ps| ps.on_ground.is_some()) && velocity.0.z >= 0.0 {
+            if physics.map_or(true, |ps| ps.state.on_ground.is_some()) && velocity.0.z >= 0.0 {
                 for (waypoint_pos, waypoint_area) in (&positions, &waypoint_areas).join() {
                     if player_pos.0.distance_squared(waypoint_pos.0)
                         < waypoint_area.radius().powi(2)

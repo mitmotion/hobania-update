@@ -106,7 +106,7 @@ pub fn handle_knockback(server: &Server, entity: EcsEntity, impulse: Vec3<f32>) 
     if let Some(physics) = ecs.read_storage::<PhysicsState>().get(entity) {
         //Check if the entity is on a surface. If it is not, reduce knockback.
         let mut impulse = impulse
-            * if physics.on_surface().is_some() {
+            * if physics.state.on_surface().is_some() {
                 1.0
             } else {
                 0.4
@@ -1358,4 +1358,12 @@ pub fn handle_update_map_marker(
             ));
         }
     }
+}
+
+/// FIXME: Remove this hack!  It should only be used for dousing flames from
+/// campfires.
+pub fn handle_update_body(server: &mut Server, entity: EcsEntity, new_body: comp::Body) {
+    server
+        .state
+        .write_component_ignore_entity_dead(entity, new_body);
 }

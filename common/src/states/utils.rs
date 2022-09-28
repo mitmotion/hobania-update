@@ -327,7 +327,7 @@ pub fn handle_skating(data: &JoinData, update: &mut StateUpdate) {
                 footwear,
             });
         }
-        if data.physics.skating_active {
+        if data.physics.state.skating_active {
             update.character =
                 CharacterState::Skate(skate::Data::new(data, footwear.unwrap_or(Friction::Normal)));
         }
@@ -338,16 +338,17 @@ pub fn handle_skating(data: &JoinData, update: &mut StateUpdate) {
 pub fn handle_move(data: &JoinData<'_>, update: &mut StateUpdate, efficiency: f32) {
     let submersion = data
         .physics
+        .state
         .in_liquid()
         .map(|depth| depth / data.body.height());
 
     if input_is_pressed(data, InputKind::Fly)
         && submersion.map_or(true, |sub| sub < 1.0)
-        && (data.physics.on_ground.is_none() || data.body.jump_impulse().is_none())
+        && (data.physics.state.on_ground.is_none() || data.body.jump_impulse().is_none())
         && data.body.fly_thrust().is_some()
     {
         fly_move(data, update, efficiency);
-    } else if let Some(submersion) = (data.physics.on_ground.is_none()
+    } else if let Some(submersion) = (data.physics.state.on_ground.is_none()
         && data.body.swim_thrust().is_some())
     .then_some(submersion)
     .flatten()
@@ -362,7 +363,7 @@ pub fn handle_move(data: &JoinData<'_>, update: &mut StateUpdate, efficiency: f3
 fn basic_move(data: &JoinData<'_>, update: &mut StateUpdate, efficiency: f32) {
     let efficiency = efficiency * data.stats.move_speed_modifier * data.stats.friction_modifier;
 
-    let accel = if let Some(block) = data.physics.on_ground {
+    let accel = if let Some(block) = data.physics.state.on_ground {
         // FRIC_GROUND temporarily used to normalize things around expected values
         data.body.base_accel() * block.get_traction() * block.get_friction() / FRIC_GROUND
     } else {
@@ -409,7 +410,7 @@ pub fn handle_forced_movement(
     match movement {
         ForcedMovement::Forward { strength } => {
             let strength = strength * data.stats.move_speed_modifier * data.stats.friction_modifier;
-            if let Some(accel) = data.physics.on_ground.map(|block| {
+            if let Some(accel) = data.physics.state.on_ground.map(|block| {
                 // FRIC_GROUND temporarily used to normalize things around expected values
                 data.body.base_accel() * block.get_traction() * block.get_friction() / FRIC_GROUND
             }) {
@@ -474,7 +475,7 @@ pub fn handle_orientation(
     // unit is multiples of 180°
     let half_turns_per_tick = data.body.base_ori_rate()
         * efficiency
-        * if data.physics.on_ground.is_some() {
+        * if data.physics.state.on_ground.is_some() {
             1.0
         } else {
             0.2
@@ -579,7 +580,7 @@ pub fn fly_move(data: &JoinData<'_>, update: &mut StateUpdate, efficiency: f32) 
                     Density((update.density.0 + data.dt.0 * rate * change).clamp(min, max))
                 };
                 let def_density = ship.density().0;
-                if data.physics.in_liquid().is_some() {
+                if data.physics.state.in_liquid().is_some() {
                     let hull_density = ship.hull_density().0;
                     update.density.0 =
                         regulate_density(def_density * 0.6, hull_density, hull_density, 25.0).0;
@@ -660,25 +661,25 @@ pub fn attempt_wield(data: &JoinData<'_>, update: &mut StateUpdate) {
 
 /// Checks that player can `Sit` and updates `CharacterState` if so
 pub fn attempt_sit(data: &JoinData<'_>, update: &mut StateUpdate) {
-    if data.physics.on_ground.is_some() {
+    if data.physics.state.on_ground.is_some() {
         update.character = CharacterState::Sit;
     }
 }
 
 pub fn attempt_dance(data: &JoinData<'_>, update: &mut StateUpdate) {
-    if data.physics.on_ground.is_some() && data.body.is_humanoid() {
+    if data.physics.state.on_ground.is_some() && data.body.is_humanoid() {
         update.character = CharacterState::Dance;
     }
 }
 
 pub fn attempt_talk(data: &JoinData<'_>, update: &mut StateUpdate) {
-    if data.physics.on_ground.is_some() {
+    if data.physics.state.on_ground.is_some() {
         update.character = CharacterState::Talk;
     }
 }
 
 pub fn attempt_sneak(data: &JoinData<'_>, update: &mut StateUpdate) {
-    if data.physics.on_ground.is_some() && data.body.is_humanoid() {
+    if data.physics.state.on_ground.is_some() && data.body.is_humanoid() {
         update.character = Idle(idle::Data {
             is_sneaking: true,
             footwear: data.character.footwear(),
@@ -689,10 +690,11 @@ pub fn attempt_sneak(data: &JoinData<'_>, update: &mut StateUpdate) {
 /// Checks that player can `Climb` and updates `CharacterState` if so
 pub fn handle_climb(data: &JoinData<'_>, update: &mut StateUpdate) -> bool {
     if data.inputs.climb.is_some()
-        && data.physics.on_wall.is_some()
-        && data.physics.on_ground.is_none()
+        && data.physics.state.on_wall.is_some()
+        && data.physics.state.on_ground.is_none()
         && !data
             .physics
+            .state
             .in_liquid()
             .map(|depth| depth > 1.0)
             .unwrap_or(false)
@@ -708,9 +710,9 @@ pub fn handle_climb(data: &JoinData<'_>, update: &mut StateUpdate) -> bool {
 }
 
 pub fn handle_wallrun(data: &JoinData<'_>, update: &mut StateUpdate) -> bool {
-    if data.physics.on_wall.is_some()
-        && data.physics.on_ground.is_none()
-        && data.physics.in_liquid().is_none()
+    if data.physics.state.on_wall.is_some()
+        && data.physics.state.on_ground.is_none()
+        && data.physics.state.in_liquid().is_none()
         && data.body.can_climb()
     {
         update.character = CharacterState::Wallrun(wallrun::Data);
@@ -895,6 +897,7 @@ pub fn attempt_glide_wield(
         .is_some()
         && !data
             .physics
+            .state
             .in_liquid()
             .map(|depth| depth > 1.0)
             .unwrap_or(false)
@@ -916,7 +919,7 @@ pub fn handle_jump(
     _update: &mut StateUpdate,
     strength: f32,
 ) -> bool {
-    (input_is_pressed(data, InputKind::Jump) && data.physics.on_ground.is_some())
+    (input_is_pressed(data, InputKind::Jump) && data.physics.state.on_ground.is_some())
         .then(|| data.body.jump_impulse())
         .flatten()
         .map(|impulse| {

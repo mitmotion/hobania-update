@@ -79,11 +79,11 @@ impl CharacterBehavior for Data {
         let mut update = StateUpdate::from(data);
 
         // If player is on ground, end glide
-        if data.physics.on_ground.is_some()
-            && (data.vel.0 - data.physics.ground_vel).magnitude_squared() < 2_f32.powi(2)
+        if data.physics.state.on_ground.is_some()
+            && (data.vel.0 - data.physics.state.ground_vel).magnitude_squared() < 2_f32.powi(2)
         {
             update.character = CharacterState::GlideWield(glide_wield::Data::from(data));
-        } else if data.physics.in_liquid().is_some()
+        } else if data.physics.state.in_liquid().is_some()
             || data
                 .inventory
                 .and_then(|inv| inv.equipped(EquipSlot::Glider))
@@ -93,6 +93,7 @@ impl CharacterBehavior for Data {
         } else if !handle_climb(data, &mut update) {
             let air_flow = data
                 .physics
+                .state
                 .in_fluid
                 .map(|fluid| fluid.relative_flow(data.vel))
                 .unwrap_or_default();
@@ -171,7 +172,7 @@ impl CharacterBehavior for Data {
                     Quaternion::rotation_3d(
                         PI / 2.0
                             * accel_factor
-                            * if data.physics.on_ground.is_some() {
+                            * if data.physics.state.on_ground.is_some() {
                                 -1.0
                             } else {
                                 1.0

@@ -30,7 +30,7 @@ impl CharacterBehavior for Data {
 
         // Try to Fall/Stand up/Move
         if self.is_sneaking
-            && (data.physics.on_ground.is_none() || data.physics.in_liquid().is_some())
+            && (data.physics.state.on_ground.is_none() || data.physics.state.in_liquid().is_some())
         {
             update.character = CharacterState::Idle(Data {
                 is_sneaking: false,

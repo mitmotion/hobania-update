@@ -44,7 +44,7 @@ impl<'a> System<'a> for Sys {
         {
             match object {
                 Object::Bomb { owner } => {
-                    if physics.on_surface().is_some() {
+                    if physics.state.on_surface().is_some() {
                         server_emitter.emit(ServerEvent::Delete(entity));
                         server_emitter.emit(ServerEvent::Explosion {
                             pos: pos.0,

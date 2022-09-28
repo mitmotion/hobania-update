@@ -28,7 +28,7 @@ impl CharacterBehavior for Data {
         handle_jump(data, output_events, &mut update, 1.0);
 
         if self.is_sneaking
-            && (data.physics.on_ground.is_none() || data.physics.in_liquid().is_some())
+            && (data.physics.state.on_ground.is_none() || data.physics.state.in_liquid().is_some())
         {
             update.character = CharacterState::Wielding(Data { is_sneaking: false });
         }
@@ -96,7 +96,7 @@ impl CharacterBehavior for Data {
 
     fn sneak(&self, data: &JoinData, _: &mut OutputEvents) -> StateUpdate {
         let mut update = StateUpdate::from(data);
-        if data.physics.on_ground.is_some() && data.body.is_humanoid() {
+        if data.physics.state.on_ground.is_some() && data.body.is_humanoid() {
             update.character = CharacterState::Wielding(Data { is_sneaking: true });
         }
         update

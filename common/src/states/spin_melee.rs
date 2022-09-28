@@ -62,7 +62,7 @@ impl CharacterBehavior for Data {
         match self.static_data.movement_behavior {
             MovementBehavior::ForwardGround | MovementBehavior::Stationary => {},
             MovementBehavior::AxeHover => {
-                update.movement = update.movement.with_movement(if data.physics.on_ground.is_some() {
+                update.movement = update.movement.with_movement(if data.physics.state.on_ground.is_some() {
                     // TODO: Just remove axehover entirely with axe rework, it's really janky
                     // TODO: Should 5 even be used here, or should body accel be used? Maybe just call handle_move?
                     let dir = Dir::from_unnormalized(data.inputs.move_dir.with_z(0.0));
