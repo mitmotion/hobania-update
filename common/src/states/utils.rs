@@ -363,6 +363,7 @@ pub fn handle_move(data: &JoinData<'_>, update: &mut StateUpdate, efficiency: f3
 fn basic_move(data: &JoinData<'_>, update: &mut StateUpdate, efficiency: f32) {
     let efficiency = efficiency * data.stats.move_speed_modifier * data.stats.friction_modifier;
 
+    // PHYSICSSTATE TODO
     let accel = if let Some(block) = data.physics.state.on_ground {
         // FRIC_GROUND temporarily used to normalize things around expected values
         data.body.base_accel() * block.get_traction() * block.get_friction() / FRIC_GROUND
@@ -410,6 +411,7 @@ pub fn handle_forced_movement(
     match movement {
         ForcedMovement::Forward { strength } => {
             let strength = strength * data.stats.move_speed_modifier * data.stats.friction_modifier;
+            // PHYSICSSTATE TODO
             if let Some(accel) = data.physics.state.on_ground.map(|block| {
                 // FRIC_GROUND temporarily used to normalize things around expected values
                 data.body.base_accel() * block.get_traction() * block.get_friction() / FRIC_GROUND
@@ -475,6 +477,7 @@ pub fn handle_orientation(
     // unit is multiples of 180°
     let half_turns_per_tick = data.body.base_ori_rate()
         * efficiency
+        // PHYSICSSTATE TODO
         * if data.physics.state.on_ground.is_some() {
             1.0
         } else {
@@ -580,6 +583,7 @@ pub fn fly_move(data: &JoinData<'_>, update: &mut StateUpdate, efficiency: f32) 
                     Density((update.density.0 + data.dt.0 * rate * change).clamp(min, max))
                 };
                 let def_density = ship.density().0;
+                // PHYSICSSTATE TODO
                 if data.physics.state.in_liquid().is_some() {
                     let hull_density = ship.hull_density().0;
                     update.density.0 =

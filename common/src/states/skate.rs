@@ -39,6 +39,7 @@ impl CharacterBehavior for Data {
         handle_wield(data, &mut update);
         handle_jump(data, output_events, &mut update, 1.0);
 
+        // PHYSICSSTATE TODO
         if !data.physics.state.skating_active {
             update.character = CharacterState::Idle(idle::Data {
                 is_sneaking: false,

@@ -79,10 +79,13 @@ impl CharacterBehavior for Data {
         let mut update = StateUpdate::from(data);
 
         // If player is on ground, end glide
+        // PHYSICSSTATE TODO
         if data.physics.state.on_ground.is_some()
+        // PHYSICSSTATE TODO
             && (data.vel.0 - data.physics.state.ground_vel).magnitude_squared() < 2_f32.powi(2)
         {
             update.character = CharacterState::GlideWield(glide_wield::Data::from(data));
+        // PHYSICSSTATE TODO
         } else if data.physics.state.in_liquid().is_some()
             || data
                 .inventory
@@ -172,6 +175,7 @@ impl CharacterBehavior for Data {
                     Quaternion::rotation_3d(
                         PI / 2.0
                             * accel_factor
+                            // PHYSICSSTATE TODO
                             * if data.physics.state.on_ground.is_some() {
                                 -1.0
                             } else {
