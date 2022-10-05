@@ -37,7 +37,7 @@ const BANLIST_FILENAME: &str = "banlist.ron";
 const SERVER_DESCRIPTION_FILENAME: &str = "description.ron";
 const ADMINS_FILENAME: &str = "admins.ron";
 
-#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub enum ServerBattleMode {
     Global(BattleMode),
     PerPlayer { default: BattleMode },
@@ -161,6 +161,7 @@ impl CalendarMode {
 pub struct Settings {
     pub gameserver_protocols: Vec<Protocol>,
     pub metrics_address: SocketAddr,
+    pub query_address: SocketAddr,
     pub auth_server_address: Option<String>,
     pub max_players: u16,
     pub world_seed: u32,
@@ -199,6 +200,7 @@ impl Default for Settings {
                 },
             ],
             metrics_address: SocketAddr::from((Ipv4Addr::LOCALHOST, 14005)),
+            query_address: SocketAddr::from((Ipv4Addr::LOCALHOST, 14006)),
             auth_server_address: Some("https://auth.veloren.net".into()),
             world_seed: DEFAULT_WORLD_SEED,
             server_name: "Veloren Server".into(),

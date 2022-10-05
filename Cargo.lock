@@ -1908,6 +1908,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "error-chain"
+version = "0.12.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d2f06b9cac1506ece98fe3231e3cc9c4410ec3d5b1f24ae1c8946f0742cdefc"
+dependencies = [
+ "backtrace",
+ "version_check 0.9.4",
+]
+
+[[package]]
 name = "error-code"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4663,6 +4673,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "protocol"
+version = "3.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13cfa9ba37e0183f87fb14b82f23fc76494c458c72469d95b8a8eec75ad5f191"
+dependencies = [
+ "byteorder",
+ "error-chain",
+ "flate2",
+ "num-traits",
+ "protocol-derive",
+ "uuid 0.8.2",
+]
+
+[[package]]
+name = "protocol-derive"
+version = "3.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "28647f30298898ead966b51e9aee5c74e4ac709ce5ca554378fde187fd3f7e47"
+dependencies = [
+ "proc-macro2 1.0.43",
+ "quote 1.0.21",
+ "syn 1.0.100",
+]
+
+[[package]]
 name = "ptr_meta"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6468,7 +6503,7 @@ version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "rand 0.8.5",
  "static_assertions",
 ]
@@ -6881,7 +6916,7 @@ dependencies = [
  "crossbeam-channel",
  "futures-core",
  "futures-util",
- "hashbrown 0.9.1",
+ "hashbrown 0.12.3",
  "lazy_static",
  "lz-fear",
  "prometheus",
@@ -6968,6 +7003,7 @@ dependencies = [
  "portpicker",
  "prometheus",
  "prometheus-hyper",
+ "protocol",
  "quinn",
  "rand 0.8.5",
  "rand_distr",

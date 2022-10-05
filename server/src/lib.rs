@@ -38,6 +38,7 @@ pub mod terrain_persistence;
 
 mod weather;
 
+mod query_server;
 pub mod wiring;
 
 // Reexports
@@ -125,6 +126,7 @@ use {
     common_state::plugin::{memory_manager::EcsWorld, PluginMgr},
 };
 
+use crate::{query_server::QueryServer, sys::server_info::ServerInfoRequest};
 use common::comp::Anchor;
 #[cfg(feature = "worldgen")]
 use world::{
@@ -309,6 +311,7 @@ impl Server {
         state.ecs_mut().insert(tick_metrics);
         state.ecs_mut().insert(physics_metrics);
         state.ecs_mut().insert(server_event_metrics);
+
         if settings.experimental_terrain_persistence {
             #[cfg(feature = "persistent_world")]
             {
@@ -477,6 +480,12 @@ impl Server {
             )
             .await
         });
+
+        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+        state.ecs_mut().insert(receiver);
+        let mut query_server = QueryServer::new(settings.query_address, sender);
+        // Run the query server in its own long-running future
+        runtime.spawn(async move { query_server.run().await });
 
         let mut printed_quic_warning = false;
         for protocol in &settings.gameserver_protocols {
