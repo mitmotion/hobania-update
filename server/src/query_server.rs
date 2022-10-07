@@ -13,6 +13,10 @@ use tracing::{debug, info, trace};
 // NOTE: Debug logging is disabled by default for this module - to enable it add
 // veloren_server::query_server=trace to RUST_LOG
 
+pub const VELOREN_HEADER: [u8; 7] = [0x56, 0x45, 0x4C, 0x4F, 0x52, 0x45, 0x4E];
+
+/// Implements the Veloren Query Server, used by external applications to query
+/// real-time status information from the server.
 pub struct QueryServer {
     pub bind_addr: SocketAddr,
     pipeline: dgram::Pipeline<QueryServerPacketKind, protocol::wire::middleware::pipeline::Default>,
@@ -54,8 +58,6 @@ impl QueryServer {
     }
 
     fn validate_datagram(len: usize, data: &mut Vec<u8>) -> bool {
-        const VELOREN_HEADER: [u8; 7] = [0x56, 0x45, 0x4C, 0x4F, 0x52, 0x45, 0x4E];
-
         if len < 8 {
             trace!("Ignoring packet - too short");
             false
@@ -86,46 +88,12 @@ impl QueryServer {
                 QueryServer::send_response(remote_addr, &QueryServerPacketKind::Pong(Pong {}))
                     .await?
             },
-            QueryServerPacketKind::ServerInfoQuery(ref _query) => {
-                let (sender, receiver) = tokio::sync::oneshot::channel::<ServerInfoResponse>();
-                let req = ServerInfoRequest {
-                    response_sender: sender,
-                };
-                self.server_info_request_sender
-                    .send(req)
-                    .map_err(|e| QueryError::ChannelError(format!("{}", e)))?;
-
-                tokio::spawn(async move {
-                    match timeout(Duration::from_secs(2), async move {
-                        match receiver.await {
-                            Ok(response) => {
-                                trace!(?response, "Sending ServerInfoResponse");
-                                QueryServer::send_response(
-                                    remote_addr,
-                                    &QueryServerPacketKind::ServerInfoResponse(response),
-                                )
-                                .await
-                                .expect("Failed to send response"); // TODO remove expect
-                            },
-                            Err(_) => {
-                                //  Oneshot receive error
-                            },
-                        }
-                    })
-                    .await
-                    {
-                        Ok(_) => {},
-                        Err(elapsed) => {
-                            debug!(
-                                ?elapsed,
-                                "Timeout expired while waiting for ServerInfoResponse"
-                            );
-                        },
-                    }
-                });
+            QueryServerPacketKind::ServerInfoQuery(query) => {
+                self.handle_server_info_query(remote_addr, query)?
             },
             QueryServerPacketKind::Pong(_) | QueryServerPacketKind::ServerInfoResponse(_) => {
-                // Ignore any incoming packets
+                // Ignore any incoming datagrams for packets that should only be sent as
+                // responses
                 debug!(?packet, "Dropping received response packet");
             },
         }
@@ -152,6 +120,53 @@ impl QueryServer {
 
         Ok(())
     }
+
+    fn handle_server_info_query(
+        &mut self,
+        remote_addr: SocketAddr,
+        query: ServerInfoQuery,
+    ) -> Result<(), QueryError> {
+        // Ensure that the required padding is present
+        if !query.padding.iter().all(|x| *x == 0xFF) {
+            return Err(QueryError::ValidationError("Missing padding".into()));
+        }
+
+        // Send a request to the server_info system to retrieve the live server
+        // information. This takes up to the duration of a full tick to process,
+        // so a future is spawned to wait for the result which is then sent as a
+        // UDP response.
+        let (sender, receiver) = tokio::sync::oneshot::channel::<ServerInfoResponse>();
+        let req = ServerInfoRequest {
+            response_sender: sender,
+        };
+        self.server_info_request_sender
+            .send(req)
+            .map_err(|e| QueryError::ChannelError(format!("{}", e)))?;
+
+        tokio::spawn(async move {
+            // Wait to receive the response from the server_info system
+            timeout(Duration::from_secs(2), async move {
+                match receiver.await {
+                    Ok(response) => {
+                        trace!(?response, "Sending ServerInfoResponse");
+                        QueryServer::send_response(
+                            remote_addr,
+                            &QueryServerPacketKind::ServerInfoResponse(response),
+                        )
+                        .await
+                    },
+                    Err(_) => {
+                        //  Oneshot receive error
+                        Err(QueryError::ChannelError("Oneshot receive error".to_owned()))
+                    },
+                }
+            })
+            .await
+            .map_err(|_| debug!("Timeout expired while waiting for ServerInfoResponse"))
+        });
+
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -159,6 +174,7 @@ enum QueryError {
     NetworkError(io::Error),
     ProtocolError(protocol::Error),
     ChannelError(String),
+    ValidationError(String),
 }
 
 impl From<protocol::Error> for QueryError {
@@ -169,16 +185,19 @@ impl From<io::Error> for QueryError {
     fn from(e: io::Error) -> Self { QueryError::NetworkError(e) }
 }
 
-#[derive(protocol::Protocol, Clone, Debug, PartialEq)]
+#[derive(Protocol, Clone, Debug, PartialEq)]
 pub struct Ping;
 
-#[derive(protocol::Protocol, Clone, Debug, PartialEq)]
+#[derive(Protocol, Clone, Debug, PartialEq)]
 pub struct Pong;
 
-#[derive(protocol::Protocol, Clone, Debug, PartialEq)]
-pub struct ServerInfoQuery;
+#[derive(Protocol, Clone, Debug, PartialEq)]
+pub struct ServerInfoQuery {
+    // Used to avoid UDP amplification attacks by requiring more data to be sent than is received
+    pub padding: [u8; 512],
+}
 
-#[derive(protocol::Protocol, Clone, Debug, PartialEq)]
+#[derive(Protocol, Clone, Debug, PartialEq)]
 #[protocol(discriminant = "integer")]
 #[protocol(discriminator(u8))]
 pub enum QueryServerPacketKind {

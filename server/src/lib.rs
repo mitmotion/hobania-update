@@ -38,7 +38,7 @@ pub mod terrain_persistence;
 
 mod weather;
 
-mod query_server;
+pub mod query_server;
 pub mod wiring;
 
 // Reexports

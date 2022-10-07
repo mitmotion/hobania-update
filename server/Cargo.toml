@@ -71,3 +71,6 @@ refinery = { git = "https://gitlab.com/veloren/refinery.git", rev = "8ecf4b4772d
 
 # Plugins
 plugin-api = { package = "veloren-plugin-api", path = "../plugin/api"}
+
+[[bin]]
+name = "query_client"
