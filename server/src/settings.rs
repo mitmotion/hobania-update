@@ -37,7 +37,7 @@ const BANLIST_FILENAME: &str = "banlist.ron";
 const SERVER_DESCRIPTION_FILENAME: &str = "description.ron";
 const ADMINS_FILENAME: &str = "admins.ron";
 
-#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub enum ServerBattleMode {
     Global(BattleMode),
     PerPlayer { default: BattleMode },

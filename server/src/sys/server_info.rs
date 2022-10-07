@@ -4,7 +4,7 @@ use specs::{Read, ReadStorage, WriteExpect};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::error;
 
-/// TODO: description
+/// Processes server info requests from the Query Server
 #[derive(Default)]
 pub struct Sys;
 impl<'a> System<'a> for Sys {
@@ -19,7 +19,7 @@ impl<'a> System<'a> for Sys {
     const PHASE: Phase = Phase::Create;
 
     fn run(_job: &mut Job<Self>, (clients, settings, mut receiver): Self::SystemData) {
-        let players_current = (&clients).count() as u16;
+        let players_current = clients.count() as u16;
         let server_info = ServerInfoResponse {
             players_current,
             players_max: settings.max_players,

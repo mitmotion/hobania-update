@@ -1,10 +1,12 @@
 use crate::{settings::ServerBattleMode, ServerInfoRequest};
 use common::resources::BattleMode;
+use governor::{clock::DefaultClock, state::keyed::DashMapStateStore, Quota, RateLimiter};
 use protocol::{wire::dgram, Protocol};
 use std::{
     io,
     io::Cursor,
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4},
+    num::NonZeroU32,
     time::Duration,
 };
 use tokio::{net::UdpSocket, sync::mpsc::UnboundedSender, time::timeout};
@@ -21,6 +23,7 @@ pub struct QueryServer {
     pub bind_addr: SocketAddr,
     pipeline: dgram::Pipeline<QueryServerPacketKind, protocol::wire::middleware::pipeline::Default>,
     server_info_request_sender: UnboundedSender<ServerInfoRequest>,
+    rate_limiter: RateLimiter<IpAddr, DashMapStateStore<IpAddr>, DefaultClock>,
 }
 
 impl QueryServer {
@@ -35,6 +38,10 @@ impl QueryServer {
                 protocol::Settings::default(),
             ),
             server_info_request_sender,
+            // The rate limit is currently set very low as the intended use of the query server is
+            // for the server browser to query servers periodically (no more than a few
+            // times per minute)
+            rate_limiter: RateLimiter::dashmap(Quota::per_minute(NonZeroU32::new(10).unwrap())),
         }
     }
 
@@ -42,10 +49,17 @@ impl QueryServer {
         let socket = UdpSocket::bind(self.bind_addr).await?;
 
         info!("Query Server running at {}", self.bind_addr);
-
         loop {
             let mut buf = vec![0; 1500];
             let (len, remote_addr) = socket.recv_from(&mut buf).await?;
+
+            if self.rate_limiter.check_key(&remote_addr.ip()).is_err() {
+                trace!(
+                    "Rate limit exceeded for address {:?}, dropping packet",
+                    remote_addr.ip()
+                );
+                continue;
+            }
 
             if !QueryServer::validate_datagram(len, &mut buf) {
                 continue;
@@ -128,7 +142,7 @@ impl QueryServer {
     ) -> Result<(), QueryError> {
         // Ensure that the required padding is present
         if !query.padding.iter().all(|x| *x == 0xFF) {
-            return Err(QueryError::ValidationError("Missing padding".into()));
+            return Err(QueryError::Validation("Missing padding".into()));
         }
 
         // Send a request to the server_info system to retrieve the live server
@@ -141,7 +155,7 @@ impl QueryServer {
         };
         self.server_info_request_sender
             .send(req)
-            .map_err(|e| QueryError::ChannelError(format!("{}", e)))?;
+            .map_err(|e| QueryError::Channel(format!("{}", e)))?;
 
         tokio::spawn(async move {
             // Wait to receive the response from the server_info system
@@ -157,7 +171,7 @@ impl QueryServer {
                     },
                     Err(_) => {
                         //  Oneshot receive error
-                        Err(QueryError::ChannelError("Oneshot receive error".to_owned()))
+                        Err(QueryError::Channel("Oneshot receive error".to_owned()))
                     },
                 }
             })
@@ -171,33 +185,34 @@ impl QueryServer {
 
 #[derive(Debug)]
 enum QueryError {
-    NetworkError(io::Error),
-    ProtocolError(protocol::Error),
-    ChannelError(String),
-    ValidationError(String),
+    Network(io::Error),
+    Protocol(protocol::Error),
+    Channel(String),
+    Validation(String),
 }
 
 impl From<protocol::Error> for QueryError {
-    fn from(e: protocol::Error) -> Self { QueryError::ProtocolError(e) }
+    fn from(e: protocol::Error) -> Self { QueryError::Protocol(e) }
 }
 
 impl From<io::Error> for QueryError {
-    fn from(e: io::Error) -> Self { QueryError::NetworkError(e) }
+    fn from(e: io::Error) -> Self { QueryError::Network(e) }
 }
 
-#[derive(Protocol, Clone, Debug, PartialEq)]
+#[derive(Protocol, Clone, Debug, Eq, PartialEq)]
 pub struct Ping;
 
-#[derive(Protocol, Clone, Debug, PartialEq)]
+#[derive(Protocol, Clone, Debug, Eq, PartialEq)]
 pub struct Pong;
 
-#[derive(Protocol, Clone, Debug, PartialEq)]
+#[derive(Protocol, Clone, Debug, Eq, PartialEq)]
 pub struct ServerInfoQuery {
     // Used to avoid UDP amplification attacks by requiring more data to be sent than is received
     pub padding: [u8; 512],
 }
 
-#[derive(Protocol, Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)]
+#[derive(Protocol, Clone, Debug, Eq, PartialEq)]
 #[protocol(discriminant = "integer")]
 #[protocol(discriminator(u8))]
 pub enum QueryServerPacketKind {
@@ -211,16 +226,16 @@ pub enum QueryServerPacketKind {
     ServerInfoResponse(ServerInfoResponse),
 }
 
-#[derive(Protocol, Debug, Clone, PartialEq)]
+#[derive(Protocol, Debug, Clone, Eq, PartialEq)]
 pub struct ServerInfoResponse {
     pub git_hash: String, /* TODO: use u8 array instead? String includes 8 bytes for capacity
                            * and length that we don't need */
     pub players_current: u16,
     pub players_max: u16,
-    pub battle_mode: QueryBattleMode, // TODO: use a custom enum to avoid accidental breakage
+    pub battle_mode: QueryBattleMode,
 }
 
-#[derive(Protocol, Debug, Clone, PartialEq)]
+#[derive(Protocol, Debug, Clone, Eq, PartialEq)]
 #[protocol(discriminant = "integer")]
 #[protocol(discriminator(u8))]
 pub enum QueryBattleMode {
