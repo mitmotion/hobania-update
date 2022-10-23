@@ -124,7 +124,7 @@ void main() {
             {
             cloud_blend = 1.0 - color.a;
 
-            #if (FLUID_MODE >= FLUID_MODE_MEDIUM)
+            #if (FLUID_MODE >= FLUID_MODE_MEDIUM || REFLECTION_MODE >= REFLECTION_MODE_MEDIUM)
                 if (dir.z < 0.0) {
                     vec3 surf_norm = normalize(vec3(nz * 0.3 / (1.0 + dist * 0.1), 1));
                     vec3 refl_dir = reflect(dir, surf_norm);
