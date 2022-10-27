@@ -72,31 +72,13 @@ debug = 1
 # we need stacktraces, light debug information, as much checks as possible
 # I would like to put it in a seperate `official_release` target, but that doesnt share caches with `cargo test` and `cargo bench`
 [profile.release]
-opt-level = 3
+opt-level = 2
 overflow-checks = false
 debug-assertions = false
-lto = true
-debug = false
-panic = "abort" # don't need unwinding so we can skip including the landing pads for that
+# lto = true
+debug = true 
+#panic = "abort" # don't need unwinding so we can skip including the landing pads for that
 # line tables so we can have useful backtraces for in-house crates
-[profile.release.package."veloren-network"]
-debug = 1
-[profile.release.package."veloren-network-protocol"]
-debug = 1
-[profile.release.package."veloren-common"]
-debug = 1
-[profile.release.package."veloren-common-systems"]
-debug = 1
-[profile.release.package."veloren-client"]
-debug = 1
-[profile.release.package."veloren-server"]
-debug = 1
-[profile.release.package."veloren-server-cli"]
-debug = 1
-[profile.release.package."veloren-voxygen"]
-debug = 1
-[profile.release.package."veloren-world"]
-debug = 1
 
 # used for cargo bench
 [profile.bench]
