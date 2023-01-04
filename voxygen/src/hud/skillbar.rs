@@ -3,17 +3,19 @@ use super::{
     img_ids::{Imgs, ImgsRot},
     item_imgs::ItemImgs,
     slots, util, BarNumbers, HudInfo, ShortcutNumbers, BLACK, CRITICAL_HP_COLOR, HP_COLOR,
-    LOW_HP_COLOR, QUALITY_EPIC, STAMINA_COLOR, TEXT_COLOR, UI_HIGHLIGHT_0,
+    LOW_HP_COLOR, POISEBAR_TICK_COLOR, POISE_COLOR, QUALITY_EPIC, QUALITY_LEGENDARY, STAMINA_COLOR,
+    TEXT_COLOR, TEXT_VELORITE, UI_HIGHLIGHT_0, XP_COLOR,
 };
 use crate::{
     game_input::GameInput,
-    hud::{ComboFloater, Position, PositionSpecifier},
+    hud::{animation::animation_timer, ComboFloater, Position, PositionSpecifier},
     ui::{
         fonts::Fonts,
         slot::{ContentSize, SlotMaker},
         ImageFrame, ItemTooltip, ItemTooltipManager, ItemTooltipable, Tooltip, TooltipManager,
         Tooltipable,
     },
+    window::KeyMouse,
     GlobalState,
 };
 use i18n::Localization;
@@ -23,8 +25,13 @@ use client::{self, Client};
 use common::comp::{
     self,
     ability::AbilityInput,
-    item::{ItemDesc, MaterialStatManifest},
-    Ability, ActiveAbilities, Body, Energy, Health, Inventory, SkillSet,
+    item::{
+        tool::{AbilityContext, ToolKind},
+        ItemDesc, MaterialStatManifest,
+    },
+    skillset::SkillGroupKind,
+    Ability, ActiveAbilities, Body, CharacterState, Combo, Energy, Health, Inventory, Poise,
+    PoiseState, SkillSet,
 };
 use conrod_core::{
     color,
@@ -57,14 +64,13 @@ widget_ids! {
         frame_health,
         bg_energy,
         frame_energy,
+        bg_poise,
+        frame_poise,
         m1_ico,
         m2_ico,
         // Level
         level_bg,
         level,
-        // Exp-Bar
-        exp_alignment,
-        exp_filling,
         // HP-Bar
         hp_alignment,
         hp_filling,
@@ -79,6 +85,39 @@ widget_ids! {
         energy_txt_alignment,
         energy_txt_bg,
         energy_txt,
+        // Poise-Bar
+        poise_alignment,
+        poise_filling,
+        poise_ticks[],
+        poise_txt_alignment,
+        poise_txt_bg,
+        poise_txt,
+        // Exp-Bar
+        exp_frame_bg,
+        exp_frame,
+        exp_filling,
+        exp_img_frame_bg,
+        exp_img_frame,
+        exp_img,
+        exp_lvl,
+        spellbook_txt_bg,
+        spellbook_txt,
+        sp_arrow,
+        sp_arrow_txt_bg,
+        sp_arrow_txt,
+        //Bag Button
+        bag_frame_bg,
+        bag_frame,
+        bag_filling,
+        bag_img_frame_bg,
+        bag_img_frame,
+        bag_img,
+        bag_space_bg,
+        bag_space,
+        bag_progress,
+        bag_numbers_alignment,
+        bag_text_bg,
+        bag_text,
         // Combo Counter
         combo_align,
         combo_bg,
@@ -239,6 +278,11 @@ fn slot_entries(state: &State, slot_offset: f64) -> [SlotEntry; 10] {
     ]
 }
 
+pub enum Event {
+    OpenDiary(SkillGroupKind),
+    OpenBag,
+}
+
 #[derive(WidgetCommon)]
 pub struct Skillbar<'a> {
     client: &'a Client,
@@ -251,6 +295,7 @@ pub struct Skillbar<'a> {
     health: &'a Health,
     inventory: &'a Inventory,
     energy: &'a Energy,
+    poise: &'a Poise,
     skillset: &'a SkillSet,
     active_abilities: Option<&'a ActiveAbilities>,
     body: &'a Body,
@@ -265,7 +310,10 @@ pub struct Skillbar<'a> {
     #[conrod(common_builder)]
     common: widget::CommonBuilder,
     msm: &'a MaterialStatManifest,
-    combo: Option<ComboFloater>,
+    combo_floater: Option<ComboFloater>,
+    context: Option<AbilityContext>,
+    combo: Option<&'a Combo>,
+    char_state: Option<&'a CharacterState>,
 }
 
 impl<'a> Skillbar<'a> {
@@ -281,6 +329,7 @@ impl<'a> Skillbar<'a> {
         health: &'a Health,
         inventory: &'a Inventory,
         energy: &'a Energy,
+        poise: &'a Poise,
         skillset: &'a SkillSet,
         active_abilities: Option<&'a ActiveAbilities>,
         body: &'a Body,
@@ -293,7 +342,10 @@ impl<'a> Skillbar<'a> {
         slot_manager: &'a mut slots::SlotManager,
         localized_strings: &'a Localization,
         msm: &'a MaterialStatManifest,
-        combo: Option<ComboFloater>,
+        combo_floater: Option<ComboFloater>,
+        context: Option<AbilityContext>,
+        combo: Option<&'a Combo>,
+        char_state: Option<&'a CharacterState>,
     ) -> Self {
         Self {
             client,
@@ -306,6 +358,7 @@ impl<'a> Skillbar<'a> {
             health,
             inventory,
             energy,
+            poise,
             skillset,
             active_abilities,
             body,
@@ -319,8 +372,39 @@ impl<'a> Skillbar<'a> {
             slot_manager,
             localized_strings,
             msm,
+            combo_floater,
+            context,
             combo,
+            char_state,
         }
+    }
+
+    fn create_new_button_with_shadow(
+        &self,
+        ui: &mut UiCell,
+        key_mouse: &KeyMouse,
+        button_identifier: widget::Id,
+        text_background: widget::Id,
+        text: widget::Id,
+    ) {
+        let key_layout = &self.global_state.window.key_layout;
+        let key_desc = key_mouse.display_shortest(key_layout);
+
+        //Create shadow
+        Text::new(&key_desc)
+            .bottom_right_with_margins_on(button_identifier, 0.0, 0.0)
+            .font_size(10)
+            .font_id(self.fonts.cyri.conrod_id)
+            .color(BLACK)
+            .set(text_background, ui);
+
+        //Create button
+        Text::new(&key_desc)
+            .bottom_right_with_margins_on(text_background, 1.0, 1.0)
+            .font_size(10)
+            .font_id(self.fonts.cyri.conrod_id)
+            .color(TEXT_COLOR)
+            .set(text, ui);
     }
 
     fn show_death_message(&self, state: &State, ui: &mut UiCell) {
@@ -333,7 +417,7 @@ impl<'a> Skillbar<'a> {
             .controls
             .get_binding(GameInput::Respawn)
         {
-            Text::new(&localized_strings.get_msg("hud-you_died"))
+            Text::new(&self.localized_strings.get_msg("hud-you_died"))
                 .middle_of(ui.window)
                 .font_size(self.fonts.cyri.scale(50))
                 .font_id(self.fonts.cyri.conrod_id)
@@ -349,7 +433,7 @@ impl<'a> Skillbar<'a> {
                 .font_id(self.fonts.cyri.conrod_id)
                 .color(Color::Rgba(0.0, 0.0, 0.0, 1.0))
                 .set(state.ids.death_message_2_bg, ui);
-            Text::new(&localized_strings.get_msg("hud-you_died"))
+            Text::new(&self.localized_strings.get_msg("hud-you_died"))
                 .bottom_left_with_margins_on(state.ids.death_message_1_bg, 2.0, 2.0)
                 .font_size(self.fonts.cyri.scale(50))
                 .font_id(self.fonts.cyri.conrod_id)
@@ -364,17 +448,19 @@ impl<'a> Skillbar<'a> {
         }
     }
 
-    fn show_stat_bars(&self, state: &State, ui: &mut UiCell) {
-        let (hp_percentage, energy_percentage): (f64, f64) = if self.health.is_dead {
-            (0.0, 0.0)
-        } else {
-            let max_hp = f64::from(self.health.base_max().max(self.health.maximum()));
-            let current_hp = f64::from(self.health.current());
-            (
-                current_hp / max_hp * 100.0,
-                f64::from(self.energy.fraction() * 100.0),
-            )
-        };
+    fn show_stat_bars(&self, state: &State, ui: &mut UiCell) -> Option<Event> {
+        let (hp_percentage, energy_percentage, poise_percentage): (f64, f64, f64) =
+            if self.health.is_dead {
+                (0.0, 0.0, 0.0)
+            } else {
+                let max_hp = f64::from(self.health.base_max().max(self.health.maximum()));
+                let current_hp = f64::from(self.health.current());
+                (
+                    current_hp / max_hp * 100.0,
+                    f64::from(self.energy.fraction() * 100.0),
+                    f64::from(self.poise.fraction() * 100.0),
+                )
+            };
 
         // Animation timer
         let hp_ani = (self.pulse * 4.0/* speed factor */).cos() * 0.5 + 0.8;
@@ -384,6 +470,9 @@ impl<'a> Skillbar<'a> {
             || (self.health.current() - self.health.maximum()).abs() > Health::HEALTH_EPSILON;
         let show_energy = self.global_state.settings.interface.always_show_bars
             || (self.energy.current() - self.energy.maximum()).abs() > Energy::ENERGY_EPSILON;
+        let show_poise = self.global_state.settings.interface.enable_poise_bar
+            && (self.global_state.settings.interface.always_show_bars
+                || (self.poise.current() - self.poise.maximum()).abs() > Poise::POISE_EPSILON);
         let decayed_health = 1.0 - self.health.maximum() as f64 / self.health.base_max() as f64;
 
         if show_health && !self.health.is_dead || decayed_health > 0.0 {
@@ -452,9 +541,302 @@ impl<'a> Skillbar<'a> {
                 .middle_of(state.ids.bg_energy)
                 .set(state.ids.frame_energy, ui);
         }
+        if show_poise && !self.health.is_dead {
+            let offset = 17.0;
+
+            let poise_colour = match self.poise.previous_state {
+                self::PoiseState::KnockedDown => BLACK,
+                self::PoiseState::Dazed => Color::Rgba(0.25, 0.0, 0.15, 1.0),
+                self::PoiseState::Stunned => Color::Rgba(0.40, 0.0, 0.30, 1.0),
+                self::PoiseState::Interrupted => Color::Rgba(0.55, 0.0, 0.45, 1.0),
+                _ => POISE_COLOR,
+            };
+
+            Image::new(self.imgs.poise_bg)
+                .w_h(323.0, 14.0)
+                .mid_top_with_margin_on(state.ids.frame, -offset)
+                .set(state.ids.bg_poise, ui);
+            Rectangle::fill_with([319.0, 10.0], color::TRANSPARENT)
+                .top_left_with_margins_on(state.ids.bg_poise, 2.0, 2.0)
+                .set(state.ids.poise_alignment, ui);
+            Image::new(self.imgs.bar_content)
+                .w_h(319.0 * poise_percentage / 100.0, 10.0)
+                .color(Some(poise_colour))
+                .top_left_with_margins_on(state.ids.poise_alignment, 0.0, 0.0)
+                .set(state.ids.poise_filling, ui);
+            for i in 0..state.ids.poise_ticks.len() {
+                Image::new(self.imgs.poise_tick)
+                    .w_h(3.0, 10.0)
+                    .color(Some(POISEBAR_TICK_COLOR))
+                    .top_left_with_margins_on(
+                        state.ids.poise_alignment,
+                        0.0,
+                        319.0f64 * (self::Poise::POISE_THRESHOLDS[i] / self.poise.maximum()) as f64,
+                    )
+                    .set(state.ids.poise_ticks[i], ui);
+            }
+            Image::new(self.imgs.poise_frame)
+                .w_h(323.0, 16.0)
+                .color(Some(UI_HIGHLIGHT_0))
+                .middle_of(state.ids.bg_poise)
+                .set(state.ids.frame_poise, ui);
+        }
+        // Bag button and indicator
+        Image::new(self.imgs.selected_exp_bg)
+            .w_h(34.0, 38.0)
+            .bottom_right_with_margins_on(state.ids.slot10, 0.0, -37.0)
+            .color(Some(Color::Rgba(1.0, 1.0, 1.0, 1.0)))
+            .set(state.ids.bag_img_frame_bg, ui);
+
+        if Button::image(self.imgs.bag_frame)
+            .w_h(34.0, 38.0)
+            .middle_of(state.ids.bag_img_frame_bg)
+            .set(state.ids.bag_img_frame, ui)
+            .was_clicked()
+        {
+            return Some(Event::OpenBag);
+        }
+        let invs = self.client.inventories();
+        let inventory = match invs.get(self.info.viewpoint_entity) {
+            Some(inv) => inv,
+            None => return None,
+        };
+
+        let space_used = inventory.populated_slots();
+        let space_max = inventory.slots().count();
+        let bag_space = format!("{}/{}", space_used, space_max);
+        let bag_space_percentage = space_used as f64 / space_max as f64;
+
+        // bag filling indicator bar
+        Image::new(self.imgs.bar_content)
+            .w_h(1.0, 21.0 * bag_space_percentage)
+            .color(if bag_space_percentage < 0.6 {
+                Some(TEXT_VELORITE)
+            } else if bag_space_percentage < 1.0 {
+                Some(LOW_HP_COLOR)
+            } else {
+                Some(CRITICAL_HP_COLOR)
+            })
+            .graphics_for(state.ids.bag_img_frame)
+            .bottom_left_with_margins_on(state.ids.bag_img_frame, 14.0, 2.0)
+            .set(state.ids.bag_filling, ui);
+
+        // bag filling text
+        Rectangle::fill_with([32.0, 11.0], color::TRANSPARENT)
+            .bottom_left_with_margins_on(state.ids.bag_img_frame_bg, 1.0, 2.0)
+            .graphics_for(state.ids.bag_img_frame)
+            .set(state.ids.bag_numbers_alignment, ui);
+        Text::new(&bag_space)
+            .middle_of(state.ids.bag_numbers_alignment)
+            .font_size(if bag_space.len() < 6 { 9 } else { 8 })
+            .font_id(self.fonts.cyri.conrod_id)
+            .color(BLACK)
+            .graphics_for(state.ids.bag_img_frame)
+            .set(state.ids.bag_space_bg, ui);
+        Text::new(&bag_space)
+            .bottom_right_with_margins_on(state.ids.bag_space_bg, 1.0, 1.0)
+            .font_size(if bag_space.len() < 6 { 9 } else { 8 })
+            .font_id(self.fonts.cyri.conrod_id)
+            .color(if bag_space_percentage < 0.6 {
+                TEXT_VELORITE
+            } else if bag_space_percentage < 1.0 {
+                LOW_HP_COLOR
+            } else {
+                CRITICAL_HP_COLOR
+            })
+            .graphics_for(state.ids.bag_img_frame)
+            .set(state.ids.bag_space, ui);
+
+        Image::new(self.imgs.bag_ico)
+            .w_h(24.0, 24.0)
+            .graphics_for(state.ids.bag_img_frame)
+            .mid_bottom_with_margin_on(state.ids.bag_img_frame, 13.0)
+            .set(state.ids.bag_img, ui);
+
+        if let Some(bag) = &self
+            .global_state
+            .settings
+            .controls
+            .get_binding(GameInput::Bag)
+        {
+            self.create_new_button_with_shadow(
+                ui,
+                bag,
+                state.ids.bag_img,
+                state.ids.bag_text_bg,
+                state.ids.bag_text,
+            );
+        }
+
+        // Exp Type and Level Display
+
+        // Unspent SP indicator
+        let unspent_sp = self.skillset.has_available_sp();
+        if unspent_sp {
+            let arrow_ani = animation_timer(self.pulse); //Animation timer
+            Image::new(self.imgs.sp_indicator_arrow)
+                .w_h(20.0, 11.0)
+                .graphics_for(state.ids.exp_img_frame)
+                .mid_top_with_margin_on(state.ids.exp_img_frame, -12.0 + arrow_ani as f64)
+                .color(Some(QUALITY_LEGENDARY))
+                .set(state.ids.sp_arrow, ui);
+            Text::new(&self.localized_strings.get_msg("hud-sp_arrow_txt"))
+                .mid_top_with_margin_on(state.ids.sp_arrow, -18.0)
+                .graphics_for(state.ids.exp_img_frame)
+                .font_id(self.fonts.cyri.conrod_id)
+                .font_size(self.fonts.cyri.scale(14))
+                .color(BLACK)
+                .set(state.ids.sp_arrow_txt_bg, ui);
+            Text::new(&self.localized_strings.get_msg("hud-sp_arrow_txt"))
+                .graphics_for(state.ids.exp_img_frame)
+                .bottom_right_with_margins_on(state.ids.sp_arrow_txt_bg, 1.0, 1.0)
+                .font_id(self.fonts.cyri.conrod_id)
+                .font_size(self.fonts.cyri.scale(14))
+                .color(QUALITY_LEGENDARY)
+                .set(state.ids.sp_arrow_txt, ui);
+        }
+
+        if self
+            .global_state
+            .settings
+            .interface
+            .xp_bar_skillgroup
+            .is_some()
+        {
+            let offset = -81.0;
+            let selected_experience = &self
+                .global_state
+                .settings
+                .interface
+                .xp_bar_skillgroup
+                .unwrap_or(SkillGroupKind::General);
+            let current_exp = self.skillset.available_experience(*selected_experience) as f64;
+            let max_exp = self.skillset.skill_point_cost(*selected_experience) as f64;
+            let exp_percentage = current_exp / max_exp.max(1.0);
+            let level = self.skillset.earned_sp(*selected_experience);
+            let level_txt = if level > 0 {
+                self.skillset.earned_sp(*selected_experience).to_string()
+            } else {
+                "".to_string()
+            };
+
+            // Exp Bar
+            Image::new(self.imgs.exp_frame_bg)
+                .w_h(594.0, 8.0)
+                .mid_top_with_margin_on(state.ids.frame, -offset)
+                .color(Some(Color::Rgba(1.0, 1.0, 1.0, 0.9)))
+                .set(state.ids.exp_frame_bg, ui);
+            Image::new(self.imgs.exp_frame)
+                .w_h(594.0, 8.0)
+                .middle_of(state.ids.exp_frame_bg)
+                .set(state.ids.exp_frame, ui);
+
+            Image::new(self.imgs.bar_content)
+                .w_h(590.0 * exp_percentage, 4.0)
+                .color(Some(XP_COLOR))
+                .top_left_with_margins_on(state.ids.exp_frame, 2.0, 2.0)
+                .set(state.ids.exp_filling, ui);
+            // Exp Type and Level Display
+            Image::new(self.imgs.selected_exp_bg)
+                .w_h(34.0, 38.0)
+                .top_left_with_margins_on(state.ids.exp_frame, -39.0, 3.0)
+                .color(Some(Color::Rgba(1.0, 1.0, 1.0, 1.0)))
+                .set(state.ids.exp_img_frame_bg, ui);
+
+            if Button::image(self.imgs.selected_exp)
+                .w_h(34.0, 38.0)
+                .middle_of(state.ids.exp_img_frame_bg)
+                .set(state.ids.exp_img_frame, ui)
+                .was_clicked()
+            {
+                return Some(Event::OpenDiary(*selected_experience));
+            }
+
+            Text::new(&level_txt)
+                .mid_bottom_with_margin_on(state.ids.exp_img_frame, 2.0)
+                .font_size(11)
+                .font_id(self.fonts.cyri.conrod_id)
+                .color(QUALITY_LEGENDARY)
+                .graphics_for(state.ids.exp_img_frame)
+                .set(state.ids.exp_lvl, ui);
+
+            Image::new(match selected_experience {
+                SkillGroupKind::General => self.imgs.swords_crossed,
+                SkillGroupKind::Weapon(ToolKind::Sword) => self.imgs.sword,
+                SkillGroupKind::Weapon(ToolKind::Hammer) => self.imgs.hammer,
+                SkillGroupKind::Weapon(ToolKind::Axe) => self.imgs.axe,
+                SkillGroupKind::Weapon(ToolKind::Sceptre) => self.imgs.sceptre,
+                SkillGroupKind::Weapon(ToolKind::Bow) => self.imgs.bow,
+                SkillGroupKind::Weapon(ToolKind::Staff) => self.imgs.staff,
+                SkillGroupKind::Weapon(ToolKind::Pick) => self.imgs.mining,
+                _ => self.imgs.nothing,
+            })
+            .w_h(24.0, 24.0)
+            .graphics_for(state.ids.exp_img_frame)
+            .mid_bottom_with_margin_on(state.ids.exp_img_frame, 13.0)
+            .set(state.ids.exp_img, ui);
+
+            // Show Shortcut
+            if let Some(spell) = &self
+                .global_state
+                .settings
+                .controls
+                .get_binding(GameInput::Spellbook)
+            {
+                self.create_new_button_with_shadow(
+                    ui,
+                    spell,
+                    state.ids.exp_img,
+                    state.ids.spellbook_txt_bg,
+                    state.ids.spellbook_txt,
+                );
+            }
+        } else {
+            // Only show Spellbook ico
+            Image::new(self.imgs.selected_exp_bg)
+                .w_h(34.0, 38.0)
+                .bottom_left_with_margins_on(state.ids.slot1, 0.0, -37.0)
+                .color(Some(Color::Rgba(1.0, 1.0, 1.0, 1.0)))
+                .set(state.ids.exp_img_frame_bg, ui);
+
+            if Button::image(self.imgs.selected_exp)
+                .w_h(34.0, 38.0)
+                .middle_of(state.ids.exp_img_frame_bg)
+                .set(state.ids.exp_img_frame, ui)
+                .was_clicked()
+            {
+                return Some(Event::OpenDiary(SkillGroupKind::General));
+            }
+
+            Image::new(self.imgs.spellbook_ico0)
+                .w_h(24.0, 24.0)
+                .graphics_for(state.ids.exp_img_frame)
+                .mid_bottom_with_margin_on(state.ids.exp_img_frame, 13.0)
+                .set(state.ids.exp_img, ui);
+
+            // Show Shortcut
+            if let Some(spell) = &self
+                .global_state
+                .settings
+                .controls
+                .get_binding(GameInput::Spellbook)
+            {
+                self.create_new_button_with_shadow(
+                    ui,
+                    spell,
+                    state.ids.exp_img,
+                    state.ids.spellbook_txt_bg,
+                    state.ids.spellbook_txt,
+                );
+            }
+        }
+
         // Bar Text
         let bar_text = if self.health.is_dead {
             Some((
+                self.localized_strings
+                    .get_msg("hud-group-dead")
+                    .into_owned(),
                 self.localized_strings
                     .get_msg("hud-group-dead")
                     .into_owned(),
@@ -475,16 +857,18 @@ impl<'a> Skillbar<'a> {
                     self.energy.current().round() as u32,
                     self.energy.maximum().round() as u32
                 ),
+                String::new(), // Don't obscure the tick mark
             ))
         } else if let BarNumbers::Percent = bar_values {
             Some((
                 format!("{}%", hp_percentage as u32),
                 format!("{}%", energy_percentage as u32),
+                String::new(), // Don't obscure the tick mark
             ))
         } else {
             None
         };
-        if let Some((hp_txt, energy_txt)) = bar_text {
+        if let Some((hp_txt, energy_txt, poise_txt)) = bar_text {
             Text::new(&hp_txt)
                 .middle_of(state.ids.frame_health)
                 .font_size(self.fonts.cyri.scale(12))
@@ -510,7 +894,21 @@ impl<'a> Skillbar<'a> {
                 .font_id(self.fonts.cyri.conrod_id)
                 .color(TEXT_COLOR)
                 .set(state.ids.energy_txt, ui);
+
+            Text::new(&poise_txt)
+                .middle_of(state.ids.frame_poise)
+                .font_size(self.fonts.cyri.scale(12))
+                .font_id(self.fonts.cyri.conrod_id)
+                .color(Color::Rgba(0.0, 0.0, 0.0, 1.0))
+                .set(state.ids.poise_txt_bg, ui);
+            Text::new(&poise_txt)
+                .bottom_left_with_margins_on(state.ids.poise_txt_bg, 2.0, 2.0)
+                .font_size(self.fonts.cyri.scale(12))
+                .font_id(self.fonts.cyri.conrod_id)
+                .color(TEXT_COLOR)
+                .set(state.ids.poise_txt, ui);
         }
+        None
     }
 
     fn show_slotbar(&mut self, state: &State, ui: &mut UiCell, slot_offset: f64) {
@@ -525,6 +923,8 @@ impl<'a> Skillbar<'a> {
             self.skillset,
             self.active_abilities,
             self.body,
+            self.context,
+            self.combo,
         );
 
         let image_source = (self.item_imgs, self.imgs);
@@ -606,7 +1006,7 @@ impl<'a> Skillbar<'a> {
 
         // Helper
         let tooltip_text = |slot| {
-            let (hotbar, inventory, _, skill_set, active_abilities, _) = content_source;
+            let (hotbar, inventory, _, skill_set, active_abilities, _, context, _) = content_source;
             hotbar.get(slot).and_then(|content| match content {
                 hotbar::SlotContents::Inventory(i, _) => inventory
                     .get_by_hash(i)
@@ -615,7 +1015,7 @@ impl<'a> Skillbar<'a> {
                     .and_then(|a| {
                         a.auxiliary_set(Some(inventory), Some(skill_set))
                             .get(i)
-                            .and_then(|a| Ability::from(*a).ability_id(Some(inventory)))
+                            .and_then(|a| Ability::from(*a).ability_id(Some(inventory), context))
                     })
                     .map(|id| util::ability_description(id, self.localized_strings)),
             })
@@ -686,13 +1086,35 @@ impl<'a> Skillbar<'a> {
 
         let primary_ability_id = self
             .active_abilities
-            .and_then(|a| Ability::from(a.primary).ability_id(Some(self.inventory)));
+            .and_then(|a| Ability::from(a.primary).ability_id(Some(self.inventory), self.context));
+
+        let primary_ability_id = if let Some(override_id) = self
+            .char_state
+            .and_then(|cs| cs.ability_info())
+            .and_then(|info| info.ability_meta)
+            .and_then(|meta| meta.kind)
+            .map(util::representative_ability_id)
+        {
+            Some(override_id)
+        } else {
+            primary_ability_id
+        };
+
+        let (primary_ability_title, primary_ability_desc) =
+            util::ability_description(primary_ability_id.unwrap_or(""), self.localized_strings);
 
         Button::image(
             primary_ability_id.map_or(self.imgs.nothing, |id| util::ability_image(self.imgs, id)),
         )
         .w_h(36.0, 36.0)
         .middle_of(state.ids.m1_slot_bg)
+        .with_tooltip(
+            self.tooltip_manager,
+            &primary_ability_title,
+            &primary_ability_desc,
+            &tooltip,
+            TEXT_COLOR,
+        )
         .set(state.ids.m1_content, ui);
         // Slot M2
         Image::new(self.imgs.skillbar_slot)
@@ -700,9 +1122,12 @@ impl<'a> Skillbar<'a> {
             .right_from(state.ids.m1_slot_bg, slot_offset)
             .set(state.ids.m2_slot_bg, ui);
 
-        let secondary_ability_id = self
-            .active_abilities
-            .and_then(|a| Ability::from(a.secondary).ability_id(Some(self.inventory)));
+        let secondary_ability_id = self.active_abilities.and_then(|a| {
+            Ability::from(a.secondary).ability_id(Some(self.inventory), self.context)
+        });
+
+        let (secondary_ability_title, secondary_ability_desc) =
+            util::ability_description(secondary_ability_id.unwrap_or(""), self.localized_strings);
 
         Button::image(
             secondary_ability_id.map_or(self.imgs.nothing, |id| util::ability_image(self.imgs, id)),
@@ -710,23 +1135,33 @@ impl<'a> Skillbar<'a> {
         .w_h(36.0, 36.0)
         .middle_of(state.ids.m2_slot_bg)
         .image_color(
-            if self.energy.current()
-                >= self
-                    .active_abilities
-                    .and_then(|a| {
-                        a.activate_ability(
-                            AbilityInput::Secondary,
-                            Some(self.inventory),
-                            self.skillset,
-                            Some(self.body),
-                        )
-                    })
-                    .map_or(0.0, |(a, _)| a.get_energy_cost())
+            if self
+                .active_abilities
+                .and_then(|a| {
+                    a.activate_ability(
+                        AbilityInput::Secondary,
+                        Some(self.inventory),
+                        self.skillset,
+                        Some(self.body),
+                        self.context,
+                    )
+                })
+                .map_or(false, |(a, _)| {
+                    self.energy.current() >= a.energy_cost()
+                        && self.combo.map_or(false, |c| c.counter() >= a.combo_cost())
+                })
             {
                 Color::Rgba(1.0, 1.0, 1.0, 1.0)
             } else {
                 Color::Rgba(0.3, 0.3, 0.3, 0.8)
             },
+        )
+        .with_tooltip(
+            self.tooltip_manager,
+            &secondary_ability_title,
+            &secondary_ability_desc,
+            &tooltip,
+            TEXT_COLOR,
         )
         .set(state.ids.m2_content, ui);
 
@@ -741,11 +1176,11 @@ impl<'a> Skillbar<'a> {
             .set(state.ids.m2_ico, ui);
     }
 
-    fn show_combo_counter(&self, combo: ComboFloater, state: &State, ui: &mut UiCell) {
-        if combo.combo > 0 {
-            let combo_txt = format!("{} Combo", combo.combo);
-            let combo_cnt = combo.combo as f32;
-            let time_since_last_update = comp::combo::COMBO_DECAY_START - combo.timer;
+    fn show_combo_counter(&self, combo_floater: ComboFloater, state: &State, ui: &mut UiCell) {
+        if combo_floater.combo > 0 {
+            let combo_txt = format!("{} Combo", combo_floater.combo);
+            let combo_cnt = combo_floater.combo as f32;
+            let time_since_last_update = comp::combo::COMBO_DECAY_START - combo_floater.timer;
             let alpha = (1.0 - time_since_last_update * 0.2).min(1.0) as f32;
             let fnt_col = Color::Rgba(
                 // White -> Yellow -> Red text color gradient depending on count
@@ -756,7 +1191,7 @@ impl<'a> Skillbar<'a> {
             );
             // Increase size for higher counts,
             // "flash" on update by increasing the font size by 2.
-            let fnt_size = ((14.0 + combo.timer as f32 * 0.8).min(30.0)) as u32
+            let fnt_size = ((14.0 + combo_floater.timer as f32 * 0.8).min(30.0)) as u32
                 + if (time_since_last_update) < 0.1 { 2 } else { 0 };
 
             Rectangle::fill_with([10.0, 10.0], color::TRANSPARENT)
@@ -787,7 +1222,7 @@ pub struct State {
 }
 
 impl<'a> Widget for Skillbar<'a> {
-    type Event = ();
+    type Event = Option<Event>;
     type State = State;
     type Style = ();
 
@@ -811,21 +1246,31 @@ impl<'a> Widget for Skillbar<'a> {
         }
 
         // Skillbar
+
+        // Poise bar ticks
+        state.update(|s| {
+            s.ids.poise_ticks.resize(
+                self::Poise::POISE_THRESHOLDS.len(),
+                &mut ui.widget_id_generator(),
+            )
+        });
+
         // Alignment and BG
         let alignment_size = 40.0 * 12.0 + slot_offset * 11.0;
         Rectangle::fill_with([alignment_size, 80.0], color::TRANSPARENT)
             .mid_bottom_with_margin_on(ui.window, 10.0)
             .set(state.ids.frame, ui);
 
-        // Health and Energy bar
-        self.show_stat_bars(state, ui);
+        // Health, Energy and Poise bars
+        let event = self.show_stat_bars(state, ui);
 
         // Slots
         self.show_slotbar(state, ui, slot_offset);
 
         // Combo Counter
-        if let Some(combo) = self.combo {
-            self.show_combo_counter(combo, state, ui);
+        if let Some(combo_floater) = self.combo_floater {
+            self.show_combo_counter(combo_floater, state, ui);
         }
+        event
     }
 }

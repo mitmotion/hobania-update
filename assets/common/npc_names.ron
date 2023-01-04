@@ -718,10 +718,6 @@
                 keyword: "quokka",
                 generic: "Quokka"
             ),
-            dodarock: (
-                keyword: "dodarock",
-                generic: "Dodarock"
-            ),
             holladon: (
                 keyword: "holladon",
                 generic: "Holladon"
@@ -827,6 +823,10 @@
             penguin: (
                 keyword: "penguin",
                 generic: "Penguin"
+            ),
+            bat: (
+                keyword: "bat",
+                generic: "Bat"
             ),
         )
     ),
@@ -989,7 +989,11 @@
             ntouka: (
                 keyword: "ntouka",
                 generic: "Ntouka"
-            )
+            ),
+            dodarock: (
+                keyword: "dodarock",
+                generic: "Dodarock"
+            ),
         )
     ),
     dragon: (
@@ -1143,6 +1147,22 @@
                 keyword: "wyvern_flame",
                 generic: "Flame Wyvern"
             ),
+            wyvern_cloud: (
+                keyword: "wyvern_cloud",
+                generic: "Cloud Wyvern"
+            ),
+            wyvern_frost: (
+                keyword: "wyvern_frost",
+                generic: "Frost Wyvern"
+            ),
+            wyvern_sea: (
+                keyword: "wyvern_sea",
+                generic: "Sea Wyvern"
+            ),
+            wyvern_weald: (
+                keyword: "wyvern_weald",
+                generic: "Weald Wyvern"
+            ),
         )
     ),
     quadruped_low: (
@@ -1169,6 +1189,10 @@
                 keyword: "salamander",
                 generic: "Salamander"
             ),
+            elbst: (
+                keyword: "elbst",
+                generic: "Elbst"
+            ),
             monitor: (
                 keyword: "monitor",
                 generic: "Monitor"
@@ -1184,6 +1208,14 @@
             rocksnapper: (
                 keyword: "rocksnapper",
                 generic: "Rock Snapper"
+            ),
+            rootsnapper: (
+                keyword: "rootsnapper",
+                generic: "Root Snapper"
+            ),
+            reefsnapper: (
+                keyword: "reefsnapper",
+                generic: "Reef Snapper"
             ),
             pangolin: (
                 keyword: "pangolin",
@@ -1220,6 +1252,10 @@
             deadwood: (
                 keyword: "deadwood",
                 generic: "Deadwood"
+            ),
+            mossdrake: (
+                keyword: "mossdrake",
+                generic: "Moss Drake"
             ),
         )
     ),

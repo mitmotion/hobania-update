@@ -12,14 +12,14 @@ use crate::{
 use serde::Deserialize;
 use vek::*;
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub enum NameKind {
     Name(String),
     Automatic,
     Uninit,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 pub enum BodyBuilder {
     RandomWith(String),
     Exact(Body),
@@ -145,7 +145,7 @@ impl EntityConfig {
 /// Return all entity config specifiers
 pub fn try_all_entity_configs() -> Result<Vec<String>, Error> {
     let configs = assets::load_dir::<EntityConfig>("common.entity", true)?;
-    Ok(configs.ids().map(|id| id.to_owned()).collect())
+    Ok(configs.ids().map(|id| id.to_string()).collect())
 }
 
 #[derive(Clone)]

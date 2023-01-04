@@ -210,13 +210,14 @@ impl TagExampleInfo for Material {
     fn exemplar_identifier(&self) -> Option<&str> { self.asset_identifier() }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ItemTag {
     /// Used to indicate that an item is composed of this material
     Material(Material),
     /// Used to indicate that an item is composed of this material kind
     MaterialKind(MaterialKind),
     Cultist,
+    Gnarling,
     Potion,
     Food,
     BaseMaterial, // Cloth-scraps, Leather...
@@ -232,6 +233,7 @@ impl TagExampleInfo for ItemTag {
             ItemTag::Material(material) => material.name(),
             ItemTag::MaterialKind(material_kind) => material_kind.into(),
             ItemTag::Cultist => "cultist",
+            ItemTag::Gnarling => "gnarling",
             ItemTag::Potion => "potion",
             ItemTag::Food => "food",
             ItemTag::BaseMaterial => "basemat",
@@ -248,6 +250,7 @@ impl TagExampleInfo for ItemTag {
             ItemTag::Material(material) => material.exemplar_identifier(),
             ItemTag::MaterialKind(_) => None,
             ItemTag::Cultist => Some("common.items.tag_examples.cultist"),
+            ItemTag::Gnarling => Some("common.items.tag_examples.gnarling"),
             ItemTag::Potion => None,
             ItemTag::Food => None,
             ItemTag::BaseMaterial => None,
@@ -301,6 +304,29 @@ impl ItemKind {
             self,
             ItemKind::Tool(_) | ItemKind::Armor { .. } | ItemKind::Glider | ItemKind::Lantern(_)
         )
+    }
+
+    // Used for inventory sorting, what comes before the first colon (:) is used as
+    // a broader category
+    pub fn get_itemkind_string(&self) -> String {
+        let result = match self {
+            // Using tool and toolkind to sort tools by kind
+            ItemKind::Tool(tool) => format!("Tool: {:?}", tool.kind),
+            ItemKind::ModularComponent(modular_component) => {
+                format!("ModularComponent: {:?}", modular_component.toolkind())
+            },
+            ItemKind::Lantern(lantern) => format!("Lantern: {:?}", lantern),
+            ItemKind::Armor(armor) => format!("Armor: {:?}", armor.stats),
+            ItemKind::Glider => "Glider:".to_string(),
+            ItemKind::Consumable { kind, .. } => {
+                format!("Consumable: {:?}", kind)
+            },
+            ItemKind::Throwable { kind } => format!("Throwable: {:?}", kind),
+            ItemKind::Utility { kind } => format!("Utility: {:?}", kind),
+            ItemKind::Ingredient { descriptor } => format!("Ingredient: {}", descriptor),
+            ItemKind::TagExamples { item_ids } => format!("TagExamples: {:?}", item_ids),
+        };
+        result
     }
 }
 
@@ -559,7 +585,7 @@ impl TryFrom<(&Item, &AbilityMap, &MaterialStatManifest)> for ItemConfig {
                 ability_map.get_ability_set(key)
             };
             let abilities = if let Some(set_key) = item.ability_spec() {
-                if let Some(set) = ability_map.get_ability_set(&*set_key) {
+                if let Some(set) = ability_map.get_ability_set(&set_key) {
                     set.clone().modified_by_tool(tool)
                 } else {
                     error!(
@@ -655,7 +681,7 @@ impl PartialEq for Item {
 }
 
 impl assets::Compound for ItemDef {
-    fn load(cache: assets::AnyCache, specifier: &str) -> Result<Self, BoxedError> {
+    fn load(cache: assets::AnyCache, specifier: &assets::SharedString) -> Result<Self, BoxedError> {
         if specifier.starts_with("veloren.core.") {
             return Err(format!(
                 "Attempted to load an asset from a specifier reserved for core veloren functions. \
@@ -793,7 +819,7 @@ impl Item {
     pub fn new_from_asset_glob(asset_glob: &str) -> Result<Vec<Self>, Error> {
         let specifier = asset_glob.strip_suffix(".*").unwrap_or(asset_glob);
         let defs = assets::load_dir::<RawItemDef>(specifier, true)?;
-        defs.ids().map(Item::new_from_asset).collect()
+        defs.ids().map(|id| Item::new_from_asset(id)).collect()
     }
 
     /// Creates a new instance of an `Item from the provided asset identifier if
@@ -1250,7 +1276,7 @@ pub fn all_item_defs_expect() -> Vec<String> {
 /// Returns all item asset specifiers
 pub fn try_all_item_defs() -> Result<Vec<String>, Error> {
     let defs = assets::load_dir::<RawItemDef>("common.items", true)?;
-    Ok(defs.ids().map(|id| id.to_owned()).collect())
+    Ok(defs.ids().map(|id| id.to_string()).collect())
 }
 
 #[cfg(test)]

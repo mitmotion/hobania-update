@@ -14,8 +14,9 @@ pub use self::{
 use crate::{
     column::ColumnSample,
     config::CONFIG,
+    sim,
     util::{FastNoise, RandomField, RandomPerm, Sampler},
-    Canvas, IndexRef,
+    Canvas, CanvasInfo, IndexRef,
 };
 use common::{
     assets::AssetExt,
@@ -48,6 +49,52 @@ pub struct Colors {
 
 const EMPTY_AIR: Block = Block::air(SpriteKind::Empty);
 
+pub struct PathLocals {
+    pub riverless_alt: f32,
+    pub alt: f32,
+    pub water_dist: f32,
+    pub bridge_offset: f32,
+    pub depth: i32,
+}
+
+impl PathLocals {
+    pub fn new(info: &CanvasInfo, col: &ColumnSample, path_nearest: Vec2<f32>) -> PathLocals {
+        // Try to use the column at the centre of the path for sampling to make them
+        // flatter
+        let col_pos = -info.wpos().map(|e| e as f32) + path_nearest;
+        let col00 = info.col(info.wpos() + col_pos.map(|e| e.floor() as i32) + Vec2::new(0, 0));
+        let col10 = info.col(info.wpos() + col_pos.map(|e| e.floor() as i32) + Vec2::new(1, 0));
+        let col01 = info.col(info.wpos() + col_pos.map(|e| e.floor() as i32) + Vec2::new(0, 1));
+        let col11 = info.col(info.wpos() + col_pos.map(|e| e.floor() as i32) + Vec2::new(1, 1));
+        let col_attr = |col: &ColumnSample| {
+            Vec3::new(col.riverless_alt, col.alt, col.water_dist.unwrap_or(1000.0))
+        };
+        let [riverless_alt, alt, water_dist] = match (col00, col10, col01, col11) {
+            (Some(col00), Some(col10), Some(col01), Some(col11)) => Lerp::lerp(
+                Lerp::lerp(col_attr(col00), col_attr(col10), path_nearest.x.fract()),
+                Lerp::lerp(col_attr(col01), col_attr(col11), path_nearest.x.fract()),
+                path_nearest.y.fract(),
+            ),
+            _ => col_attr(col),
+        }
+        .into_array();
+        let (bridge_offset, depth) = (
+            ((water_dist.max(0.0) * 0.2).min(f32::consts::PI).cos() + 1.0) * 5.0,
+            ((1.0 - ((water_dist + 2.0) * 0.3).min(0.0).cos().abs())
+                * (riverless_alt + 5.0 - alt).max(0.0)
+                * 1.75
+                + 3.0) as i32,
+        );
+        PathLocals {
+            riverless_alt,
+            alt,
+            water_dist,
+            bridge_offset,
+            depth,
+        }
+    }
+}
+
 pub fn apply_paths_to(canvas: &mut Canvas) {
     let info = canvas.info();
     canvas.foreach_col(|canvas, wpos2d, col| {
@@ -67,36 +114,17 @@ pub fn apply_paths_to(canvas: &mut Canvas) {
         {
             let inset = 0;
 
-            // Try to use the column at the centre of the path for sampling to make them
-            // flatter
-            let col_pos = -info.wpos().map(|e| e as f32) + path_nearest;
-            let col00 = info.col(info.wpos() + col_pos.map(|e| e.floor() as i32) + Vec2::new(0, 0));
-            let col10 = info.col(info.wpos() + col_pos.map(|e| e.floor() as i32) + Vec2::new(1, 0));
-            let col01 = info.col(info.wpos() + col_pos.map(|e| e.floor() as i32) + Vec2::new(0, 1));
-            let col11 = info.col(info.wpos() + col_pos.map(|e| e.floor() as i32) + Vec2::new(1, 1));
-            let col_attr = |col: &ColumnSample| {
-                Vec3::new(col.riverless_alt, col.alt, col.water_dist.unwrap_or(1000.0))
-            };
-            let [riverless_alt, alt, water_dist] = match (col00, col10, col01, col11) {
-                (Some(col00), Some(col10), Some(col01), Some(col11)) => Lerp::lerp(
-                    Lerp::lerp(col_attr(col00), col_attr(col10), path_nearest.x.fract()),
-                    Lerp::lerp(col_attr(col01), col_attr(col11), path_nearest.x.fract()),
-                    path_nearest.y.fract(),
-                ),
-                _ => col_attr(col),
-            }
-            .into_array();
-            let (bridge_offset, depth) = (
-                ((water_dist.max(0.0) * 0.2).min(f32::consts::PI).cos() + 1.0) * 5.0,
-                ((1.0 - ((water_dist + 2.0) * 0.3).min(0.0).cos().abs())
-                    * (riverless_alt + 5.0 - alt).max(0.0)
-                    * 1.75
-                    + 3.0) as i32,
-            );
+            let PathLocals {
+                riverless_alt,
+                alt: _,
+                water_dist: _,
+                bridge_offset,
+                depth,
+            } = PathLocals::new(&canvas.info(), col, path_nearest);
             let surface_z = (riverless_alt + bridge_offset).floor() as i32;
 
             for z in inset - depth..inset {
-                let _ = canvas.set(
+                canvas.set(
                     Vec3::new(wpos2d.x, wpos2d.y, surface_z + z),
                     if bridge_offset >= 2.0 && path_dist >= 3.0 || z < inset - 1 {
                         Block::new(
@@ -114,11 +142,75 @@ pub fn apply_paths_to(canvas: &mut Canvas) {
             for z in inset..inset + head_space {
                 let pos = Vec3::new(wpos2d.x, wpos2d.y, surface_z + z);
                 if canvas.get(pos).kind() != BlockKind::Water {
-                    let _ = canvas.set(pos, EMPTY_AIR);
+                    canvas.set(pos, EMPTY_AIR);
                 }
             }
         }
     });
+}
+
+pub fn apply_trains_to(
+    canvas: &mut Canvas,
+    sim: &sim::WorldSim,
+    sim_chunk: &sim::SimChunk,
+    chunk_center_wpos2d: Vec2<i32>,
+) {
+    let mut splines = Vec::new();
+    let g = |v: Vec2<f32>| -> Vec3<f32> {
+        let path_nearest = sim
+            .get_nearest_path(v.as_::<i32>())
+            .map(|x| x.1)
+            .unwrap_or(v.as_::<f32>());
+        let alt = if let Some(c) = canvas.col_or_gen(v.as_::<i32>()) {
+            let pl = PathLocals::new(canvas, &c, path_nearest);
+            pl.riverless_alt + pl.bridge_offset + 0.75
+        } else {
+            sim_chunk.alt
+        };
+        v.with_z(alt)
+    };
+    fn hermite_to_bezier(
+        p0: Vec3<f32>,
+        m0: Vec3<f32>,
+        p3: Vec3<f32>,
+        m3: Vec3<f32>,
+    ) -> CubicBezier3<f32> {
+        let hermite = Vec4::new(p0, p3, m0, m3);
+        let hermite = hermite.map(|v| v.with_w(0.0));
+        let hermite: [[f32; 4]; 4] = hermite.map(|v: Vec4<f32>| v.into_array()).into_array();
+        // https://courses.engr.illinois.edu/cs418/sp2009/notes/12-MoreSplines.pdf
+        let mut m = Mat4::from_row_arrays([
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+            [-3.0, 3.0, 0.0, 0.0],
+            [0.0, 0.0, -3.0, 3.0],
+        ]);
+        m.invert();
+        let bezier = m * Mat4::from_row_arrays(hermite);
+        let bezier: Vec4<Vec4<f32>> =
+            Vec4::<[f32; 4]>::from(bezier.into_row_arrays()).map(Vec4::from);
+        let bezier = bezier.map(Vec3::from);
+        CubicBezier3::from(bezier)
+    }
+    for sim::NearestWaysData { bezier: bez, .. } in
+        sim.get_nearest_ways(chunk_center_wpos2d, &|chunk| Some(chunk.path))
+    {
+        if bez.length_by_discretization(16) < 0.125 {
+            continue;
+        }
+        let a = 0.0;
+        let b = 1.0;
+        for bez in bez.split((a + b) / 2.0) {
+            let p0 = g(bez.evaluate(a));
+            let p1 = g(bez.evaluate(a + (b - a) / 3.0));
+            let p2 = g(bez.evaluate(a + 2.0 * (b - a) / 3.0));
+            let p3 = g(bez.evaluate(b));
+            splines.push(hermite_to_bezier(p0, 3.0 * (p1 - p0), p3, 3.0 * (p3 - p2)));
+        }
+    }
+    for spline in splines.into_iter() {
+        canvas.chunk.meta_mut().add_track(spline);
+    }
 }
 
 pub fn apply_caves_to(canvas: &mut Canvas, rng: &mut impl Rng) {
@@ -186,7 +278,7 @@ pub fn apply_caves_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             let ridge_condition = cave_depth % 10.0 > 8.0 && cave_depth > 10.0;
             let pit_condition = cave_depth % 42.0 > 37.0 && cave_x > 0.6 && cave_depth > 200.0;
             let pit_depth = 30;
-            let floor_dist = pit_condition as i32 * pit_depth as i32;
+            let floor_dist = pit_condition as i32 * pit_depth;
             let vein_condition =
                 cave_depth % 12.0 > 11.5 && cave_x > 0.1 && cave_x < 0.6 && cave_depth > 200.0;
             let stalactite_condition = cave_depth > 150.0;
@@ -525,7 +617,7 @@ pub fn apply_caves_supplement<'a>(
                     })
                 }) {
                     if RandomField::new(index.seed).chance(wpos2d.into(), 0.0014)
-                        && cave_base < surface_z as i32 - 40
+                        && cave_base < surface_z - 40
                     {
                         let entity = EntityInfo::at(wpos2d.map(|e| e as f32).with_z(z as f32));
                         let entity = {
@@ -653,7 +745,7 @@ pub fn apply_coral_to(canvas: &mut Canvas) {
             });
 
             if is_coral {
-                let _ = canvas.set(wpos, Block::new(BlockKind::Rock, Rgb::new(170, 220, 210)));
+                canvas.set(wpos, Block::new(BlockKind::Rock, Rgb::new(170, 220, 210)));
             }
         }
     });
@@ -739,7 +831,7 @@ pub fn apply_caverns_to<R: Rng>(canvas: &mut Canvas, dynamic_rng: &mut R) {
             cavern_avg_top,
             floor,
             stalactite,
-            cavern_avg_bottom as i32 + 16, // Water level
+            cavern_avg_bottom + 16, // Water level
         )
     };
 
@@ -762,7 +854,7 @@ pub fn apply_caverns_to<R: Rng>(canvas: &mut Canvas, dynamic_rng: &mut R) {
                     let pos = wpos2d.with_z(cavern_bottom + floor);
                     if rng.gen_bool(0.15)
                         && cavern_top - cavern_bottom > 32
-                        && pos.z as i32 > water_level - 2
+                        && pos.z > water_level - 2
                     {
                         Some(Mushroom {
                             pos,
@@ -787,15 +879,15 @@ pub fn apply_caverns_to<R: Rng>(canvas: &mut Canvas, dynamic_rng: &mut R) {
             let warp_amp = Vec3::new(12.0, 12.0, 12.0);
             let wposf_warped = wposf.map(|e| e as f32)
                 + Vec3::new(
-                    FastNoise::new(seed).get(wposf * warp_freq) as f32,
-                    FastNoise::new(seed + 1).get(wposf * warp_freq) as f32,
-                    FastNoise::new(seed + 2).get(wposf * warp_freq) as f32,
+                    FastNoise::new(seed).get(wposf * warp_freq),
+                    FastNoise::new(seed + 1).get(wposf * warp_freq),
+                    FastNoise::new(seed + 2).get(wposf * warp_freq),
                 ) * warp_amp
                     * (wposf.z as f32 - mushroom.pos.z as f32)
                         .mul(0.1)
                         .clamped(0.0, 1.0);
 
-            let rpos = wposf_warped - mushroom.pos.map(|e| e as f32).map(|e| e as f32);
+            let rpos = wposf_warped - mushroom.pos.map(|e| e as f32);
 
             let stalk_radius = 2.5f32;
             let head_radius = 18.0f32;
@@ -944,7 +1036,7 @@ pub fn apply_caverns_to<R: Rng>(canvas: &mut Canvas, dynamic_rng: &mut R) {
             }
         };
 
-        let cavern_top = cavern_top as i32;
+        let cavern_top = cavern_top;
         let mut last_kind = BlockKind::Rock;
         for z in cavern_bottom - 1..cavern_top {
             use SpriteKind::*;
@@ -1042,7 +1134,7 @@ pub fn apply_caverns_to<R: Rng>(canvas: &mut Canvas, dynamic_rng: &mut R) {
                 block
             };
 
-            let _ = canvas.set(wpos, block);
+            canvas.set(wpos, block);
         }
     });
 }

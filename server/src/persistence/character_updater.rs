@@ -114,7 +114,7 @@ impl CharacterUpdater {
                 // Unwrap here is safe as there is no code that can panic when the write lock is
                 // taken that could cause the RwLock to become poisoned.
                 let mut conn =
-                    establish_connection(&*settings.read().unwrap(), ConnectionMode::ReadWrite);
+                    establish_connection(&settings.read().unwrap(), ConnectionMode::ReadWrite);
                 while let Ok(action) = update_rx.recv() {
                     match action {
                         CharacterUpdaterAction::BatchUpdate { batch_id, updates } => {

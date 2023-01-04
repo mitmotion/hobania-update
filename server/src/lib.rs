@@ -2,12 +2,9 @@
 #![allow(clippy::option_map_unit_fn)]
 #![deny(clippy::clone_on_ref_ptr)]
 #![feature(
-    bool_to_option,
     box_patterns,
     drain_filter,
-    label_break_value,
     let_chains,
-    let_else,
     never_type,
     option_zip,
     unwrap_infallible
@@ -68,7 +65,7 @@ use crate::{
     presence::{Presence, RegionSubscription, RepositionOnChunkLoad},
     rtsim::RtSim,
     state_ext::StateExt,
-    sys::sentinel::{DeletedEntities, TrackedStorages},
+    sys::sentinel::DeletedEntities,
 };
 use censor::Censor;
 #[cfg(not(feature = "worldgen"))]
@@ -80,8 +77,7 @@ use common::{
     cmd::ServerChatCommand,
     comp,
     event::{EventBus, ServerEvent},
-    recipe::{default_component_recipe_book, default_recipe_book},
-    resources::{BattleMode, Time, TimeOfDay},
+    resources::{BattleMode, GameMode, Time, TimeOfDay},
     rtsim::RtSimEntity,
     slowjob::SlowJobPool,
     terrain::{TerrainChunk, TerrainChunkSize},
@@ -89,9 +85,7 @@ use common::{
 };
 use common_ecs::run_now;
 use common_net::{
-    msg::{
-        ClientType, DisconnectReason, ServerGeneral, ServerInfo, ServerInit, ServerMsg, WorldMapMsg,
-    },
+    msg::{ClientType, DisconnectReason, ServerGeneral, ServerInfo, ServerMsg},
     sync::WorldSyncExt,
 };
 use common_state::{BuildAreas, State};
@@ -104,7 +98,7 @@ use persistence::{
 };
 use prometheus::Registry;
 use prometheus_hyper::Server as PrometheusServer;
-use specs::{join::Join, Builder, Entity as EcsEntity, Entity, SystemData, WorldExt};
+use specs::{join::Join, Builder, Entity as EcsEntity, Entity, WorldExt};
 use std::{
     i32,
     ops::{Deref, DerefMut},
@@ -203,7 +197,6 @@ pub struct Server {
     state: State,
     world: Arc<World>,
     index: IndexOwned,
-    map: WorldMapMsg,
 
     connection_handler: ConnectionHandler,
 
@@ -250,7 +243,45 @@ impl Server {
 
         let battlemode_buffer = BattleModeBuffer::default();
 
-        let mut state = State::server();
+        let pools = State::pools(GameMode::Server);
+
+        #[cfg(feature = "worldgen")]
+        let (world, index) = World::generate(
+            settings.world_seed,
+            WorldOpts {
+                seed_elements: true,
+                world_file: if let Some(ref opts) = settings.map_file {
+                    opts.clone()
+                } else {
+                    // Load default map from assets.
+                    FileOpts::LoadAsset(DEFAULT_WORLD_MAP.into())
+                },
+                calendar: Some(settings.calendar_mode.calendar_now()),
+            },
+            &pools,
+        );
+        #[cfg(not(feature = "worldgen"))]
+        let (world, index) = World::generate(settings.world_seed);
+
+        #[cfg(feature = "worldgen")]
+        let map = world.get_map_data(index.as_index_ref(), &pools);
+        #[cfg(not(feature = "worldgen"))]
+        let map = WorldMapMsg {
+            dimensions_lg: Vec2::zero(),
+            max_height: 1.0,
+            rgba: Grid::new(Vec2::new(1, 1), 1),
+            horizons: [(vec![0], vec![0]), (vec![0], vec![0])],
+            alt: Grid::new(Vec2::new(1, 1), 1),
+            sites: Vec::new(),
+            pois: Vec::new(),
+            default_chunk: Arc::new(world.generate_oob_chunk()),
+        };
+
+        let mut state = State::server(
+            pools,
+            world.sim().map_size_lg(),
+            Arc::clone(&map.default_chunk),
+        );
         state.ecs_mut().insert(battlemode_buffer);
         state.ecs_mut().insert(settings.clone());
         state.ecs_mut().insert(editable_settings);
@@ -301,6 +332,7 @@ impl Server {
         }
         {
             let pool = state.ecs_mut().write_resource::<SlowJobPool>();
+            pool.configure("CHUNK_DROP", |_n| 1);
             pool.configure("CHUNK_GENERATOR", |n| n / 2 + n / 4);
             pool.configure("CHUNK_SERIALIZER", |n| n / 2);
         }
@@ -356,38 +388,7 @@ impl Server {
             .ecs_mut()
             .insert(AutoMod::new(&settings.moderation, censor));
 
-        #[cfg(feature = "worldgen")]
-        let (world, index) = World::generate(
-            settings.world_seed,
-            WorldOpts {
-                seed_elements: true,
-                world_file: if let Some(ref opts) = settings.map_file {
-                    opts.clone()
-                } else {
-                    // Load default map from assets.
-                    FileOpts::LoadAsset(DEFAULT_WORLD_MAP.into())
-                },
-                calendar: Some(settings.calendar_mode.calendar_now()),
-            },
-            state.thread_pool(),
-        );
-
-        #[cfg(feature = "worldgen")]
-        let map = world.get_map_data(index.as_index_ref(), state.thread_pool());
-
-        #[cfg(not(feature = "worldgen"))]
-        let (world, index) = World::generate(settings.world_seed);
-        #[cfg(not(feature = "worldgen"))]
-        let map = WorldMapMsg {
-            dimensions_lg: Vec2::zero(),
-            max_height: 1.0,
-            rgba: Grid::new(Vec2::new(1, 1), 1),
-            horizons: [(vec![0], vec![0]), (vec![0], vec![0])],
-            sea_level: 0.0,
-            alt: Grid::new(Vec2::new(1, 1), 1),
-            sites: Vec::new(),
-            pois: Vec::new(),
-        };
+        state.ecs_mut().insert(map);
 
         #[cfg(feature = "worldgen")]
         let spawn_point = SpawnPoint({
@@ -494,7 +495,7 @@ impl Server {
                     use std::fs;
 
                     match || -> Result<_, Box<dyn std::error::Error>> {
-                        let key = fs::read(&key_file_path)?;
+                        let key = fs::read(key_file_path)?;
                         let key = if key_file_path.extension().map_or(false, |x| x == "der") {
                             rustls::PrivateKey(key)
                         } else {
@@ -510,7 +511,7 @@ impl Server {
                                 .ok_or("No valid pem key in file")?;
                             rustls::PrivateKey(key)
                         };
-                        let cert_chain = fs::read(&cert_file_path)?;
+                        let cert_chain = fs::read(cert_file_path)?;
                         let cert_chain = if cert_file_path.extension().map_or(false, |x| x == "der")
                         {
                             vec![rustls::Certificate(cert_chain)]
@@ -564,8 +565,6 @@ impl Server {
             state,
             world,
             index,
-            map,
-
             connection_handler,
             runtime,
 
@@ -591,7 +590,7 @@ impl Server {
         let editable_settings = self.state.ecs().fetch::<EditableSettings>();
         ServerInfo {
             name: settings.server_name.clone(),
-            description: (&*editable_settings.server_description).clone(),
+            description: (*editable_settings.server_description).clone(),
             git_hash: common::util::GIT_HASH.to_string(),
             git_date: common::util::GIT_DATE.to_string(),
             auth_provider: settings.auth_server_address.clone(),
@@ -631,9 +630,6 @@ impl Server {
 
     /// Get a reference to the server's world.
     pub fn world(&self) -> &World { &self.world }
-
-    /// Get a reference to the server's world map.
-    pub fn map(&self) -> &WorldMapMsg { &self.map }
 
     /// Execute a single server tick, handle input and update the game state by
     /// the given duration.
@@ -793,10 +789,11 @@ impl Server {
                             // so, we delete them. We check for
                             // `home_chunk` in order to avoid duplicating
                             // the entity under some circumstances.
-                            terrain.get_key(chunk_key).is_none() && terrain.get_key(*hc).is_none()
+                            terrain.get_key_real(chunk_key).is_none()
+                                && terrain.get_key_real(*hc).is_none()
                         },
                         Some(Anchor::Entity(entity)) => !self.state.ecs().is_alive(*entity),
-                        None => terrain.get_key(chunk_key).is_none(),
+                        None => terrain.get_key_real(chunk_key).is_none(),
                     }
                 })
                 .map(|(entity, _, _, _)| entity)
@@ -896,7 +893,7 @@ impl Server {
                         },
                         CharacterScreenResponseKind::CharacterData(result) => {
                             let message = match *result {
-                                Ok(character_data) => {
+                                Ok((character_data, skill_set_persistence_load_error)) => {
                                     let PersistedComponents {
                                         body,
                                         stats,
@@ -920,6 +917,7 @@ impl Server {
                                     ServerEvent::UpdateCharacterData {
                                         entity: response.target_entity,
                                         components: character_data,
+                                        metadata: skill_set_persistence_load_error,
                                     }
                                 },
                                 Err(error) => {
@@ -929,7 +927,9 @@ impl Server {
                                     // to display
                                     self.notify_client(
                                         response.target_entity,
-                                        ServerGeneral::CharacterDataLoadError(error.to_string()),
+                                        ServerGeneral::CharacterDataLoadResult(Err(
+                                            error.to_string()
+                                        )),
                                     );
 
                                     // Clean up the entity data on the server
@@ -1040,19 +1040,7 @@ impl Server {
             .map(|mut t| t.maintain());
     }
 
-    fn initialize_client(
-        &mut self,
-        client: connection_handler::IncomingClient,
-    ) -> Result<Option<Entity>, Error> {
-        if self.settings().max_players <= self.state.ecs().read_storage::<Client>().join().count() {
-            trace!(
-                ?client.participant,
-                "to many players, wont allow participant to connect"
-            );
-            client.send(ServerInit::TooManyPlayers)?;
-            return Ok(None);
-        }
-
+    fn initialize_client(&mut self, client: connection_handler::IncomingClient) -> Entity {
         let entity = self
             .state
             .ecs_mut()
@@ -1064,43 +1052,7 @@ impl Server {
             .read_resource::<metrics::PlayerMetrics>()
             .clients_connected
             .inc();
-        // Send client all the tracked components currently attached to its entity as
-        // well as synced resources (currently only `TimeOfDay`)
-        debug!("Starting initial sync with client.");
-        self.state
-            .ecs()
-            .read_storage::<Client>()
-            .get(entity)
-            .expect(
-                "We just created this entity with a Client component using build(), and we have \
-                 &mut access to the ecs so it can't have been deleted yet.",
-            )
-            .send(ServerInit::GameSync {
-                // Send client their entity
-                entity_package: TrackedStorages::fetch(self.state.ecs())
-                    .create_entity_package(entity, None, None, None)
-                    .expect(
-                        "We just created this entity as marked() (using create_entity_synced) so \
-                         it definitely has a uid",
-                    ),
-                time_of_day: *self.state.ecs().read_resource(),
-                max_group_size: self.settings().max_player_group_size,
-                client_timeout: self.settings().client_timeout,
-                world_map: self.map.clone(),
-                recipe_book: default_recipe_book().cloned(),
-                component_recipe_book: default_component_recipe_book().cloned(),
-                material_stats: (&*self
-                    .state
-                    .ecs()
-                    .read_resource::<comp::item::MaterialStatManifest>())
-                    .clone(),
-                ability_map: (&*self
-                    .state
-                    .ecs()
-                    .read_resource::<comp::item::tool::AbilityMap>())
-                    .clone(),
-            })?;
-        Ok(Some(entity))
+        entity
     }
 
     /// Disconnects all clients if requested by either an admin command or
@@ -1166,16 +1118,8 @@ impl Server {
         }
 
         while let Ok(incoming) = self.connection_handler.client_receiver.try_recv() {
-            match self.initialize_client(incoming) {
-                Ok(None) => (),
-                Ok(Some(entity)) => {
-                    frontend_events.push(Event::ClientConnected { entity });
-                    debug!("Done initial sync with client.");
-                },
-                Err(e) => {
-                    debug!(?e, "failed initializing a new client");
-                },
-            }
+            let entity = self.initialize_client(incoming);
+            frontend_events.push(Event::ClientConnected { entity });
         }
     }
 

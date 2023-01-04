@@ -23,7 +23,7 @@ impl Animation for SneakWieldAnimation {
     const UPDATE_FN: &'static [u8] = b"character_sneakwield\0";
 
     #[cfg_attr(feature = "be-dyn-lib", export_name = "character_sneakwield")]
-    fn update_skeleton_inner<'a>(
+    fn update_skeleton_inner(
         skeleton: &Self::Skeleton,
         (
             (active_tool_kind, active_tool_spec),
@@ -33,7 +33,7 @@ impl Animation for SneakWieldAnimation {
             orientation,
             last_ori,
             global_time,
-        ): Self::Dependency<'a>,
+        ): Self::Dependency<'_>,
         anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,
@@ -292,7 +292,7 @@ impl Animation for SneakWieldAnimation {
                 Some(ToolKind::Instrument) => {
                     if let Some(AbilitySpec::Custom(spec)) = active_tool_spec {
                         match spec.as_str() {
-                            "Perc" => {
+                            "Washboard" => {
                                 next.hand_l.position = Vec3::new(-7.0, 0.0, 3.0);
                                 next.hand_l.orientation = Quaternion::rotation_x(1.27);
                                 next.main.position = Vec3::new(-5.0, -4.5, -5.0);

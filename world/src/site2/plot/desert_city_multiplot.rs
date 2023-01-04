@@ -349,7 +349,7 @@ impl Structure for DesertCityMultiPlot {
                         .clear();
                     // Stairs for each storey
                     painter
-                        .ramp(
+                        .ramp_inset(
                             Aabb {
                                 min: Vec2::new(center.x - room_length, center.y - room_length + 1)
                                     .with_z(floor_level),
@@ -816,8 +816,8 @@ impl Structure for DesertCityMultiPlot {
                     // stairway
                     let stair_radius = tower.length + 1;
                     let stairs_clear = painter.aabb(Aabb {
-                        min: (tower_center - stair_radius as i32).with_z(base),
-                        max: (tower_center + stair_radius as i32).with_z(base + tower.height + 2),
+                        min: (tower_center - stair_radius).with_z(base),
+                        max: (tower_center + stair_radius).with_z(base + tower.height + 2),
                     });
                     stairs_clear
                         .sample(spiral_staircase(
@@ -1016,7 +1016,7 @@ impl Structure for DesertCityMultiPlot {
                                     .clear();
                                 // Stairs for each storey
                                 painter
-                                    .ramp(
+                                    .ramp_inset(
                                         Aabb {
                                             min: Vec2::new(
                                                 subplot_center.x - room_length,
@@ -1628,7 +1628,6 @@ impl Structure for DesertCityMultiPlot {
                                         )
                                         .with_z(base + tower_height + 1),
                                     },
-                                    2,
                                     Dir::NegX,
                                 )
                                 .fill(sandstone.clone());
@@ -1943,9 +1942,8 @@ impl Structure for DesertCityMultiPlot {
                             // stairway
                             let stair_radius = tower_length + 1;
                             let stairs_clear = painter.aabb(Aabb {
-                                min: (bldg_a_center - stair_radius as i32).with_z(base),
-                                max: (bldg_a_center + stair_radius as i32)
-                                    .with_z(base + tower_height + 2),
+                                min: (bldg_a_center - stair_radius).with_z(base),
+                                max: (bldg_a_center + stair_radius).with_z(base + tower_height + 2),
                             });
                             stairs_clear
                                 .sample(spiral_staircase(
@@ -2164,8 +2162,8 @@ impl Structure for DesertCityMultiPlot {
                             // stairway
                             let stair_radius = tower.length + 1;
                             let stairs_clear = painter.aabb(Aabb {
-                                min: (subplot_center - stair_radius as i32).with_z(base),
-                                max: (subplot_center + stair_radius as i32)
+                                min: (subplot_center - stair_radius).with_z(base),
+                                max: (subplot_center + stair_radius)
                                     .with_z(base + tower.height + 2),
                             });
                             stairs_clear

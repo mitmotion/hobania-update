@@ -5,6 +5,9 @@ hud-you_died = Moriste
 hud-waypoint_saved = Marcador Guardado
 hud-sp_arrow_txt = SP
 hud-inventory_full = Inventario lleno
+hud-someone_else = alguien más
+hud-another_group = otro grupo
+hud-owned_by_for_secs = Propiedad de { $name } por { $secs } segundos
 hud-press_key_to_show_keybindings_fmt = Presiona { $key } para mostrar los controles del teclado
 hud-press_key_to_toggle_lantern_fmt = [{ $key }] Linterna
 hud-press_key_to_show_debug_info_fmt = Presiona { $key } para mostrar información de depuración
@@ -14,7 +17,7 @@ hud-press_key_to_respawn = Presiona { $key } para reaparecer en la ultima fogata
 hud-tutorial_btn = Tutorial
 hud-tutorial_click_here =
     ¡Presiona [ { $key } ] para 
-    mover libremente el cursor y clickear este boton!
+    mover libremente el cursor y clickear este botón!
 hud-tutorial_elements = Craftear
 hud-temp_quest_headline = Saludos viajero!
 hud-temp_quest_text =
@@ -24,7 +27,7 @@ hud-temp_quest_text =
     
     Mira en la parte inferior derecha de la pantalla para encontrar cosas como tu bolsa, el menú de artesanía y el mapa.
     
-    El menú de elaboracion te permite crear armaduras, armas, comida y mucho más!
+    El menú de elaboración te permite crear armaduras, armas, comida y mucho más!
     
     Los animales salvajes que rodean la ciudad son una gran fuente de trozos de cuero para crear alguna protección contra los peligros del mundo.
     

@@ -191,7 +191,7 @@ impl Recipe {
             for (inv_slot_id, slot) in inv.slots_with_id() {
                 if let Some(item) = slot
                     .as_ref()
-                    .filter(|item| item.matches_recipe_input(&*input, amount))
+                    .filter(|item| item.matches_recipe_input(input, amount))
                 {
                     *input_max.entry(inv_slot_id).or_insert(0) += item.amount();
                 }
@@ -241,7 +241,7 @@ fn inventory_contains_ingredients<'a, I: Iterator<Item = (&'a RecipeInput, u32)>
         for (inv_slot_id, slot) in inv.slots_with_id() {
             if let Some(item) = slot
                 .as_ref()
-                .filter(|item| item.matches_recipe_input(&*input, amount))
+                .filter(|item| item.matches_recipe_input(input, amount))
             {
                 let claim = slot_claims.entry(inv_slot_id).or_insert(0);
                 slots.push((i as u32, inv_slot_id));
@@ -404,6 +404,19 @@ impl RecipeBook {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_recipe_valid_key_check() {
+        let recipe_book = default_recipe_book().read();
+        let is_invalid_key =
+            |input: &str| input.chars().any(|c| c.is_uppercase() || c.is_whitespace());
+        assert!(!recipe_book.iter().any(|(k, _)| is_invalid_key(k)));
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum RawRecipeInput {
     Item(String),
@@ -460,7 +473,10 @@ impl assets::Asset for ItemList {
 }
 
 impl assets::Compound for RecipeBook {
-    fn load(cache: assets::AnyCache, specifier: &str) -> Result<Self, assets::BoxedError> {
+    fn load(
+        cache: assets::AnyCache,
+        specifier: &assets::SharedString,
+    ) -> Result<Self, assets::BoxedError> {
         #[inline]
         fn load_item_def(spec: &(String, u32)) -> Result<(Arc<ItemDef>, u32), assets::Error> {
             let def = Arc::<ItemDef>::load_cloned(&spec.0)?;
@@ -578,10 +594,10 @@ impl ComponentRecipe {
         let mut slot_claims = HashMap::new();
         let mut unsatisfied_requirements = Vec::new();
 
-        fn handle_requirement<'a, 'b, I: Iterator<Item = InvSlotId>>(
+        fn handle_requirement<'a, I: Iterator<Item = InvSlotId>>(
             slot_claims: &mut HashMap<InvSlotId, u32>,
             unsatisfied_requirements: &mut Vec<(&'a RecipeInput, u32)>,
-            inv: &'b Inventory,
+            inv: &Inventory,
             input: &'a RecipeInput,
             amount: u32,
             input_slots: I,
@@ -815,7 +831,10 @@ enum RawComponentOutput {
 }
 
 impl assets::Compound for ComponentRecipeBook {
-    fn load(cache: assets::AnyCache, specifier: &str) -> Result<Self, assets::BoxedError> {
+    fn load(
+        cache: assets::AnyCache,
+        specifier: &assets::SharedString,
+    ) -> Result<Self, assets::BoxedError> {
         #[inline]
         fn create_recipe_key(raw_recipe: &RawComponentRecipe) -> ComponentKey {
             match &raw_recipe.output {
@@ -890,7 +909,10 @@ pub fn default_component_recipe_book() -> AssetHandle<ComponentRecipeBook> {
 }
 
 impl assets::Compound for ReverseComponentRecipeBook {
-    fn load(cache: assets::AnyCache, specifier: &str) -> Result<Self, assets::BoxedError> {
+    fn load(
+        cache: assets::AnyCache,
+        specifier: &assets::SharedString,
+    ) -> Result<Self, assets::BoxedError> {
         let forward = cache.load::<ComponentRecipeBook>(specifier)?.cloned();
         let mut recipes = HashMap::new();
         for (_, recipe) in forward.iter() {

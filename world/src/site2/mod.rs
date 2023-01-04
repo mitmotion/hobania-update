@@ -10,9 +10,10 @@ pub use self::{
     util::Dir,
 };
 use crate::{
+    sim::Path,
     site::{namegen::NameGen, SpawnRules},
     util::{attempt, DHashSet, Grid, CARDINALS, SQUARE_4, SQUARE_9},
-    Canvas, Land,
+    Canvas, IndexRef, Land,
 };
 use common::{
     astar::Astar,
@@ -67,7 +68,7 @@ impl Site {
                 // 25 Seems to be big enough for the current scale of 4.0
                 25
             } else {
-                1
+                5
             })
             * TILE_SIZE as i32) as f32
     }
@@ -87,7 +88,7 @@ impl Site {
                 }
             })
             .min_by_key(|d2| *d2 as i32)
-            .map(|d2| d2.sqrt() as f32 / TILE_SIZE as f32)
+            .map(|d2| d2.sqrt() / TILE_SIZE as f32)
             .unwrap_or(1.0);
         let base_spawn_rules = SpawnRules {
             trees: max_warp == 1.0,
@@ -154,7 +155,7 @@ impl Site {
             }
             max_cost
         };
-        let path = Astar::new(MAX_ITERS, a, &heuristic, DefaultHashBuilder::default())
+        let path = Astar::new(MAX_ITERS, a, heuristic, DefaultHashBuilder::default())
             .poll(
                 MAX_ITERS,
                 &heuristic,
@@ -323,15 +324,23 @@ impl Site {
         Spiral2d::new()
             .take((SEARCH_RADIUS * 2 + 1).pow(2) as usize)
             .for_each(|tile| {
+                let wpos = self.tile_center_wpos(tile);
                 if let Some(kind) = Spiral2d::new()
                     .take(9)
-                    .find_map(|rpos| wpos_is_hazard(land, self.tile_center_wpos(tile) + rpos))
+                    .find_map(|rpos| wpos_is_hazard(land, wpos + rpos))
                 {
                     for &rpos in &SQUARE_4 {
                         // `get_mut` doesn't increase generation bounds
                         self.tiles
                             .get_mut(tile - rpos - 1)
                             .map(|tile| tile.kind = TileKind::Hazard(kind));
+                    }
+                }
+                if let Some((dist, _, Path { width }, _)) = land.get_nearest_path(wpos) {
+                    if dist < 2.0 * width {
+                        self.tiles
+                            .get_mut(tile)
+                            .map(|tile| tile.kind = TileKind::Path);
                     }
                 }
             });
@@ -383,6 +392,34 @@ impl Site {
             hard_alt: None,
         });
 
+        site
+    }
+
+    pub fn generate_citadel(land: &Land, rng: &mut impl Rng, origin: Vec2<i32>) -> Self {
+        let mut rng = reseed(rng);
+        let mut site = Site {
+            origin,
+            ..Site::default()
+        };
+        site.demarcate_obstacles(land);
+        let citadel = plot::Citadel::generate(origin, land, &mut rng);
+        site.name = citadel.name().to_string();
+        let size = citadel.radius() / tile::TILE_SIZE as i32;
+        let aabr = Aabr {
+            min: Vec2::broadcast(-size),
+            max: Vec2::broadcast(size),
+        };
+        let plot = site.create_plot(Plot {
+            kind: PlotKind::Citadel(citadel),
+            root_tile: aabr.center(),
+            tiles: aabr_tiles(aabr).collect(),
+            seed: rng.gen(),
+        });
+        site.blit_aabr(aabr, Tile {
+            kind: TileKind::Building,
+            plot: Some(plot),
+            hard_alt: None,
+        });
         site
     }
 
@@ -789,6 +826,38 @@ impl Site {
         site
     }
 
+    pub fn generate_savannah_pit(land: &Land, rng: &mut impl Rng, origin: Vec2<i32>) -> Self {
+        let mut rng = reseed(rng);
+        let mut site = Site {
+            origin,
+            name: NameGen::location(&mut rng).generate_savannah_custom(),
+            ..Site::default()
+        };
+        let size = 11.0 as i32;
+        let aabr = Aabr {
+            min: Vec2::broadcast(-size),
+            max: Vec2::broadcast(size),
+        };
+        {
+            let savannah_pit =
+                plot::SavannahPit::generate(land, &mut reseed(&mut rng), &site, aabr);
+            let savannah_pit_alt = savannah_pit.alt;
+            let plot = site.create_plot(Plot {
+                kind: PlotKind::SavannahPit(savannah_pit),
+                root_tile: aabr.center(),
+                tiles: aabr_tiles(aabr).collect(),
+                seed: rng.gen(),
+            });
+
+            site.blit_aabr(aabr, Tile {
+                kind: TileKind::Building,
+                plot: Some(plot),
+                hard_alt: Some(savannah_pit_alt),
+            });
+        }
+        site
+    }
+
     pub fn generate_desert_city(land: &Land, rng: &mut impl Rng, origin: Vec2<i32>) -> Self {
         let mut rng = reseed(rng);
 
@@ -919,6 +988,78 @@ impl Site {
         site
     }
 
+    pub fn generate_bridge(
+        land: &Land,
+        index: IndexRef,
+        rng: &mut impl Rng,
+        start: Vec2<i32>,
+        end: Vec2<i32>,
+    ) -> Self {
+        let mut rng = reseed(rng);
+        let start = TerrainChunkSize::center_wpos(start);
+        let end = TerrainChunkSize::center_wpos(end);
+        let origin = (start + end) / 2;
+
+        let mut site = Site {
+            origin,
+            name: format!("Bridge of {}", NameGen::location(&mut rng).generate_town()),
+            ..Site::default()
+        };
+
+        let start_tile = site.wpos_tile_pos(start);
+        let end_tile = site.wpos_tile_pos(end);
+
+        let width = 1;
+
+        let orth = (start_tile - end_tile).yx().map(|dir| dir.signum().abs());
+
+        let start_aabr = Aabr {
+            min: start_tile.map2(end_tile, |a, b| a.min(b)) - orth * width,
+            max: start_tile.map2(end_tile, |a, b| a.max(b)) + 1 + orth * width,
+        };
+
+        let bridge = plot::Bridge::generate(land, index, &mut rng, &site, start_tile, end_tile);
+
+        let start_tile = site.wpos_tile_pos(bridge.start.xy());
+        let end_tile = site.wpos_tile_pos(bridge.end.xy());
+
+        let width = (bridge.width() + TILE_SIZE as i32 / 2) / TILE_SIZE as i32;
+        let aabr = Aabr {
+            min: start_tile.map2(end_tile, |a, b| a.min(b)) - orth * width,
+            max: start_tile.map2(end_tile, |a, b| a.max(b)) + 1 + orth * width,
+        };
+
+        site.create_road(
+            land,
+            &mut rng,
+            bridge.dir.select_aabr_with(aabr, aabr.center()) + bridge.dir.to_vec2(),
+            bridge.dir.select_aabr_with(start_aabr, aabr.center()),
+            2,
+        );
+        site.create_road(
+            land,
+            &mut rng,
+            (-bridge.dir).select_aabr_with(aabr, aabr.center()) - bridge.dir.to_vec2(),
+            (-bridge.dir).select_aabr_with(start_aabr, aabr.center()),
+            2,
+        );
+
+        let plot = site.create_plot(Plot {
+            kind: PlotKind::Bridge(bridge),
+            root_tile: start_tile,
+            tiles: aabr_tiles(aabr).collect(),
+            seed: rng.gen(),
+        });
+
+        site.blit_aabr(aabr, Tile {
+            kind: TileKind::Building,
+            plot: Some(plot),
+            hard_alt: None,
+        });
+
+        site
+    }
+
     pub fn wpos_tile_pos(&self, wpos2d: Vec2<i32>) -> Vec2<i32> {
         (wpos2d - self.origin).map(|e| e.div_euclid(TILE_SIZE as i32))
     }
@@ -944,7 +1085,7 @@ impl Site {
 
         #[allow(clippy::single_match)]
         match &tile.kind {
-            TileKind::Plaza => {
+            TileKind::Plaza | TileKind::Path => {
                 let near_roads = CARDINALS.iter().filter_map(|rpos| {
                     if self.tiles.get(tpos + rpos) == tile {
                         Some(Aabr {
@@ -1168,12 +1309,15 @@ impl Site {
                 PlotKind::Gnarling(gnarling) => gnarling.render_collect(self, canvas),
                 PlotKind::GiantTree(giant_tree) => giant_tree.render_collect(self, canvas),
                 PlotKind::CliffTower(cliff_tower) => cliff_tower.render_collect(self, canvas),
+                PlotKind::SavannahPit(savannah_pit) => savannah_pit.render_collect(self, canvas),
                 PlotKind::DesertCityMultiPlot(desert_city_multi_plot) => {
                     desert_city_multi_plot.render_collect(self, canvas)
                 },
                 PlotKind::DesertCityTemple(desert_city_temple) => {
                     desert_city_temple.render_collect(self, canvas)
                 },
+                PlotKind::Citadel(citadel) => citadel.render_collect(self, canvas),
+                PlotKind::Bridge(bridge) => bridge.render_collect(self, canvas),
                 _ => continue,
             };
 

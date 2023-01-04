@@ -7,6 +7,7 @@ use common::{
     calendar::Calendar,
     character::{self, CharacterItem},
     comp::{self, invite::InviteKind, item::MaterialStatManifest},
+    event::UpdateCharacterMetadata,
     lod,
     outcome::Outcome,
     recipe::{ComponentRecipeBook, RecipeBook},
@@ -55,7 +56,6 @@ pub struct ServerInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(clippy::large_enum_variant)]
 pub enum ServerInit {
-    TooManyPlayers,
     GameSync {
         entity_package: sync::EntityPackage<EcsCompPacket>,
         time_of_day: TimeOfDay,
@@ -130,8 +130,8 @@ impl SerializedTerrainChunk {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerGeneral {
     //Character Screen related
-    /// An error occurred while loading character data
-    CharacterDataLoadError(String),
+    /// Result of loading character data
+    CharacterDataLoadResult(Result<UpdateCharacterMetadata, String>),
     /// A list of characters belonging to the a authenticated player was sent
     CharacterListUpdate(Vec<CharacterItem>),
     /// An error occurred while creating or deleting a character
@@ -152,6 +152,8 @@ pub enum ServerGeneral {
     /// Indicate to the client that their sent invite was not invalid and is
     /// currently pending
     InvitePending(Uid),
+    /// Update the HUD of the clients in the group
+    GroupInventoryUpdate(comp::Item, String, Uid),
     /// Note: this could potentially include all the failure cases such as
     /// inviting yourself in which case the `InvitePending` message could be
     /// removed and the client could consider their invite pending until
@@ -243,6 +245,13 @@ pub struct PlayerInfo {
     pub uuid: Uuid,
 }
 
+/// used for localisation, filled by client and used by i18n code
+pub struct ChatTypeContext {
+    pub you: Uid,
+    pub player_alias: HashMap<Uid, PlayerInfo>,
+    pub entity_name: HashMap<Uid, String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CharacterInfo {
     pub name: String,
@@ -268,13 +277,14 @@ pub enum DisconnectReason {
     Kicked(String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum RegisterError {
     AuthError(String),
     Banned(String),
     Kicked(String),
     InvalidCharacter,
     NotOnWhitelist,
+    TooManyPlayers,
     //TODO: InvalidAlias,
 }
 
@@ -293,7 +303,7 @@ impl ServerMsg {
                 registered
                     && match g {
                         //Character Screen related
-                        ServerGeneral::CharacterDataLoadError(_)
+                        ServerGeneral::CharacterDataLoadResult(_)
                         | ServerGeneral::CharacterListUpdate(_)
                         | ServerGeneral::CharacterActionError(_)
                         | ServerGeneral::CharacterEdited(_)
@@ -310,6 +320,7 @@ impl ServerMsg {
                         | ServerGeneral::InviteComplete { .. }
                         | ServerGeneral::ExitInGameSuccess
                         | ServerGeneral::InventoryUpdate(_, _)
+                        | ServerGeneral::GroupInventoryUpdate(_, _, _)
                         | ServerGeneral::TerrainChunkUpdate { .. }
                         | ServerGeneral::LodZoneUpdate { .. }
                         | ServerGeneral::TerrainBlockUpdates(_)

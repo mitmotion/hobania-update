@@ -1,11 +1,5 @@
 use super::{world_msg::SiteId, PingMsg};
-use common::{
-    character::CharacterId,
-    comp,
-    comp::{Skill, SkillGroupKind},
-    terrain::block::Block,
-    ViewDistances,
-};
+use common::{character::CharacterId, comp, comp::Skill, terrain::block::Block, ViewDistances};
 use serde::{Deserialize, Serialize};
 use vek::*;
 
@@ -28,7 +22,7 @@ pub enum ClientMsg {
 2nd Level Enums
 */
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ClientType {
     /// Regular Client like Voxygen who plays the game
     Game,
@@ -39,7 +33,7 @@ pub enum ClientType {
     Bot { privileged: bool },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClientRegister {
     pub token_or_username: String,
 }
@@ -78,7 +72,6 @@ pub enum ClientGeneral {
         force_counter: u64,
     },
     UnlockSkill(Skill),
-    UnlockSkillGroup(SkillGroupKind),
     RequestSiteInfo(SiteId),
     UpdateMapMarker(comp::MapMarkerChange),
 
@@ -100,7 +93,6 @@ pub enum ClientGeneral {
     RequestLossyTerrainCompression {
         lossy_terrain_compression: bool,
     },
-    AcknowledgePersistenceLoadError,
 }
 
 impl ClientMsg {
@@ -138,10 +130,8 @@ impl ClientMsg {
                         | ClientGeneral::LodZoneRequest { .. }
                         | ClientGeneral::UnlockSkill(_)
                         | ClientGeneral::RequestSiteInfo(_)
-                        | ClientGeneral::UnlockSkillGroup(_)
                         | ClientGeneral::RequestPlayerPhysics { .. }
                         | ClientGeneral::RequestLossyTerrainCompression { .. }
-                        | ClientGeneral::AcknowledgePersistenceLoadError
                         | ClientGeneral::UpdateMapMarker(_)
                         | ClientGeneral::SpectatePosition(_) => {
                             c_type == ClientType::Game && presence.is_some()

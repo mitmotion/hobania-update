@@ -2,7 +2,8 @@ use super::{ScaleChange, RESET_BUTTONS_HEIGHT, RESET_BUTTONS_WIDTH};
 
 use crate::{
     hud::{
-        img_ids::Imgs, BarNumbers, BuffPosition, CrosshairType, ShortcutNumbers, Show, TEXT_COLOR,
+        img_ids::Imgs, BarNumbers, BuffPosition, CrosshairType, ShortcutNumbers, Show, MENU_BG,
+        TEXT_COLOR,
     },
     session::settings_change::{Interface as InterfaceChange, Interface::*},
     ui::{fonts::Fonts, ImageSlider, ScaleMode, ToggleButton},
@@ -11,7 +12,7 @@ use crate::{
 use conrod_core::{
     color,
     position::{Align, Relative},
-    widget::{self, Button, Image, Rectangle, Scrollbar, Text},
+    widget::{self, Button, DropDownList, Image, Rectangle, Scrollbar, Text},
     widget_ids, Color, Colorable, Labelable, Positionable, Sizeable, Widget, WidgetCommon,
 };
 use i18n::Localization;
@@ -27,6 +28,7 @@ widget_ids! {
         ui_scale_label,
         ui_scale_slider,
         ui_scale_value,
+        ui_scale_list,
         relative_to_win_button,
         relative_to_win_text,
         absolute_scale_button,
@@ -66,6 +68,8 @@ widget_ids! {
         show_bar_numbers_percentage_text,
         always_show_bars_button,
         always_show_bars_label,
+        enable_poise_bar_button,
+        enable_poise_bar_label,
         //
         show_shortcuts_button,
         show_shortcuts_text,
@@ -434,6 +438,27 @@ impl<'a> Widget for Interface<'a> {
             .set(state.ids.ui_scale_slider, ui)
             {
                 events.push(UiScale(ScaleChange::Adjust(2.0f64.powf(new_val))));
+            }
+            let mode_label_list = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+            let selected = mode_label_list
+                .iter()
+                .position(|factor| (*factor - scale).abs() < 0.24);
+            // Dropdown menu for custom scaling
+            if let Some(clicked) = DropDownList::new(
+                &mode_label_list
+                    .iter()
+                    .map(|factor| format!("{n:.*}", 2, n = factor))
+                    .collect::<Vec<String>>(),
+                selected,
+            )
+            .w_h(208.0, 22.0)
+            .color(MENU_BG)
+            .label_color(TEXT_COLOR)
+            .label_font_size(self.fonts.cyri.scale(10))
+            .down_from(state.ids.ui_scale_slider, 6.0)
+            .set(state.ids.ui_scale_list, ui)
+            {
+                events.push(UiScale(ScaleChange::Adjust(mode_label_list[clicked])));
             }
             // Custom Scaling Text
             Text::new(&format!("{:.2}", scale))
@@ -1153,13 +1178,41 @@ impl<'a> Widget for Interface<'a> {
         .color(TEXT_COLOR)
         .set(state.ids.always_show_bars_label, ui);
 
+        // Enable poise bar
+        let enable_poise_bar = ToggleButton::new(
+            self.global_state.settings.interface.enable_poise_bar,
+            self.imgs.checkbox,
+            self.imgs.checkbox_checked,
+        )
+        .w_h(18.0, 18.0)
+        .down_from(state.ids.always_show_bars_button, 20.0)
+        .hover_images(self.imgs.checkbox_mo, self.imgs.checkbox_checked_mo)
+        .press_images(self.imgs.checkbox_press, self.imgs.checkbox_checked)
+        .set(state.ids.enable_poise_bar_button, ui);
+
+        if enable_poise_bar != self.global_state.settings.interface.enable_poise_bar {
+            events.push(TogglePoiseBar(enable_poise_bar));
+        }
+
+        Text::new(
+            &self
+                .localized_strings
+                .get_msg("hud-settings-enable_poise_bar"),
+        )
+        .right_from(state.ids.enable_poise_bar_button, 10.0)
+        .font_size(self.fonts.cyri.scale(14))
+        .font_id(self.fonts.cyri.conrod_id)
+        .graphics_for(state.ids.enable_poise_bar_button)
+        .color(TEXT_COLOR)
+        .set(state.ids.enable_poise_bar_label, ui);
+
         // Experience Numbers
         Text::new(
             &self
                 .localized_strings
                 .get_msg("hud-settings-experience_numbers"),
         )
-        .down_from(state.ids.always_show_bars_button, 20.0)
+        .down_from(state.ids.enable_poise_bar_button, 20.0)
         .font_size(self.fonts.cyri.scale(18))
         .font_id(self.fonts.cyri.conrod_id)
         .color(TEXT_COLOR)

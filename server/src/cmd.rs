@@ -61,10 +61,10 @@ use rand::{thread_rng, Rng};
 use specs::{
     saveload::MarkerAllocator, storage::StorageEntry, Builder, Entity as EcsEntity, Join, WorldExt,
 };
-use std::{str::FromStr, sync::Arc};
+use std::{fmt::Write, str::FromStr, sync::Arc};
 use vek::*;
 use wiring::{Circuit, Wire, WireNode, WiringAction, WiringActionEffect, WiringElement};
-use world::util::Sampler;
+use world::util::{Sampler, LOCALITY};
 
 use common::comp::Alignment;
 use tracing::{error, info, warn};
@@ -136,6 +136,7 @@ fn do_command(
         ServerChatCommand::BuildAreaRemove => handle_build_area_remove,
         ServerChatCommand::Campfire => handle_spawn_campfire,
         ServerChatCommand::DebugColumn => handle_debug_column,
+        ServerChatCommand::DebugWays => handle_debug_ways,
         ServerChatCommand::DisconnectAllPlayers => handle_disconnect_all_players,
         ServerChatCommand::DropAll => handle_drop_all,
         ServerChatCommand::Dummy => handle_spawn_training_dummy,
@@ -517,7 +518,7 @@ fn handle_give_item(
 ) -> CmdResult<()> {
     if let (Some(item_name), give_amount_opt) = parse_cmd_args!(args, String, u32) {
         let give_amount = give_amount_opt.unwrap_or(1);
-        if let Ok(item) = Item::new_from_asset(&item_name.replace('/', ".").replace('\\', ".")) {
+        if let Ok(item) = Item::new_from_asset(&item_name.replace(['/', '\\'], ".")) {
             let mut item: Item = item;
             let mut res = Ok(());
 
@@ -954,8 +955,14 @@ fn handle_time(
         Some("dusk") => {
             next_cycle(NaiveTime::from_hms(17, 0, 0).num_seconds_from_midnight() as f64)
         },
-        Some(n) => match n.parse() {
-            Ok(n) => n,
+        Some(n) => match n.parse::<f64>() {
+            Ok(n) => {
+                if n < 0.0 {
+                    return Err(format!("{} is invalid, cannot be negative.", n));
+                }
+                // Seconds from next midnight
+                next_cycle(0.0) + n
+            },
             Err(_) => match NaiveTime::parse_from_str(n, "%H:%M") {
                 // Relative to current day
                 Ok(time) => next_cycle(time.num_seconds_from_midnight() as f64),
@@ -965,10 +972,18 @@ fn handle_time(
                     .filter(|_| n.starts_with('u'))
                     .and_then(|n| n.trim_start_matches('u').parse::<u64>().ok())
                 {
-                    // Absolute time (i.e: since in-game epoch)
-                    Some(n) => n as f64,
+                    // Absolute time (i.e. from world epoch)
+                    Some(n) => {
+                        if (n as f64) < time_in_seconds {
+                            return Err(format!(
+                                "{} is before the current time, time cannot go backwards.",
+                                n
+                            ));
+                        }
+                        n as f64
+                    },
                     None => {
-                        return Err(format!("{:?} is not a valid time.", n));
+                        return Err(format!("{} is not a valid time.", n));
                     },
                 },
             },
@@ -1212,6 +1227,7 @@ fn handle_spawn(
                         body,
                     )
                     .with(comp::Vel(vel))
+                    .with(body.scale())
                     .with(alignment);
 
                 if ai {
@@ -1844,7 +1860,7 @@ fn handle_kill_npcs(
                         true
                     };
 
-                should_kill.then(|| entity)
+                should_kill.then_some(entity)
             })
             .collect::<Vec<_>>()
     };
@@ -1944,49 +1960,70 @@ where
         if target_inventory.free_slots() < count {
             return Err("Inventory doesn't have enough slots".to_owned());
         }
-        let mut rng = thread_rng();
-        for (item_id, quantity) in kit {
-            let mut item = match &item_id {
-                KitSpec::Item(item_id) => Item::new_from_asset(item_id)
-                    .map_err(|_| format!("Unknown item: {:#?}", item_id))?,
-                KitSpec::ModularWeapon { tool, material } => {
-                    comp::item::modular::random_weapon(*tool, *material, None, &mut rng)
-                        .map_err(|err| format!("{:#?}", err))?
-                },
-            };
-            let mut res = Ok(());
 
-            // Either push stack or push one by one.
-            if item.is_stackable() {
-                // FIXME: in theory, this can fail,
-                // but we don't have stack sizes yet.
-                let _ = item.set_amount(quantity);
-                res = target_inventory.push(item);
+        for (item_id, quantity) in kit {
+            push_item(item_id, quantity, server, &mut |item| {
+                let res = target_inventory.push(item);
                 let _ = target_inv_update.insert(
                     target,
                     comp::InventoryUpdate::new(comp::InventoryUpdateEvent::Debug),
                 );
-            } else {
-                let ability_map = server.state.ecs().read_resource::<AbilityMap>();
-                let msm = server.state.ecs().read_resource::<MaterialStatManifest>();
-                for _ in 0..quantity {
-                    res = target_inventory.push(item.duplicate(&ability_map, &msm));
-                    let _ = target_inv_update.insert(
-                        target,
-                        comp::InventoryUpdate::new(comp::InventoryUpdateEvent::Debug),
-                    );
-                }
-            }
-            // I think it's possible to pick-up item during this loop
-            // and fail into case where you had space but now you don't?
-            if res.is_err() {
-                return Err("Can't fit item to inventory".to_owned());
-            }
+
+                res
+            })?;
         }
+
         Ok(())
     } else {
         Err("Could not get inventory".to_string())
     }
+}
+
+fn push_item(
+    item_id: KitSpec,
+    quantity: u32,
+    server: &Server,
+    push: &mut dyn FnMut(Item) -> Result<(), Item>,
+) -> CmdResult<()> {
+    let items = match &item_id {
+        KitSpec::Item(item_id) => vec![
+            Item::new_from_asset(item_id).map_err(|_| format!("Unknown item: {:#?}", item_id))?,
+        ],
+        KitSpec::ModularWeapon { tool, material } => {
+            comp::item::modular::generate_weapons(*tool, *material, None)
+                .map_err(|err| format!("{:#?}", err))?
+        },
+    };
+
+    let mut res = Ok(());
+    for mut item in items {
+        // Either push stack or push one by one.
+        if item.is_stackable() {
+            // FIXME: in theory, this can fail,
+            // but we don't have stack sizes yet.
+            let _ = item.set_amount(quantity);
+            res = push(item);
+        } else {
+            let ability_map = server.state.ecs().read_resource::<AbilityMap>();
+            let msm = server.state.ecs().read_resource::<MaterialStatManifest>();
+
+            for _ in 0..quantity {
+                res = push(item.duplicate(&ability_map, &msm));
+
+                if res.is_err() {
+                    break;
+                }
+            }
+        }
+
+        // I think it's possible to pick-up item during this loop
+        // and fail into case where you had space but now you don't?
+        if res.is_err() {
+            return Err("Can't fit item to inventory".to_owned());
+        }
+    }
+
+    Ok(())
 }
 
 fn handle_object(
@@ -2066,9 +2103,9 @@ fn handle_light(
             return Err("cr, cg and cb values mustn't be negative.".into());
         }
 
-        let r = r.max(0.0).min(1.0);
-        let g = g.max(0.0).min(1.0);
-        let b = b.max(0.0).min(1.0);
+        let r = r.clamp(0.0, 1.0);
+        let g = g.clamp(0.0, 1.0);
+        let b = b.clamp(0.0, 1.0);
         light_emitter.col = Rgb::new(r, g, b)
     };
     if let (Some(x), Some(y), Some(z)) = (opt_x, opt_y, opt_z) {
@@ -2115,14 +2152,9 @@ fn handle_lantern(
             .write_storage::<LightEmitter>()
             .get_mut(target)
         {
-            light.strength = s.max(0.1).min(10.0);
+            light.strength = s.clamp(0.1, 10.0);
             if let (Some(r), Some(g), Some(b)) = (r, g, b) {
-                light.col = (
-                    r.max(0.0).min(1.0),
-                    g.max(0.0).min(1.0),
-                    b.max(0.0).min(1.0),
-                )
-                    .into();
+                light.col = (r.clamp(0.0, 1.0), g.clamp(0.0, 1.0), b.clamp(0.0, 1.0)).into();
                 server.notify_client(
                     client,
                     ServerGeneral::server_msg(
@@ -2769,6 +2801,7 @@ fn handle_debug_column(
         let downhill = chunk.downhill;
         let river = &chunk.river;
         let flux = chunk.flux;
+        let path = chunk.path;
 
         Some(format!(
             r#"wpos: {:?}
@@ -2784,7 +2817,8 @@ temp {:?}
 humidity {:?}
 rockiness {:?}
 tree_density {:?}
-spawn_rate {:?} "#,
+spawn_rate {:?}
+path {:?} "#,
             wpos,
             alt,
             col.alt,
@@ -2800,10 +2834,56 @@ spawn_rate {:?} "#,
             humidity,
             rockiness,
             tree_density,
-            spawn_rate
+            spawn_rate,
+            path,
         ))
     };
     if let Some(s) = msg_generator(&calendar) {
+        server.notify_client(client, ServerGeneral::server_msg(ChatType::CommandInfo, s));
+        Ok(())
+    } else {
+        Err("Not a pre-generated chunk.".into())
+    }
+}
+
+#[cfg(not(feature = "worldgen"))]
+fn handle_debug_ways(
+    server: &mut Server,
+    client: EcsEntity,
+    target: EcsEntity,
+    _args: Vec<String>,
+    _action: &ServerChatCommand,
+) -> CmdResult<()> {
+    Err("Unsupported without worldgen enabled".into())
+}
+
+#[cfg(feature = "worldgen")]
+fn handle_debug_ways(
+    server: &mut Server,
+    client: EcsEntity,
+    target: EcsEntity,
+    args: Vec<String>,
+    _action: &ServerChatCommand,
+) -> CmdResult<()> {
+    let sim = server.world.sim();
+    let wpos = if let (Some(x), Some(y)) = parse_cmd_args!(args, i32, i32) {
+        Vec2::new(x, y)
+    } else {
+        let pos = position(server, target, "target")?;
+        // FIXME: Deal with overflow, if needed.
+        pos.0.xy().map(|x| x as i32)
+    };
+    let msg_generator = || {
+        let chunk_pos = wpos.map2(TerrainChunkSize::RECT_SIZE, |e, sz: u32| e / sz as i32);
+        let mut ret = String::new();
+        for delta in LOCALITY {
+            let pos = chunk_pos + delta;
+            let chunk = sim.get(pos)?;
+            writeln!(ret, "{:?}: {:?}", pos, chunk.path).ok()?;
+        }
+        Some(ret)
+    };
+    if let Some(s) = msg_generator() {
         server.notify_client(client, ServerGeneral::server_msg(ChatType::CommandInfo, s));
         Ok(())
     } else {

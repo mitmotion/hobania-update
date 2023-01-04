@@ -1,14 +1,16 @@
 use chrono::{DateTime, Datelike, Local, TimeZone, Utc};
 use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
+use strum::EnumIter;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, EnumIter)]
 #[repr(u16)]
 pub enum CalendarEvent {
     Christmas = 0,
+    Halloween = 1,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Calendar {
     events: Vec<CalendarEvent>,
 }
@@ -35,6 +37,10 @@ impl Calendar {
 
         if now.month() == 12 && (20..=30).contains(&now.day()) {
             this.events.push(CalendarEvent::Christmas);
+        }
+
+        if now.month() == 10 && (24..=31).contains(&now.day()) {
+            this.events.push(CalendarEvent::Halloween);
         }
 
         this

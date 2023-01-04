@@ -2,6 +2,7 @@ use crate::comp::buff::{Buff, BuffChange, BuffData, BuffKind, BuffSource};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::{
     comp::{
+        ability::Capability,
         inventory::{
             item::{armor::Protection, tool::ToolKind, ItemDesc, ItemKind, MaterialStatManifest},
             slot::EquipSlot,
@@ -129,6 +130,7 @@ impl Attack {
     pub fn effects(&self) -> impl Iterator<Item = &AttackEffect> { self.effects.iter() }
 
     pub fn compute_damage_reduction(
+        attacker: Option<&AttackerInfo>,
         target: &TargetInfo,
         source: AttackSource,
         dir: Dir,
@@ -137,40 +139,47 @@ impl Attack {
         mut emit: impl FnMut(ServerEvent),
         mut emit_outcome: impl FnMut(Outcome),
     ) -> f32 {
-        let damage_reduction =
-            Damage::compute_damage_reduction(Some(damage), target.inventory, target.stats, msm);
-        let block_reduction = match source {
-            AttackSource::Melee => {
-                if let (Some(CharacterState::BasicBlock(data)), Some(ori)) =
-                    (target.char_state, target.ori)
-                {
-                    if ori.look_vec().angle_between(-*dir) < data.static_data.max_angle.to_radians()
-                    {
-                        let parry = matches!(data.stage_section, StageSection::Buildup);
-                        emit_outcome(Outcome::Block {
-                            parry,
-                            pos: target.pos,
-                            uid: target.uid,
-                        });
-                        emit(ServerEvent::Parry {
-                            entity: target.entity,
-                            energy_cost: data.static_data.energy_cost,
-                        });
-                        if parry {
-                            1.0
+        if damage.value > 0.0 {
+            let damage_reduction =
+                Damage::compute_damage_reduction(Some(damage), target.inventory, target.stats, msm);
+            let block_reduction = match source {
+                AttackSource::Melee => {
+                    if let (Some(char_state), Some(ori)) = (target.char_state, target.ori) {
+                        if ori.look_vec().angle_between(-*dir) < char_state.block_angle() {
+                            if char_state.is_parry() {
+                                emit_outcome(Outcome::Block {
+                                    parry: true,
+                                    pos: target.pos,
+                                    uid: target.uid,
+                                });
+                                emit(ServerEvent::ParryHook {
+                                    defender: target.entity,
+                                    attacker: attacker.map(|a| a.entity),
+                                });
+                                1.0
+                            } else if let Some(block_strength) = char_state.block_strength() {
+                                emit_outcome(Outcome::Block {
+                                    parry: false,
+                                    pos: target.pos,
+                                    uid: target.uid,
+                                });
+                                block_strength
+                            } else {
+                                0.0
+                            }
                         } else {
-                            data.static_data.block_strength
+                            0.0
                         }
                     } else {
                         0.0
                     }
-                } else {
-                    0.0
-                }
-            },
-            _ => 0.0,
-        };
-        1.0 - (1.0 - damage_reduction) * (1.0 - block_reduction)
+                },
+                _ => 0.0,
+            };
+            1.0 - (1.0 - damage_reduction) * (1.0 - block_reduction)
+        } else {
+            0.0
+        }
     }
 
     pub fn apply_attack(
@@ -220,6 +229,7 @@ impl Attack {
         {
             is_applied = true;
             let damage_reduction = Attack::compute_damage_reduction(
+                attacker.as_ref(),
                 &target,
                 attack_source,
                 dir,
@@ -253,8 +263,10 @@ impl Attack {
                         if let Some(target_energy) = target.energy {
                             let energy_change = applied_damage * SLASHING_ENERGY_FRACTION;
                             if energy_change > target_energy.current() {
+                                let health_damage = energy_change - target_energy.current();
+                                accumulated_damage += health_damage;
                                 let health_change = HealthChange {
-                                    amount: -(energy_change - target_energy.current()),
+                                    amount: -health_damage,
                                     by: attacker.map(|x| x.into()),
                                     cause: Some(damage.damage.source),
                                     time,
@@ -280,7 +292,13 @@ impl Attack {
                         let reduced_damage =
                             applied_damage * damage_reduction / (1.0 - damage_reduction);
                         let poise = reduced_damage * CRUSHING_POISE_FRACTION;
-                        let change = -Poise::apply_poise_reduction(poise, target.inventory, msm);
+                        let change = -Poise::apply_poise_reduction(
+                            poise,
+                            target.inventory,
+                            msm,
+                            target.char_state,
+                            target.stats,
+                        );
                         let poise_change = PoiseChange {
                             amount: change,
                             impulse: *dir,
@@ -321,7 +339,8 @@ impl Attack {
                 for effect in damage.effects.iter() {
                     match effect {
                         CombatEffect::Knockback(kb) => {
-                            let impulse = kb.calculate_impulse(dir) * strength_modifier;
+                            let impulse =
+                                kb.calculate_impulse(dir, target.char_state) * strength_modifier;
                             if !impulse.is_approx_zero() {
                                 emit(ServerEvent::Knockback {
                                     entity: target.entity,
@@ -371,8 +390,13 @@ impl Attack {
                             }
                         },
                         CombatEffect::Poise(p) => {
-                            let change = -Poise::apply_poise_reduction(*p, target.inventory, msm)
-                                * strength_modifier;
+                            let change = -Poise::apply_poise_reduction(
+                                *p,
+                                target.inventory,
+                                msm,
+                                target.char_state,
+                                target.stats,
+                            ) * strength_modifier;
                             if change.abs() > Poise::POISE_EPSILON {
                                 let poise_change = PoiseChange {
                                     amount: change,
@@ -409,6 +433,19 @@ impl Attack {
                                 emit(ServerEvent::ComboChange {
                                     entity: attacker_entity,
                                     change: *c,
+                                });
+                            }
+                        },
+                        CombatEffect::BuildupsVulnerable => {
+                            if target.char_state.map_or(false, |cs| {
+                                matches!(
+                                    cs.stage_section(),
+                                    Some(StageSection::Buildup | StageSection::Charge)
+                                )
+                            }) {
+                                emit(ServerEvent::HealthChange {
+                                    entity: target.entity,
+                                    change,
                                 });
                             }
                         },
@@ -468,7 +505,8 @@ impl Attack {
                 is_applied = true;
                 match effect.effect {
                     CombatEffect::Knockback(kb) => {
-                        let impulse = kb.calculate_impulse(dir) * strength_modifier;
+                        let impulse =
+                            kb.calculate_impulse(dir, target.char_state) * strength_modifier;
                         if !impulse.is_approx_zero() {
                             emit(ServerEvent::Knockback {
                                 entity: target.entity,
@@ -518,8 +556,13 @@ impl Attack {
                         }
                     },
                     CombatEffect::Poise(p) => {
-                        let change = -Poise::apply_poise_reduction(p, target.inventory, msm)
-                            * strength_modifier;
+                        let change = -Poise::apply_poise_reduction(
+                            p,
+                            target.inventory,
+                            msm,
+                            target.char_state,
+                            target.stats,
+                        ) * strength_modifier;
                         if change.abs() > Poise::POISE_EPSILON {
                             let poise_change = PoiseChange {
                                 amount: change,
@@ -559,6 +602,8 @@ impl Attack {
                             });
                         }
                     },
+                    // Only has an effect when attached to a damage
+                    CombatEffect::BuildupsVulnerable => {},
                 }
             }
         }
@@ -690,6 +735,11 @@ pub enum CombatEffect {
     Lifesteal(f32),
     Poise(f32),
     Combo(i32),
+    // If the attack hits the target while they are in the buildup portion of a character state,
+    // deal double damage Only has an effect when attached to a damage, otherwise does nothing
+    // if only attached to the attack TODO: Maybe try to make it do something if tied to
+    // attack, not sure if it should double count in that instance?
+    BuildupsVulnerable,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -799,9 +849,7 @@ impl Damage {
 
         let penetration = if let Some(damage) = damage {
             if let DamageKind::Piercing = damage.kind {
-                (damage.value * PIERCING_PENETRATION_FRACTION)
-                    .min(protection.unwrap_or(0.0))
-                    .max(0.0)
+                (damage.value * PIERCING_PENETRATION_FRACTION).clamp(0.0, protection.unwrap_or(0.0))
             } else {
                 0.0
             }
@@ -901,7 +949,7 @@ pub struct Knockback {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum KnockbackDir {
     Away,
     Towards,
@@ -911,18 +959,26 @@ pub enum KnockbackDir {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl Knockback {
-    pub fn calculate_impulse(self, dir: Dir) -> Vec3<f32> {
-        // TEMP until source knockback values have been updated
-        50.0 * match self.direction {
-            KnockbackDir::Away => self.strength * *Dir::slerp(dir, Dir::new(Vec3::unit_z()), 0.5),
-            KnockbackDir::Towards => {
-                self.strength * *Dir::slerp(-dir, Dir::new(Vec3::unit_z()), 0.5)
-            },
-            KnockbackDir::Up => self.strength * Vec3::unit_z(),
-            KnockbackDir::TowardsUp => {
-                self.strength * *Dir::slerp(-dir, Dir::new(Vec3::unit_z()), 0.85)
-            },
-        }
+    pub fn calculate_impulse(self, dir: Dir, char_state: Option<&CharacterState>) -> Vec3<f32> {
+        let from_char = {
+            let resistant = char_state
+                .and_then(|cs| cs.ability_info())
+                .and_then(|a| a.ability_meta)
+                .map_or(false, |a| {
+                    a.capabilities.contains(Capability::KNOCKBACK_RESISTANT)
+                });
+            if resistant { 0.5 } else { 1.0 }
+        };
+        // TEMP: 50.0 multiplication kept until source knockback values have been
+        // updated
+        50.0 * self.strength
+            * from_char
+            * match self.direction {
+                KnockbackDir::Away => *Dir::slerp(dir, Dir::new(Vec3::unit_z()), 0.5),
+                KnockbackDir::Towards => *Dir::slerp(-dir, Dir::new(Vec3::unit_z()), 0.5),
+                KnockbackDir::Up => Vec3::unit_z(),
+                KnockbackDir::TowardsUp => *Dir::slerp(-dir, Dir::new(Vec3::unit_z()), 0.85),
+            }
     }
 
     #[must_use]
@@ -1112,9 +1168,10 @@ pub fn combat_rating(
         * compute_energy_reward_mod(Some(inventory), msm);
 
     // Normalized with a standard max poise of 100
-    let poise_rating = poise.base_max() as f32
+    let poise_rating = poise.base_max()
         / 100.0
-        / (1.0 - Poise::compute_poise_damage_reduction(inventory, msm)).max(0.00001);
+        / (1.0 - Poise::compute_poise_damage_reduction(Some(inventory), msm, None, None))
+            .max(0.00001);
 
     // Normalized with a standard crit multiplier of 1.2
     let crit_rating = compute_crit_mult(Some(inventory), msm) / 1.2;

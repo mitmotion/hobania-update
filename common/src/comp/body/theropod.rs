@@ -10,13 +10,13 @@ pub struct Body {
 impl Body {
     pub fn random() -> Self {
         let mut rng = thread_rng();
-        let species = *(&ALL_SPECIES).choose(&mut rng).unwrap();
+        let species = *ALL_SPECIES.choose(&mut rng).unwrap();
         Self::random_with(&mut rng, &species)
     }
 
     #[inline]
     pub fn random_with(rng: &mut impl rand::Rng, &species: &Species) -> Self {
-        let body_type = *(&ALL_BODY_TYPES).choose(rng).unwrap();
+        let body_type = *ALL_BODY_TYPES.choose(rng).unwrap();
         Self { species, body_type }
     }
 }
@@ -36,6 +36,7 @@ pub enum Species {
     Sunlizard = 5,
     Yale = 6,
     Ntouka = 7,
+    Dodarock = 8,
 }
 
 /// Data representing per-species generic data.
@@ -48,6 +49,7 @@ pub struct AllSpecies<SpeciesMeta> {
     pub raptor_wood: SpeciesMeta,
     pub sunlizard: SpeciesMeta,
     pub yale: SpeciesMeta,
+    pub dodarock: SpeciesMeta,
     pub ntouka: SpeciesMeta,
 }
 
@@ -64,12 +66,13 @@ impl<'a, SpeciesMeta> core::ops::Index<&'a Species> for AllSpecies<SpeciesMeta> 
             Species::Woodraptor => &self.raptor_wood,
             Species::Sunlizard => &self.sunlizard,
             Species::Yale => &self.yale,
+            Species::Dodarock => &self.dodarock,
             Species::Ntouka => &self.ntouka,
         }
     }
 }
 
-pub const ALL_SPECIES: [Species; 8] = [
+pub const ALL_SPECIES: [Species; 9] = [
     Species::Archaeos,
     Species::Odonto,
     Species::Sandraptor,
@@ -77,6 +80,7 @@ pub const ALL_SPECIES: [Species; 8] = [
     Species::Woodraptor,
     Species::Sunlizard,
     Species::Yale,
+    Species::Dodarock,
     Species::Ntouka,
 ];
 

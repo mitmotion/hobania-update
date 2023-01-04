@@ -108,6 +108,7 @@ impl Skeleton for ArthropodSkeleton {
 
         Offsets {
             lantern: None,
+            viewpoint: Some((head_mat * Vec4::new(0.0, 7.0, 0.0, 1.0)).xyz()),
             mount_bone: Transform {
                 position: mount_position,
                 orientation: mount_orientation,
@@ -286,17 +287,17 @@ impl<'a> From<&'a Body> for SkeletonAttr {
                 (Sandcrawler, _) => (2.5, 7.0, -5.5),
             },
             scaler: match (body.species, body.body_type) {
-                (Tarantula, _) => (1.0),
-                (Blackwidow, _) => (1.0),
-                (Antlion, _) => (1.0),
-                (Hornbeetle, _) => (0.8),
-                (Leafbeetle, _) => (0.8),
-                (Stagbeetle, _) => (0.8),
-                (Weevil, _) => (0.8),
-                (Cavespider, _) => (1.0),
-                (Moltencrawler, _) => (0.8),
-                (Mosscrawler, _) => (0.8),
-                (Sandcrawler, _) => (0.8),
+                (Tarantula, _) => 1.0,
+                (Blackwidow, _) => 1.0,
+                (Antlion, _) => 1.0,
+                (Hornbeetle, _) => 0.8,
+                (Leafbeetle, _) => 0.8,
+                (Stagbeetle, _) => 0.8,
+                (Weevil, _) => 0.8,
+                (Cavespider, _) => 1.0,
+                (Moltencrawler, _) => 0.8,
+                (Mosscrawler, _) => 0.8,
+                (Sandcrawler, _) => 0.8,
             },
             // Z ori (front, front center, back center, center)
             leg_ori: match (body.species, body.body_type) {

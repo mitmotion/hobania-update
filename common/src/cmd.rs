@@ -39,7 +39,7 @@ impl ChatCommandData {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub enum KitSpec {
     Item(String),
     ModularWeapon {
@@ -47,7 +47,7 @@ pub enum KitSpec {
         material: comp::item::Material,
     },
 }
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct KitManifest(pub HashMap<String, Vec<(KitSpec, u32)>>);
 impl assets::Asset for KitManifest {
     type Loader = assets::RonLoader;
@@ -55,7 +55,7 @@ impl assets::Asset for KitManifest {
     const EXTENSION: &'static str = "ron";
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct SkillPresetManifest(pub HashMap<String, Vec<(Skill, u8)>>);
 impl assets::Asset for SkillPresetManifest {
     type Loader = assets::RonLoader;
@@ -141,6 +141,7 @@ lazy_static! {
             BuffKind::Cursed => "cursed",
             BuffKind::Potion => "potion",
             BuffKind::CampfireHeal => "campfire_heal",
+            BuffKind::EnergyRegen => "energy_regen",
             BuffKind::IncreaseMaxEnergy => "increase_max_energy",
             BuffKind::IncreaseMaxHealth => "increase_max_health",
             BuffKind::Invulnerability => "invulnerability",
@@ -152,9 +153,13 @@ lazy_static! {
             BuffKind::Ensnared => "ensnared",
             BuffKind::Poisoned => "poisoned",
             BuffKind::Hastened => "hastened",
+            BuffKind::Fortitude => "fortitude",
+            BuffKind::Parried => "parried",
         };
         let mut buff_parser = HashMap::new();
-        BuffKind::iter().for_each(|kind| {buff_parser.insert(string_from_buff(kind).to_string(), kind);});
+        for kind in BuffKind::iter() {
+            buff_parser.insert(string_from_buff(kind).to_string(), kind);
+        }
         buff_parser
     };
 
@@ -247,6 +252,7 @@ pub enum ServerChatCommand {
     BuildAreaRemove,
     Campfire,
     DebugColumn,
+    DebugWays,
     DisconnectAllPlayers,
     DropAll,
     Dummy,
@@ -404,6 +410,11 @@ impl ServerChatCommand {
             ServerChatCommand::DebugColumn => cmd(
                 vec![Integer("x", 15000, Required), Integer("y", 15000, Required)],
                 "Prints some debug information about a column",
+                Some(Moderator),
+            ),
+            ServerChatCommand::DebugWays => cmd(
+                vec![Integer("x", 15000, Required), Integer("y", 15000, Required)],
+                "Prints some debug information about a column's ways",
                 Some(Moderator),
             ),
             ServerChatCommand::DisconnectAllPlayers => cmd(
@@ -733,6 +744,7 @@ impl ServerChatCommand {
             ServerChatCommand::BuildAreaRemove => "build_area_remove",
             ServerChatCommand::Campfire => "campfire",
             ServerChatCommand::DebugColumn => "debug_column",
+            ServerChatCommand::DebugWays => "debug_ways",
             ServerChatCommand::DisconnectAllPlayers => "disconnect_all_players",
             ServerChatCommand::DropAll => "dropall",
             ServerChatCommand::Dummy => "dummy",
@@ -872,7 +884,7 @@ impl FromStr for ServerChatCommand {
         .filter_map(|c| c.short_keyword().map(|s| (s, c)))
         .chain(Self::iter().map(|c| (c.keyword(), c)))
             // Find command with matching string as keyword
-            .find_map(|(kwd, command)| (kwd == keyword).then(|| command))
+            .find_map(|(kwd, command)| (kwd == keyword).then_some(command))
             // Return error if not found
             .ok_or(())
     }

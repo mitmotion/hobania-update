@@ -1,6 +1,10 @@
 use crate::{column::ColumnSample, sim::SimChunk, Canvas, CONFIG};
-use common::terrain::{Block, BlockKind, SpriteKind};
+use common::{
+    calendar::{Calendar, CalendarEvent},
+    terrain::{Block, BlockKind, SpriteKind},
+};
 use noise::NoiseFn;
+use num::traits::Pow;
 use rand::prelude::*;
 use std::f32;
 use vek::*;
@@ -9,10 +13,24 @@ pub fn close(x: f32, tgt: f32, falloff: f32) -> f32 {
     (1.0 - (x - tgt).abs() / falloff).max(0.0).powf(0.125)
 }
 
+/// Returns a decimal value between 0 and 1.  
+/// The density is maximum at the middle of the highest and the lowest allowed
+/// altitudes, and zero otherwise. Quadratic curve.
+///
+/// The formula used is:
+///
+/// ```latex
+/// \max\left(-\frac{4\left(x-u\right)\left(x-l\right)}{\left(u-l\right)^{2}},\ 0\right)
+/// ```
+pub fn density_factor_by_altitude(lower_limit: f32, altitude: f32, upper_limit: f32) -> f32 {
+    let maximum: f32 = (upper_limit - lower_limit).pow(2) / 4.0f32;
+    (-((altitude - lower_limit) * (altitude - upper_limit)) / maximum).max(0.0)
+}
+
 const MUSH_FACT: f32 = 1.0e-4; // To balance things around the mushroom spawning rate
 const GRASS_FACT: f32 = 1.0e-3; // To balance things around the grass spawning rate
 const DEPTH_WATER_NORM: f32 = 15.0; // Water depth at which regular underwater sprites start spawning
-pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
+pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng, calendar: Option<&Calendar>) {
     enum WaterMode {
         Underwater,
         Floating,
@@ -129,17 +147,21 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
         ScatterConfig {
             kind: Cotton,
             water_mode: Ground,
-            permit: |b| matches!(b, BlockKind::Grass),
+            permit: |b| matches!(b, BlockKind::Earth | BlockKind::Grass),
             f: |_, col| {
                 (
-                    close(col.temp, CONFIG.temperate_temp, 0.7).min(close(
+                    close(col.temp, CONFIG.tropical_temp, 0.7).min(close(
                         col.humidity,
                         CONFIG.jungle_hum,
                         0.4,
                     )) * col.tree_density
-                        * MUSH_FACT
-                        * 75.0,
-                    Some((0.0, 256.0, 0.25)),
+                    * MUSH_FACT
+                    * 200.0
+                    * (!col.snow_cover) as i32 as f32 /* To prevent spawning in snow covered areas */
+                    * density_factor_by_altitude(-500.0 , col.alt, 500.0), /* To prevent
+                                                                            * spawning at high
+                                                                            * altitudes */
+                    Some((0.0, 128.0, 0.30)),
                 )
             },
         },
@@ -163,10 +185,16 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             permit: |b| matches!(b, BlockKind::Grass),
             f: |_, col| {
                 (
-                    close(col.temp, 0.0, 0.7).min(close(col.humidity, CONFIG.jungle_hum, 0.4))
-                        * col.tree_density
+                    close(col.temp, CONFIG.temperate_temp, 0.7).min(close(
+                        col.humidity,
+                        CONFIG.forest_hum,
+                        0.4,
+                    )) * col.tree_density
                         * MUSH_FACT
-                        * 600.0,
+                        * 600.0
+                        * density_factor_by_altitude(200.0, col.alt, 1000.0), /* To control
+                                                                               * spawning based
+                                                                               * on altitude */
                     Some((0.0, 100.0, 0.15)),
                 )
             },
@@ -258,16 +286,22 @@ pub fn apply_scatter_to(canvas: &mut Canvas, rng: &mut impl Rng) {
             kind: Pumpkin,
             water_mode: Ground,
             permit: |b| matches!(b, BlockKind::Grass),
-            f: |_, col| {
-                (
-                    close(col.temp, CONFIG.temperate_temp, 0.5).min(close(
-                        col.humidity,
-                        CONFIG.forest_hum,
-                        0.5,
-                    )) * MUSH_FACT
-                        * 500.0,
-                    Some((0.0, 512.0, 0.05)),
-                )
+            f: if calendar.map_or(false, |calendar| {
+                calendar.is_event(CalendarEvent::Halloween)
+            }) {
+                |_, _| (0.1, Some((0.0003, 128.0, 0.1)))
+            } else {
+                |_, col| {
+                    (
+                        close(col.temp, CONFIG.temperate_temp, 0.5).min(close(
+                            col.humidity,
+                            CONFIG.forest_hum,
+                            0.5,
+                        )) * MUSH_FACT
+                            * 500.0,
+                        Some((0.0, 512.0, 0.05)),
+                    )
+                }
             },
         },
         // Collectable Objects

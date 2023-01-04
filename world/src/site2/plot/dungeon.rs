@@ -128,8 +128,8 @@ impl Dungeon {
 
     pub fn difficulty(&self) -> u32 { self.difficulty }
 
-    pub fn apply_supplement<'a>(
-        &'a self,
+    pub fn apply_supplement(
+        &self,
         // NOTE: Used only for dynamic elements like chests and entities!
         dynamic_rng: &mut impl Rng,
         wpos2d: Vec2<i32>,
@@ -142,7 +142,7 @@ impl Dungeon {
         };
 
         // Add waypoint
-        let pos = self.origin.map2(FLOOR_SIZE, |e, sz| e + sz as i32 / 2);
+        let pos = self.origin.map2(FLOOR_SIZE, |e, sz| e + sz / 2);
         if area.contains_point(pos - self.origin) {
             supplement.add_entity(
                 EntityInfo::at(Vec3::new(pos.x as f32, pos.y as f32, self.alt as f32) + 5.0)
@@ -222,7 +222,7 @@ impl Room {
                 .map(|e| e.rem_euclid(pillar_space) == 0)
                 .reduce_and()
         });
-        let enemy_spawn_tile = enemy_spawn_tile + if enemy_tile_is_pillar { 1 } else { 0 };
+        let enemy_spawn_tile = enemy_spawn_tile + i32::from(enemy_tile_is_pillar);
 
         // Toss mobs in the center of the room
         if tile_pos == enemy_spawn_tile && wpos2d == tile_wcenter.xy() {
@@ -281,7 +281,7 @@ impl Room {
                 .map(|e| e.rem_euclid(pillar_space) == 0)
                 .reduce_and()
         });
-        let miniboss_spawn_tile = miniboss_spawn_tile + if miniboss_tile_is_pillar { 1 } else { 0 };
+        let miniboss_spawn_tile = miniboss_spawn_tile + i32::from(miniboss_tile_is_pillar);
 
         if tile_pos == miniboss_spawn_tile && tile_wcenter.xy() == wpos2d {
             let entities = match self.difficulty {
@@ -314,7 +314,7 @@ impl Room {
                 .map(|e| e.rem_euclid(pillar_space) == 0)
                 .reduce_and()
         });
-        let boss_spawn_tile = boss_spawn_tile + if boss_tile_is_pillar { 1 } else { 0 };
+        let boss_spawn_tile = boss_spawn_tile + i32::from(boss_tile_is_pillar);
 
         if tile_pos == boss_spawn_tile && wpos2d == tile_wcenter.xy() {
             let entities = match self.difficulty {

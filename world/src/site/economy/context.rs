@@ -122,6 +122,7 @@ impl Environment {
                     SiteKind::Settlement(_)
                     | SiteKind::Refactor(_)
                     | SiteKind::CliffTown(_)
+                    | SiteKind::SavannahPit(_)
                     | SiteKind::DesertCity(_) => towns += site.economy.pop,
                     SiteKind::Dungeon(_) => dungeons += site.economy.pop,
                     SiteKind::Castle(_) => castles += site.economy.pop,
@@ -129,6 +130,7 @@ impl Environment {
                     SiteKind::GiantTree(_) => (),
                     SiteKind::Gnarling(_) => {},
                     SiteKind::ChapelSite(_) => {},
+                    SiteKind::Bridge(_) => {},
                 }
             }
             if towns.valid() {
@@ -237,12 +239,7 @@ fn tick(index: &mut Index, dt: f32, _env: &mut Environment) {
         // distribute orders (travelling merchants)
         for (_id, site) in index.sites.iter_mut() {
             for (i, mut v) in site.economy.orders.drain() {
-                index
-                    .trade
-                    .orders
-                    .entry(i)
-                    .or_insert(Vec::new())
-                    .append(&mut v);
+                index.trade.orders.entry(i).or_default().append(&mut v);
             }
         }
         // trade at sites

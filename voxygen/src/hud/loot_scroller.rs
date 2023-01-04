@@ -102,6 +102,7 @@ impl<'a> LootScroller<'a> {
 pub struct LootMessage {
     pub item: Item,
     pub amount: u32,
+    pub taken_by: String,
 }
 
 pub struct State {
@@ -291,7 +292,11 @@ impl<'a> Widget for LootScroller<'a> {
                 let i = list_message.i;
 
                 let (message, age) = messages_to_display[i];
-                let LootMessage { item, amount } = message;
+                let LootMessage {
+                    item,
+                    amount,
+                    taken_by,
+                } = message;
 
                 let alpha = 1.0 - age.min(show_all_age).powi(4);
 
@@ -312,7 +317,7 @@ impl<'a> Widget for LootScroller<'a> {
                     Quality::Artifact => self.imgs.inv_slot_orange,
                     _ => self.imgs.inv_slot_red,
                 };
-                let quality_col = get_quality_col(&*item);
+                let quality_col = get_quality_col(item);
 
                 Image::new(self.imgs.pixel)
                     .color(Some(shade_color(quality_col.alpha(0.7))))
@@ -327,7 +332,7 @@ impl<'a> Widget for LootScroller<'a> {
                     .set(state.ids.message_icon_frames[i], ui);
 
                 Image::new(animate_by_pulse(
-                    &self.item_imgs.img_ids_or_not_found_img((&*item).into()),
+                    &self.item_imgs.img_ids_or_not_found_img(item.into()),
                     self.pulse,
                 ))
                 .color(Some(shade_color(color::hsla(0.0, 0.0, 1.0, 1.0))))
@@ -335,17 +340,19 @@ impl<'a> Widget for LootScroller<'a> {
                 .middle_of(state.ids.message_icon_bgs[i])
                 .with_item_tooltip(
                     self.item_tooltip_manager,
-                    core::iter::once(&*item as &dyn ItemDesc),
+                    core::iter::once(item as &dyn ItemDesc),
                     &None,
                     &item_tooltip,
                 )
                 .set(state.ids.message_icons[i], ui);
-
-                let label = if *amount == 1 {
-                    item.name().into_owned()
-                } else {
-                    format!("{}x {}", amount, item.name())
-                };
+                let label = self.localized_strings.get_msg_ctx(
+                    "hud-loot-pickup-msg",
+                    &i18n::fluent_args! {
+                          "actor" => taken_by,
+                          "amount" => amount,
+                          "item" => item.name(),
+                    },
+                );
                 let label_font_size = 20;
 
                 Text::new(&label)

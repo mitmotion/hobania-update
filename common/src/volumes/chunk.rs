@@ -71,7 +71,7 @@ impl<V, S: VolSize, M> Chunk<V, S, M> {
         Self::GROUP_VOLUME / (Self::GROUP_LONG_SIDE_LEN * Self::GROUP_LONG_SIDE_LEN),
     );
     const GROUP_VOLUME: u32 = [Self::VOLUME / 256, 1][(Self::VOLUME < 256) as usize];
-    const VOLUME: u32 = (S::SIZE.x * S::SIZE.y * S::SIZE.z) as u32;
+    const VOLUME: u32 = S::SIZE.x * S::SIZE.y * S::SIZE.z;
 
     /// Creates a new `Chunk` with the provided dimensions and all voxels filled
     /// with duplicates of the provided voxel.
@@ -123,7 +123,7 @@ impl<V, S: VolSize, M> Chunk<V, S, M> {
     {
         // First, construct a HashMap with max capacity equal to GROUP_COUNT (since each
         // filled group can have at most one slot).
-        let mut map = HashMap::with_capacity(Self::GROUP_COUNT_TOTAL as usize);
+        let mut map: HashMap<_, Vec<_>> = HashMap::with_capacity(Self::GROUP_COUNT_TOTAL as usize);
         let vox = &self.vox;
         let default = &self.default;
         self.indices
@@ -139,11 +139,11 @@ impl<V, S: VolSize, M> Chunk<V, S, M> {
                     if group.all(|block| block == first) {
                         // All blocks in the group were the same, so add our position to this entry
                         // in the HashMap.
-                        map.entry(first).or_insert(vec![]).push(grp_idx);
+                        map.entry(first).or_default().push(grp_idx);
                     }
                 } else {
                     // This slot is empty (i.e. has the default value).
-                    map.entry(default).or_insert(vec![]).push(grp_idx);
+                    map.entry(default).or_default().push(grp_idx);
                 }
             });
         // Now, find the block with max frequency in the HashMap and make that our new
@@ -305,6 +305,28 @@ impl<V, S: VolSize, M> ReadVol for Chunk<V, S, M> {
             Err(Self::Error::OutOfBounds)
         } else {
             Ok(self.get_unchecked(pos))
+        }
+    }
+
+    #[inline(always)]
+    fn get_unchecked(&self, pos: Vec3<i32>) -> &Self::Vox {
+        self.get_unchecked(pos)
+    }
+
+    fn for_each_in(&self, mut aabb: Aabb<i32>, mut f: impl FnMut(Vec3<i32>, Self::Vox))
+    where
+        Self::Vox: Copy,
+    {
+        aabb.intersect(Aabb {
+            min: Vec3::zero(),
+            max: S::SIZE.map(|e| e as i32) - 1,
+        });
+        for z in aabb.min.z..aabb.max.z + 1 {
+            for y in aabb.min.y..aabb.max.y + 1 {
+                for x in aabb.min.x..aabb.max.x + 1 {
+                    f(Vec3::new(x, y, z), *self.get_unchecked(Vec3::new(x, y, z)));
+                }
+            }
         }
     }
 }

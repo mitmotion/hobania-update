@@ -54,7 +54,7 @@ impl Lod {
             client.world_data().lod_alt.raw(),
             client.world_data().lod_horizon.raw(),
             (client.world_data().chunk_size().as_() / weather::CHUNKS_PER_CELL).map(|e| e.max(1)),
-            settings.graphics.lod_detail.max(100).min(2500),
+            settings.graphics.lod_detail.clamp(100, 2500),
             /* TODO: figure out how we want to do this without color borders?
              * water_color().into_array().into(), */
         );
@@ -65,6 +65,7 @@ impl Lod {
             object_data: [
                 (lod::ObjectKind::Oak, make_lod_object("oak", renderer)),
                 (lod::ObjectKind::Pine, make_lod_object("pine", renderer)),
+                (lod::ObjectKind::Dead, make_lod_object("dead", renderer)),
                 (lod::ObjectKind::House, make_lod_object("house", renderer)),
                 (
                     lod::ObjectKind::GiantTree,
@@ -80,7 +81,7 @@ impl Lod {
 
     pub fn set_detail(&mut self, detail: u32) {
         // Make sure the recorded detail is even.
-        self.data.tgt_detail = (detail - detail % 2).max(100).min(2500);
+        self.data.tgt_detail = (detail - detail % 2).clamp(100, 2500);
     }
 
     pub fn maintain(
@@ -124,6 +125,7 @@ impl Lod {
                     let color = match object.kind {
                         lod::ObjectKind::Pine => Rgb::new(0, 25, 12),
                         lod::ObjectKind::Oak => Rgb::new(10, 50, 5),
+                        lod::ObjectKind::Dead => Rgb::new(20, 10, 2),
                         lod::ObjectKind::House => Rgb::new(20, 15, 0),
                         lod::ObjectKind::GiantTree => Rgb::new(8, 35, 5),
                     };
@@ -234,11 +236,9 @@ fn create_lod_terrain_mesh(detail: u32) -> Mesh<LodTerrainVertex> {
                 Vertex::new(Vec2::new(x + 1, y + 1).map(transform)),
                 Vertex::new(Vec2::new(x, y + 1).map(transform)),
             )
-            .rotated_by(if (x > detail as i32 / 2) ^ (y > detail as i32 / 2) {
-                0
-            } else {
-                1
-            })
+            .rotated_by(usize::from(
+                !((x > detail as i32 / 2) ^ (y > detail as i32 / 2)),
+            ))
         })
         .collect()
 }

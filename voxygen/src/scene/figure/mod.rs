@@ -32,7 +32,7 @@ use anim::{
 use common::{
     comp::{
         inventory::slot::EquipSlot,
-        item::{Hands, ItemKind, ToolKind},
+        item::{tool::AbilityContext, Hands, ItemKind, ToolKind},
         Body, CharacterState, Collider, Controller, Health, Inventory, Item, ItemKey, Last,
         LightAnimation, LightEmitter, Ori, PhysicsState, PoiseState, Pos, Scale, Vel,
     },
@@ -40,9 +40,10 @@ use common::{
     mounting::Rider,
     resources::{DeltaTime, Time},
     states::{equipping, idle, utils::StageSection, wielding},
-    terrain::TerrainChunk,
+    terrain::{Block, TerrainChunk, TerrainGrid},
     uid::UidAllocator,
-    vol::RectRasterableVol,
+    util::Dir,
+    vol::{ReadVol, RectRasterableVol},
 };
 use common_base::span;
 use common_state::State;
@@ -223,7 +224,7 @@ impl FigureMgrStates {
         }
     }
 
-    fn remove<'a, Q: ?Sized>(&'a mut self, body: &Body, entity: &Q) -> Option<FigureStateMeta>
+    fn remove<Q: ?Sized>(&mut self, body: &Body, entity: &Q) -> Option<FigureStateMeta>
     where
         EcsEntity: Borrow<Q>,
         Q: Hash + Eq,
@@ -726,6 +727,8 @@ impl FigureMgr {
 
         let bodies = ecs.read_storage::<Body>();
 
+        let terrain_grid = ecs.read_resource::<TerrainGrid>();
+
         for (
             i,
             (
@@ -821,7 +824,7 @@ impl FigureMgr {
             let vd_frac = anim::vek::Vec2::from(pos.0 - player_pos)
                 .map2(
                     anim::vek::Vec2::<u32>::from(TerrainChunk::RECT_SIZE),
-                    |d: f32, sz| d.abs() as f32 / sz as f32,
+                    |d: f32, sz| d.abs() / sz as f32,
                 )
                 .magnitude()
                 / view_distance as f32;
@@ -914,6 +917,20 @@ impl FigureMgr {
             let second_tool_spec = second_tool_spec.as_deref();
             let hands = (active_tool_hand, second_tool_hand);
 
+            let context = AbilityContext::try_from(character);
+
+            let ability_id = character.and_then(|c| {
+                c.ability_info()
+                    .and_then(|a| a.ability)
+                    .and_then(|a| a.ability_id(inventory, context))
+            });
+
+            let move_dir = {
+                let ori = ori * *Dir::default();
+                let theta = vel.0.y.atan2(vel.0.x) - ori.y.atan2(ori.x);
+                anim::vek::Vec2::unit_y().rotated_z(theta)
+            };
+
             // If a mount exists, get its animated mounting transform and its position
             let mount_transform_pos = (|| -> Option<_> {
                 let mount = is_rider?.mount;
@@ -926,7 +943,7 @@ impl FigureMgr {
             let body = *body;
 
             // Only use trail manager when trails are enabled
-            let trail_mgr = scene_data.weapon_trails_enabled.then(|| &mut *trail_mgr);
+            let trail_mgr = scene_data.weapon_trails_enabled.then_some(&mut *trail_mgr);
 
             let common_params = FigureUpdateCommonParameters {
                 entity: Some(entity),
@@ -1151,7 +1168,93 @@ impl FigureMgr {
                                 (
                                     hands,
                                     Some(s.stage_section),
-                                    (Some(s.static_data.ability_info), None),
+                                    Some(s.static_data.ability_info),
+                                ),
+                                stage_progress,
+                                &mut state_animation_rate,
+                                skeleton_attr,
+                            )
+                        },
+                        CharacterState::FinisherMelee(s) => {
+                            let stage_time = s.timer.as_secs_f32();
+                            let stage_progress = match s.stage_section {
+                                StageSection::Buildup => {
+                                    stage_time / s.static_data.buildup_duration.as_secs_f32()
+                                },
+                                StageSection::Action => {
+                                    stage_time / s.static_data.swing_duration.as_secs_f32()
+                                },
+                                StageSection::Recover => {
+                                    stage_time / s.static_data.recover_duration.as_secs_f32()
+                                },
+                                _ => 0.0,
+                            };
+                            anim::character::FinisherMeleeAnimation::update_skeleton(
+                                &target_base,
+                                (
+                                    ability_id,
+                                    Some(s.stage_section),
+                                    Some(s.static_data.ability_info),
+                                ),
+                                stage_progress,
+                                &mut state_animation_rate,
+                                skeleton_attr,
+                            )
+                        },
+                        CharacterState::DiveMelee(s) => {
+                            let stage_time = s.timer.as_secs_f32();
+                            let stage_progress = match s.stage_section {
+                                StageSection::Movement => stage_time,
+                                StageSection::Action => {
+                                    stage_time / s.static_data.swing_duration.as_secs_f32()
+                                },
+                                StageSection::Recover => {
+                                    stage_time / s.static_data.recover_duration.as_secs_f32()
+                                },
+                                _ => 0.0,
+                            };
+                            let convert_vec3 =
+                                |vec3: anim::vek::Vec3<_>| Vec3::new(vec3.x, vec3.y, vec3.z);
+                            let ground_dist = terrain_grid
+                                .ray(convert_vec3(pos.0), convert_vec3(pos.0 + vel.0))
+                                .until(Block::is_solid)
+                                .cast()
+                                .0
+                                .powi(2)
+                                / vel.0.magnitude_squared();
+                            anim::character::DiveMeleeAnimation::update_skeleton(
+                                &target_base,
+                                (
+                                    ability_id,
+                                    Some(s.stage_section),
+                                    ground_dist,
+                                    Some(s.static_data.ability_info),
+                                ),
+                                stage_progress,
+                                &mut state_animation_rate,
+                                skeleton_attr,
+                            )
+                        },
+                        CharacterState::SelfBuff(s) => {
+                            let stage_time = s.timer.as_secs_f32();
+                            let stage_progress = match s.stage_section {
+                                StageSection::Buildup => {
+                                    stage_time / s.static_data.buildup_duration.as_secs_f32()
+                                },
+                                StageSection::Action => {
+                                    stage_time / s.static_data.cast_duration.as_secs_f32()
+                                },
+                                StageSection::Recover => {
+                                    stage_time / s.static_data.recover_duration.as_secs_f32()
+                                },
+                                _ => 0.0,
+                            };
+                            anim::character::SelfBuffAnimation::update_skeleton(
+                                &target_base,
+                                (
+                                    ability_id,
+                                    Some(s.stage_section),
+                                    Some(s.static_data.ability_info),
                                 ),
                                 stage_progress,
                                 &mut state_animation_rate,
@@ -1242,8 +1345,7 @@ impl FigureMgr {
                                 &target_base,
                                 (
                                     hands,
-                                    rel_vel,
-                                    time,
+                                    ability_id,
                                     Some(s.stage_section),
                                     Some(s.static_data.ability_info),
                                 ),
@@ -1331,7 +1433,7 @@ impl FigureMgr {
                         CharacterState::Boost(_) => {
                             anim::character::AlphaAnimation::update_skeleton(
                                 &target_base,
-                                (hands, None, (None, None)),
+                                (hands, None, None),
                                 state.state_time,
                                 &mut state_animation_rate,
                                 skeleton_attr,
@@ -1358,6 +1460,7 @@ impl FigureMgr {
                                 &target_base,
                                 (
                                     hands,
+                                    ability_id,
                                     time,
                                     Some(s.stage_section),
                                     Some(s.static_data.ability_info),
@@ -1484,6 +1587,34 @@ impl FigureMgr {
                                 skeleton_attr,
                             )
                         },
+                        CharacterState::RapidMelee(s) => {
+                            let stage_time = s.timer.as_secs_f32();
+                            let stage_progress = match s.stage_section {
+                                StageSection::Buildup => {
+                                    stage_time / s.static_data.buildup_duration.as_secs_f32()
+                                },
+                                StageSection::Action => {
+                                    stage_time / s.static_data.swing_duration.as_secs_f32()
+                                },
+                                StageSection::Recover => {
+                                    stage_time / s.static_data.recover_duration.as_secs_f32()
+                                },
+                                _ => 0.0,
+                            };
+
+                            anim::character::RapidMeleeAnimation::update_skeleton(
+                                &target_base,
+                                (
+                                    ability_id,
+                                    Some(s.stage_section),
+                                    (s.current_strike, s.static_data.max_strikes),
+                                    Some(s.static_data.ability_info),
+                                ),
+                                stage_progress,
+                                &mut state_animation_rate,
+                                skeleton_attr,
+                            )
+                        },
                         CharacterState::Stunned(s) => {
                             let stage_time = s.timer.as_secs_f32();
                             let wield_status = s.was_wielded;
@@ -1589,7 +1720,7 @@ impl FigureMgr {
                                     (
                                         hands,
                                         Some(s.stage_section),
-                                        (Some(s.static_data.ability_info), None),
+                                        Some(s.static_data.ability_info),
                                     ),
                                     stage_progress,
                                     &mut state_animation_rate,
@@ -1612,6 +1743,7 @@ impl FigureMgr {
                                     &target_base,
                                     (
                                         hands,
+                                        ability_id,
                                         rel_vel.magnitude(),
                                         time,
                                         Some(s.stage_section),
@@ -1621,6 +1753,98 @@ impl FigureMgr {
                                     &mut state_animation_rate,
                                     skeleton_attr,
                                 ),
+                            }
+                        },
+                        CharacterState::ComboMelee2(s) => {
+                            if matches!(
+                                s.stage_section,
+                                Some(
+                                    StageSection::Buildup
+                                        | StageSection::Action
+                                        | StageSection::Recover
+                                )
+                            ) {
+                                let timer = s.timer.as_secs_f32();
+                                let current_strike =
+                                    s.completed_strikes % s.static_data.strikes.len();
+                                let strike_data = s.static_data.strikes[current_strike];
+                                let progress = match s.stage_section {
+                                    Some(StageSection::Buildup) => {
+                                        timer / strike_data.buildup_duration.as_secs_f32()
+                                    },
+                                    Some(StageSection::Action) => {
+                                        timer / strike_data.swing_duration.as_secs_f32()
+                                    },
+                                    Some(StageSection::Recover) => {
+                                        timer / strike_data.recover_duration.as_secs_f32()
+                                    },
+                                    _ => 0.0,
+                                };
+
+                                anim::character::ComboAnimation::update_skeleton(
+                                    &target_base,
+                                    (
+                                        ability_id,
+                                        s.stage_section,
+                                        Some(s.static_data.ability_info),
+                                        current_strike,
+                                        move_dir,
+                                    ),
+                                    progress,
+                                    &mut state_animation_rate,
+                                    skeleton_attr,
+                                )
+                            } else if physics.in_liquid().is_some() {
+                                anim::character::SwimWieldAnimation::update_skeleton(
+                                    &target_base,
+                                    (
+                                        active_tool_kind,
+                                        second_tool_kind,
+                                        hands,
+                                        rel_vel.magnitude(),
+                                        time,
+                                    ),
+                                    state.state_time,
+                                    &mut state_animation_rate,
+                                    skeleton_attr,
+                                )
+                            } else if false {
+                                // Check for sneaking here if we want combo melee 2 to be able to
+                                // sneak when not actively swinging
+                                anim::character::SneakWieldAnimation::update_skeleton(
+                                    &target_base,
+                                    (
+                                        (active_tool_kind, active_tool_spec),
+                                        second_tool_kind,
+                                        hands,
+                                        rel_vel,
+                                        // TODO: Update to use the quaternion.
+                                        ori * anim::vek::Vec3::<f32>::unit_y(),
+                                        state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
+                                        time,
+                                    ),
+                                    state.state_time,
+                                    &mut state_animation_rate,
+                                    skeleton_attr,
+                                )
+                            } else {
+                                anim::character::WieldAnimation::update_skeleton(
+                                    &target_base,
+                                    (
+                                        (active_tool_kind, active_tool_spec),
+                                        second_tool_kind,
+                                        hands,
+                                        // TODO: Update to use the quaternion.
+                                        ori * anim::vek::Vec3::<f32>::unit_y(),
+                                        state.last_ori * anim::vek::Vec3::<f32>::unit_y(),
+                                        look_dir,
+                                        rel_vel,
+                                        time,
+                                    ),
+                                    state.state_time,
+                                    &mut state_animation_rate,
+                                    skeleton_attr,
+                                )
                             }
                         },
                         CharacterState::BasicBlock(s) => {
@@ -1642,8 +1866,9 @@ impl FigureMgr {
                                     active_tool_kind,
                                     second_tool_kind,
                                     rel_vel,
-                                    time,
+                                    ability_id,
                                     Some(s.stage_section),
+                                    Some(s.static_data.ability_info),
                                 ),
                                 stage_progress,
                                 &mut state_animation_rate,
@@ -1833,25 +2058,39 @@ impl FigureMgr {
                             )
                         },
                         CharacterState::Music(s) => {
+                            anim::character::MusicAnimation::update_skeleton(
+                                &target_base,
+                                (
+                                    hands,
+                                    (Some(s.static_data.ability_info), active_tool_spec, time),
+                                    rel_vel,
+                                ),
+                                state.state_time,
+                                &mut state_animation_rate,
+                                skeleton_attr,
+                            )
+                        },
+                        CharacterState::RiposteMelee(s) => {
                             let stage_time = s.timer.as_secs_f32();
                             let stage_progress = match s.stage_section {
                                 StageSection::Buildup => {
                                     stage_time / s.static_data.buildup_duration.as_secs_f32()
                                 },
                                 StageSection::Action => {
-                                    stage_time / s.static_data.play_duration.as_secs_f32()
+                                    stage_time / s.static_data.swing_duration.as_secs_f32()
                                 },
                                 StageSection::Recover => {
                                     stage_time / s.static_data.recover_duration.as_secs_f32()
                                 },
                                 _ => 0.0,
                             };
-                            anim::character::AlphaAnimation::update_skeleton(
+
+                            anim::character::RiposteMeleeAnimation::update_skeleton(
                                 &target_base,
                                 (
-                                    hands,
+                                    ability_id,
                                     Some(s.stage_section),
-                                    (Some(s.static_data.ability_info), active_tool_spec),
+                                    Some(s.static_data.ability_info),
                                 ),
                                 stage_progress,
                                 &mut state_animation_rate,
@@ -2232,6 +2471,34 @@ impl FigureMgr {
                                 skeleton_attr,
                             )
                         },
+                        CharacterState::Shockwave(s) => {
+                            let stage_time = s.timer.as_secs_f32();
+                            let stage_progress = match s.stage_section {
+                                StageSection::Buildup => {
+                                    stage_time / s.static_data.buildup_duration.as_secs_f32()
+                                },
+                                StageSection::Charge => stage_time,
+                                StageSection::Action => {
+                                    stage_time / s.static_data.swing_duration.as_secs_f32()
+                                },
+                                StageSection::Recover => {
+                                    stage_time / s.static_data.recover_duration.as_secs_f32()
+                                },
+                                _ => 0.0,
+                            };
+                            anim::quadruped_medium::ShockwaveAnimation::update_skeleton(
+                                &target_base,
+                                (
+                                    rel_vel.magnitude(),
+                                    time,
+                                    Some(s.stage_section),
+                                    state.state_time,
+                                ),
+                                stage_progress,
+                                &mut state_animation_rate,
+                                skeleton_attr,
+                            )
+                        },
                         CharacterState::LeapMelee(s) => {
                             let stage_time = s.timer.as_secs_f32();
                             let stage_progress = match s.stage_section {
@@ -2546,7 +2813,6 @@ impl FigureMgr {
                                 skeleton_attr,
                             )
                         },
-
                         CharacterState::ChargedMelee(s) => {
                             let stage_time = s.timer.as_secs_f32();
 
@@ -2564,6 +2830,64 @@ impl FigureMgr {
                                 _ => 0.0,
                             };
                             anim::quadruped_low::TailwhipAnimation::update_skeleton(
+                                &target_base,
+                                (
+                                    rel_vel.magnitude(),
+                                    time,
+                                    Some(s.stage_section),
+                                    state.state_time,
+                                ),
+                                stage_progress,
+                                &mut state_animation_rate,
+                                skeleton_attr,
+                            )
+                        },
+                        CharacterState::Shockwave(s) => {
+                            let stage_time = s.timer.as_secs_f32();
+
+                            let stage_progress = match s.stage_section {
+                                StageSection::Buildup => {
+                                    stage_time / s.static_data.buildup_duration.as_secs_f32()
+                                },
+                                StageSection::Action => {
+                                    stage_time / s.static_data.swing_duration.as_secs_f32()
+                                },
+                                StageSection::Recover => {
+                                    stage_time / s.static_data.recover_duration.as_secs_f32()
+                                },
+
+                                _ => 0.0,
+                            };
+                            anim::quadruped_low::ShockwaveAnimation::update_skeleton(
+                                &target_base,
+                                (
+                                    rel_vel.magnitude(),
+                                    time,
+                                    Some(s.stage_section),
+                                    state.state_time,
+                                ),
+                                stage_progress,
+                                &mut state_animation_rate,
+                                skeleton_attr,
+                            )
+                        },
+                        CharacterState::SpriteSummon(s) => {
+                            let stage_time = s.timer.as_secs_f32();
+
+                            let stage_progress = match s.stage_section {
+                                StageSection::Buildup => {
+                                    stage_time / s.static_data.buildup_duration.as_secs_f32()
+                                },
+                                StageSection::Action => {
+                                    stage_time / s.static_data.cast_duration.as_secs_f32()
+                                },
+                                StageSection::Recover => {
+                                    stage_time / s.static_data.recover_duration.as_secs_f32()
+                                },
+
+                                _ => 0.0,
+                            };
+                            anim::quadruped_low::SpriteSummonAnimation::update_skeleton(
                                 &target_base,
                                 (
                                     rel_vel.magnitude(),
@@ -5859,11 +6183,11 @@ impl FigureMgr {
                     arthropod_states,
                 },
         } = self;
-        let col_lights = &*col_lights_;
+        let col_lights = col_lights_;
         if let Some((bound, model_entry)) = match body {
             Body::Humanoid(body) => character_states
                 .get(&entity)
-                .filter(|state| filter_state(*state))
+                .filter(|state| filter_state(state))
                 .map(move |state| {
                     (
                         state.bound(),
@@ -5880,7 +6204,7 @@ impl FigureMgr {
                 }),
             Body::QuadrupedSmall(body) => quadruped_small_states
                 .get(&entity)
-                .filter(|state| filter_state(*state))
+                .filter(|state| filter_state(state))
                 .map(move |state| {
                     (
                         state.bound(),
@@ -5897,7 +6221,7 @@ impl FigureMgr {
                 }),
             Body::QuadrupedMedium(body) => quadruped_medium_states
                 .get(&entity)
-                .filter(|state| filter_state(*state))
+                .filter(|state| filter_state(state))
                 .map(move |state| {
                     (
                         state.bound(),
@@ -5914,7 +6238,7 @@ impl FigureMgr {
                 }),
             Body::QuadrupedLow(body) => quadruped_low_states
                 .get(&entity)
-                .filter(|state| filter_state(*state))
+                .filter(|state| filter_state(state))
                 .map(move |state| {
                     (
                         state.bound(),
@@ -5931,7 +6255,7 @@ impl FigureMgr {
                 }),
             Body::BirdMedium(body) => bird_medium_states
                 .get(&entity)
-                .filter(|state| filter_state(*state))
+                .filter(|state| filter_state(state))
                 .map(move |state| {
                     (
                         state.bound(),
@@ -5948,7 +6272,7 @@ impl FigureMgr {
                 }),
             Body::FishMedium(body) => fish_medium_states
                 .get(&entity)
-                .filter(|state| filter_state(*state))
+                .filter(|state| filter_state(state))
                 .map(move |state| {
                     (
                         state.bound(),
@@ -5965,7 +6289,7 @@ impl FigureMgr {
                 }),
             Body::Theropod(body) => theropod_states
                 .get(&entity)
-                .filter(|state| filter_state(*state))
+                .filter(|state| filter_state(state))
                 .map(move |state| {
                     (
                         state.bound(),
@@ -5982,7 +6306,7 @@ impl FigureMgr {
                 }),
             Body::Dragon(body) => dragon_states
                 .get(&entity)
-                .filter(|state| filter_state(*state))
+                .filter(|state| filter_state(state))
                 .map(move |state| {
                     (
                         state.bound(),
@@ -5999,7 +6323,7 @@ impl FigureMgr {
                 }),
             Body::BirdLarge(body) => bird_large_states
                 .get(&entity)
-                .filter(|state| filter_state(*state))
+                .filter(|state| filter_state(state))
                 .map(move |state| {
                     (
                         state.bound(),
@@ -6016,7 +6340,7 @@ impl FigureMgr {
                 }),
             Body::FishSmall(body) => fish_small_states
                 .get(&entity)
-                .filter(|state| filter_state(*state))
+                .filter(|state| filter_state(state))
                 .map(move |state| {
                     (
                         state.bound(),
@@ -6033,7 +6357,7 @@ impl FigureMgr {
                 }),
             Body::BipedLarge(body) => biped_large_states
                 .get(&entity)
-                .filter(|state| filter_state(*state))
+                .filter(|state| filter_state(state))
                 .map(move |state| {
                     (
                         state.bound(),
@@ -6050,7 +6374,7 @@ impl FigureMgr {
                 }),
             Body::BipedSmall(body) => biped_small_states
                 .get(&entity)
-                .filter(|state| filter_state(*state))
+                .filter(|state| filter_state(state))
                 .map(move |state| {
                     (
                         state.bound(),
@@ -6067,7 +6391,7 @@ impl FigureMgr {
                 }),
             Body::Golem(body) => golem_states
                 .get(&entity)
-                .filter(|state| filter_state(*state))
+                .filter(|state| filter_state(state))
                 .map(move |state| {
                     (
                         state.bound(),
@@ -6084,7 +6408,7 @@ impl FigureMgr {
                 }),
             Body::Arthropod(body) => arthropod_states
                 .get(&entity)
-                .filter(|state| filter_state(*state))
+                .filter(|state| filter_state(state))
                 .map(move |state| {
                     (
                         state.bound(),
@@ -6101,7 +6425,7 @@ impl FigureMgr {
                 }),
             Body::Object(body) => object_states
                 .get(&entity)
-                .filter(|state| filter_state(*state))
+                .filter(|state| filter_state(state))
                 .map(move |state| {
                     (
                         state.bound(),
@@ -6118,7 +6442,7 @@ impl FigureMgr {
                 }),
             Body::ItemDrop(body) => item_drop_states
                 .get(&entity)
-                .filter(|state| filter_state(*state))
+                .filter(|state| filter_state(state))
                 .map(move |state| {
                     (
                         state.bound(),
@@ -6137,7 +6461,7 @@ impl FigureMgr {
                 if body.manifest_entry().is_some() {
                     ship_states
                         .get(&entity)
-                        .filter(|state| filter_state(*state))
+                        .filter(|state| filter_state(state))
                         .map(move |state| {
                             (
                                 state.bound(),
@@ -6155,7 +6479,7 @@ impl FigureMgr {
                 } else {
                     volume_states
                         .get(&entity)
-                        .filter(|state| filter_state(*state))
+                        .filter(|state| filter_state(state))
                         .map(move |state| {
                             (
                                 state.bound(),
@@ -6191,6 +6515,103 @@ impl FigureMgr {
             // trace!("Body has no saved figure");
             None
         }
+    }
+
+    pub fn viewpoint_offset(&self, scene_data: &SceneData, entity: EcsEntity) -> Vec3<f32> {
+        scene_data
+            .state
+            .ecs()
+            .read_storage::<Body>()
+            .get(entity)
+            .and_then(|b| match b {
+                Body::Humanoid(_) => self
+                    .states
+                    .character_states
+                    .get(&entity)
+                    .and_then(|state| state.viewpoint_offset),
+                Body::QuadrupedSmall(_) => self
+                    .states
+                    .quadruped_small_states
+                    .get(&entity)
+                    .and_then(|state| state.viewpoint_offset),
+                Body::QuadrupedMedium(_) => self
+                    .states
+                    .quadruped_medium_states
+                    .get(&entity)
+                    .and_then(|state| state.viewpoint_offset),
+                Body::BirdMedium(_) => self
+                    .states
+                    .bird_medium_states
+                    .get(&entity)
+                    .and_then(|state| state.viewpoint_offset),
+                Body::FishMedium(_) => self
+                    .states
+                    .fish_medium_states
+                    .get(&entity)
+                    .and_then(|state| state.viewpoint_offset),
+                Body::Dragon(_) => self
+                    .states
+                    .dragon_states
+                    .get(&entity)
+                    .and_then(|state| state.viewpoint_offset),
+                Body::BirdLarge(_) => self
+                    .states
+                    .bird_large_states
+                    .get(&entity)
+                    .and_then(|state| state.viewpoint_offset),
+                Body::FishSmall(_) => self
+                    .states
+                    .fish_small_states
+                    .get(&entity)
+                    .and_then(|state| state.viewpoint_offset),
+                Body::BipedLarge(_) => self
+                    .states
+                    .biped_large_states
+                    .get(&entity)
+                    .and_then(|state| state.viewpoint_offset),
+                Body::BipedSmall(_) => self
+                    .states
+                    .biped_small_states
+                    .get(&entity)
+                    .and_then(|state| state.viewpoint_offset),
+                Body::Golem(_) => self
+                    .states
+                    .golem_states
+                    .get(&entity)
+                    .and_then(|state| state.viewpoint_offset),
+                Body::Theropod(_) => self
+                    .states
+                    .theropod_states
+                    .get(&entity)
+                    .and_then(|state| state.viewpoint_offset),
+                Body::QuadrupedLow(_) => self
+                    .states
+                    .quadruped_low_states
+                    .get(&entity)
+                    .and_then(|state| state.viewpoint_offset),
+                Body::Arthropod(_) => self
+                    .states
+                    .arthropod_states
+                    .get(&entity)
+                    .and_then(|state| state.viewpoint_offset),
+                Body::Object(_) => self
+                    .states
+                    .object_states
+                    .get(&entity)
+                    .and_then(|state| state.viewpoint_offset),
+                Body::Ship(_) => self
+                    .states
+                    .ship_states
+                    .get(&entity)
+                    .and_then(|state| state.viewpoint_offset),
+                Body::ItemDrop(_) => self
+                    .states
+                    .item_drop_states
+                    .get(&entity)
+                    .and_then(|state| state.viewpoint_offset),
+            })
+            .map(|viewpoint| viewpoint.into())
+            .unwrap_or_else(Vec3::zero)
     }
 
     pub fn figure_count(&self) -> usize { self.states.count() }
@@ -6301,6 +6722,7 @@ impl FigureColLights {
 
 pub struct FigureStateMeta {
     lantern_offset: Option<anim::vek::Vec3<f32>>,
+    viewpoint_offset: Option<anim::vek::Vec3<f32>>,
     main_abs_trail_points: Option<(anim::vek::Vec3<f32>, anim::vek::Vec3<f32>)>,
     off_abs_trail_points: Option<(anim::vek::Vec3<f32>, anim::vek::Vec3<f32>)>,
     // Animation to be applied to rider of this entity
@@ -6386,6 +6808,7 @@ impl<S: Skeleton> FigureState<S> {
         Self {
             meta: FigureStateMeta {
                 lantern_offset: offsets.lantern,
+                viewpoint_offset: offsets.viewpoint,
                 main_abs_trail_points: None,
                 off_abs_trail_points: None,
                 mount_transform: offsets.mount_bone,
@@ -6566,6 +6989,7 @@ impl<S: Skeleton> FigureState<S> {
 
         renderer.update_consts(&mut self.meta.bound.1, &new_bone_consts[0..S::BONE_COUNT]);
         self.lantern_offset = offsets.lantern;
+        self.viewpoint_offset = offsets.viewpoint;
         // Handle weapon trails
         fn handle_weapon_trails(
             trail_mgr: &mut TrailMgr,

@@ -20,7 +20,7 @@ pub use self::{
     model::{DynamicModel, Model, SubModel},
     pipelines::{
         clouds::Locals as CloudsLocals,
-        debug::{DebugPipeline, Locals as DebugLocals, Vertex as DebugVertex},
+        debug::{DebugLayout, DebugPipeline, Locals as DebugLocals, Vertex as DebugVertex},
         figure::{
             BoneData as FigureBoneData, BoneMeshes, FigureLayout, FigureModel,
             Locals as FigureLocals,
@@ -49,9 +49,10 @@ pub use self::{
     },
     renderer::{
         drawer::{
-            DebugDrawer, Drawer, FigureDrawer, FigureShadowDrawer, FirstPassDrawer, ParticleDrawer,
-            PreparedUiDrawer, SecondPassDrawer, ShadowPassDrawer, SpriteDrawer, TerrainDrawer,
-            TerrainShadowDrawer, ThirdPassDrawer, TrailDrawer, UiDrawer,
+            DebugDrawer, DebugShadowDrawer, Drawer, FigureDrawer, FigureShadowDrawer,
+            FirstPassDrawer, ParticleDrawer, PreparedUiDrawer, ShadowPassDrawer, SpriteDrawer,
+            TerrainDrawer, TerrainShadowDrawer, ThirdPassDrawer, TrailDrawer,
+            TransparentPassDrawer, UiDrawer, VolumetricPassDrawer,
         },
         ColLightInfo, Renderer,
     },
@@ -68,7 +69,7 @@ pub trait Vertex: Clone + bytemuck::Pod {
 
 use serde::{Deserialize, Serialize};
 /// Anti-aliasing modes
-#[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum AaMode {
     /// Fast approximate antialiasing.
     ///
@@ -93,8 +94,30 @@ pub enum AaMode {
     /// also struggle in the future with deferred shading, so they may be
     /// removed in the future.
     MsaaX16,
+    /// Fast edge-detecting upscaling.
+    ///
+    /// Screen-space technique that attempts to reconstruct lines and edges
+    /// in the original image. Useless at internal resolutions higher than 1.0x,
+    /// but potentially very effective at much lower internal resolutions.
+    Hqx,
+    /// Fast upscaling informed by FXAA.
+    ///
+    /// Screen-space technique that uses a combination of FXAA and
+    /// nearest-neighbour sample retargeting to produce crisp, clean upscaling.
+    FxUpscale,
     #[serde(other)]
     None,
+}
+
+impl AaMode {
+    pub fn samples(&self) -> u32 {
+        match self {
+            AaMode::None | AaMode::Fxaa | AaMode::Hqx | AaMode::FxUpscale => 1,
+            AaMode::MsaaX4 => 4,
+            AaMode::MsaaX8 => 8,
+            AaMode::MsaaX16 => 16,
+        }
+    }
 }
 
 impl Default for AaMode {
@@ -102,7 +125,7 @@ impl Default for AaMode {
 }
 
 /// Cloud modes
-#[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum CloudMode {
     /// No clouds. As cheap as it gets.
     None,
@@ -132,16 +155,17 @@ impl Default for CloudMode {
 }
 
 /// Fluid modes
-#[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum FluidMode {
-    /// "Cheap" water.  This water implements no waves, no reflections, no
+    /// "Low" water.  This water implements no waves, no reflections, no
     /// diffraction, and no light attenuation through water.  As a result,
     /// it can be much cheaper than shiny reflection.
-    Cheap,
-    /// "Shiny" water.  This water implements waves on the surfaces, some
-    /// attempt at reflections, and tries to compute accurate light
-    /// attenuation through water (this is what results in the
-    /// colors changing as you descend into deep water).
+    Low,
+    High,
+    /// This water implements waves on the surfaces, some attempt at
+    /// reflections, and tries to compute accurate light attenuation through
+    /// water (this is what results in the colors changing as you descend
+    /// into deep water).
     ///
     /// Unfortunately, the way the engine is currently set up, calculating
     /// accurate attenuation is a bit difficult; we use estimates from
@@ -155,15 +179,32 @@ pub enum FluidMode {
     /// which causes attenuation to be computed incorrectly; this can be
     /// addressed by using shadow maps (at least for terrain).
     #[serde(other)]
-    Shiny,
+    Medium,
 }
 
 impl Default for FluidMode {
-    fn default() -> Self { FluidMode::Shiny }
+    fn default() -> Self { FluidMode::Medium }
+}
+
+/// Reflection modes
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Serialize, Deserialize)]
+pub enum ReflectionMode {
+    /// No or minimal reflections.
+    Low,
+    /// High quality reflections with screen-space raycasting and
+    /// all the bells & whistles.
+    High,
+    // Medium quality screen-space reflections.
+    #[serde(other)]
+    Medium,
+}
+
+impl Default for ReflectionMode {
+    fn default() -> Self { ReflectionMode::High }
 }
 
 /// Lighting modes
-#[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum LightingMode {
     /// Ashikhmin-Shirley BRDF lighting model.  Attempts to generate a
     /// physically plausible (to some extent) lighting distribution.
@@ -251,7 +292,7 @@ impl Default for UpscaleMode {
 
 /// Present modes
 /// See https://docs.rs/wgpu/0.7.0/wgpu/enum.PresentMode.html
-#[derive(Default, PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Default, PartialEq, Eq, Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum PresentMode {
     Mailbox,
     Immediate,
@@ -294,7 +335,7 @@ impl BloomFactor {
             Self::Low => 0.1,
             Self::Medium => 0.2,
             Self::High => 0.3,
-            Self::Custom(val) => val.max(0.0).min(1.0),
+            Self::Custom(val) => val.clamp(0.0, 1.0),
         }
     }
 }
@@ -341,6 +382,7 @@ impl BloomMode {
 pub struct RenderMode {
     pub aa: AaMode,
     pub cloud: CloudMode,
+    pub reflection: ReflectionMode,
     pub fluid: FluidMode,
     pub lighting: LightingMode,
     pub shadow: ShadowMode,
@@ -364,6 +406,7 @@ impl Default for RenderMode {
             aa: AaMode::default(),
             cloud: CloudMode::default(),
             fluid: FluidMode::default(),
+            reflection: ReflectionMode::default(),
             lighting: LightingMode::default(),
             shadow: ShadowMode::default(),
             rain_occlusion: ShadowMapMode::default(),
@@ -385,6 +428,7 @@ impl RenderMode {
                 aa: self.aa,
                 cloud: self.cloud,
                 fluid: self.fluid,
+                reflection: self.reflection,
                 lighting: self.lighting,
                 shadow: self.shadow,
                 rain_occlusion: self.rain_occlusion,
@@ -409,6 +453,7 @@ pub struct PipelineModes {
     aa: AaMode,
     pub cloud: CloudMode,
     fluid: FluidMode,
+    reflection: ReflectionMode,
     lighting: LightingMode,
     pub shadow: ShadowMode,
     pub rain_occlusion: ShadowMapMode,
@@ -480,6 +525,6 @@ pub enum ExperimentalShader {
     DirectionalShadowMapTexelGrid,
     /// Disable rainbows
     NoRainbows,
-    /// Make objects appear wet when appropriate.
-    Wetness,
+    /// Add extra detailing to puddles.
+    PuddleDetails,
 }

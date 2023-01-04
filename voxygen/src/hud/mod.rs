@@ -67,7 +67,9 @@ use crate::{
     },
     session::{
         interactable::Interactable,
-        settings_change::{Chat as ChatChange, Interface as InterfaceChange, SettingsChange},
+        settings_change::{
+            Audio, Chat as ChatChange, Interface as InterfaceChange, SettingsChange,
+        },
     },
     settings::chat::ChatFilter,
     ui::{
@@ -85,10 +87,13 @@ use common::{
         ability::AuxiliaryAbility,
         fluid_dynamics,
         inventory::{slot::InvSlotId, trade_pricing::TradePricing, CollectFailedReason},
-        item::{tool::ToolKind, ItemDesc, MaterialStatManifest, Quality},
+        item::{
+            tool::{AbilityContext, ToolKind},
+            ItemDesc, MaterialStatManifest, Quality,
+        },
         loot_owner::LootOwnerKind,
         pet::is_mountable,
-        skillset::{skills::Skill, SkillGroupKind},
+        skillset::{skills::Skill, SkillGroupKind, SkillsPersistenceError},
         BuffData, BuffKind, Health, Item, MapMarkerChange,
     },
     consts::MAX_PICKUP_RANGE,
@@ -118,6 +123,7 @@ use rand::Rng;
 use specs::{Entity as EcsEntity, Join, WorldExt};
 use std::{
     borrow::Cow,
+    cmp::Ordering,
     collections::VecDeque,
     sync::Arc,
     time::{Duration, Instant},
@@ -143,6 +149,8 @@ const CRITICAL_HP_COLOR: Color = Color::Rgba(0.79, 0.19, 0.17, 1.0);
 const STAMINA_COLOR: Color = Color::Rgba(0.29, 0.62, 0.75, 0.9);
 const ENEMY_HP_COLOR: Color = Color::Rgba(0.93, 0.1, 0.29, 1.0);
 const XP_COLOR: Color = Color::Rgba(0.59, 0.41, 0.67, 1.0);
+const POISE_COLOR: Color = Color::Rgba(0.70, 0.0, 0.60, 1.0);
+const POISEBAR_TICK_COLOR: Color = Color::Rgba(0.70, 0.90, 0.0, 1.0);
 //const TRANSPARENT: Color = Color::Rgba(0.0, 0.0, 0.0, 0.0);
 //const FOCUS_COLOR: Color = Color::Rgba(1.0, 0.56, 0.04, 1.0);
 //const RAGE_COLOR: Color = Color::Rgba(0.5, 0.04, 0.13, 1.0);
@@ -189,6 +197,7 @@ const DEFAULT_NPC: Color = Color::Rgba(1.0, 1.0, 1.0, 1.0);
 
 // UI Color-Theme
 const UI_MAIN: Color = Color::Rgba(0.61, 0.70, 0.70, 1.0); // Greenish Blue
+const UI_SUBTLE: Color = Color::Rgba(0.2, 0.24, 0.24, 1.0); // Dark Greenish Blue
 //const UI_MAIN: Color = Color::Rgba(0.1, 0.1, 0.1, 0.97); // Dark
 const UI_HIGHLIGHT_0: Color = Color::Rgba(0.79, 1.09, 1.09, 1.0);
 // Pull-Down menu BG color
@@ -414,8 +423,8 @@ impl<W: Positionable> Position for W {
     fn position(self, request: PositionSpecifier) -> Self {
         match request {
             // Place the widget near other widget with the given margins
-            PositionSpecifier::TopLeftWithMarginsOn(other, top, right) => {
-                self.top_left_with_margins_on(other, top, right)
+            PositionSpecifier::TopLeftWithMarginsOn(other, top, left) => {
+                self.top_left_with_margins_on(other, top, left)
             },
             PositionSpecifier::TopRightWithMarginsOn(other, top, right) => {
                 self.top_right_with_margins_on(other, top, right)
@@ -444,11 +453,144 @@ impl<W: Positionable> Position for W {
 }
 
 #[derive(Clone, Copy)]
-pub struct BuffInfo {
-    kind: BuffKind,
-    data: BuffData,
+pub enum BuffIconKind<'a> {
+    Buff { kind: BuffKind, data: BuffData },
+    Ability { ability_id: &'a str },
+}
+
+impl<'a> BuffIconKind<'a> {
+    pub fn image(&self, imgs: &Imgs) -> conrod_core::image::Id {
+        match self {
+            Self::Buff { kind, .. } => get_buff_image(*kind, imgs),
+            Self::Ability { ability_id, .. } => util::ability_image(imgs, ability_id),
+        }
+    }
+
+    pub fn max_duration(&self) -> Option<Duration> {
+        match self {
+            Self::Buff { data, .. } => data.duration,
+            Self::Ability { .. } => None,
+        }
+    }
+
+    pub fn title_description<'b>(
+        &self,
+        localized_strings: &'b Localization,
+    ) -> (Cow<'b, str>, Cow<'b, str>) {
+        match self {
+            Self::Buff { kind, data } => (
+                get_buff_title(*kind, localized_strings),
+                get_buff_desc(*kind, *data, localized_strings),
+            ),
+            Self::Ability { ability_id } => {
+                util::ability_description(ability_id, localized_strings)
+            },
+        }
+    }
+}
+
+impl<'a> PartialOrd for BuffIconKind<'a> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (
+                BuffIconKind::Buff { kind, .. },
+                BuffIconKind::Buff {
+                    kind: other_kind, ..
+                },
+            ) => Some(kind.cmp(other_kind)),
+            (BuffIconKind::Buff { .. }, BuffIconKind::Ability { .. }) => Some(Ordering::Greater),
+            (BuffIconKind::Ability { .. }, BuffIconKind::Buff { .. }) => Some(Ordering::Less),
+            (
+                BuffIconKind::Ability { ability_id },
+                BuffIconKind::Ability {
+                    ability_id: other_id,
+                },
+            ) => Some(ability_id.cmp(other_id)),
+        }
+    }
+}
+
+impl<'a> Ord for BuffIconKind<'a> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // We know this is safe since we can look at the partialord implementation and
+        // see that every variant is wrapped in Some
+        self.partial_cmp(other).unwrap()
+    }
+}
+
+impl<'a> PartialEq for BuffIconKind<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                BuffIconKind::Buff { kind, .. },
+                BuffIconKind::Buff {
+                    kind: other_kind, ..
+                },
+            ) => kind == other_kind,
+            (
+                BuffIconKind::Ability { ability_id },
+                BuffIconKind::Ability {
+                    ability_id: other_id,
+                },
+            ) => ability_id == other_id,
+            _ => false,
+        }
+    }
+}
+
+impl<'a> Eq for BuffIconKind<'a> {}
+
+#[derive(Clone, Copy)]
+pub struct BuffIcon<'a> {
+    kind: BuffIconKind<'a>,
     is_buff: bool,
     dur: Option<Duration>,
+}
+
+impl<'a> BuffIcon<'a> {
+    pub fn get_buff_time(&self) -> String {
+        if let Some(dur) = self.dur {
+            format!("{:.0}s", dur.as_secs_f32())
+        } else {
+            "".to_string()
+        }
+    }
+
+    pub fn icons_vec(buffs: &comp::Buffs, char_state: &comp::CharacterState) -> Vec<Self> {
+        buffs
+            .iter_active()
+            .map(BuffIcon::from_buff)
+            .chain(BuffIcon::from_char_state(char_state).into_iter())
+            .collect::<Vec<_>>()
+    }
+
+    fn from_char_state(char_state: &comp::CharacterState) -> Option<Self> {
+        if let Some(ability_kind) = char_state
+            .ability_info()
+            .and_then(|info| info.ability_meta)
+            .and_then(|meta| meta.kind)
+        {
+            let id = util::representative_ability_id(ability_kind);
+            Some(BuffIcon {
+                kind: BuffIconKind::Ability { ability_id: id },
+                is_buff: true,
+                dur: None,
+            })
+        } else {
+            None
+        }
+    }
+
+    fn from_buff(buff: &comp::Buff) -> Self {
+        Self {
+            kind: BuffIconKind::Buff {
+                kind: buff.kind,
+                data: buff.data,
+            },
+            is_buff: buff.kind.is_buff(),
+            dur: buff.time,
+        }
+    }
 }
 
 pub struct ExpFloater {
@@ -505,6 +647,7 @@ pub struct HudInfo {
     pub mutable_viewpoint: bool,
     pub target_entity: Option<specs::Entity>,
     pub selected_entity: Option<(specs::Entity, Instant)>,
+    pub persistence_load_error: Option<SkillsPersistenceError>,
 }
 
 #[derive(Clone)]
@@ -565,6 +708,8 @@ pub enum Event {
     AssignLeader(Uid),
     RemoveBuff(BuffKind),
     UnlockSkill(Skill),
+    SelectExpBar(Option<SkillGroupKind>),
+
     RequestSiteInfo(SiteId),
     ChangeAbility(usize, AuxiliaryAbility),
 
@@ -577,7 +722,7 @@ pub enum Event {
 // TODO: Maybe replace this with bitflags.
 // `map` is not here because it currently is displayed over the top of other
 // open windows.
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq)]
 pub enum Windows {
     Settings, // Display settings window.
     None,
@@ -630,7 +775,7 @@ pub enum PressBehavior {
     #[serde(other)]
     Toggle = 0,
 }
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ChatTab {
     pub label: String,
     pub filter: ChatFilter,
@@ -1278,52 +1423,48 @@ impl Hud {
             let bodies = ecs.read_storage::<comp::Body>();
             let items = ecs.read_storage::<Item>();
             let inventories = ecs.read_storage::<comp::Inventory>();
-            let players = ecs.read_storage::<comp::Player>();
             let msm = ecs.read_resource::<MaterialStatManifest>();
             let entities = ecs.entities();
             let me = info.viewpoint_entity;
             let poises = ecs.read_storage::<comp::Poise>();
             let alignments = ecs.read_storage::<comp::Alignment>();
             let is_mount = ecs.read_storage::<Is<Mount>>();
+            let char_states = ecs.read_storage::<comp::CharacterState>();
 
             // Check if there was a persistence load error of the skillset, and if so
             // display a dialog prompt
             if self.show.prompt_dialog.is_none() {
-                if let Some(skill_set) = skill_sets.get(me) {
-                    if let Some(persistence_error) = skill_set.persistence_load_error {
-                        use comp::skillset::SkillsPersistenceError;
-                        let persistence_error = match persistence_error {
-                            SkillsPersistenceError::HashMismatch => {
-                                "There was a difference detected in one of your skill groups since \
-                                 you last played."
-                            },
-                            SkillsPersistenceError::DeserializationFailure => {
-                                "There was a error in loading some of your skills from the \
-                                 database."
-                            },
-                            SkillsPersistenceError::SpentExpMismatch => {
-                                "The amount of free experience you had in one of your skill groups \
-                                 differed from when you last played."
-                            },
-                            SkillsPersistenceError::SkillsUnlockFailed => {
-                                "Your skills were not able to be obtained in the same order you \
-                                 acquired them. Prerequisites or costs may have changed."
-                            },
-                        };
+                if let Some(persistence_error) = info.persistence_load_error {
+                    let persistence_error = match persistence_error {
+                        SkillsPersistenceError::HashMismatch => {
+                            "There was a difference detected in one of your skill groups since you \
+                             last played."
+                        },
+                        SkillsPersistenceError::DeserializationFailure => {
+                            "There was a error in loading some of your skills from the database."
+                        },
+                        SkillsPersistenceError::SpentExpMismatch => {
+                            "The amount of free experience you had in one of your skill groups \
+                             differed from when you last played."
+                        },
+                        SkillsPersistenceError::SkillsUnlockFailed => {
+                            "Your skills were not able to be obtained in the same order you \
+                             acquired them. Prerequisites or costs may have changed."
+                        },
+                    };
 
-                        let common_message = "Some of your skill points have been reset. You will \
-                                              need to reassign them.";
+                    let common_message = "Some of your skill points have been reset. You will \
+                                          need to reassign them.";
 
-                        warn!("{}\n{}", persistence_error, common_message);
-                        let prompt_dialog = PromptDialogSettings::new(
-                            format!("{}\n", common_message),
-                            Event::AcknowledgePersistenceLoadError,
-                            None,
-                        )
-                        .with_no_negative_option();
-                        // self.set_prompt_dialog(prompt_dialog);
-                        self.show.prompt_dialog = Some(prompt_dialog);
-                    }
+                    warn!("{}\n{}", persistence_error, common_message);
+                    let prompt_dialog = PromptDialogSettings::new(
+                        format!("{}\n", common_message),
+                        Event::AcknowledgePersistenceLoadError,
+                        None,
+                    )
+                    .with_no_negative_option();
+                    // self.set_prompt_dialog(prompt_dialog);
+                    self.show.prompt_dialog = Some(prompt_dialog);
                 }
             }
 
@@ -1337,7 +1478,7 @@ impl Hud {
             if let Some(health) = healths.get(me) {
                 // Hurt Frame
                 let hp_percentage = health.current() / health.maximum() * 100.0;
-                self.hp_pulse += dt.as_secs_f32() * 10.0 / hp_percentage.max(3.0).min(7.0);
+                self.hp_pulse += dt.as_secs_f32() * 10.0 / hp_percentage.clamp(3.0, 7.0);
                 if hp_percentage < 10.0 && !health.is_dead {
                     let hurt_fade = (self.hp_pulse).sin() * 0.5 + 0.6; //Animation timer
                     Image::new(self.imgs.hurt_bg)
@@ -1799,9 +1940,9 @@ impl Hud {
                 };
 
             self.failed_block_pickups
-                .retain(|_, t| pulse - (*t).pulse < overitem::PICKUP_FAILED_FADE_OUT_TIME);
+                .retain(|_, t| pulse - t.pulse < overitem::PICKUP_FAILED_FADE_OUT_TIME);
             self.failed_entity_pickups
-                .retain(|_, t| pulse - (*t).pulse < overitem::PICKUP_FAILED_FADE_OUT_TIME);
+                .retain(|_, t| pulse - t.pulse < overitem::PICKUP_FAILED_FADE_OUT_TIME);
 
             // Render overitem: name, etc.
             for (entity, pos, item, distance) in (&entities, &pos, &items)
@@ -1978,9 +2119,8 @@ impl Hud {
                 &mut hp_floater_lists,
                 &uids,
                 &inventories,
-                players.maybe(),
                 poises.maybe(),
-                (alignments.maybe(), is_mount.maybe()),
+                (alignments.maybe(), is_mount.maybe(), &char_states),
             )
                 .join()
                 .filter(|t| {
@@ -2002,9 +2142,8 @@ impl Hud {
                         hpfl,
                         uid,
                         inventory,
-                        player,
                         poise,
-                        (alignment, is_mount),
+                        (alignment, is_mount, char_state),
                     )| {
                         // Use interpolated position if available
                         let pos = interpolated.map_or(pos.0, |i| i.pos);
@@ -2013,7 +2152,8 @@ impl Hud {
                         // TODO: once the site2 rework lands and merchants have dedicated stalls or
                         // buildings, they no longer need to be emphasized via the higher overhead
                         // text radius relative to other NPCs
-                        let is_merchant = stats.name == "Merchant" && player.is_none();
+                        let is_merchant =
+                            stats.name == "Merchant" && client.player_list().get(uid).is_none();
                         let dist_sqr = pos.distance_squared(player_pos);
                         // Determine whether to display nametag and healthbar based on whether the
                         // entity has been damaged, is targeted/selected, or is in your group
@@ -2054,6 +2194,7 @@ impl Hud {
                             } else {
                                 0.0
                             },
+                            char_state,
                         });
                         // Only render bubble if nearby or if its me and setting is on
                         let bubble = if (dist_sqr < SPEECH_BUBBLE_RANGE.powi(2) && !is_me)
@@ -2063,7 +2204,7 @@ impl Hud {
                         } else {
                             None
                         };
-                        (info.is_some() || bubble.is_some()).then(|| {
+                        (info.is_some() || bubble.is_some()).then_some({
                             (
                                 entity, pos, info, bubble, stats, skill_set, health, buffs, scale,
                                 body, hpfl, in_group, dist_sqr, alignment, is_mount,
@@ -2106,12 +2247,18 @@ impl Hud {
                         },
                         Some(comp::Alignment::Owned(owner))
                             if Some(*owner) == client.uid()
-                                && !client.is_riding()
-                                && is_mount.is_none()
-                                && is_mountable(body, bodies.get(client.entity()))
                                 && dist_sqr < common::consts::MAX_MOUNT_RANGE.powi(2) =>
                         {
-                            vec![(GameInput::Mount, i18n.get_msg("hud-mount").to_string())]
+                            let mut options =
+                                vec![(GameInput::Trade, i18n.get_msg("hud-trade").to_string())];
+                            if !client.is_riding()
+                                && is_mount.is_none()
+                                && is_mountable(body, bodies.get(client.entity()))
+                            {
+                                options
+                                    .push((GameInput::Mount, i18n.get_msg("hud-mount").to_string()))
+                            }
+                            options
                         },
                         _ => Vec::new(),
                     },
@@ -2588,40 +2735,30 @@ impl Hud {
 
         // Bag button and nearby icons
         let ecs = client.state().ecs();
-        let entity = info.viewpoint_entity;
+        // let entity = info.viewpoint_entity;
         let stats = ecs.read_storage::<comp::Stats>();
         let skill_sets = ecs.read_storage::<comp::SkillSet>();
         let buffs = ecs.read_storage::<comp::Buffs>();
+        let char_states = ecs.read_storage::<comp::CharacterState>();
         let msm = ecs.read_resource::<MaterialStatManifest>();
-        if let (Some(player_stats), Some(skill_set)) = (stats.get(entity), skill_sets.get(entity)) {
-            match Buttons::new(
-                client,
-                &info,
-                self.show.bag,
-                &self.imgs,
-                &self.fonts,
-                global_state,
-                &self.rot_imgs,
-                tooltip_manager,
-                i18n,
-                player_stats,
-                skill_set,
-                self.pulse,
-            )
-            .set(self.ids.buttons, ui_widgets)
-            {
-                Some(buttons::Event::ToggleBag) => {
-                    let state = !self.show.bag;
-                    Self::show_bag(&mut self.slot_manager, &mut self.show, state)
-                },
-                Some(buttons::Event::ToggleSettings) => self.show.toggle_settings(global_state),
-                Some(buttons::Event::ToggleSocial) => self.show.toggle_social(),
-                Some(buttons::Event::ToggleSpell) => self.show.toggle_spell(),
-                Some(buttons::Event::ToggleMap) => self.show.toggle_map(),
-                Some(buttons::Event::ToggleCrafting) => self.show.toggle_crafting(),
-                None => {},
-            }
+
+        match Buttons::new(
+            &self.imgs,
+            &self.fonts,
+            global_state,
+            &self.rot_imgs,
+            tooltip_manager,
+            i18n,
+        )
+        .set(self.ids.buttons, ui_widgets)
+        {
+            Some(buttons::Event::ToggleSettings) => self.show.toggle_settings(global_state),
+            Some(buttons::Event::ToggleSocial) => self.show.toggle_social(),
+            Some(buttons::Event::ToggleMap) => self.show.toggle_map(),
+            Some(buttons::Event::ToggleCrafting) => self.show.toggle_crafting(),
+            None => {},
         }
+
         // Group Window
         for event in Group::new(
             &mut self.show,
@@ -2717,6 +2854,7 @@ impl Hud {
         let active_abilities = ecs.read_storage::<comp::ActiveAbilities>();
         let bodies = ecs.read_storage::<comp::Body>();
         let poises = ecs.read_storage::<comp::Poise>();
+        let combos = ecs.read_storage::<comp::Combo>();
         // Combo floater stuffs
         self.floaters.combo_floater = self.floaters.combo_floater.map(|mut f| {
             f.timer -= dt.as_secs_f64();
@@ -2724,14 +2862,23 @@ impl Hud {
         });
         self.floaters.combo_floater = self.floaters.combo_floater.filter(|f| f.timer > 0_f64);
 
-        if let (Some(health), Some(inventory), Some(energy), Some(skillset), Some(body)) = (
+        if let (
+            Some(health),
+            Some(inventory),
+            Some(energy),
+            Some(poise),
+            Some(skillset),
+            Some(body),
+        ) = (
             healths.get(entity),
             inventories.get(entity),
             energies.get(entity),
+            poises.get(entity),
             skillsets.get(entity),
             bodies.get(entity),
         ) {
-            Skillbar::new(
+            let context = AbilityContext::try_from(char_states.get(entity));
+            match Skillbar::new(
                 client,
                 &info,
                 global_state,
@@ -2742,6 +2889,7 @@ impl Hud {
                 health,
                 inventory,
                 energy,
+                poise,
                 skillset,
                 active_abilities.get(entity),
                 body,
@@ -2755,8 +2903,19 @@ impl Hud {
                 i18n,
                 &msm,
                 self.floaters.combo_floater,
+                context,
+                combos.get(entity),
+                char_states.get(entity),
             )
-            .set(self.ids.skillbar, ui_widgets);
+            .set(self.ids.skillbar, ui_widgets)
+            {
+                Some(skillbar::Event::OpenDiary(skillgroup)) => {
+                    self.show.diary(true);
+                    self.show.open_skill_tree(skillgroup);
+                },
+                Some(skillbar::Event::OpenBag) => self.show.bag = !self.show.bag,
+                None => {},
+            }
         }
         // Bag contents
         if self.show.bag {
@@ -2866,10 +3025,11 @@ impl Hud {
         }
 
         // Buffs
-        if let (Some(player_buffs), Some(health), Some(energy)) = (
+        if let (Some(player_buffs), Some(health), Some(energy), Some(char_state)) = (
             buffs.get(info.viewpoint_entity),
             healths.get(entity),
             energies.get(entity),
+            char_states.get(entity),
         ) {
             for event in BuffsBar::new(
                 &self.imgs,
@@ -2878,6 +3038,7 @@ impl Hud {
                 tooltip_manager,
                 i18n,
                 player_buffs,
+                char_state,
                 self.pulse,
                 global_state,
                 health,
@@ -2899,7 +3060,7 @@ impl Hud {
                     &info,
                     &self.imgs,
                     &self.fonts,
-                    &*i18n,
+                    i18n,
                     self.pulse,
                     &self.rot_imgs,
                     item_tooltip_manager,
@@ -3040,7 +3201,7 @@ impl Hud {
             &self.item_imgs,
             &self.rot_imgs,
             &self.fonts,
-            &*i18n,
+            i18n,
             &msm,
             item_tooltip_manager,
             self.pulse,
@@ -3157,6 +3318,7 @@ impl Hud {
                 bodies.get(entity),
                 poises.get(entity),
             ) {
+                let context = AbilityContext::try_from(char_states.get(entity));
                 for event in Diary::new(
                     &self.show,
                     client,
@@ -3177,6 +3339,7 @@ impl Hud {
                     tooltip_manager,
                     &mut self.slot_manager,
                     self.pulse,
+                    context,
                 )
                 .set(self.ids.diary, ui_widgets)
                 {
@@ -3192,6 +3355,9 @@ impl Hud {
                         diary::Event::UnlockSkill(skill) => events.push(Event::UnlockSkill(skill)),
                         diary::Event::ChangeSection(section) => {
                             self.show.diary_fields.section = section;
+                        },
+                        diary::Event::SelectExpBar(xp_bar) => {
+                            events.push(Event::SelectExpBar(xp_bar))
                         },
                     }
                 }
@@ -3454,6 +3620,12 @@ impl Hud {
                     } else if let (Crafting(c), Inventory(_)) = (a, b) {
                         // Remove item from crafting input
                         self.show.crafting_fields.recipe_inputs.remove(&c.index);
+                    } else if let (Ability(AbilitySlot::Ability(ability)), Hotbar(slot)) = (a, b) {
+                        if let Some(Some(HotbarSlotContents::Ability(index))) =
+                            self.hotbar.slots.get(slot as usize)
+                        {
+                            events.push(Event::ChangeAbility(*index, ability));
+                        }
                     }
                 },
                 slot::Event::Dropped(from) => {
@@ -4124,6 +4296,13 @@ impl Hud {
 
             // Press key while not typing
             WinEvent::InputUpdate(key, state) if !self.typing() => {
+                let gs_audio = &global_state.settings.audio;
+                let mut toggle_mute = |audio: Audio| {
+                    self.events
+                        .push(Event::SettingsChange(SettingsChange::Audio(audio)));
+                    true
+                };
+
                 let matching_key = match key {
                     GameInput::Command if state => {
                         self.force_chat_input = Some("/".to_owned());
@@ -4186,6 +4365,23 @@ impl Hud {
                     },
                     GameInput::MapZoomOut if state => {
                         handle_map_zoom(0.5, self.world_map.1, &self.show, global_state)
+                    },
+                    GameInput::MuteMaster if state => {
+                        toggle_mute(Audio::MuteMasterVolume(!gs_audio.master_volume.muted))
+                    },
+                    GameInput::MuteInactiveMaster if state => {
+                        toggle_mute(Audio::MuteInactiveMasterVolume(
+                            !gs_audio.inactive_master_volume_perc.muted,
+                        ))
+                    },
+                    GameInput::MuteMusic if state => {
+                        toggle_mute(Audio::MuteMusicVolume(!gs_audio.music_volume.muted))
+                    },
+                    GameInput::MuteSfx if state => {
+                        toggle_mute(Audio::MuteSfxVolume(!gs_audio.sfx_volume.muted))
+                    },
+                    GameInput::MuteAmbience if state => {
+                        toggle_mute(Audio::MuteAmbienceVolume(!gs_audio.ambience_volume.muted))
                     },
                     // Skillbar
                     input => {
@@ -4509,15 +4705,6 @@ pub fn get_quality_col<I: ItemDesc + ?Sized>(item: &I) -> Color {
         Quality::Debug => QUALITY_DEBUG,
     }
 }
-// Get info about applied buffs
-fn get_buff_info(buff: &comp::Buff) -> BuffInfo {
-    BuffInfo {
-        kind: buff.kind,
-        data: buff.data,
-        is_buff: buff.kind.is_buff(),
-        dur: buff.time,
-    }
-}
 
 fn try_hotbar_slot_from_input(input: GameInput) -> Option<hotbar::Slot> {
     Some(match input {
@@ -4564,21 +4751,24 @@ pub fn get_buff_image(buff: BuffKind, imgs: &Imgs) -> conrod_core::image::Id {
         BuffKind::Saturation { .. } => imgs.buff_saturation_0,
         BuffKind::Potion { .. } => imgs.buff_potion_0,
         BuffKind::CampfireHeal { .. } => imgs.buff_campfire_heal_0,
+        BuffKind::EnergyRegen { .. } => imgs.buff_energyplus_0,
         BuffKind::IncreaseMaxEnergy { .. } => imgs.buff_energyplus_0,
         BuffKind::IncreaseMaxHealth { .. } => imgs.buff_healthplus_0,
         BuffKind::Invulnerability => imgs.buff_invincibility_0,
         BuffKind::ProtectingWard => imgs.buff_dmg_red_0,
-        BuffKind::Frenzied { .. } => imgs.buff_frenzy_0,
-        BuffKind::Hastened { .. } => imgs.buff_haste_0,
+        BuffKind::Frenzied => imgs.buff_frenzy_0,
+        BuffKind::Hastened => imgs.buff_haste_0,
+        BuffKind::Fortitude => imgs.buff_fortitude_0,
         //  Debuffs
-        BuffKind::Bleeding { .. } => imgs.debuff_bleed_0,
-        BuffKind::Cursed { .. } => imgs.debuff_skull_0,
-        BuffKind::Burning { .. } => imgs.debuff_burning_0,
-        BuffKind::Crippled { .. } => imgs.debuff_crippled_0,
-        BuffKind::Frozen { .. } => imgs.debuff_frozen_0,
-        BuffKind::Wet { .. } => imgs.debuff_wet_0,
-        BuffKind::Ensnared { .. } => imgs.debuff_ensnared_0,
-        BuffKind::Poisoned { .. } => imgs.debuff_poisoned_0,
+        BuffKind::Bleeding => imgs.debuff_bleed_0,
+        BuffKind::Cursed => imgs.debuff_skull_0,
+        BuffKind::Burning => imgs.debuff_burning_0,
+        BuffKind::Crippled => imgs.debuff_crippled_0,
+        BuffKind::Frozen => imgs.debuff_frozen_0,
+        BuffKind::Wet => imgs.debuff_wet_0,
+        BuffKind::Ensnared => imgs.debuff_ensnared_0,
+        BuffKind::Poisoned => imgs.debuff_poisoned_0,
+        BuffKind::Parried => imgs.debuff_parried_0,
     }
 }
 
@@ -4589,14 +4779,18 @@ pub fn get_buff_title(buff: BuffKind, localized_strings: &Localization) -> Cow<s
         BuffKind::Saturation { .. } => localized_strings.get_msg("buff-title-saturation"),
         BuffKind::Potion { .. } => localized_strings.get_msg("buff-title-potion"),
         BuffKind::CampfireHeal { .. } => localized_strings.get_msg("buff-title-campfire_heal"),
+        BuffKind::EnergyRegen { .. } => localized_strings.get_msg("buff-title-energy_regen"),
         BuffKind::IncreaseMaxHealth { .. } => {
-            localized_strings.get_msg("buff-title-IncreaseMaxHealth")
+            localized_strings.get_msg("buff-title-increase_max_health")
         },
-        BuffKind::IncreaseMaxEnergy { .. } => localized_strings.get_msg("buff-title-energyup"),
+        BuffKind::IncreaseMaxEnergy { .. } => {
+            localized_strings.get_msg("buff-title-increase_max_energy")
+        },
         BuffKind::Invulnerability => localized_strings.get_msg("buff-title-invulnerability"),
         BuffKind::ProtectingWard => localized_strings.get_msg("buff-title-protectingward"),
         BuffKind::Frenzied => localized_strings.get_msg("buff-title-frenzied"),
         BuffKind::Hastened => localized_strings.get_msg("buff-title-hastened"),
+        BuffKind::Fortitude => localized_strings.get_msg("buff-title-fortitude"),
         // Debuffs
         BuffKind::Bleeding { .. } => localized_strings.get_msg("buff-title-bleed"),
         BuffKind::Cursed { .. } => localized_strings.get_msg("buff-title-cursed"),
@@ -4606,6 +4800,7 @@ pub fn get_buff_title(buff: BuffKind, localized_strings: &Localization) -> Cow<s
         BuffKind::Wet { .. } => localized_strings.get_msg("buff-title-wet"),
         BuffKind::Ensnared { .. } => localized_strings.get_msg("buff-title-ensnared"),
         BuffKind::Poisoned { .. } => localized_strings.get_msg("buff-title-poisoned"),
+        BuffKind::Parried { .. } => localized_strings.get_msg("buff-title-parried"),
     }
 }
 
@@ -4620,16 +4815,18 @@ pub fn get_buff_desc(buff: BuffKind, data: BuffData, localized_strings: &Localiz
                 "rate" => data.strength * 100.0
             })
         },
+        BuffKind::EnergyRegen { .. } => localized_strings.get_msg("buff-desc-energy_regen"),
         BuffKind::IncreaseMaxHealth { .. } => {
-            localized_strings.get_msg("buff-desc-IncreaseMaxHealth")
+            localized_strings.get_msg("buff-desc-increase_max_health")
         },
         BuffKind::IncreaseMaxEnergy { .. } => {
-            localized_strings.get_msg("buff-desc-IncreaseMaxEnergy")
+            localized_strings.get_msg("buff-desc-increase_max_energy")
         },
         BuffKind::Invulnerability => localized_strings.get_msg("buff-desc-invulnerability"),
         BuffKind::ProtectingWard => localized_strings.get_msg("buff-desc-protectingward"),
         BuffKind::Frenzied => localized_strings.get_msg("buff-desc-frenzied"),
         BuffKind::Hastened => localized_strings.get_msg("buff-desc-hastened"),
+        BuffKind::Fortitude => localized_strings.get_msg("buff-desc-fortitude"),
         // Debuffs
         BuffKind::Bleeding { .. } => localized_strings.get_msg("buff-desc-bleed"),
         BuffKind::Cursed { .. } => localized_strings.get_msg("buff-desc-cursed"),
@@ -4639,6 +4836,7 @@ pub fn get_buff_desc(buff: BuffKind, data: BuffData, localized_strings: &Localiz
         BuffKind::Wet { .. } => localized_strings.get_msg("buff-desc-wet"),
         BuffKind::Ensnared { .. } => localized_strings.get_msg("buff-desc-ensnared"),
         BuffKind::Poisoned { .. } => localized_strings.get_msg("buff-desc-poisoned"),
+        BuffKind::Parried { .. } => localized_strings.get_msg("buff-desc-parried"),
     }
 }
 
@@ -4667,14 +4865,6 @@ pub fn get_sprite_desc(sprite: SpriteKind, localized_strings: &Localization) -> 
         sprite => return Some(Cow::Owned(format!("{:?}", sprite))),
     };
     Some(localized_strings.get_msg(i18n_key))
-}
-
-pub fn get_buff_time(buff: BuffInfo) -> String {
-    if let Some(dur) = buff.dur {
-        format!("{:.0}s", dur.as_secs_f32())
-    } else {
-        "".to_string()
-    }
 }
 
 pub fn angle_of_attack_text(

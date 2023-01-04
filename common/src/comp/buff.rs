@@ -27,6 +27,9 @@ pub enum BuffKind {
     /// Applied when sitting at a campfire
     /// Strength is fraction of health restored per second
     CampfireHeal,
+    /// Restores energy/time for some period
+    /// Strength should be the healing per second
+    EnergyRegen,
     /// Raises maximum energy
     /// Strength should be 10x the effect to max energy
     IncreaseMaxEnergy,
@@ -48,6 +51,11 @@ pub enum BuffKind {
     /// Strength scales strength of both effects linearly. 0.5 is a 50%
     /// increase, 1.0 is a 100% increase.
     Hastened,
+    // TODO: Consider non linear scaling?
+    /// Increases resistance to incoming poise over time
+    /// Strength scales the resistance linearly, values over 1 will usually do
+    /// nothing. 0.5 is 50%, 1.0 is 100%.
+    Fortitude,
     // Debuffs
     /// Does damage to a creature over time
     /// Strength should be the DPS of the debuff
@@ -79,6 +87,10 @@ pub enum BuffKind {
     /// Drain stamina to a creature over time
     /// Strength should be the energy per second of the debuff
     Poisoned,
+    /// Results from having an attack parried.
+    /// Causes your attack speed to be slower to emulate the recover duration of
+    /// an ability being lengthened.
+    Parried,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -91,11 +103,13 @@ impl BuffKind {
             | BuffKind::Potion
             | BuffKind::CampfireHeal
             | BuffKind::Frenzied
+            | BuffKind::EnergyRegen
             | BuffKind::IncreaseMaxEnergy
             | BuffKind::IncreaseMaxHealth
             | BuffKind::Invulnerability
             | BuffKind::ProtectingWard
-            | BuffKind::Hastened => true,
+            | BuffKind::Hastened
+            | BuffKind::Fortitude => true,
             BuffKind::Bleeding
             | BuffKind::Cursed
             | BuffKind::Burning
@@ -103,7 +117,8 @@ impl BuffKind {
             | BuffKind::Frozen
             | BuffKind::Wet
             | BuffKind::Ensnared
-            | BuffKind::Poisoned => false,
+            | BuffKind::Poisoned
+            | BuffKind::Parried => false,
         }
     }
 
@@ -177,6 +192,8 @@ pub enum BuffEffect {
     AttackSpeed(f32),
     /// Modifies ground friction of target
     GroundFriction(f32),
+    /// Reduces poise damage taken after armor is accounted for by this fraction
+    PoiseReduction(f32),
 }
 
 /// Actual de/buff.
@@ -279,6 +296,14 @@ impl Buff {
                 ],
                 data.duration,
             ),
+            BuffKind::EnergyRegen => (
+                vec![BuffEffect::EnergyChangeOverTime {
+                    rate: data.strength,
+                    accumulated: 0.0,
+                    kind: ModifierKind::Additive,
+                }],
+                data.duration,
+            ),
             BuffKind::IncreaseMaxEnergy => (
                 vec![BuffEffect::MaxEnergyModifier {
                     value: data.strength,
@@ -296,9 +321,9 @@ impl Buff {
             BuffKind::Invulnerability => (vec![BuffEffect::DamageReduction(1.0)], data.duration),
             BuffKind::ProtectingWard => (
                 vec![BuffEffect::DamageReduction(
-                    // Causes non-linearity in effect strength, but necessary to allow for tool
-                    // power and other things to affect the strength. 0.5 also still provides 50%
-                    // damage reduction.
+                    // Causes non-linearity in effect strength, but necessary
+                    // to allow for tool power and other things to affect the
+                    // strength. 0.5 also still provides 50% damage reduction.
                     nn_scaling(data.strength),
                 )],
                 data.duration,
@@ -366,6 +391,11 @@ impl Buff {
                 ],
                 data.duration,
             ),
+            BuffKind::Fortitude => (
+                vec![BuffEffect::PoiseReduction(data.strength)],
+                data.duration,
+            ),
+            BuffKind::Parried => (vec![BuffEffect::AttackSpeed(0.5)], data.duration),
         };
         Buff {
             kind,
@@ -410,7 +440,7 @@ impl PartialEq for Buff {
 }
 
 /// Source of the de/buff
-#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum BuffSource {
     /// Applied by a character
     Character { by: Uid },
@@ -493,7 +523,7 @@ impl Buffs {
         self.kinds
             .get(&kind)
             .map(|ids| ids.iter())
-            .unwrap_or_else(|| (&[]).iter())
+            .unwrap_or_else(|| [].iter())
             .map(move |id| (*id, &self.buffs[id]))
     }
 

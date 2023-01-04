@@ -1,7 +1,7 @@
 [package]
 name = "veloren-common"
 version = "0.10.0"
-authors = ["Joshua Barretto <joshua.s.barretto@gmail.com>", "Maciej Ćwięka <mckol363@gmail.com>", "Imbris <imbrisf@gmail.com>"]
+authors = ["Joshua Barretto <joshua.s.barretto@gmail.com>", "Luna Ćwięka <luna@lunareclipse.zone>", "Imbris <imbrisf@gmail.com>"]
 edition = "2021"
 
 [features]
@@ -9,7 +9,7 @@ no-assets = []
 hot-reloading = ["common-assets/hot-reloading"]
 simd = ["vek/platform_intrinsics"]
 bin_csv = ["ron", "csv", "structopt"]
-bin_graphviz = ["petgraph"]
+bin_graphviz = ["petgraph", "structopt"]
 bin_cmd_doc_gen = []
 bin_asset_migrate = ["ron"]
 rrt_pathfinding = ["kiddo"]
@@ -26,9 +26,8 @@ common-base = { package = "veloren-common-base", path = "base" }
 serde = { version = "1.0.110", features = ["derive", "rc"] }
 
 # Util
-enum-iterator = "0.7"
 vek = { version = "0.15.8", features = ["serde"] }
-chrono = "0.4"
+chrono = "0.4.22"
 chrono-tz = "0.6"
 sha2 = "0.10"
 serde_json = "1.0.50"
@@ -83,6 +82,7 @@ specs = { version = "0.18", features = ["serde", "storage-event-control", "night
 [dev-dependencies]
 #bench
 criterion = "0.3"
+rand_chacha = "0.3"
 
 #test
 tracing-subscriber = { version = "0.3.7", default-features = false, features = ["fmt", "time", "ansi", "smallvec", "env-filter"] }
@@ -110,6 +110,10 @@ required-features = ["bin_asset_migrate"]
 
 [[bin]]
 name = "recipe_graphviz"
+required-features = ["bin_graphviz"]
+
+[[bin]]
+name = "skill_graphviz"
 required-features = ["bin_graphviz"]
 
 [[bin]]

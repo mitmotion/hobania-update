@@ -9,25 +9,26 @@ use common::{
 use core::f32::consts::PI;
 
 pub struct BetaAnimation;
-
-type BetaAnimationDependency = (
-    (Option<Hands>, Option<Hands>),
-    f32,
-    f32,
-    Option<StageSection>,
-    Option<AbilityInfo>,
-);
 impl Animation for BetaAnimation {
-    type Dependency<'a> = BetaAnimationDependency;
+    type Dependency<'a> = (
+        (Option<Hands>, Option<Hands>),
+        Option<&'a str>,
+        f32,
+        f32,
+        Option<StageSection>,
+        Option<AbilityInfo>,
+    );
     type Skeleton = CharacterSkeleton;
 
     #[cfg(feature = "use-dyn-lib")]
     const UPDATE_FN: &'static [u8] = b"character_beta\0";
 
     #[cfg_attr(feature = "be-dyn-lib", export_name = "character_beta")]
-    fn update_skeleton_inner<'a>(
+    fn update_skeleton_inner(
         skeleton: &Self::Skeleton,
-        (hands, _velocity, _global_time, stage_section, ability_info): Self::Dependency<'a>,
+        (hands, _ability_id, _velocity, _global_time, stage_section, ability_info): Self::Dependency<
+            '_,
+        >,
         anim_time: f32,
         rate: &mut f32,
         s_a: &SkeletonAttr,

@@ -132,7 +132,7 @@ pub const MAX_WORLD_BLOCKS_LG: Vec2<u32> = Vec2 { x: 19, y: 19 };
 /// [TERRAIN_CHUNK_BLOCKS_LG]))` fits in an i32 (derived from the invariant
 /// on [MAX_WORLD_BLOCKS_LG]).
 ///
-/// NOTE: As an invariant, each dimension (in chunks) must fit in a u16.
+/// NOTE: As an invariant, each dimension (in chunks) must fit in a i16.
 ///
 /// NOTE: As an invariant, the product of dimensions (in chunks) must fit in a
 /// usize.
@@ -160,12 +160,12 @@ impl MapSizeLg {
         // 0 and ([MAX_WORLD_BLOCKS_LG] - [TERRAIN_CHUNK_BLOCKS_LG])
         let is_le_max = map_size_lg.x <= MAX_WORLD_BLOCKS_LG.x - TERRAIN_CHUNK_BLOCKS_LG
             && map_size_lg.y <= MAX_WORLD_BLOCKS_LG.y - TERRAIN_CHUNK_BLOCKS_LG;
-        // Assertion on dimensions: chunks must fit in a u16.
+        // Assertion on dimensions: chunks must fit in a i16.
         let chunks_in_range =
-            /* 1u16.checked_shl(map_size_lg.x).is_some() &&
-            1u16.checked_shl(map_size_lg.y).is_some(); */
-            map_size_lg.x <= 16 &&
-            map_size_lg.y <= 16;
+            /* 1u15.checked_shl(map_size_lg.x).is_some() &&
+            1u15.checked_shl(map_size_lg.y).is_some(); */
+            map_size_lg.x <= 15 &&
+            map_size_lg.y <= 15;
         if is_le_max && chunks_in_range {
             // Assertion on dimensions: blocks must fit in a i32.
             let blocks_in_range =
@@ -197,6 +197,15 @@ impl MapSizeLg {
 
     /// Get the size of an array of the correct size to hold all chunks.
     pub const fn chunks_len(self) -> usize { 1 << (self.0.x + self.0.y) }
+
+    #[inline(always)]
+    /// Determine whether a chunk position is in bounds.
+    pub const fn contains_chunk(&self, chunk_key: Vec2<i32>) -> bool {
+        let map_size = self.chunks();
+        chunk_key.x >= 0 && chunk_key.y >= 0 &&
+        chunk_key.x == chunk_key.x & ((map_size.x as i32) - 1) &&
+        chunk_key.y == chunk_key.y & ((map_size.y as i32) - 1)
+    }
 }
 
 impl From<MapSizeLg> for Vec2<u32> {
@@ -461,7 +470,7 @@ impl<'a> MapConfig<'a> {
             light_direction.y,
             0.0, // we currently ignore light_direction.z.
         );
-        let light_shadow_dir = if light_direction.x >= 0.0 { 0 } else { 1 };
+        let light_shadow_dir = usize::from(light_direction.x < 0.0);
         let horizon_map = horizons.map(|horizons| &horizons[light_shadow_dir]);
         let light = light_direction.normalized();
         let /*mut */quads = [[0u32; QUADRANTS]; QUADRANTS];
@@ -485,8 +494,8 @@ impl<'a> MapConfig<'a> {
         let world_size = map_size_lg.chunks();
 
         (0..dimensions.y * dimensions.x).for_each(|chunk_idx| {
-            let i = chunk_idx % dimensions.x as usize;
-            let j = chunk_idx / dimensions.x as usize;
+            let i = chunk_idx % dimensions.x;
+            let j = chunk_idx / dimensions.x;
 
             let wposf = focus_rect + Vec2::new(i as f64, j as f64) * scale;
             let pos = wposf.map(|e: f64| e as i32);
@@ -669,7 +678,7 @@ impl<'a> MapConfig<'a> {
                             let deltax = height / angle;
                             let lighty = (light_direction.y / light_direction.x * deltax).abs();
                             let deltay = lighty - height;
-                            let s = (deltay / deltax / w).min(1.0).max(0.0);
+                            let s = (deltay / deltax / w).clamp(0.0, 1.0);
                             // Smoothstep
                             s * s * (3.0 - 2.0 * s)
                         } else {

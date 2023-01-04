@@ -1,7 +1,7 @@
 use crate::{
     assets::{self, AssetExt},
     comp::{
-        arthropod, biped_large, biped_small, bird_large, golem,
+        arthropod, biped_large, biped_small, bird_large, bird_medium, golem,
         inventory::{
             loadout::Loadout,
             slot::{ArmorSlot, EquipSlot},
@@ -556,12 +556,14 @@ fn default_main_tool(body: &Body) -> Item {
                 "common.items.npc_weapons.unique.quadmedjump",
             )),
             quadruped_medium::Species::Tuskram
-            | quadruped_medium::Species::Roshwalr
             | quadruped_medium::Species::Moose
             | quadruped_medium::Species::Dreadhorn
             | quadruped_medium::Species::Mammoth
             | quadruped_medium::Species::Ngoubou => Some(Item::new_from_asset_expect(
                 "common.items.npc_weapons.unique.quadmedcharge",
+            )),
+            quadruped_medium::Species::Roshwalr => Some(Item::new_from_asset_expect(
+                "common.items.npc_weapons.unique.roshwalr",
             )),
             quadruped_medium::Species::Highland
             | quadruped_medium::Species::Cattle
@@ -585,7 +587,8 @@ fn default_main_tool(body: &Body) -> Item {
             quadruped_low::Species::Crocodile
             | quadruped_low::Species::SeaCrocodile
             | quadruped_low::Species::Alligator
-            | quadruped_low::Species::Salamander => Some(Item::new_from_asset_expect(
+            | quadruped_low::Species::Salamander
+            | quadruped_low::Species::Elbst => Some(Item::new_from_asset_expect(
                 "common.items.npc_weapons.unique.quadlowtail",
             )),
             quadruped_low::Species::Monitor | quadruped_low::Species::Pangolin => Some(
@@ -615,6 +618,9 @@ fn default_main_tool(body: &Body) -> Item {
             )),
             theropod::Species::Yale => Some(Item::new_from_asset_expect(
                 "common.items.npc_weapons.unique.theropodcharge",
+            )),
+            theropod::Species::Dodarock => Some(Item::new_from_asset_expect(
+                "common.items.npc_weapons.unique.theropodsmall",
             )),
             _ => Some(Item::new_from_asset_expect(
                 "common.items.npc_weapons.unique.theropodbasic",
@@ -756,15 +762,29 @@ fn default_main_tool(body: &Body) -> Item {
             )),
         },
         Body::BirdLarge(bird_large) => match (bird_large.species, bird_large.body_type) {
-            (bird_large::Species::Cockatrice | bird_large::Species::FlameWyvern, _) => Some(
-                Item::new_from_asset_expect("common.items.npc_weapons.unique.birdlargebreathe"),
-            ),
+            (
+                bird_large::Species::Cockatrice
+                | bird_large::Species::FlameWyvern
+                | bird_large::Species::CloudWyvern
+                | bird_large::Species::FrostWyvern
+                | bird_large::Species::SeaWyvern
+                | bird_large::Species::WealdWyvern,
+                _,
+            ) => Some(Item::new_from_asset_expect(
+                "common.items.npc_weapons.unique.birdlargebreathe",
+            )),
             (bird_large::Species::Phoenix, _) => Some(Item::new_from_asset_expect(
                 "common.items.npc_weapons.unique.birdlargefire",
             )),
             (bird_large::Species::Roc, _) => Some(Item::new_from_asset_expect(
                 "common.items.npc_weapons.unique.birdlargebasic",
             )),
+        },
+        Body::BirdMedium(bird_medium) => match bird_medium.species {
+            bird_medium::Species::Bat => Some(Item::new_from_asset_expect(
+                "common.items.npc_weapons.unique.simpleflyingbasic",
+            )),
+            _ => None,
         },
         _ => None,
     };
@@ -790,7 +810,7 @@ fn default_main_tool(body: &Body) -> Item {
 #[derive(Clone)]
 pub struct LoadoutBuilder(Loadout);
 
-#[derive(Copy, Clone, PartialEq, Deserialize, Serialize, Debug, EnumIter)]
+#[derive(Copy, Clone, PartialEq, Eq, Deserialize, Serialize, Debug, EnumIter)]
 pub enum Preset {
     HuskSummon,
 }
@@ -892,11 +912,20 @@ impl LoadoutBuilder {
                 | quadruped_low::Species::Lavadrake
                 | quadruped_low::Species::Maneater
                 | quadruped_low::Species::Rocksnapper
+                | quadruped_low::Species::Rootsnapper
+                | quadruped_low::Species::Reefsnapper
                 | quadruped_low::Species::Sandshark => {
                     Some("common.items.npc_armor.quadruped_low.generic")
                 },
+                quadruped_low::Species::Dagon => Some("common.items.npc_armor.quadruped_low.dagon"),
                 quadruped_low::Species::Tortoise => {
                     Some("common.items.npc_armor.quadruped_low.shell")
+                },
+                _ => None,
+            },
+            Body::QuadrupedMedium(body) => match body.species {
+                quadruped_medium::Species::Roshwalr => {
+                    Some("common.items.npc_armor.quadruped_medium.roshwalr")
                 },
                 _ => None,
             },
@@ -1073,7 +1102,7 @@ impl LoadoutBuilder {
         // Panic if item doesn't correspond to slot
         assert!(
             item.as_ref()
-                .map_or(true, |item| equip_slot.can_hold(&*item.kind()))
+                .map_or(true, |item| equip_slot.can_hold(&item.kind()))
         );
 
         self.0.swap(equip_slot, item);
@@ -1243,7 +1272,7 @@ mod tests {
             let loadout =
                 LoadoutSpec::load_cloned(loadout_id).expect("failed to load loadout asset");
             loadout
-                .validate(vec![loadout_id.to_owned()])
+                .validate(vec![loadout_id.to_string()])
                 .unwrap_or_else(|e| panic!("{loadout_id} is broken: {e:?}"));
         }
     }
@@ -1258,7 +1287,7 @@ mod tests {
             let loadout =
                 LoadoutSpec::load_cloned(loadout_id).expect("failed to load loadout asset");
             loadout
-                .validate(vec![loadout_id.to_owned()])
+                .validate(vec![loadout_id.to_string()])
                 .unwrap_or_else(|e| panic!("{loadout_id} is broken: {e:?}"));
         }
     }

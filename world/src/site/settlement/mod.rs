@@ -232,8 +232,8 @@ impl Settlement {
         let river_offs = Vec2::new(rng.gen_range(-3..4), rng.gen_range(-3..4));
 
         for x in (0..100).map(|e| e as f32 / 100.0) {
-            let theta0 = x as f32 * f32::consts::PI * 2.0;
-            let theta1 = (x + 0.01) as f32 * f32::consts::PI * 2.0;
+            let theta0 = x * f32::consts::PI * 2.0;
+            let theta1 = (x + 0.01) * f32::consts::PI * 2.0;
 
             let pos0 = (river_dir * radius + Vec2::new(theta0.sin(), theta0.cos()) * radius)
                 .map(|e| e.floor() as i32)
@@ -1110,7 +1110,7 @@ fn transfer(wares: &mut Vec<Item>, bag: &mut Item) {
     }
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Crop {
     Corn,
     Wheat,
@@ -1126,7 +1126,7 @@ pub enum Crop {
 
 // NOTE: No support for struct variants in make_case_elim yet, unfortunately, so
 // we can't use it.
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Plot {
     Hazard,
     Dirt,
@@ -1149,7 +1149,7 @@ const CARDINALS: [Vec2<i32>; 4] = [
     Vec2::new(-1, 0),
 ];
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum WayKind {
     Path,
     #[allow(dead_code)]
@@ -1165,7 +1165,7 @@ impl WayKind {
     }
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Tower {
     #[allow(dead_code)]
     Wall,

@@ -54,9 +54,9 @@ pub struct MainMenuState {
 
 impl MainMenuState {
     /// Create a new `MainMenuState`.
-    pub fn new(global_state: &mut GlobalState) -> Self {
+    pub fn new(global_state: &mut GlobalState, server: Option<String>) -> Self {
         Self {
-            main_menu_ui: MainMenuUi::new(global_state),
+            main_menu_ui: MainMenuUi::new(global_state, server),
             init: InitState::None,
             scene: Scene::new(global_state.window.renderer_mut()),
         }
@@ -415,7 +415,9 @@ fn get_client_msg_error(
     // and server version it is almost definitely due to this mismatch rather than
     // a true networking error.
     let net_error = |error: String, mismatched_server_info: Option<ServerInfo>| -> String {
-        if let Some(server_info) = mismatched_server_info {
+        if let Some(server_info) =
+            mismatched_server_info.filter(|info| info.git_hash != *common::util::GIT_HASH)
+        {
             format!(
                 "{} {}: {} ({}) {}: {} ({})",
                 localization.get_msg("main-login-network_wrong_version"),

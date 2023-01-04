@@ -1,6 +1,5 @@
 #![deny(unsafe_code)]
 #![deny(clippy::clone_on_ref_ptr)]
-#![feature(bool_to_option)]
 
 #[cfg(target_os = "windows")]
 #[global_allocator]
@@ -87,6 +86,11 @@ fn main() -> io::Result<()> {
             .build()
             .unwrap(),
     );
+
+    #[cfg(feature = "hot-agent")]
+    {
+        agent::init();
+    }
 
     // Load server settings
     let mut server_settings = server::Settings::load(&server_data_dir);

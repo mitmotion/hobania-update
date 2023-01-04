@@ -4,7 +4,6 @@ use crate::{
     event::ServerEvent,
     states::{
         behavior::{CharacterBehavior, JoinData},
-        idle, wielding,
     },
     terrain::SpriteKind,
     util::Dir,
@@ -30,6 +29,8 @@ pub struct StaticData {
     pub was_wielded: bool,
     /// Was sneaking
     pub was_sneak: bool,
+    /// Miscellaneous information about the ability
+    pub ability_info: AbilityInfo,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -98,22 +99,12 @@ impl CharacterBehavior for Data {
                     let inv_manip = InventoryManip::Collect(self.static_data.sprite_pos);
                     output_events.emit_server(ServerEvent::InventoryManip(data.entity, inv_manip));
                     // Done
-
-                    update.character = if self.static_data.was_wielded {
-                        CharacterState::Wielding(wielding::Data {
-                            is_sneaking: self.static_data.was_sneak,
-                        })
-                    } else {
-                        CharacterState::Idle(idle::Data {
-                            is_sneaking: self.static_data.was_sneak,
-                            footwear: None,
-                        })
-                    }
+                    end_ability(data, &mut update);
                 }
             },
             _ => {
                 // If it somehow ends up in an incorrect stage section
-                update.character = CharacterState::Idle(idle::Data::default());
+                end_ability(data, &mut update);
             },
         }
 
@@ -121,14 +112,14 @@ impl CharacterBehavior for Data {
         handle_wield(data, &mut update);
 
         // At end of state logic so an interrupt isn't overwritten
-        handle_state_interrupt(data, &mut update, false);
+        handle_dodge_input(data, &mut update);
 
         update
     }
 }
 
 /// Used to control effects based off of the type of sprite interacted with
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpriteInteractKind {
     Chest,
     Harvestable,

@@ -1,112 +1,202 @@
 {
   description = "Flake providing Veloren, a multiplayer voxel RPG written in Rust.";
 
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    nixCargoIntegration = {
-      url = "github:yusdacra/nix-cargo-integration";
-      inputs.nixpkgs.follows = "nixpkgs";
+  inputs.nci.url = "github:yusdacra/nix-cargo-integration";
+
+  outputs = inputs: let
+    lib = inputs.nci.inputs.nixpkgs.lib;
+    ncl = inputs.nci.lib.nci-lib;
+
+    git = let
+      sourceInfo = inputs.self.sourceInfo;
+      dateTimeFormat = import ./nix/dateTimeFormat.nix;
+      dateTime = dateTimeFormat sourceInfo.lastModified;
+      shortRev = sourceInfo.shortRev or "dirty";
+    in {
+      prettyRev = shortRev + "/" + dateTime;
+      tag = "";
     };
-  };
 
-  outputs = inputs:
-    inputs.nixCargoIntegration.lib.makeOutputs {
-      root = ./.;
-      buildPlatform = "crate2nix";
-      defaultOutputs = {
-        package = "veloren-voxygen";
-        app = "veloren-voxygen";
+    filteredSource = let
+      pathsToIgnore = [
+        "flake.nix"
+        "flake.lock"
+        "nix"
+        "assets"
+        "README.md"
+        "CONTRIBUTING.md"
+        "CHANGELOG.md"
+        "CODE_OF_CONDUCT.md"
+        "clippy.toml"
+        ".cargo"
+        ".github"
+        ".gitlab"
+      ];
+      ignorePaths = path: type: let
+        split = lib.splitString "/" path;
+        actual = lib.drop 4 split;
+        _path = lib.concatStringsSep "/" actual;
+      in
+        lib.all (n: ! (lib.hasPrefix n _path)) pathsToIgnore;
+    in
+      builtins.path {
+        name = "veloren-source";
+        path = toString ./.;
+        # filter out unnecessary paths
+        filter = ignorePaths;
       };
-      overrides = {
-        build = common: prev: {
-          runTests = !prev.release && prev.runTests;
-          rootFeatures =
-            if prev.release && common.cargoPkg.name == "veloren-voxygen"
-            then [ "default-publish" ]
-            else prev.rootFeatures;
+    checkIfLfsIsSetup = pkgs: checkFile: ''
+      checkFile="${checkFile}"
+      result="$(${pkgs.file}/bin/file --mime-type $checkFile)"
+      if [ "$result" = "$checkFile: image/jpeg" ]; then
+        echo "Git LFS seems to be setup properly."
+        true
+      else
+        echo "
+          Git Large File Storage (git-lfs) has not been set up correctly.
+          Most common reasons:
+            - git-lfs was not installed before cloning this repository.
+            - This repository was not cloned from the primary GitLab mirror.
+            - The GitHub mirror does not support LFS.
+          See the book at https://book.veloren.net/ for details.
+          Run 'nix-shell -p git git-lfs --run \"git lfs install --local && git lfs fetch && git lfs checkout\"'
+          or 'nix shell nixpkgs#git-lfs nixpkgs#git -c sh -c \"git lfs install --local && git lfs fetch && git lfs checkout\"'.
+        "
+        false
+      fi
+    '';
+  in
+    inputs.nci.lib.makeOutputs {
+      root = ./.;
+      config = common: {
+        cCompiler.package = common.pkgs.clang;
+        outputs.defaults = {
+          package = "veloren-voxygen";
+          app = "veloren-voxygen";
         };
-        crateOverrides = common: prev:
-          let
-            pkgs = common.pkgs;
-            lib = common.lib;
-
-            gitLfsCheckFile = ./assets/voxygen/background/bg_main.jpg;
-            utils = import ./nix/utils.nix { inherit pkgs; };
-
-            sourceInfo =
-              if inputs.self.sourceInfo ? rev
-              then inputs.self.sourceInfo // {
-                # Tag would have to be set manually for stable releases flake
-                # because there's currently no way to get the tag via the interface.
-                # tag = v0.9.0;
-              }
-              else (throw "Can't get revision because the git tree is dirty");
-
-            prettyRev = with sourceInfo; builtins.substring 0 8 rev + "/" + utils.dateTimeFormat lastModified;
-
-            tag = with sourceInfo;
-              if sourceInfo ? tag
-              then sourceInfo.tag
-              else "";
-
-            # If gitTag has a tag (meaning the commit we are on is a *release*), use
-            # it as version, else: just use the prettified hash we have, if we don't
-            # have it the build fails.
-            # Must be in format f4987672/2020-12-10-12:00
-            version =
-              if tag != "" then tag
-              else if prettyRev != "" then prettyRev
-              else throw "Need a tag or pretty revision in order to determine version";
-
-            veloren-assets = pkgs.runCommand "makeAssetsDir" { } ''
-              mkdir $out
-              ln -sf ${./assets} $out/assets
+        shell = {
+          startup.checkLfsSetup.text = ''
+            ${checkIfLfsIsSetup common.pkgs "$PWD/assets/voxygen/background/bg_main.jpg"}
+            if [ $? -ne 0 ]; then
+              exit 1
+            fi
+          '';
+        };
+      };
+      pkgConfig = common: let
+        inherit (common) pkgs;
+        veloren-common-ov = {
+          # Disable `git-lfs` check here since we check it ourselves
+          # We have to include the command output here, otherwise Nix won't run it
+          DISABLE_GIT_LFS_CHECK = true;
+          # We don't add in any information here because otherwise anything
+          # that depends on common will be recompiled. We will set these in
+          # our wrapper instead.
+          NIX_GIT_HASH = "";
+          NIX_GIT_TAG = "";
+        };
+        wrapWithAssets = _: old: let
+          runtimeLibs = with pkgs; [
+            xorg.libX11
+            xorg.libXi
+            xorg.libxcb
+            xorg.libXcursor
+            xorg.libXrandr
+            libxkbcommon
+            shaderc.lib
+            udev
+            alsa-lib
+            vulkan-loader
+          ];
+          assets = pkgs.runCommand "veloren-assets" {} ''
+            mkdir $out
+            ln -sf ${./assets} $out/assets
+            ${checkIfLfsIsSetup pkgs "$out/assets/voxygen/background/bg_main.jpg"}
+          '';
+          wrapped =
+            common.internal.pkgsSet.utils.wrapDerivation old
+            {nativeBuildInputs = [pkgs.makeWrapper];}
+            ''
+              rm -rf $out/bin
+              mkdir $out/bin
+              ln -sf ${old}/bin/* $out/bin/
+              wrapProgram $out/bin/* \
+                ${lib.optionalString (old.pname == "veloren-voxygen") "--prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath runtimeLibs}"} \
+                --set VELOREN_ASSETS ${assets} \
+                --set VELOREN_GIT_VERSION "${git.prettyRev}" \
+                --set VELOREN_GIT_TAG "${git.tag}"
             '';
-          in
-          {
-            # veloren-world = oldAttrs: {
-            #   crateBin = lib.filter (bin: bin.name != "chunk_compression_benchmarks") oldAttrs.crateBin;
-            # };
-            veloren-client = oldAttrs: {
-              crateBin = lib.filter (bin: bin.name != "bot") oldAttrs.crateBin;
-            };
-            veloren-voxygen-i18n = oldAttrs: {
-              crateBin = lib.filter (bin: bin.name != "i18n-check") oldAttrs.crateBin;
-            };
-            veloren-common = oldAttrs: {
-              # Disable `git-lfs` check here since we check it ourselves
-              # We have to include the command output here, otherwise Nix won't run it
-              DISABLE_GIT_LFS_CHECK = utils.isGitLfsSetup gitLfsCheckFile;
-              # Declare env values here so that `common/build.rs` sees them
-              NIX_GIT_HASH = prettyRev;
-              NIX_GIT_TAG = tag;
-              crateBin = lib.filter (bin: bin.name != "csv_export" && bin.name != "csv_import" && bin.name != "recipe_graphviz") oldAttrs.crateBin;
-            };
-            veloren-voxygen = oldAttrs: {
+        in
+          wrapped;
+      in {
+        veloren-voxygen = let
+          veloren-voxygen-deps-ov = oldAttrs: {
+            buildInputs = ncl.addBuildInputs oldAttrs (
+              with pkgs; [
+                alsa-lib
+                libxkbcommon
+                udev
+                xorg.libxcb
+              ]
+            );
+            nativeBuildInputs =
+              ncl.addNativeBuildInputs oldAttrs (with pkgs; [python3 pkg-config]);
+
+            SHADERC_LIB_DIR = "${pkgs.shaderc.lib}/lib";
+
+            doCheck = false;
+            dontCheck = true;
+          };
+        in {
+          features = {
+            release = ["default-publish"];
+            dev = ["default-publish"];
+            test = ["default-publish"];
+          };
+          depsOverrides.fix-build.overrideAttrs = veloren-voxygen-deps-ov;
+          overrides = {
+            fix-veloren-common = veloren-common-ov;
+            add-deps-reqs.overrideAttrs = veloren-voxygen-deps-ov;
+            fix-build.overrideAttrs = prev: {
+              src = filteredSource;
+
               VELOREN_USERDATA_STRATEGY = "system";
+
+              dontUseCmakeConfigure = true;
+
               preConfigure = ''
-                substituteInPlace src/audio/soundcache.rs \
+                ${prev.preConfigure or ""}
+                substituteInPlace voxygen/src/audio/soundcache.rs \
                   --replace \
                   "../../../assets/voxygen/audio/null.ogg" \
                   "${./assets/voxygen/audio/null.ogg}"
               '';
-              postInstall = ''
-                if [ -f $out/bin/veloren-voxygen ]; then
-                  wrapProgram $out/bin/veloren-voxygen \
-                    --set VELOREN_ASSETS ${veloren-assets} \
-                    --set LD_LIBRARY_PATH ${lib.makeLibraryPath common.runtimeLibs}
-                fi
-              '';
-            };
-            veloren-server-cli = oldAttrs: {
-              VELOREN_USERDATA_STRATEGY = "system";
-              postInstall = ''
-                if [ -f $out/bin/veloren-server-cli ]; then
-                  wrapProgram $out/bin/veloren-server-cli --set VELOREN_ASSETS ${veloren-assets}
-                fi
-              '';
             };
           };
+          wrapper = wrapWithAssets;
+        };
+        veloren-server-cli = let
+          veloren-server-cli-deps-ov = oldAttrs: {
+            doCheck = false;
+            dontCheck = true;
+          };
+        in {
+          features = {
+            release = ["default-publish"];
+            dev = ["default-publish"];
+            test = ["default-publish"];
+          };
+          depsOverrides.fix-build.overrideAttrs = veloren-server-cli-deps-ov;
+          overrides = {
+            fix-veloren-common = veloren-common-ov;
+            add-deps-reqs.overrideAttrs = veloren-server-cli-deps-ov;
+            fix-build = {
+              src = filteredSource;
+              VELOREN_USERDATA_STRATEGY = "system";
+            };
+          };
+          wrapper = wrapWithAssets;
+        };
       };
     };
 }

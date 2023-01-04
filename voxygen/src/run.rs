@@ -9,9 +9,10 @@ use common_base::{prof_span, span};
 use std::{mem, time::Duration};
 use tracing::debug;
 
-pub fn run(mut global_state: GlobalState, event_loop: EventLoop) {
+pub fn run(mut global_state: GlobalState, event_loop: EventLoop, server: Option<String>) {
     // Set up the initial play state.
-    let mut states: Vec<Box<dyn PlayState>> = vec![Box::new(MainMenuState::new(&mut global_state))];
+    let mut states: Vec<Box<dyn PlayState>> =
+        vec![Box::new(MainMenuState::new(&mut global_state, server))];
     states.last_mut().map(|current_state| {
         current_state.enter(&mut global_state, Direction::Forwards);
         let current_state = current_state.name();
@@ -89,10 +90,14 @@ pub fn run(mut global_state: GlobalState, event_loop: EventLoop) {
 
                 if let winit::event::WindowEvent::Focused(focused) = event {
                     global_state.audio.set_master_volume(if focused {
-                        global_state.settings.audio.master_volume
+                        global_state.settings.audio.master_volume.get_checked()
                     } else {
-                        global_state.settings.audio.inactive_master_volume_perc
-                            * global_state.settings.audio.master_volume
+                        global_state
+                            .settings
+                            .audio
+                            .inactive_master_volume_perc
+                            .get_checked()
+                            * global_state.settings.audio.master_volume.get_checked()
                     });
                 }
 

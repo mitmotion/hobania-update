@@ -26,7 +26,7 @@ use common::{
     resources::{Time, TimeOfDay},
     slowjob::SlowJobPool,
     uid::{Uid, UidAllocator},
-    ViewDistances,
+    LoadoutBuilder, ViewDistances,
 };
 use common_net::{
     msg::{CharacterInfo, PlayerListUpdate, PresenceKind, ServerGeneral},
@@ -183,7 +183,16 @@ impl StateExt for State {
             },
             Effect::Poise(poise) => {
                 let inventories = self.ecs().read_storage::<Inventory>();
-                let change = Poise::apply_poise_reduction(poise, inventories.get(entity), &msm);
+                let char_states = self.ecs().read_storage::<comp::CharacterState>();
+                let stats = self.ecs().read_storage::<comp::Stats>();
+
+                let change = Poise::apply_poise_reduction(
+                    poise,
+                    inventories.get(entity),
+                    &msm,
+                    char_states.get(entity),
+                    stats.get(entity),
+                );
                 // Check to make sure the entity is not already stunned
                 if let Some(character_state) = self
                     .ecs()
@@ -651,7 +660,10 @@ impl StateExt for State {
                             comp::SkillSet::default(),
                             Some(comp::Health::new(body, DEFAULT_PET_HEALTH_LEVEL)),
                             Poise::new(body),
-                            Inventory::with_empty(),
+                            Inventory::with_loadout(
+                                LoadoutBuilder::from_default(&body).build(),
+                                body,
+                            ),
                             body,
                         )
                         .with(comp::Scale(1.0))
@@ -703,8 +715,10 @@ impl StateExt for State {
         msg: &str,
     ) -> bool {
         let mut automod = self.ecs().write_resource::<AutoMod>();
-        let Some(client) = self.ecs().read_storage::<Client>().get(entity) else { return true };
-        let Some(player) = self.ecs().read_storage::<Player>().get(entity) else { return true };
+        let client = self.ecs().read_storage::<Client>();
+        let player = self.ecs().read_storage::<Player>();
+        let Some(client) = client.get(entity) else { return true };
+        let Some(player) = player.get(entity) else { return true };
 
         match automod.validate_chat_msg(
             player.uuid(),

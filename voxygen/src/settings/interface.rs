@@ -2,7 +2,7 @@ use crate::{
     hud::{BarNumbers, BuffPosition, CrosshairType, Intro, ShortcutNumbers, XpBar},
     ui::ScaleMode,
 };
-
+use common::comp::skillset::SkillGroupKind;
 use serde::{Deserialize, Serialize};
 
 /// `InterfaceSettings` contains UI, HUD and Map options.
@@ -30,6 +30,7 @@ pub struct InterfaceSettings {
     pub buff_position: BuffPosition,
     pub bar_numbers: BarNumbers,
     pub always_show_bars: bool,
+    pub enable_poise_bar: bool,
     pub ui_scale: ScaleMode,
     pub map_zoom: f64,
     pub map_show_topo_map: bool,
@@ -37,6 +38,7 @@ pub struct InterfaceSettings {
     pub map_show_towns: bool,
     pub map_show_dungeons: bool,
     pub map_show_castles: bool,
+    pub map_show_bridges: bool,
     pub loading_tips: bool,
     pub map_show_caves: bool,
     pub map_show_trees: bool,
@@ -47,6 +49,7 @@ pub struct InterfaceSettings {
     pub minimap_face_north: bool,
     pub minimap_zoom: f64,
     pub accum_experience: bool,
+    pub xp_bar_skillgroup: Option<SkillGroupKind>,
 }
 
 impl Default for InterfaceSettings {
@@ -73,6 +76,7 @@ impl Default for InterfaceSettings {
             buff_position: BuffPosition::Bar,
             bar_numbers: BarNumbers::Values,
             always_show_bars: false,
+            enable_poise_bar: false,
             ui_scale: ScaleMode::RelativeToWindow([1920.0, 1080.0].into()),
             map_zoom: 10.0,
             map_show_topo_map: true,
@@ -80,6 +84,7 @@ impl Default for InterfaceSettings {
             map_show_towns: true,
             map_show_dungeons: true,
             map_show_castles: false,
+            map_show_bridges: false,
             loading_tips: true,
             map_show_caves: true,
             map_show_trees: false,
@@ -90,6 +95,7 @@ impl Default for InterfaceSettings {
             minimap_face_north: true,
             minimap_zoom: 160.0,
             accum_experience: true,
+            xp_bar_skillgroup: Some(SkillGroupKind::General),
         }
     }
 }

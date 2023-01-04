@@ -14,14 +14,34 @@ use std::{collections::VecDeque, fmt};
 use strum::{EnumIter, IntoEnumIterator};
 use vek::*;
 
-use super::dialogue::Subject;
+use super::{dialogue::Subject, Pos};
 
 pub const DEFAULT_INTERACTION_TIME: f32 = 3.0;
 pub const TRADE_INTERACTION_TIME: f32 = 300.0;
-const AWARENESS_DECREMENT_CONSTANT: f32 = 2.1;
 const SECONDS_BEFORE_FORGET_SOUNDS: f64 = 180.0;
 
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+//intentionally very few concurrent action state variables are allowed. This is
+// to keep the complexity of our AI from getting too large, too quickly.
+// Originally I was going to provide 30 of these, but if we decide later that
+// this is too many and somebody is already using 30 in one of their AI, it will
+// be difficult to go back.
+
+/// The number of timers that a single Action node can track concurrently
+/// Define constants within a given action node to index between them.
+const ACTIONSTATE_NUMBER_OF_CONCURRENT_TIMERS: usize = 5;
+/// The number of float counters that a single Action node can track
+/// concurrently Define constants within a given action node to index between
+/// them.
+const ACTIONSTATE_NUMBER_OF_CONCURRENT_COUNTERS: usize = 5;
+/// The number of integer counters that a single Action node can track
+/// concurrently Define constants within a given action node to index between
+/// them.
+const ACTIONSTATE_NUMBER_OF_CONCURRENT_INT_COUNTERS: usize = 5;
+/// The number of booleans that a single Action node can track concurrently
+/// Define constants within a given action node to index between them.
+const ACTIONSTATE_NUMBER_OF_CONCURRENT_CONDITIONS: usize = 5;
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Alignment {
     /// Wild animals and gentle giants
     Wild,
@@ -37,7 +57,7 @@ pub enum Alignment {
     Passive,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Mark {
     Merchant,
     Guard,
@@ -86,6 +106,7 @@ bitflags::bitflags! {
     #[derive(Default)]
     pub struct BehaviorCapability: u8 {
         const SPEAK = 0b00000001;
+        const TRADE = 0b00000010;
     }
 }
 bitflags::bitflags! {
@@ -93,6 +114,26 @@ bitflags::bitflags! {
     pub struct BehaviorState: u8 {
         const TRADING        = 0b00000001;
         const TRADING_ISSUER = 0b00000010;
+    }
+}
+
+#[derive(Default, Copy, Clone, Debug)]
+pub enum TradingBehavior {
+    #[default]
+    None,
+    RequireBalanced {
+        trade_site: SiteId,
+    },
+    AcceptFood,
+}
+
+impl TradingBehavior {
+    fn can_trade(&self, alignment: Option<Alignment>, counterparty: Uid) -> bool {
+        match self {
+            TradingBehavior::RequireBalanced { .. } => true,
+            TradingBehavior::AcceptFood => alignment == Some(Alignment::Owned(counterparty)),
+            TradingBehavior::None => false,
+        }
     }
 }
 
@@ -105,7 +146,7 @@ bitflags::bitflags! {
 pub struct Behavior {
     capabilities: BehaviorCapability,
     state: BehaviorState,
-    pub trade_site: Option<SiteId>,
+    pub trading_behavior: TradingBehavior,
 }
 
 impl From<BehaviorCapability> for Behavior {
@@ -113,7 +154,7 @@ impl From<BehaviorCapability> for Behavior {
         Behavior {
             capabilities,
             state: BehaviorState::default(),
-            trade_site: None,
+            trading_behavior: TradingBehavior::None,
         }
     }
 }
@@ -136,7 +177,9 @@ impl Behavior {
     /// Set trade_site if Option is Some
     #[must_use]
     pub fn with_trade_site(mut self, trade_site: Option<SiteId>) -> Self {
-        self.trade_site = trade_site;
+        if let Some(trade_site) = trade_site {
+            self.trading_behavior = TradingBehavior::RequireBalanced { trade_site };
+        }
         self
     }
 
@@ -156,7 +199,9 @@ impl Behavior {
     }
 
     /// Check if the Behavior is able to trade
-    pub fn can_trade(&self) -> bool { self.trade_site.is_some() }
+    pub fn can_trade(&self, alignment: Option<Alignment>, counterparty: Uid) -> bool {
+        self.trading_behavior.can_trade(alignment, counterparty)
+    }
 
     /// Set a state to the Behavior
     pub fn set(&mut self, state: BehaviorState) { self.state.set(state, true) }
@@ -166,6 +211,15 @@ impl Behavior {
 
     /// Check if the Behavior has a specific state
     pub fn is(&self, state: BehaviorState) -> bool { self.state.contains(state) }
+
+    /// Get the trade site at which this behavior evaluates prices, if it does
+    pub fn trade_site(&self) -> Option<SiteId> {
+        if let TradingBehavior::RequireBalanced { trade_site } = self.trading_behavior {
+            Some(trade_site)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -206,7 +260,6 @@ impl<'a> From<&'a Body> for Psyche {
                     quadruped_small::Species::Cat => 0.9,
                     quadruped_small::Species::Batfox => 0.1,
                     quadruped_small::Species::Raccoon => 0.6,
-                    quadruped_small::Species::Dodarock => 0.0,
                     quadruped_small::Species::Holladon => 0.0,
                     quadruped_small::Species::Hyena => 0.2,
                     quadruped_small::Species::Dog => 0.8,
@@ -229,14 +282,17 @@ impl<'a> From<&'a Body> for Psyche {
                     quadruped_medium::Species::Dreadhorn => 0.2,
                     quadruped_medium::Species::Bonerattler => 0.0,
                     quadruped_medium::Species::Tiger => 0.1,
+                    quadruped_medium::Species::Roshwalr => 0.0,
                     _ => 0.3,
                 },
                 Body::QuadrupedLow(quadruped_low) => match quadruped_low.species {
-                    quadruped_low::Species::Salamander => 0.2,
+                    quadruped_low::Species::Salamander | quadruped_low::Species::Elbst => 0.2,
                     quadruped_low::Species::Monitor => 0.3,
                     quadruped_low::Species::Pangolin => 0.6,
                     quadruped_low::Species::Tortoise => 0.2,
                     quadruped_low::Species::Rocksnapper => 0.05,
+                    quadruped_low::Species::Rootsnapper => 0.05,
+                    quadruped_low::Species::Reefsnapper => 0.05,
                     quadruped_low::Species::Asp => 0.05,
                     _ => 0.0,
                 },
@@ -254,6 +310,7 @@ impl<'a> From<&'a Body> for Psyche {
                     bird_medium::Species::Peacock => 0.4,
                     bird_medium::Species::Eagle => 0.3,
                     bird_medium::Species::Parrot => 0.8,
+                    bird_medium::Species::Bat => 0.0,
                     _ => 0.5,
                 },
                 Body::BirdLarge(_) => 0.1,
@@ -363,15 +420,23 @@ pub struct Target {
     pub selected_at: f64,
     /// Whether the target has come close enough to trigger aggro.
     pub aggro_on: bool,
+    pub last_known_pos: Option<Vec3<f32>>,
 }
 
 impl Target {
-    pub fn new(target: EcsEntity, hostile: bool, selected_at: f64, aggro_on: bool) -> Self {
+    pub fn new(
+        target: EcsEntity,
+        hostile: bool,
+        selected_at: f64,
+        aggro_on: bool,
+        last_known_pos: Option<Vec3<f32>>,
+    ) -> Self {
         Self {
             target,
             hostile,
             selected_at,
             aggro_on,
+            last_known_pos,
         }
     }
 }
@@ -472,16 +537,89 @@ pub struct Agent {
     pub timer: Timer,
     pub bearing: Vec2<f32>,
     pub sounds_heard: Vec<Sound>,
-    pub awareness: f32,
     pub position_pid_controller: Option<PidController<fn(Vec3<f32>, Vec3<f32>) -> f32, 16>>,
+    /// Position from which to flee. Intended to be the agent's position plus a
+    /// random position offset, to be used when a random flee direction is
+    /// required and reset each time the flee timer is reset.
+    pub flee_from_pos: Option<Pos>,
+    pub awareness: Awareness,
 }
 
+#[derive(Clone, Debug)]
+/// Always clamped between `0.0` and `1.0`.
+pub struct Awareness {
+    level: f32,
+    reached: bool,
+}
+impl fmt::Display for Awareness {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{:.2}", self.level) }
+}
+impl Awareness {
+    const ALERT: f32 = 1.0;
+    const HIGH: f32 = 0.6;
+    const LOW: f32 = 0.1;
+    const MEDIUM: f32 = 0.3;
+    const UNAWARE: f32 = 0.0;
+
+    pub fn new(level: f32) -> Self {
+        Self {
+            level: level.clamp(Self::UNAWARE, Self::ALERT),
+            reached: false,
+        }
+    }
+
+    /// The level of awareness as a decimal.
+    pub fn level(&self) -> f32 { self.level }
+
+    /// The level of awareness in English. To see if awareness has been fully
+    /// reached, use `self.reached()`.
+    pub fn state(&self) -> AwarenessState {
+        if self.level == Self::ALERT {
+            AwarenessState::Alert
+        } else if self.level.is_between(Self::HIGH, Self::ALERT) {
+            AwarenessState::High
+        } else if self.level.is_between(Self::MEDIUM, Self::HIGH) {
+            AwarenessState::Medium
+        } else if self.level.is_between(Self::LOW, Self::MEDIUM) {
+            AwarenessState::Low
+        } else {
+            AwarenessState::Unaware
+        }
+    }
+
+    /// Awareness was reached at some point and has not been reset.
+    pub fn reached(&self) -> bool { self.reached }
+
+    pub fn change_by(&mut self, amount: f32) {
+        self.level = (self.level + amount).clamp(Self::UNAWARE, Self::ALERT);
+
+        if self.state() == AwarenessState::Alert {
+            self.reached = true;
+        } else if self.state() == AwarenessState::Unaware {
+            self.reached = false;
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialOrd, PartialEq, Eq)]
+pub enum AwarenessState {
+    Unaware = 0,
+    Low = 1,
+    Medium = 2,
+    High = 3,
+    Alert = 4,
+}
+
+/// State persistence object for the behavior tree
+/// Allows for state to be stored between subsequent, sequential calls of a
+/// single action node. If the executed action node changes between ticks, then
+/// the state should be considered lost.
 #[derive(Clone, Debug, Default)]
 pub struct ActionState {
-    pub timer: f32,
-    pub counter: f32,
-    pub condition: bool,
-    pub int_counter: u8,
+    pub timers: [f32; ACTIONSTATE_NUMBER_OF_CONCURRENT_TIMERS],
+    pub counters: [f32; ACTIONSTATE_NUMBER_OF_CONCURRENT_COUNTERS],
+    pub conditions: [bool; ACTIONSTATE_NUMBER_OF_CONCURRENT_CONDITIONS],
+    pub int_counters: [u8; ACTIONSTATE_NUMBER_OF_CONCURRENT_INT_COUNTERS],
     pub initialized: bool,
 }
 
@@ -500,8 +638,9 @@ impl Agent {
             timer: Timer::default(),
             bearing: Vec2::zero(),
             sounds_heard: Vec::new(),
-            awareness: 0.0,
             position_pid_controller: None,
+            flee_from_pos: None,
+            awareness: Awareness::new(0.0),
         }
     }
 
@@ -550,34 +689,6 @@ impl Agent {
     pub fn with_aggro_no_warn(mut self) -> Self {
         self.psyche.aggro_dist = None;
         self
-    }
-
-    pub fn decrement_awareness(&mut self, dt: f32) {
-        let mut decrement = dt * AWARENESS_DECREMENT_CONSTANT;
-        let awareness = self.awareness;
-
-        let too_high = awareness >= 100.0;
-        let high = awareness >= 50.0;
-        let medium = awareness >= 30.0;
-        let low = awareness > 15.0;
-        let positive = awareness >= 0.0;
-        let negative = awareness < 0.0;
-
-        if too_high {
-            decrement *= 3.0;
-        } else if high {
-            decrement *= 1.0;
-        } else if medium {
-            decrement *= 2.5;
-        } else if low {
-            decrement *= 0.70;
-        } else if positive {
-            decrement *= 0.5;
-        } else if negative {
-            return;
-        }
-
-        self.awareness -= decrement;
     }
 
     pub fn forget_old_sounds(&mut self, time: f64) {

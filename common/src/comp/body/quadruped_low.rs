@@ -15,13 +15,13 @@ make_proj_elim!(
 impl Body {
     pub fn random() -> Self {
         let mut rng = thread_rng();
-        let species = *(&ALL_SPECIES).choose(&mut rng).unwrap();
+        let species = *ALL_SPECIES.choose(&mut rng).unwrap();
         Self::random_with(&mut rng, &species)
     }
 
     #[inline]
     pub fn random_with(rng: &mut impl rand::Rng, &species: &Species) -> Self {
-        let body_type = *(&ALL_BODY_TYPES).choose(rng).unwrap();
+        let body_type = *ALL_BODY_TYPES.choose(rng).unwrap();
         Self { species, body_type }
     }
 }
@@ -45,17 +45,21 @@ make_case_elim!(
         Monitor = 3,
         Asp = 4,
         Tortoise = 5,
-        Rocksnapper = 6,
-        Pangolin = 7,
-        Maneater = 8,
-        Sandshark = 9,
-        Hakulaq = 10,
-        Lavadrake = 11,
-        Basilisk = 12,
-        Deadwood = 13,
-        Icedrake = 14,
-        SeaCrocodile = 15,
-        Dagon = 16,
+        Pangolin = 6,
+        Maneater = 7,
+        Sandshark = 8,
+        Hakulaq = 9,
+        Lavadrake = 10,
+        Basilisk = 11,
+        Deadwood = 12,
+        Icedrake = 13,
+        SeaCrocodile = 14,
+        Dagon = 15,
+        Rocksnapper = 16,
+        Rootsnapper = 17,
+        Reefsnapper = 18,
+        Elbst = 19,
+        Mossdrake = 20,
     }
 );
 
@@ -68,10 +72,13 @@ pub struct AllSpecies<SpeciesMeta> {
     pub sea_crocodile: SpeciesMeta,
     pub alligator: SpeciesMeta,
     pub salamander: SpeciesMeta,
+    pub elbst: SpeciesMeta,
     pub monitor: SpeciesMeta,
     pub asp: SpeciesMeta,
     pub tortoise: SpeciesMeta,
     pub rocksnapper: SpeciesMeta,
+    pub rootsnapper: SpeciesMeta,
+    pub reefsnapper: SpeciesMeta,
     pub pangolin: SpeciesMeta,
     pub maneater: SpeciesMeta,
     pub sandshark: SpeciesMeta,
@@ -81,6 +88,7 @@ pub struct AllSpecies<SpeciesMeta> {
     pub basilisk: SpeciesMeta,
     pub deadwood: SpeciesMeta,
     pub icedrake: SpeciesMeta,
+    pub mossdrake: SpeciesMeta,
 }
 
 impl<'a, SpeciesMeta> core::ops::Index<&'a Species> for AllSpecies<SpeciesMeta> {
@@ -93,10 +101,13 @@ impl<'a, SpeciesMeta> core::ops::Index<&'a Species> for AllSpecies<SpeciesMeta> 
             Species::SeaCrocodile => &self.sea_crocodile,
             Species::Alligator => &self.alligator,
             Species::Salamander => &self.salamander,
+            Species::Elbst => &self.elbst,
             Species::Monitor => &self.monitor,
             Species::Asp => &self.asp,
             Species::Tortoise => &self.tortoise,
             Species::Rocksnapper => &self.rocksnapper,
+            Species::Rootsnapper => &self.rootsnapper,
+            Species::Reefsnapper => &self.reefsnapper,
             Species::Pangolin => &self.pangolin,
             Species::Maneater => &self.maneater,
             Species::Sandshark => &self.sandshark,
@@ -106,19 +117,23 @@ impl<'a, SpeciesMeta> core::ops::Index<&'a Species> for AllSpecies<SpeciesMeta> 
             Species::Basilisk => &self.basilisk,
             Species::Deadwood => &self.deadwood,
             Species::Icedrake => &self.icedrake,
+            Species::Mossdrake => &self.mossdrake,
         }
     }
 }
 
-pub const ALL_SPECIES: [Species; 17] = [
+pub const ALL_SPECIES: [Species; 21] = [
     Species::Crocodile,
     Species::SeaCrocodile,
     Species::Alligator,
     Species::Salamander,
+    Species::Elbst,
     Species::Monitor,
     Species::Asp,
     Species::Tortoise,
     Species::Rocksnapper,
+    Species::Rootsnapper,
+    Species::Reefsnapper,
     Species::Pangolin,
     Species::Maneater,
     Species::Sandshark,
@@ -128,6 +143,7 @@ pub const ALL_SPECIES: [Species; 17] = [
     Species::Basilisk,
     Species::Deadwood,
     Species::Icedrake,
+    Species::Mossdrake,
 ];
 
 impl<'a, SpeciesMeta: 'a> IntoIterator for &'a AllSpecies<SpeciesMeta> {

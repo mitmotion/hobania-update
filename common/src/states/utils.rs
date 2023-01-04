@@ -2,14 +2,15 @@ use crate::{
     astar::Astar,
     combat,
     comp::{
+        ability::{Ability, AbilityInput, AbilityMeta, Capability},
         arthropod, biped_large, biped_small,
         character_state::OutputEvents,
         inventory::slot::{ArmorSlot, EquipSlot, Slot},
-        item::{armor::Friction, Hands, ItemKind, ToolKind},
+        item::{armor::Friction, Hands, ItemKind, ToolKind, tool::AbilityContext},
         quadruped_low, quadruped_medium, quadruped_small,
         skills::{Skill, SwimSkill, SKILL_MODIFIERS},
         theropod, Body, CharacterAbility, CharacterState, Density, InputAttr, InputKind,
-        InventoryAction, StateUpdate,
+        InventoryAction, StateUpdate, Melee,
     },
     consts::{FRIC_GROUND, GRAVITY, MAX_PICKUP_RANGE},
     event::{LocalEvent, ServerEvent},
@@ -22,6 +23,7 @@ use core::hash::BuildHasherDefault;
 use fxhash::FxHasher64;
 use serde::{Deserialize, Serialize};
 use std::{
+    f32::consts::PI,
     ops::{Add, Div},
     time::Duration,
 };
@@ -43,7 +45,6 @@ impl Body {
                 quadruped_small::Species::Fungome => 70.0,
                 quadruped_small::Species::Goat => 80.0,
                 quadruped_small::Species::Raccoon => 100.0,
-                quadruped_small::Species::Dodarock => 80.0,
                 quadruped_small::Species::Frog => 150.0,
                 quadruped_small::Species::Porcupine => 100.0,
                 quadruped_small::Species::Beaver => 100.0,
@@ -118,10 +119,13 @@ impl Body {
                 quadruped_low::Species::SeaCrocodile => 120.0,
                 quadruped_low::Species::Alligator => 110.0,
                 quadruped_low::Species::Salamander => 85.0,
+                quadruped_low::Species::Elbst => 85.0,
                 quadruped_low::Species::Monitor => 160.0,
                 quadruped_low::Species::Asp => 110.0,
                 quadruped_low::Species::Tortoise => 60.0,
                 quadruped_low::Species::Rocksnapper => 70.0,
+                quadruped_low::Species::Rootsnapper => 70.0,
+                quadruped_low::Species::Reefsnapper => 70.0,
                 quadruped_low::Species::Pangolin => 90.0,
                 quadruped_low::Species::Maneater => 80.0,
                 quadruped_low::Species::Sandshark => 160.0,
@@ -131,6 +135,7 @@ impl Body {
                 quadruped_low::Species::Icedrake => 100.0,
                 quadruped_low::Species::Basilisk => 90.0,
                 quadruped_low::Species::Deadwood => 140.0,
+                quadruped_low::Species::Mossdrake => 100.0,
             },
             Body::Ship(_) => 0.0,
             Body::Arthropod(arthropod) => match arthropod.species {
@@ -192,14 +197,17 @@ impl Body {
                 theropod::Species::Archaeos => 2.3,
                 theropod::Species::Odonto => 2.3,
                 theropod::Species::Ntouka => 2.3,
+                theropod::Species::Dodarock => 2.0,
                 _ => 2.5,
             },
             Body::QuadrupedLow(quadruped_low) => match quadruped_low.species {
                 quadruped_low::Species::Asp => 2.2,
                 quadruped_low::Species::Tortoise => 1.5,
                 quadruped_low::Species::Rocksnapper => 1.8,
+                quadruped_low::Species::Rootsnapper => 1.8,
                 quadruped_low::Species::Lavadrake => 1.7,
                 quadruped_low::Species::Icedrake => 1.7,
+                quadruped_low::Species::Mossdrake => 1.7,
                 _ => 2.0,
             },
             Body::Ship(ship) if ship.has_water_thrust() => 0.1,
@@ -226,6 +234,7 @@ impl Body {
                 | theropod::Species::Snowraptor
                 | theropod::Species::Sunlizard
                 | theropod::Species::Woodraptor
+                | theropod::Species::Dodarock
                 | theropod::Species::Yale => Some(200.0 * self.mass().0),
                 _ => Some(100.0 * self.mass().0),
             },
@@ -402,16 +411,46 @@ pub fn handle_forced_movement(
     movement: ForcedMovement,
 ) {
     match movement {
-        ForcedMovement::Forward { strength } => {
+        ForcedMovement::Forward(strength) => {
             let strength = strength * data.stats.move_speed_modifier * data.stats.friction_modifier;
             if let Some(accel) = data.physics.on_ground.map(|block| {
                 // FRIC_GROUND temporarily used to normalize things around expected values
                 data.body.base_accel() * block.get_traction() * block.get_friction() / FRIC_GROUND
             }) {
-                update.vel.0 += Vec2::broadcast(data.dt.0)
-                    * accel
-                    * (data.inputs.move_dir * 0.5 + Vec2::from(update.ori) * 1.5)
-                    * strength;
+                update.vel.0 +=
+                    Vec2::broadcast(data.dt.0) * accel * Vec2::from(update.ori) * strength;
+            }
+        },
+        ForcedMovement::Reverse(strength) => {
+            let strength = strength * data.stats.move_speed_modifier * data.stats.friction_modifier;
+            if let Some(accel) = data.physics.on_ground.map(|block| {
+                // FRIC_GROUND temporarily used to normalize things around expected values
+                data.body.base_accel() * block.get_traction() * block.get_friction() / FRIC_GROUND
+            }) {
+                update.vel.0 +=
+                    Vec2::broadcast(data.dt.0) * accel * -Vec2::from(update.ori) * strength;
+            }
+        },
+        ForcedMovement::Sideways(strength) => {
+            let strength = strength * data.stats.move_speed_modifier * data.stats.friction_modifier;
+            if let Some(accel) = data.physics.on_ground.map(|block| {
+                // FRIC_GROUND temporarily used to normalize things around expected values
+                data.body.base_accel() * block.get_traction() * block.get_friction() / FRIC_GROUND
+            }) {
+                let direction = {
+                    // Left if positive, else right
+                    let side = Vec2::from(update.ori)
+                        .rotated_z(PI / 2.)
+                        .dot(data.inputs.move_dir)
+                        .signum();
+                    if side > 0.0 {
+                        Vec2::from(update.ori).rotated_z(PI / 2.)
+                    } else {
+                        -Vec2::from(update.ori).rotated_z(PI / 2.)
+                    }
+                };
+
+                update.vel.0 += Vec2::broadcast(data.dt.0) * accel * direction * strength;
             }
         },
         ForcedMovement::Leap {
@@ -583,7 +622,7 @@ pub fn fly_move(data: &JoinData<'_>, update: &mut StateUpdate, efficiency: f32) 
                     let change = if data.inputs.move_z.abs() > f32::EPSILON {
                         -data.inputs.move_z
                     } else {
-                        (def - data.density.0).max(-1.0).min(1.0)
+                        (def - data.density.0).clamp(-1.0, 1.0)
                     };
                     Density((update.density.0 + data.dt.0 * rate * change).clamp(min, max))
                 };
@@ -769,8 +808,9 @@ pub fn handle_manipulate_loadout(
                         inv_slot,
                         item_kind,
                         item_hash: item.item_hash(),
-                        was_wielded: matches!(data.character, CharacterState::Wielding(_)),
+                        was_wielded: data.character.is_wield(),
                         was_sneak: data.character.is_stealthy(),
+                        ability_info: AbilityInfo::from_forced_state_change(data.character),
                     },
                     timer: Duration::default(),
                     stage_section: StageSection::Buildup,
@@ -873,8 +913,9 @@ pub fn handle_manipulate_loadout(
                                 recover_duration,
                                 sprite_pos,
                                 sprite_kind: sprite_interact,
-                                was_wielded: matches!(data.character, CharacterState::Wielding(_)),
+                                was_wielded: data.character.is_wield(),
                                 was_sneak: data.character.is_stealthy(),
+                                ability_info: AbilityInfo::from_forced_state_change(data.character),
                             },
                             timer: Duration::default(),
                             stage_section: StageSection::Buildup,
@@ -935,7 +976,8 @@ pub fn handle_jump(
         .is_some()
 }
 
-fn handle_ability(data: &JoinData<'_>, update: &mut StateUpdate, input: InputKind) {
+fn handle_ability(data: &JoinData<'_>, update: &mut StateUpdate, input: InputKind) -> bool {
+    let context = AbilityContext::try_from(Some(data.character));
     if let Some(ability_input) = input.into() {
         if let Some((ability, from_offhand)) = data
             .active_abilities
@@ -945,28 +987,20 @@ fn handle_ability(data: &JoinData<'_>, update: &mut StateUpdate, input: InputKin
                     data.inventory,
                     data.skill_set,
                     Some(data.body),
+                    context,
                 )
             })
             .filter(|(ability, _)| ability.requirements_paid(data, update))
         {
             update.character = CharacterState::from((
                 &ability,
-                AbilityInfo::from_input(data, from_offhand, input),
+                AbilityInfo::from_input(data, from_offhand, input, ability.ability_meta()),
                 data,
             ));
+            return true;
         }
     }
-}
-
-pub fn handle_ability_input(data: &JoinData<'_>, update: &mut StateUpdate) {
-    if let Some(input) = data
-        .controller
-        .queued_inputs
-        .keys()
-        .find(|i| i.is_ability())
-    {
-        handle_ability(data, update, *input);
-    }
+    false
 }
 
 pub fn handle_input(
@@ -977,13 +1011,17 @@ pub fn handle_input(
 ) {
     match input {
         InputKind::Primary | InputKind::Secondary | InputKind::Ability(_) => {
-            handle_ability(data, update, input)
+            handle_ability(data, update, input);
         },
-        InputKind::Roll => handle_dodge_input(data, update),
+        InputKind::Roll => {
+            handle_dodge_input(data, update);
+        },
         InputKind::Jump => {
             handle_jump(data, output_events, update, 1.0);
         },
-        InputKind::Block => handle_block_input(data, update),
+        InputKind::Block => {
+            handle_block_input(data, update);
+        },
         InputKind::Fly => {},
     }
 }
@@ -1000,7 +1038,7 @@ pub fn attempt_input(
 }
 
 /// Checks that player can block, then attempts to block
-pub fn handle_block_input(data: &JoinData<'_>, update: &mut StateUpdate) {
+pub fn handle_block_input(data: &JoinData<'_>, update: &mut StateUpdate) -> bool {
     let can_block = |equip_slot| matches!(unwrap_tool_data(data, equip_slot), Some((kind, _)) if kind.can_block());
     let hands = get_hands(data);
     if input_is_pressed(data, InputKind::Block)
@@ -1011,27 +1049,32 @@ pub fn handle_block_input(data: &JoinData<'_>, update: &mut StateUpdate) {
         if ability.requirements_paid(data, update) {
             update.character = CharacterState::from((
                 &ability,
-                AbilityInfo::from_input(data, false, InputKind::Roll),
+                AbilityInfo::from_input(data, false, InputKind::Block, Default::default()),
                 data,
             ));
+            true
+        } else {
+            false
         }
+    } else {
+        false
     }
 }
 
 /// Checks that player can perform a dodge, then
 /// attempts to perform their dodge ability
-pub fn handle_dodge_input(data: &JoinData<'_>, update: &mut StateUpdate) {
+pub fn handle_dodge_input(data: &JoinData<'_>, update: &mut StateUpdate) -> bool {
     if input_is_pressed(data, InputKind::Roll) && data.body.is_humanoid() {
         let ability = CharacterAbility::default_roll().adjusted_by_skills(data.skill_set, None);
         if ability.requirements_paid(data, update) {
             update.character = CharacterState::from((
                 &ability,
-                AbilityInfo::from_input(data, false, InputKind::Roll),
+                AbilityInfo::from_input(data, false, InputKind::Roll, Default::default()),
                 data,
             ));
             if let CharacterState::Roll(roll) = &mut update.character {
                 if let CharacterState::ComboMelee(c) = data.character {
-                    roll.was_combo = Some((c.static_data.ability_info.input, c.stage));
+                    roll.was_combo = c.static_data.ability_info.input.map(|input| (input, c.stage));
                     roll.was_wielded = true;
                 } else {
                     if data.character.is_wield() {
@@ -1042,7 +1085,43 @@ pub fn handle_dodge_input(data: &JoinData<'_>, update: &mut StateUpdate) {
                     }
                 }
             }
+            true
+        } else {
+            false
         }
+    } else {
+        false
+    }
+}
+
+/// Returns whether an interrupt occurred
+pub fn handle_interrupts(
+    data: &JoinData,
+    update: &mut StateUpdate,
+) -> bool {
+    let can_dodge = {
+        let in_buildup = data
+            .character
+            .stage_section()
+            .map_or(true, |stage_section| {
+                matches!(stage_section, StageSection::Buildup)
+            });
+        let interruptible = data.character.ability_info().and_then(|info| info.ability_meta).map_or(false, |meta| {
+            meta.capabilities
+                .contains(Capability::ROLL_INTERRUPT)
+        });
+        in_buildup || interruptible
+    };
+    let can_block = data.character.ability_info().and_then(|info| info.ability_meta).map_or(false, |meta| {
+        meta.capabilities
+            .contains(Capability::BLOCK_INTERRUPT)
+    });
+    if can_dodge {
+        handle_dodge_input(data, update)
+    } else if can_block {
+        handle_block_input(data, update)
+    } else {
+        false
     }
 }
 
@@ -1132,19 +1211,12 @@ pub fn get_buff_strength(data: &JoinData<'_>, ai: AbilityInfo) -> f32 {
         .unwrap_or(1.0)
 }
 
-pub fn handle_state_interrupt(
-    data: &JoinData<'_>,
-    update: &mut StateUpdate,
-    attacks_interrupt: bool,
-) {
-    if attacks_interrupt {
-        handle_ability_input(data, update);
-    }
-    handle_dodge_input(data, update);
-}
-
 pub fn input_is_pressed(data: &JoinData<'_>, input: InputKind) -> bool {
     data.controller.queued_inputs.contains_key(&input)
+}
+
+pub fn input_just_pressed(update: &StateUpdate, input: InputKind) -> bool {
+    update.queued_inputs.contains_key(&input)
 }
 
 /// Checked `Duration` addition. Computes `timer` + `dt`, applying relevant stat
@@ -1177,13 +1249,14 @@ pub enum StageSection {
     Charge,
     Movement,
     Action,
+    Ready,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ForcedMovement {
-    Forward {
-        strength: f32,
-    },
+    Forward(f32),
+    Reverse(f32),
+    Sideways(f32),
     Leap {
         vertical: f32,
         forward: f32,
@@ -1195,7 +1268,7 @@ pub enum ForcedMovement {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MovementDirection {
     Look,
     Move,
@@ -1222,12 +1295,20 @@ impl MovementDirection {
 pub struct AbilityInfo {
     pub tool: Option<ToolKind>,
     pub hand: Option<HandInfo>,
-    pub input: InputKind,
+    pub input: Option<InputKind>,
     pub input_attr: Option<InputAttr>,
+    pub ability_meta: Option<AbilityMeta>,
+    pub ability: Option<Ability>,
+    pub return_ability: Option<InputKind>,
 }
 
 impl AbilityInfo {
-    pub fn from_input(data: &JoinData<'_>, from_offhand: bool, input: InputKind) -> Self {
+    pub fn from_input(
+        data: &JoinData<'_>,
+        from_offhand: bool,
+        input: InputKind,
+        ability_meta: AbilityMeta,
+    ) -> Self {
         let tool_data = if from_offhand {
             unwrap_tool_data(data, EquipSlot::ActiveOffhand)
         } else {
@@ -1239,17 +1320,73 @@ impl AbilityInfo {
                 Some(HandInfo::from_main_tool(hands, from_offhand)),
             )
         });
+        let ability = Option::<AbilityInput>::from(input)
+            .zip(data.active_abilities)
+            .map(|(i, a)| a.get_ability(i, data.inventory, Some(data.skill_set)));
+
+        let return_ability = if data.character.should_be_returned_to() {
+            data.character.ability_info().and_then(|info| info.input)
+        } else {
+            None
+        };
 
         Self {
             tool,
             hand,
-            input,
+            input: Some(input),
             input_attr: data.controller.queued_inputs.get(&input).copied(),
+            ability_meta: Some(ability_meta),
+            ability,
+            return_ability,
+        }
+    }
+
+    pub fn from_forced_state_change(char_state: &CharacterState) -> Self {
+        let return_ability = if char_state.should_be_returned_to() {
+            char_state.ability_info().and_then(|info| info.input)
+        } else {
+            None
+        };
+
+        // If this ability should not be returned to, check if this ability was going to return to another ability, and return to that one instead
+        let return_ability = return_ability.or_else(|| char_state.ability_info().and_then(|info| info.return_ability));
+
+        Self {
+            tool: None,
+            hand: None,
+            input: None,
+            input_attr: None,
+            ability_meta: None,
+            ability: None,
+            return_ability,
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub fn end_ability(data: &JoinData<'_>, update: &mut StateUpdate) {
+    // If an ability has a return ability specified, and is not itself an ability that should be returned to (to prevent bouncing between two abilities), attempt to return to the specified ability, otherwise return to wield or idle depending on whether or not leaving a wield state
+    let returned = if let Some(return_ability) = (!data.character.should_be_returned_to()).then_some(data.character.ability_info().and_then(|info| info.return_ability)).flatten() {
+        handle_ability(data, update, return_ability)
+    } else {
+        false
+    };
+    if !returned {
+        if data.character.is_wield() || data.character.was_wielded() {
+            update.character =
+                CharacterState::Wielding(wielding::Data { is_sneaking: data.character.is_stealthy() });
+        } else {
+            update.character =
+                CharacterState::Idle(idle::Data { is_sneaking: data.character.is_stealthy(), footwear: None });
+        }
+    }
+}
+
+pub fn end_melee_ability(data: &JoinData<'_>, update: &mut StateUpdate) {
+    end_ability(data, update);
+    data.updater.remove::<Melee>(data.entity);
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HandInfo {
     TwoHanded,
     MainHand,

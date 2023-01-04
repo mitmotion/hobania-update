@@ -81,6 +81,7 @@ image_ids! {
         book_bg: "voxygen.element.ui.diary.spellbook_bg",
         skills_bg: "voxygen.element.ui.diary.diary_skills_bg",
         slot_skills: "voxygen.element.ui.diary.buttons.slot_skilltree",
+        sword_bg: "voxygen.element.ui.diary.sword_bg",
         swords_crossed: "voxygen.element.weapons.swords_crossed",
         sceptre: "voxygen.element.weapons.sceptre",
         sword: "voxygen.element.weapons.sword",
@@ -93,6 +94,7 @@ image_ids! {
         pickaxe_ico: "voxygen.element.weapons.pickaxe",
         skilltree_ico: "voxygen.element.ui.diary.buttons.skilltree",
         spellbook_ico: "voxygen.element.ui.diary.buttons.spellbook",
+        spellbook_ico0: "voxygen.element.ui.generic.buttons.spellbook0",
         stats_ico: "voxygen.element.ui.diary.buttons.stats",
         lock: "voxygen.element.ui.diary.buttons.lock",
         wpn_icon_border_skills: "voxygen.element.ui.diary.buttons.border_skills",
@@ -184,8 +186,6 @@ image_ids! {
         sp_indicator_arrow: "voxygen.element.ui.generic.buttons.arrow_down_gold",
 
         // Skill Icons
-        twohsword_m1: "voxygen.element.skills.2hsword_m1",
-        twohsword_m2: "voxygen.element.skills.2hsword_m2",
         onehdagger_m1: "voxygen.element.weapons.daggers",
         onehdagger_m2: "voxygen.element.skills.skill_slice_2",
         onehshield_m1: "voxygen.element.weapons.swordshield",
@@ -198,11 +198,43 @@ image_ids! {
         fireball: "voxygen.element.skills.staff_m2",
         flyingrod_m1: "voxygen.element.skills.debug_wand_m1",
         flyingrod_m2: "voxygen.element.skills.debug_wand_m2",
-        sword_pierce: "voxygen.element.skills.skill_sword_pierce",
         hammergolf: "voxygen.element.skills.skill_hammergolf",
         axespin: "voxygen.element.skills.skill_axespin",
         fire_aoe: "voxygen.element.skills.skill_fire_aoe",
         flamethrower: "voxygen.element.skills.skill_flamethrower",
+        // Sword
+        sword_balanced_combo: "voxygen.element.skills.sword.balanced_combo",
+        sword_balanced_thrust: "voxygen.element.skills.sword.balanced_thrust",
+        sword_balanced_finisher: "voxygen.element.skills.sword.balanced_finisher",
+        sword_offensive_combo: "voxygen.element.skills.sword.offensive_combo",
+        sword_offensive_finisher: "voxygen.element.skills.sword.offensive_finisher",
+        sword_offensive_advance: "voxygen.element.skills.sword.offensive_advance",
+        sword_crippling_combo: "voxygen.element.skills.sword.crippling_combo",
+        sword_crippling_finisher: "voxygen.element.skills.sword.crippling_finisher",
+        sword_crippling_strike: "voxygen.element.skills.sword.crippling_strike",
+        sword_crippling_gouge: "voxygen.element.skills.sword.crippling_gouge",
+        sword_cleaving_combo: "voxygen.element.skills.sword.cleaving_combo",
+        sword_cleaving_finisher: "voxygen.element.skills.sword.cleaving_finisher",
+        sword_cleaving_spin: "voxygen.element.skills.sword.cleaving_spin",
+        sword_cleaving_dive: "voxygen.element.skills.sword.cleaving_dive",
+        sword_defensive_combo: "voxygen.element.skills.sword.defensive_combo",
+        sword_defensive_bulwark: "voxygen.element.skills.sword.defensive_bulwark",
+        sword_defensive_retreat: "voxygen.element.skills.sword.defensive_retreat",
+        sword_parrying_combo: "voxygen.element.skills.sword.parrying_combo",
+        sword_parrying_parry: "voxygen.element.skills.sword.parrying_parry",
+        sword_parrying_riposte: "voxygen.element.skills.sword.parrying_riposte",
+        sword_parrying_counter: "voxygen.element.skills.sword.parrying_counter",
+        sword_heavy_combo: "voxygen.element.skills.sword.heavy_combo",
+        sword_heavy_finisher: "voxygen.element.skills.sword.heavy_finisher",
+        sword_heavy_pommelstrike: "voxygen.element.skills.sword.heavy_pommelstrike",
+        sword_heavy_fortitude: "voxygen.element.skills.sword.heavy_fortitude",
+        sword_mobility_combo: "voxygen.element.skills.sword.mobility_combo",
+        sword_mobility_feint: "voxygen.element.skills.sword.mobility_feint",
+        sword_mobility_agility: "voxygen.element.skills.sword.mobility_agility",
+        sword_reaching_combo: "voxygen.element.skills.sword.reaching_combo",
+        sword_reaching_charge: "voxygen.element.skills.sword.reaching_charge",
+        sword_reaching_flurry: "voxygen.element.skills.sword.reaching_flurry",
+        sword_reaching_skewer: "voxygen.element.skills.sword.reaching_skewer",
 
         // Skilltree Icons
         health_plus_skill: "voxygen.element.skills.skilltree.health_plus",
@@ -336,15 +368,25 @@ image_ids! {
         skillbar_frame: "voxygen.element.ui.skillbar.frame",
         health_bg: "voxygen.element.ui.skillbar.health_bg",
         health_frame: "voxygen.element.ui.skillbar.health_frame",
+        exp_frame: "voxygen.element.ui.skillbar.exp_frame",
+        exp_frame_bg: "voxygen.element.ui.skillbar.exp_frame_bg",
+        selected_exp: "voxygen.element.ui.skillbar.selected_exp_frame",
+        bag_frame: "voxygen.element.ui.skillbar.bag_frame",
+        selected_exp_bg: "voxygen.element.ui.skillbar.selected_exp_frame_bg",
         decayed_bg: "voxygen.element.ui.skillbar.decayed_bg",
         energy_bg: "voxygen.element.ui.skillbar.energy_bg",
         energy_frame: "voxygen.element.ui.skillbar.energy_frame",
+        poise_bg: "voxygen.element.ui.skillbar.poise_bg",
+        poise_frame: "voxygen.element.ui.skillbar.poise_frame",
+        poise_tick: "voxygen.element.ui.skillbar.bar_content",
         m1_ico: "voxygen.element.ui.generic.icons.m1",
         m2_ico: "voxygen.element.ui.generic.icons.m2",
         m_scroll_ico: "voxygen.element.ui.generic.icons.m_scroll",
         m_move_ico: "voxygen.element.ui.generic.icons.m_move",
         m_click_ico: "voxygen.element.ui.generic.icons.m_click",
         skillbar_slot: "voxygen.element.ui.skillbar.slot",
+        bag_ico: "voxygen.element.ui.generic.buttons.bag",
+
 
         // Other Icons/Art
         skull: "voxygen.element.ui.generic.icons.skull",
@@ -419,6 +461,9 @@ image_ids! {
         mmap_site_castle: "voxygen.element.ui.map.buttons.castle",
         mmap_site_castle_hover: "voxygen.element.ui.map.buttons.castle_hover",
         mmap_site_castle_bg: "voxygen.element.ui.map.buttons.castle_bg",
+        mmap_site_bridge: "voxygen.element.ui.map.buttons.bridge",
+        mmap_site_bridge_hover: "voxygen.element.ui.map.buttons.bridge_hover",
+        mmap_site_bridge_bg: "voxygen.element.ui.map.buttons.bridge_bg",
         mmap_site_cave_bg: "voxygen.element.ui.map.buttons.cave_bg",
         mmap_site_cave_hover: "voxygen.element.ui.map.buttons.cave_hover",
         mmap_site_cave: "voxygen.element.ui.map.buttons.cave",
@@ -542,7 +587,6 @@ image_ids! {
         // Icons
         snake_arrow_0: "voxygen.element.skills.snake",
         skill_sceptre_lifesteal: "voxygen.element.skills.lifesteal",
-        sword_whirlwind: "voxygen.element.skills.sword_whirlwind",
         skill_sceptre_heal: "voxygen.element.skills.heal_aoe",
         hammerleap: "voxygen.element.skills.skill_hammerleap",
         skill_axe_leap_slash: "voxygen.element.skills.skill_axe_leap_slash",
@@ -556,6 +600,15 @@ image_ids! {
         button_hover: "voxygen.element.ui.generic.buttons.button_hover",
         button_press: "voxygen.element.ui.generic.buttons.button_press",
 
+        // Mute Buttons
+        button_mute: "voxygen.element.ui.generic.buttons.mute_btn",
+        button_mute_hover: "voxygen.element.ui.generic.buttons.mute_btn_hover",
+        button_mute_press: "voxygen.element.ui.generic.buttons.mute_btn_press",
+        button_muted: "voxygen.element.ui.generic.buttons.muted_btn",
+        button_muted_hover: "voxygen.element.ui.generic.buttons.muted_btn_hover",
+        button_muted_press: "voxygen.element.ui.generic.buttons.muted_btn_press",
+
+
         // Enemy Healthbar
         enemy_health: "voxygen.element.ui.generic.frames.enemybar",
         enemy_health_bg: "voxygen.element.ui.generic.frames.enemybar_bg",
@@ -563,14 +616,6 @@ image_ids! {
         health_bar_group_bg: "voxygen.element.ui.generic.frames.enemybar_bg_1",
         // Enemy Bar Content:
         enemy_bar: "voxygen.element.ui.skillbar.enemy_bar_content",
-
-        // Bag
-        bag: "voxygen.element.ui.generic.buttons.bag.closed",
-        bag_hover: "voxygen.element.ui.generic.buttons.bag.closed_hover",
-        bag_press: "voxygen.element.ui.generic.buttons.bag.closed_press",
-        bag_open: "voxygen.element.ui.generic.buttons.bag.open",
-        bag_open_hover: "voxygen.element.ui.generic.buttons.bag.open_hover",
-        bag_open_press: "voxygen.element.ui.generic.buttons.bag.open_press",
 
         map_icon: "voxygen.element.ui.generic.buttons.map",
 
@@ -640,6 +685,7 @@ image_ids! {
         buff_dmg_red_0: "voxygen.element.de_buffs.buff_damage_reduce_0",
         buff_frenzy_0: "voxygen.element.de_buffs.buff_frenzy_0",
         buff_haste_0: "voxygen.element.de_buffs.buff_haste_0",
+        buff_fortitude_0: "voxygen.element.de_buffs.buff_fortitude_0",
 
         // Debuffs
         debuff_skull_0: "voxygen.element.de_buffs.debuff_skull_0",
@@ -650,6 +696,7 @@ image_ids! {
         debuff_wet_0: "voxygen.element.de_buffs.debuff_wet_0",
         debuff_ensnared_0: "voxygen.element.de_buffs.debuff_ensnared_0",
         debuff_poisoned_0: "voxygen.element.de_buffs.debuff_poisoned_0",
+        debuff_parried_0: "voxygen.element.de_buffs.debuff_parried_0",
 
         // Animation Frames
         // Buff Frame

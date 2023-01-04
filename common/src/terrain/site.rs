@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SiteKindMeta {
     Dungeon(DungeonKindMeta),
     Cave,
@@ -9,17 +9,18 @@ pub enum SiteKindMeta {
     Void,
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DungeonKindMeta {
     Old,
     Gnarling,
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SettlementKindMeta {
     Default,
-    Cliff,
-    Desert,
+    CliffTown,
+    DesertCity,
+    SavannahPit,
 }
 
 impl Default for SiteKindMeta {

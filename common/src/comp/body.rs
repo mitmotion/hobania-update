@@ -27,7 +27,7 @@ use specs::{Component, DerefFlaggedStorage};
 use strum::Display;
 use vek::*;
 
-use super::{BuffKind, Collider, Density, Mass};
+use super::{BuffKind, Collider, Density, Mass, Scale};
 
 make_case_elim!(
     body,
@@ -231,6 +231,17 @@ impl Body {
         )
     }
 
+    pub fn scale(&self) -> Scale {
+        let s = match self {
+            Body::BirdMedium(bird_medium) => match bird_medium.species {
+                bird_medium::Species::Bat => 0.5,
+                _ => 1.0,
+            },
+            _ => 1.0,
+        };
+        Scale(s)
+    }
+
     /// Average density of the body
     // Units are based on kg/m³
     pub fn density(&self) -> Density {
@@ -280,6 +291,7 @@ impl Body {
                 bird_medium::Species::Parrot => 2.0,
                 bird_medium::Species::Penguin => 8.0,
                 bird_medium::Species::Peacock => 5.0,
+                bird_medium::Species::Bat => 2.0,
             },
             Body::BirdLarge(_) => 100.0,
 
@@ -312,7 +324,9 @@ impl Body {
                 quadruped_low::Species::Monitor => 100.0,
                 quadruped_low::Species::Pangolin => 100.0,
                 quadruped_low::Species::Salamander => 65.0,
+                quadruped_low::Species::Elbst => 65.0,
                 quadruped_low::Species::Tortoise => 200.0,
+                quadruped_low::Species::Mossdrake => 500.0,
                 _ => 200.0,
             },
             Body::QuadrupedMedium(body) => match body.species {
@@ -335,8 +349,7 @@ impl Body {
                 quadruped_small::Species::Beaver => 10.0,
                 quadruped_small::Species::Boar => 80.0, // ~✅ (60-100 kg)
                 quadruped_small::Species::Cat => 4.0,   // ~✅ (4-5 kg)
-                quadruped_small::Species::Dodarock => 500.0,
-                quadruped_small::Species::Dog => 30.0, // ~✅ (German Shepherd: 30-40 kg)
+                quadruped_small::Species::Dog => 30.0,  // ~✅ (German Shepherd: 30-40 kg)
                 quadruped_small::Species::Fox => 10.0,
                 quadruped_small::Species::Frog => 1.0,
                 quadruped_small::Species::Fungome => 10.0,
@@ -364,7 +377,7 @@ impl Body {
                 theropod::Species::Archaeos => 13_000.0,
                 theropod::Species::Ntouka => 13_000.0,
                 theropod::Species::Odonto => 13_000.0,
-
+                theropod::Species::Dodarock => 700.0,
                 theropod::Species::Sandraptor => 500.0,
                 theropod::Species::Snowraptor => 500.0,
                 theropod::Species::Sunlizard => 500.0,
@@ -412,6 +425,7 @@ impl Body {
                 bird_medium::Species::Duck => Vec3::new(0.9, 1.0, 1.4),
                 bird_medium::Species::Goose => Vec3::new(1.0, 1.2, 1.5),
                 bird_medium::Species::Peacock => Vec3::new(1.3, 1.1, 1.4),
+                bird_medium::Species::Bat => Vec3::new(2.0, 2.0, 1.5),
                 _ => Vec3::new(2.0, 1.0, 1.5),
             },
             Body::BirdLarge(body) => match body.species {
@@ -458,7 +472,6 @@ impl Body {
             },
             Body::QuadrupedSmall(body) => match body.species {
                 quadruped_small::Species::Batfox => Vec3::new(1.4, 1.7, 1.3),
-                quadruped_small::Species::Dodarock => Vec3::new(1.2, 1.9, 1.5),
                 quadruped_small::Species::Holladon => Vec3::new(1.3, 1.9, 1.5),
                 quadruped_small::Species::Hyena => Vec3::new(1.2, 1.4, 1.3),
                 quadruped_small::Species::Truffler => Vec3::new(1.2, 1.8, 2.2),
@@ -477,10 +490,14 @@ impl Body {
                 quadruped_low::Species::Monitor => Vec3::new(1.4, 3.2, 1.3),
                 quadruped_low::Species::Pangolin => Vec3::new(1.0, 2.6, 1.1),
                 quadruped_low::Species::Rocksnapper => Vec3::new(2.5, 3.5, 2.9),
+                quadruped_low::Species::Rootsnapper => Vec3::new(2.5, 3.5, 2.9),
+                quadruped_low::Species::Reefsnapper => Vec3::new(2.5, 3.5, 2.9),
                 quadruped_low::Species::Sandshark => Vec3::new(2.1, 4.3, 1.7),
                 quadruped_low::Species::Basilisk => Vec3::new(2.7, 6.0, 2.9),
                 quadruped_low::Species::Salamander => Vec3::new(1.7, 4.0, 1.3),
+                quadruped_low::Species::Elbst => Vec3::new(1.7, 4.0, 1.3),
                 quadruped_low::Species::Tortoise => Vec3::new(1.7, 2.7, 1.5),
+                quadruped_low::Species::Mossdrake => Vec3::new(2.0, 4.7, 2.5),
                 _ => Vec3::new(1.0, 1.6, 1.3),
             },
             Body::Ship(ship) => ship.dimensions(),
@@ -488,6 +505,7 @@ impl Body {
                 theropod::Species::Archaeos => Vec3::new(4.0, 8.5, 8.0),
                 theropod::Species::Ntouka => Vec3::new(4.0, 9.0, 6.6),
                 theropod::Species::Odonto => Vec3::new(4.0, 8.0, 6.6),
+                theropod::Species::Dodarock => Vec3::new(2.0, 3.0, 2.6),
                 theropod::Species::Sandraptor => Vec3::new(2.0, 3.0, 2.6),
                 theropod::Species::Snowraptor => Vec3::new(2.0, 3.0, 2.6),
                 theropod::Species::Sunlizard => Vec3::new(2.0, 3.6, 2.5),
@@ -623,6 +641,10 @@ impl Body {
                 bird_large::Species::Phoenix => 600,
                 bird_large::Species::Roc => 500,
                 bird_large::Species::FlameWyvern => 600,
+                bird_large::Species::CloudWyvern => 600,
+                bird_large::Species::FrostWyvern => 600,
+                bird_large::Species::SeaWyvern => 600,
+                bird_large::Species::WealdWyvern => 600,
             },
             Body::Humanoid(_) => 75,
             _ => 100,
@@ -636,7 +658,6 @@ impl Body {
             Body::QuadrupedSmall(quadruped_small) => match quadruped_small.species {
                 quadruped_small::Species::Boar => 70,
                 quadruped_small::Species::Batfox => 40,
-                quadruped_small::Species::Dodarock => 100,
                 quadruped_small::Species::Holladon => 80,
                 quadruped_small::Species::Hyena => 45,
                 quadruped_small::Species::Truffler => 45,
@@ -672,7 +693,7 @@ impl Body {
                 quadruped_medium::Species::Bonerattler => 50,
                 quadruped_medium::Species::Deer => 50,
                 quadruped_medium::Species::Hirdrasil => 70,
-                quadruped_medium::Species::Roshwalr => 280,
+                quadruped_medium::Species::Roshwalr => 500,
                 quadruped_medium::Species::Donkey => 55,
                 quadruped_medium::Species::Zebra => 55,
                 quadruped_medium::Species::Antelope => 45,
@@ -696,6 +717,7 @@ impl Body {
                 bird_medium::Species::Eagle => 45,
                 bird_medium::Species::Owl => 45,
                 bird_medium::Species::Duck => 10,
+                bird_medium::Species::Bat => 20,
                 _ => 15,
             },
             Body::FishMedium(_) => 15,
@@ -753,6 +775,7 @@ impl Body {
             Body::Theropod(theropod) => match theropod.species {
                 theropod::Species::Archaeos => 350,
                 theropod::Species::Yale => 280,
+                theropod::Species::Dodarock => 200,
                 theropod::Species::Odonto => 300,
                 theropod::Species::Ntouka => 300,
                 _ => 110,
@@ -765,6 +788,8 @@ impl Body {
                 quadruped_low::Species::Asp => 75,
                 quadruped_low::Species::Tortoise => 90,
                 quadruped_low::Species::Rocksnapper => 140,
+                quadruped_low::Species::Rootsnapper => 140,
+                quadruped_low::Species::Reefsnapper => 140,
                 quadruped_low::Species::Pangolin => 40,
                 quadruped_low::Species::Maneater => 130,
                 quadruped_low::Species::Sandshark => 110,
@@ -773,6 +798,7 @@ impl Body {
                 quadruped_low::Species::Lavadrake => 160,
                 quadruped_low::Species::Basilisk => 200,
                 quadruped_low::Species::Deadwood => 120,
+                quadruped_low::Species::Mossdrake => 160,
                 _ => 70,
             },
             Body::Arthropod(arthropod) => match arthropod.species {
@@ -805,7 +831,12 @@ impl Body {
 
     pub fn immune_to(&self, buff: BuffKind) -> bool {
         match buff {
-            BuffKind::Bleeding => matches!(self, Body::Object(_) | Body::Golem(_) | Body::Ship(_)),
+            BuffKind::Bleeding => match self {
+                Body::Object(_) | Body::Golem(_) | Body::Ship(_) => true,
+                Body::BipedSmall(b) => matches!(b.species, biped_small::Species::Husk),
+                Body::BipedLarge(b) => matches!(b.species, biped_large::Species::Huskbrute),
+                _ => false,
+            },
             BuffKind::Burning => match self {
                 Body::Golem(g) => matches!(g.species, golem::Species::ClayGolem),
                 Body::BipedSmall(b) => matches!(b.species, biped_small::Species::Haniwa),
@@ -816,6 +847,10 @@ impl Body {
                     bird_large::Species::Phoenix
                         | bird_large::Species::Cockatrice
                         | bird_large::Species::FlameWyvern
+                        | bird_large::Species::CloudWyvern
+                        | bird_large::Species::FrostWyvern
+                        | bird_large::Species::SeaWyvern
+                        | bird_large::Species::WealdWyvern
                 ),
                 Body::Arthropod(b) => matches!(b.species, arthropod::Species::Moltencrawler),
                 _ => false,

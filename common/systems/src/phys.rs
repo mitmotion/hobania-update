@@ -540,7 +540,7 @@ impl<'a> PhysicsData<'a> {
             .join()
         {
             let vol = match collider {
-                Collider::Voxel { id } => voxel_colliders_manifest.colliders.get(&*id),
+                Collider::Voxel { id } => voxel_colliders_manifest.colliders.get(id),
                 Collider::Volume(vol) => Some(&**vol),
                 _ => None,
             };
@@ -632,8 +632,7 @@ impl<'a> PhysicsData<'a> {
                 )| {
                     let in_loaded_chunk = read
                         .terrain
-                        .get_key(read.terrain.pos_key(pos.0.map(|e| e.floor() as i32)))
-                        .is_some();
+                        .contains_key(read.terrain.pos_key(pos.0.map(|e| e.floor() as i32)));
 
                     // Apply physics only if in a loaded chunk
                     if in_loaded_chunk
@@ -790,8 +789,7 @@ impl<'a> PhysicsData<'a> {
 
                     let in_loaded_chunk = read
                         .terrain
-                        .get_key(read.terrain.pos_key(pos.0.map(|e| e.floor() as i32)))
-                        .is_some();
+                        .contains_key(read.terrain.pos_key(pos.0.map(|e| e.floor() as i32)));
 
                     // Don't move if we're not in a loaded chunk
                     let pos_delta = if in_loaded_chunk {
@@ -1335,9 +1333,9 @@ impl<'a> System<'a> for Sys {
 }
 
 #[allow(clippy::too_many_lines)]
-fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
+fn box_voxel_collision<T: BaseVol<Vox = Block> + ReadVol>(
     cylinder: (f32, f32, f32), // effective collision cylinder
-    terrain: &'a T,
+    terrain: &T,
     entity: Entity,
     pos: &mut Pos,
     tgt_pos: Vec3<f32>,
@@ -1462,11 +1460,9 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
             // Calculate the world space near aabb
             let near_aabb = move_aabb(near_aabb, pos.0);
             let player_overlap = |block_aabb: Aabb<f32>| {
-                ordered_float::OrderedFloat(
-                    (block_aabb.center() - player_aabb.center() - Vec3::unit_z() * 0.5)
-                        .map(f32::abs)
-                        .sum(),
-                )
+                (block_aabb.center() - player_aabb.center() - Vec3::unit_z() * 0.5)
+                    .map(f32::abs)
+                    .sum()
             };
 
             terrain.for_each_in(near_aabb, |block_pos, block| {
@@ -1481,19 +1477,16 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
 
                     // Determine whether the block's AABB collides with the player's AABB
                     if block_aabb.collides_with_aabb(player_aabb) {
-                        most_colliding = match most_colliding {
+                        match &most_colliding {
                             // Select the minimum of the value from `player_overlap`
-                            other @ Some((_, other_block_aabb, _))
+                            Some((_, other_block_aabb, _))
                                 if {
                                     // TODO: comment below is outdated (as of ~1 year ago)
                                     // Find the maximum of the minimum collision axes (this bit
                                     // is weird, trust me that it works)
-                                    player_overlap(block_aabb) >= player_overlap(other_block_aabb)
-                                } =>
-                            {
-                                other
-                            },
-                            _ => Some((block_pos, block_aabb, block)),
+                                    player_overlap(block_aabb) >= player_overlap(*other_block_aabb)
+                                } => {},
+                            _ => most_colliding = Some((block_pos, block_aabb, block)),
                         }
                     }
                 }
@@ -1745,7 +1738,7 @@ fn box_voxel_collision<'a, T: BaseVol<Vox = Block> + ReadVol>(
             // E=½mv², we scale both energies by ½m
             let kinetic = squared_velocity;
             // positive accelerate, negative decelerate, ΔE=mgΔh
-            let delta_potential = vertical_difference.max(-1.0).min(2.0) * POTENTIAL_TO_KINETIC;
+            let delta_potential = vertical_difference.clamp(-1.0, 2.0) * POTENTIAL_TO_KINETIC;
             let new_energy = kinetic + delta_potential;
             physics_state.skating_last_height = pos.0.z;
             new_energy / kinetic

@@ -47,12 +47,11 @@ use common::{
     store::Id,
     terrain::{
         map::MapConfig, uniform_idx_as_vec2, vec2_as_uniform_idx, BiomeKind, MapSizeLg,
-        TerrainChunkSize,
+        TerrainChunk, TerrainChunkSize,
     },
     vol::RectVolSize,
 };
 use common_net::msg::WorldMapMsg;
-use enum_iterator::IntoEnumIterator;
 use noise::{
     BasicMulti, Billow, Fbm, HybridMulti, MultiFractal, NoiseFn, RangeFunction, RidgedMulti,
     Seedable, SuperSimplex, Worley,
@@ -68,7 +67,9 @@ use std::{
     io::{BufReader, BufWriter},
     ops::{Add, Div, Mul, Neg, Sub},
     path::PathBuf,
+    sync::Arc,
 };
+use strum::IntoEnumIterator;
 use tracing::{debug, warn};
 use vek::*;
 
@@ -696,7 +697,7 @@ impl WorldSim {
             hill_nz: SuperSimplex::new().set_seed(rng.gen()),
             alt_nz: util::HybridMulti::new()
                 .set_octaves(8)
-                .set_frequency((10_000.0 / continent_scale) as f64)
+                .set_frequency(10_000.0 / continent_scale)
                 // persistence = lacunarity^(-(1.0 - fractal increment))
                 .set_lacunarity(util::HybridMulti::DEFAULT_LACUNARITY)
                 .set_persistence(util::HybridMulti::DEFAULT_LACUNARITY.powi(-1))
@@ -810,9 +811,8 @@ impl WorldSim {
         let logistic_cdf = |x: f64| (x / logistic_2_base).tanh() * 0.5 + 0.5;
 
         let map_size_chunks_len_f64 = map_size_lg.chunks().map(f64::from).product();
-        let min_epsilon = 1.0 / map_size_chunks_len_f64.max(f64::EPSILON as f64 * 0.5);
-        let max_epsilon =
-            (1.0 - 1.0 / map_size_chunks_len_f64).min(1.0 - f64::EPSILON as f64 * 0.5);
+        let min_epsilon = 1.0 / map_size_chunks_len_f64.max(f64::EPSILON * 0.5);
+        let max_epsilon = (1.0 - 1.0 / map_size_chunks_len_f64).min(1.0 - f64::EPSILON * 0.5);
 
         // No NaNs in these uniform vectors, since the original noise value always
         // returns Some.
@@ -827,8 +827,7 @@ impl WorldSim {
                         (gen_ctx
                             .alt_nz
                             .get((wposf.div(10_000.0)).into_array())
-                            .min(1.0)
-                            .max(-1.0))
+                            .clamp(-1.0, 1.0))
                         .sub(0.05)
                         .mul(0.35),
                     )
@@ -850,8 +849,7 @@ impl WorldSim {
                                     .div(1_500.0))
                                 .into_array(),
                             )
-                            .min(1.0)
-                            .max(-1.0)
+                            .clamp(-1.0, 1.0)
                             .mul(1.0)
                         + gen_ctx
                             .hill_nz
@@ -862,8 +860,7 @@ impl WorldSim {
                                     .div(400.0))
                                 .into_array(),
                             )
-                            .min(1.0)
-                            .max(-1.0)
+                            .clamp(-1.0, 1.0)
                             .mul(0.3))
                     .add(0.3)
                     .max(0.0);
@@ -875,8 +872,7 @@ impl WorldSim {
                         ((gen_ctx
                             .chaos_nz
                             .get((wposf.div(3_000.0)).into_array())
-                            .min(1.0)
-                            .max(-1.0))
+                            .clamp(-1.0, 1.0))
                         .add(1.0)
                         .mul(0.5)
                         // [0, 1] * [0.4, 1] = [0, 1] (but probably towards the lower end)
@@ -884,11 +880,9 @@ impl WorldSim {
                             (gen_ctx
                                 .chaos_nz
                                 .get((wposf.div(6_000.0)).into_array())
-                                .min(1.0)
-                                .max(-1.0))
+                                .clamp(-1.0, 1.0))
                             .abs()
-                            .max(0.4)
-                            .min(1.0),
+                                .clamp(0.4, 1.0),
                         )
                         // Chaos is always increased by a little when we're on a hill (but remember
                         // that hill is 0.3 or less about 50% of the time).
@@ -933,8 +927,7 @@ impl WorldSim {
                 let alt_main = (gen_ctx
                     .alt_nz
                     .get((wposf.div(2_000.0)).into_array())
-                    .min(1.0)
-                    .max(-1.0))
+                    .clamp(-1.0, 1.0))
                 .abs()
                 .powf(1.35);
 
@@ -950,8 +943,7 @@ impl WorldSim {
                                 .div(300.0))
                             .into_array(),
                         )
-                        .min(1.0)
-                        .max(-1.0))
+                        .clamp(-1.0, 1.0))
                     .mul(alt_main.powf(0.8).max(/* 0.25 */ 0.15))
                     .mul(0.3)
                     .add(1.0)
@@ -1041,7 +1033,7 @@ impl WorldSim {
         let theta_func = |_posi| 0.4;
         let kf_func = {
             |posi| {
-                let kf_scale_i = k_fs_scale(theta_func(posi), n_func(posi)) as f64;
+                let kf_scale_i = k_fs_scale(theta_func(posi), n_func(posi));
                 if is_ocean_fn(posi) {
                     return 1.0e-4 * kf_scale_i;
                 }
@@ -1119,8 +1111,7 @@ impl WorldSim {
             let uheight = gen_ctx
                 .uplift_nz
                 .get(turb_wposf.into_array())
-                .min(1.0)
-                .max(-1.0)
+                .clamp(-1.0, 1.0)
                 .mul(0.5)
                 .add(0.5);
             let wposf3 = Vec3::new(
@@ -1131,8 +1122,7 @@ impl WorldSim {
             let rock_strength = gen_ctx
                 .rock_strength_nz
                 .get(wposf3.into_array())
-                .min(1.0)
-                .max(-1.0)
+                .clamp(-1.0, 1.0)
                 .mul(0.5)
                 .add(0.5);
             let center = 0.4;
@@ -1140,8 +1130,8 @@ impl WorldSim {
             let dmax = center + 0.05;
             let log_odds = |x: f64| logit(x) - logit(center);
             let ustrength = logistic_cdf(
-                1.0 * logit(rock_strength.min(1.0f64 - 1e-7).max(1e-7))
-                    + 1.0 * log_odds(uheight.min(dmax).max(dmin)),
+                1.0 * logit(rock_strength.clamp(1e-7, 1.0f64 - 1e-7))
+                    + 1.0 * log_odds(uheight.clamp(dmin, dmax)),
             );
             // marine: ε₀ = 2.078e-3
             // San Gabriel Mountains: ε₀ = 3.18e-4
@@ -1174,8 +1164,7 @@ impl WorldSim {
             let uheight = gen_ctx
                 .uplift_nz
                 .get(turb_wposf.into_array())
-                .min(1.0)
-                .max(-1.0)
+                .clamp(-1.0, 1.0)
                 .mul(0.5)
                 .add(0.5);
             let wposf3 = Vec3::new(
@@ -1186,8 +1175,7 @@ impl WorldSim {
             let rock_strength = gen_ctx
                 .rock_strength_nz
                 .get(wposf3.into_array())
-                .min(1.0)
-                .max(-1.0)
+                .clamp(-1.0, 1.0)
                 .mul(0.5)
                 .add(0.5);
             let center = 0.4;
@@ -1195,8 +1183,8 @@ impl WorldSim {
             let dmax = center + 0.05;
             let log_odds = |x: f64| logit(x) - logit(center);
             let ustrength = logistic_cdf(
-                1.0 * logit(rock_strength.min(1.0f64 - 1e-7).max(1e-7))
-                    + 1.0 * log_odds(uheight.min(dmax).max(dmin)),
+                1.0 * logit(rock_strength.clamp(1e-7, 1.0f64 - 1e-7))
+                    + 1.0 * log_odds(uheight.clamp(dmin, dmax)),
             );
             // Frog Hollow (peak production = 0.25): α = 4.2e-2
             // San Gabriel Mountains: α = 3.8e-2
@@ -1212,8 +1200,8 @@ impl WorldSim {
             if is_ocean_fn(posi) {
                 return 0.0;
             }
-            let height = (uplift_uniform[posi].1 - alt_old_min_uniform) as f64
-                / (alt_old_max_uniform - alt_old_min_uniform) as f64;
+            let height = (uplift_uniform[posi].1 - alt_old_min_uniform)
+                / (alt_old_max_uniform - alt_old_min_uniform);
 
             let height = height.mul(max_epsilon - min_epsilon).add(min_epsilon);
             let height = erosion_factor(height);
@@ -1224,8 +1212,8 @@ impl WorldSim {
             // u = 5e-4: normal (mid example in Yuan, average mountain uplift)
             // u = 2e-4: low (low example in Yuan; known that lagoons etc. may have u ~
             // 0.05). u = 0: low (plateau [fan, altitude = 0.0])
-            let height = height.mul(max_erosion_per_delta_t);
-            height as f64
+
+            height.mul(max_erosion_per_delta_t)
         };
         let alt_func = |posi| {
             if is_ocean_fn(posi) {
@@ -1363,7 +1351,7 @@ impl WorldSim {
                 threadpool,
             )
         };
-        let flux_old = get_multi_drainage(map_size_lg, &mstack, &mrec, &*mwrec, boundary_len);
+        let flux_old = get_multi_drainage(map_size_lg, &mstack, &mrec, &mwrec, boundary_len);
         // let flux_rivers = get_drainage(map_size_lg, &water_alt_pos, &dh,
         // boundary_len); TODO: Make rivers work with multi-direction flux as
         // well.
@@ -1591,6 +1579,10 @@ impl WorldSim {
 
     pub fn get_size(&self) -> Vec2<u32> { self.map_size_lg().chunks().map(u32::from) }
 
+    pub fn generate_oob_chunk(&self) -> TerrainChunk {
+        TerrainChunk::water(CONFIG.sea_level as i32)
+    }
+
     /// Draw a map of the world based on chunk information.  Returns a buffer of
     /// u32s.
     pub fn get_map(&self, index: IndexRef, calendar: Option<&Calendar>) -> WorldMapMsg {
@@ -1665,7 +1657,7 @@ impl WorldSim {
         map_config.is_shaded = false;
 
         map_config.generate(
-            |pos| sample_pos(&map_config, self, Some(&samples_data), pos),
+            |pos| sample_pos(&map_config, self, index, Some(&samples_data), pos),
             |pos| sample_wpos(&map_config, self, pos),
             |pos, (r, g, b, _a)| {
                 // We currently ignore alpha and replace it with the height at pos, scaled to
@@ -1680,18 +1672,18 @@ impl WorldSim {
                 // NOTE: Safe by invariants on map_size_lg.
                 let posi = (pos.y << self.map_size_lg().vec().x) | pos.x;
                 v[posi] = u32::from_le_bytes([r, g, b, a]);
-                alts[posi] = (((alt.min(1.0).max(0.0) * 8191.0) as u32) & 0x1FFF) << 3;
+                alts[posi] = (((alt.clamp(0.0, 1.0) * 8191.0) as u32) & 0x1FFF) << 3;
             },
         );
         WorldMapMsg {
             dimensions_lg: self.map_size_lg().vec(),
-            sea_level: CONFIG.sea_level,
             max_height: self.max_height,
             rgba: Grid::from_raw(self.get_size().map(|e| e as i32), v),
             alt: Grid::from_raw(self.get_size().map(|e| e as i32), alts),
             horizons,
             sites: Vec::new(), // Will be substituted later
             pois: Vec::new(),  // Will be substituted later
+            default_chunk: Arc::new(self.generate_oob_chunk()),
         }
     }
 
@@ -2128,14 +2120,11 @@ impl WorldSim {
         Some(z0 + z1 + z2 + z3)
     }
 
-    /// Return the distance to the nearest way in blocks, along with the
-    /// closest point on the way, the way metadata, and the tangent vector
-    /// of that way.
-    pub fn get_nearest_way<M: Clone + Lerp<Output = M>>(
-        &self,
+    pub fn get_nearest_ways<'a, M: Clone + Lerp<Output = M>>(
+        &'a self,
         wpos: Vec2<i32>,
-        get_way: impl Fn(&SimChunk) -> Option<(Way, M)>,
-    ) -> Option<(f32, Vec2<f32>, M, Vec2<f32>)> {
+        get_way: &'a impl Fn(&SimChunk) -> Option<(Way, M)>,
+    ) -> impl Iterator<Item = NearestWaysData<M, impl FnOnce() -> Vec2<f32>>> + 'a {
         let chunk_pos = wpos.map2(TerrainChunkSize::RECT_SIZE, |e, sz: u32| {
             e.div_euclid(sz as i32)
         });
@@ -2145,10 +2134,9 @@ impl WorldSim {
             })
         };
 
-        let get_way = &get_way;
         LOCALITY
             .iter()
-            .filter_map(|ctrl| {
+            .filter_map(move |ctrl| {
                 let (way, meta) = get_way(self.get(chunk_pos + *ctrl)?)?;
                 let ctrl_pos = get_chunk_centre(chunk_pos + *ctrl).map(|e| e as f32)
                     + way.offset.map(|e| e as f32);
@@ -2158,7 +2146,7 @@ impl WorldSim {
                     return None;
                 }
 
-                let (start_pos, _start_idx, start_meta) = if chunk_connections != 2 {
+                let (start_pos, start_idx, start_meta) = if chunk_connections != 2 {
                     (ctrl_pos, None, meta.clone())
                 } else {
                     let (start_idx, start_rpos) = NEIGHBORS
@@ -2181,8 +2169,10 @@ impl WorldSim {
                     NEIGHBORS
                         .iter()
                         .enumerate()
-                        .filter(move |(i, _)| way.neighbors & (1 << *i as u8) != 0)
-                        .filter_map(move |(_, end_rpos)| {
+                        .filter(move |(i, _)| {
+                            way.neighbors & (1 << *i as u8) != 0 && Some(*i) != start_idx
+                        })
+                        .filter_map(move |(i, end_rpos)| {
                             let end_pos_chunk = chunk_pos + *ctrl + end_rpos;
                             let (end_way, end_meta) = get_way(self.get(end_pos_chunk)?)?;
                             let end_pos = get_chunk_centre(end_pos_chunk).map(|e| e as f32)
@@ -2204,15 +2194,42 @@ impl WorldSim {
                             } else {
                                 Lerp::lerp(meta.clone(), end_meta, nearest_interval - 0.5)
                             };
-                            Some((dist_sqrd, pos, meta, move || {
-                                bez.evaluate_derivative(nearest_interval).normalized()
-                            }))
+                            Some(NearestWaysData {
+                                i,
+                                dist_sqrd,
+                                pos,
+                                meta,
+                                bezier: bez,
+                                calc_tangent: move || {
+                                    bez.evaluate_derivative(nearest_interval).normalized()
+                                },
+                            })
                         }),
                 )
             })
             .flatten()
-            .min_by_key(|(dist_sqrd, _, _, _)| (dist_sqrd * 1024.0) as i32)
-            .map(|(dist, pos, meta, calc_tangent)| (dist.sqrt(), pos, meta, calc_tangent()))
+    }
+
+    /// Return the distance to the nearest way in blocks, along with the
+    /// closest point on the way, the way metadata, and the tangent vector
+    /// of that way.
+    pub fn get_nearest_way<M: Clone + Lerp<Output = M>>(
+        &self,
+        wpos: Vec2<i32>,
+        get_way: impl Fn(&SimChunk) -> Option<(Way, M)>,
+    ) -> Option<(f32, Vec2<f32>, M, Vec2<f32>)> {
+        let get_way = &get_way;
+        self.get_nearest_ways(wpos, get_way)
+            .min_by_key(|NearestWaysData { dist_sqrd, .. }| (dist_sqrd * 1024.0) as i32)
+            .map(
+                |NearestWaysData {
+                     dist_sqrd,
+                     pos,
+                     meta,
+                     calc_tangent,
+                     ..
+                 }| (dist_sqrd.sqrt(), pos, meta, calc_tangent()),
+            )
     }
 
     pub fn get_nearest_path(&self, wpos: Vec2<i32>) -> Option<(f32, Vec2<f32>, Path, Vec2<f32>)> {
@@ -2234,7 +2251,7 @@ impl WorldSim {
         };
         let env = chunk.get_environment();
         Lottery::from(
-            ForestKind::into_enum_iter()
+            ForestKind::iter()
                 .enumerate()
                 .map(|(i, fk)| {
                     const CLUSTER_SIZE: f64 = 48.0;
@@ -2327,6 +2344,15 @@ pub struct RegionInfo {
     pub block_pos: Vec2<i32>,
     pub dist: f32,
     pub seed: u32,
+}
+
+pub struct NearestWaysData<M, F: FnOnce() -> Vec2<f32>> {
+    pub i: usize,
+    pub dist_sqrd: f32,
+    pub pos: Vec2<f32>,
+    pub meta: M,
+    pub bezier: QuadraticBezier2<f32>,
+    pub calc_tangent: F,
 }
 
 impl SimChunk {
@@ -2433,8 +2459,7 @@ impl SimChunk {
                 // Forces lakes to be downhill from the land around them, and adds some noise to
                 // the lake bed to make sure it's not too flat.
                 let lake_bottom_nz = (gen_ctx.small_nz.get((wposf.div(20.0)).into_array()) as f32)
-                    .max(-1.0)
-                    .min(1.0)
+                    .clamp(-1.0, 1.0)
                     .mul(3.0);
                 alt = alt.min(water_alt - 5.0) + lake_bottom_nz;
             },
@@ -2447,12 +2472,9 @@ impl SimChunk {
             0.0
         } else {
             let tree_density = (gen_ctx.tree_nz.get((wposf.div(1024.0)).into_array()))
-                .mul(1.5)
-                .add(1.0)
-                .mul(0.5)
-                .add(0.05)
-                .max(0.0)
-                .min(1.0);
+                .mul(0.75)
+                .add(0.55)
+                .clamp(0.0, 1.0);
             // Tree density should go (by a lot) with humidity.
             if humidity <= 0.0 || tree_density <= 0.0 {
                 0.0
@@ -2547,7 +2569,7 @@ impl SimChunk {
                     },
                 };
 
-                ForestKind::into_enum_iter()
+                ForestKind::iter()
                     .max_by_key(|fk| (fk.proclivity(&env) * 10000.0) as u32)
                     .unwrap() // Can't fail
             },

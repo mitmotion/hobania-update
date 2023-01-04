@@ -8,21 +8,27 @@ use crate::{
     },
     render::RenderMode,
     settings::{
-        AudioSettings, ChatSettings, ControlSettings, Fps, GamepadSettings, GameplaySettings,
-        GraphicsSettings, InterfaceSettings,
+        audio::AudioVolume, AudioSettings, ChatSettings, ControlSettings, Fps, GamepadSettings,
+        GameplaySettings, GraphicsSettings, InterfaceSettings,
     },
     window::FullScreenSettings,
     GlobalState,
 };
 use i18n::{LanguageMetadata, LocalizationHandle};
+use std::rc::Rc;
 
 #[derive(Clone)]
 pub enum Audio {
     AdjustMasterVolume(f32),
+    MuteMasterVolume(bool),
     AdjustInactiveMasterVolume(f32),
+    MuteInactiveMasterVolume(bool),
     AdjustMusicVolume(f32),
+    MuteMusicVolume(bool),
     AdjustSfxVolume(f32),
+    MuteSfxVolume(bool),
     AdjustAmbienceVolume(f32),
+    MuteAmbienceVolume(bool),
     AdjustMusicSpacing(f32),
     //ChangeAudioDevice(String),
     ResetAudioSettings,
@@ -93,6 +99,7 @@ pub enum Graphics {
     AdjustWindowSize([u16; 2]),
 
     ResetGraphicsSettings,
+    ChangeGraphicsSettings(Rc<dyn Fn(GraphicsSettings) -> GraphicsSettings>),
 }
 #[derive(Clone)]
 pub enum Interface {
@@ -117,6 +124,7 @@ pub enum Interface {
     ToggleXpBar(XpBar),
     ToggleBarNumbers(BarNumbers),
     ToggleAlwaysShowBars(bool),
+    TogglePoiseBar(bool),
     ToggleShortcutNumbers(ShortcutNumbers),
     BuffPosition(BuffPosition),
 
@@ -132,6 +140,7 @@ pub enum Interface {
     MapShowTowns(bool),
     MapShowDungeons(bool),
     MapShowCastles(bool),
+    MapShowBridges(bool),
     MapShowCaves(bool),
     MapShowTrees(bool),
     MapShowPeaks(bool),
@@ -194,31 +203,73 @@ settings_change_from!(Networking);
 impl SettingsChange {
     pub fn process(self, global_state: &mut GlobalState, session_state: &mut SessionState) {
         let mut settings = &mut global_state.settings;
+
         match self {
             SettingsChange::Audio(audio_change) => {
+                fn update_volume(audio: &mut AudioVolume, volume: f32) -> f32 {
+                    audio.volume = volume;
+                    audio.get_checked()
+                }
+                fn update_muted(audio: &mut AudioVolume, muted: bool) -> f32 {
+                    audio.muted = muted;
+                    audio.get_checked()
+                }
+
                 match audio_change {
                     Audio::AdjustMasterVolume(master_volume) => {
-                        global_state.audio.set_master_volume(master_volume);
+                        let volume_checked =
+                            update_volume(&mut settings.audio.master_volume, master_volume);
 
-                        settings.audio.master_volume = master_volume;
+                        global_state.audio.set_master_volume(volume_checked);
+                    },
+                    Audio::MuteMasterVolume(master_muted) => {
+                        let volume_checked =
+                            update_muted(&mut settings.audio.master_volume, master_muted);
+
+                        global_state.audio.set_master_volume(volume_checked);
                     },
                     Audio::AdjustInactiveMasterVolume(inactive_master_volume_perc) => {
-                        settings.audio.inactive_master_volume_perc = inactive_master_volume_perc;
+                        settings.audio.inactive_master_volume_perc.volume =
+                            inactive_master_volume_perc;
+                    },
+                    Audio::MuteInactiveMasterVolume(inactive_master_volume_muted) => {
+                        settings.audio.inactive_master_volume_perc.muted =
+                            inactive_master_volume_muted;
                     },
                     Audio::AdjustMusicVolume(music_volume) => {
-                        global_state.audio.set_music_volume(music_volume);
+                        let volume_checked =
+                            update_volume(&mut settings.audio.music_volume, music_volume);
 
-                        settings.audio.music_volume = music_volume;
+                        global_state.audio.set_music_volume(volume_checked);
+                    },
+                    Audio::MuteMusicVolume(music_muted) => {
+                        let volume_checked =
+                            update_muted(&mut settings.audio.music_volume, music_muted);
+
+                        global_state.audio.set_music_volume(volume_checked);
                     },
                     Audio::AdjustSfxVolume(sfx_volume) => {
-                        global_state.audio.set_sfx_volume(sfx_volume);
+                        let volume_checked =
+                            update_volume(&mut settings.audio.sfx_volume, sfx_volume);
 
-                        settings.audio.sfx_volume = sfx_volume;
+                        global_state.audio.set_sfx_volume(volume_checked);
+                    },
+                    Audio::MuteSfxVolume(sfx_muted) => {
+                        let volume_checked =
+                            update_muted(&mut settings.audio.sfx_volume, sfx_muted);
+
+                        global_state.audio.set_sfx_volume(volume_checked);
                     },
                     Audio::AdjustAmbienceVolume(ambience_volume) => {
                         global_state.audio.set_ambience_volume(ambience_volume);
 
-                        settings.audio.ambience_volume = ambience_volume;
+                        settings.audio.ambience_volume.volume = ambience_volume;
+                    },
+                    Audio::MuteAmbienceVolume(ambience_muted) => {
+                        let volume_checked =
+                            update_muted(&mut settings.audio.ambience_volume, ambience_muted);
+
+                        global_state.audio.set_ambience_volume(volume_checked);
                     },
                     Audio::AdjustMusicSpacing(multiplier) => {
                         global_state.audio.set_music_spacing(multiplier);
@@ -232,9 +283,14 @@ impl SettingsChange {
                     //},
                     Audio::ResetAudioSettings => {
                         settings.audio = AudioSettings::default();
-                        let audio = &settings.audio;
-                        global_state.audio.set_music_volume(audio.music_volume);
-                        global_state.audio.set_sfx_volume(audio.sfx_volume);
+
+                        let audio = &mut global_state.audio;
+
+                        // TODO: check if updating the master volume is necessary
+                        // (it wasn't done before)
+                        audio.set_master_volume(settings.audio.master_volume.get_checked());
+                        audio.set_music_volume(settings.audio.music_volume.get_checked());
+                        audio.set_sfx_volume(settings.audio.sfx_volume.get_checked());
                     },
                 }
             },
@@ -357,6 +413,8 @@ impl SettingsChange {
                 }
             },
             SettingsChange::Graphics(graphics_change) => {
+                let mut change_preset = false;
+
                 match graphics_change {
                     Graphics::AdjustTerrainViewDistance(terrain_vd) => {
                         adjust_terrain_view_distance(terrain_vd, settings, session_state)
@@ -395,7 +453,7 @@ impl SettingsChange {
                         session_state
                             .scene
                             .camera_mut()
-                            .compute_dependents(&*session_state.client.borrow().state().terrain());
+                            .compute_dependents(&session_state.client.borrow().state().terrain());
                     },
                     Graphics::ChangeGamma(new_gamma) => {
                         settings.graphics.gamma = new_gamma;
@@ -411,7 +469,7 @@ impl SettingsChange {
                         global_state
                             .window
                             .renderer_mut()
-                            .set_render_mode((&*new_render_mode).clone())
+                            .set_render_mode((*new_render_mode).clone())
                             .unwrap();
                         settings.graphics.render_mode = *new_render_mode;
                     },
@@ -433,28 +491,45 @@ impl SettingsChange {
                     },
                     Graphics::ResetGraphicsSettings => {
                         settings.graphics = GraphicsSettings::default();
-                        let graphics = &settings.graphics;
-                        // View distance
-                        client_set_view_distance(settings, session_state);
-                        // FOV
-                        session_state.scene.camera_mut().set_fov_deg(graphics.fov);
-                        session_state
-                            .scene
-                            .camera_mut()
-                            .compute_dependents(&*session_state.client.borrow().state().terrain());
-                        // LoD
-                        session_state.scene.lod.set_detail(graphics.lod_detail);
-                        // Render mode
+                        change_preset = true;
+                        // Fullscreen mode
                         global_state
                             .window
-                            .renderer_mut()
-                            .set_render_mode(graphics.render_mode.clone())
-                            .unwrap();
-                        // Fullscreen mode
-                        global_state.window.set_fullscreen_mode(graphics.fullscreen);
+                            .set_fullscreen_mode(settings.graphics.fullscreen);
                         // Window size
-                        global_state.window.set_size(graphics.window_size.into());
+                        global_state
+                            .window
+                            .set_size(settings.graphics.window_size.into());
                     },
+                    Graphics::ChangeGraphicsSettings(f) => {
+                        settings.graphics = f(settings.graphics.clone());
+                        change_preset = true;
+                    },
+                }
+
+                if change_preset {
+                    let graphics = &settings.graphics;
+                    // View distance
+                    client_set_view_distance(settings, session_state);
+                    // FOV
+                    session_state.scene.camera_mut().set_fov_deg(graphics.fov);
+                    session_state
+                        .scene
+                        .camera_mut()
+                        .compute_dependents(&session_state.client.borrow().state().terrain());
+                    // LoD
+                    session_state.scene.lod.set_detail(graphics.lod_detail);
+                    // LoD distance
+                    session_state
+                        .client
+                        .borrow_mut()
+                        .set_lod_distance(graphics.lod_distance);
+                    // Render mode
+                    global_state
+                        .window
+                        .renderer_mut()
+                        .set_render_mode(graphics.render_mode.clone())
+                        .unwrap();
                 }
             },
             SettingsChange::Interface(interface_change) => {
@@ -519,6 +594,9 @@ impl SettingsChange {
                     Interface::ToggleAlwaysShowBars(always_show_bars) => {
                         settings.interface.always_show_bars = always_show_bars;
                     },
+                    Interface::TogglePoiseBar(enable_poise_bar) => {
+                        settings.interface.enable_poise_bar = enable_poise_bar;
+                    },
                     Interface::ToggleShortcutNumbers(shortcut_numbers) => {
                         settings.interface.shortcut_numbers = shortcut_numbers;
                     },
@@ -554,6 +632,9 @@ impl SettingsChange {
                     },
                     Interface::MapShowCastles(map_show_castles) => {
                         settings.interface.map_show_castles = map_show_castles;
+                    },
+                    Interface::MapShowBridges(map_show_bridges) => {
+                        settings.interface.map_show_bridges = map_show_bridges;
                     },
                     Interface::MapShowCaves(map_show_caves) => {
                         settings.interface.map_show_caves = map_show_caves;

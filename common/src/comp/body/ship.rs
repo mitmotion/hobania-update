@@ -42,13 +42,13 @@ impl Body {
         Self::random_with(&mut rng)
     }
 
-    pub fn random_with(rng: &mut impl rand::Rng) -> Self { *(&ALL_BODIES).choose(rng).unwrap() }
+    pub fn random_with(rng: &mut impl rand::Rng) -> Self { *ALL_BODIES.choose(rng).unwrap() }
 
     pub fn random_airship_with(rng: &mut impl rand::Rng) -> Self {
-        *(&ALL_AIRSHIPS).choose(rng).unwrap()
+        *ALL_AIRSHIPS.choose(rng).unwrap()
     }
 
-    pub fn random_ship_with(rng: &mut impl rand::Rng) -> Self { *(&ALL_SHIPS).choose(rng).unwrap() }
+    pub fn random_ship_with(rng: &mut impl rand::Rng) -> Self { *ALL_SHIPS.choose(rng).unwrap() }
 
     /// Return the structure manifest that this ship uses. `None` means that it
     /// should be derived from the collider.
@@ -206,7 +206,10 @@ pub mod figuredata {
     }
 
     impl assets::Compound for ShipSpec {
-        fn load(cache: assets::AnyCache, _: &str) -> Result<Self, assets::BoxedError> {
+        fn load(
+            cache: assets::AnyCache,
+            _: &assets::SharedString,
+        ) -> Result<Self, assets::BoxedError> {
             let manifest: AssetHandle<Ron<ShipCentralSpec>> =
                 AssetExt::load("common.manifests.ship_manifest")?;
             let mut colliders = HashMap::new();

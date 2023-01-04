@@ -6,8 +6,8 @@ use super::{
             blit, bloom, clouds, debug, figure, fluid, lod_object, lod_terrain, particle,
             postprocess, shadow, skybox, sprite, terrain, trail, ui,
         },
-        AaMode, BloomMode, CloudMode, FluidMode, LightingMode, PipelineModes, RenderError,
-        ShadowMode,
+        AaMode, BloomMode, CloudMode, FluidMode, LightingMode, PipelineModes, ReflectionMode,
+        RenderError, ShadowMode,
     },
     shaders::Shaders,
     ImmutableLayouts, Layouts,
@@ -60,6 +60,7 @@ pub struct ShadowPipelines {
     pub point: Option<shadow::PointShadowPipeline>,
     pub directed: Option<shadow::ShadowPipeline>,
     pub figure: Option<shadow::ShadowFigurePipeline>,
+    pub debug: Option<shadow::ShadowDebugPipeline>,
 }
 
 pub struct RainOcclusionPipelines {
@@ -140,6 +141,7 @@ struct ShaderModules {
     point_light_shadows_vert: wgpu::ShaderModule,
     light_shadows_directed_vert: wgpu::ShaderModule,
     light_shadows_figure_vert: wgpu::ShaderModule,
+    light_shadows_debug_vert: wgpu::ShaderModule,
     rain_occlusion_directed_vert: wgpu::ShaderModule,
     rain_occlusion_figure_vert: wgpu::ShaderModule,
 }
@@ -164,6 +166,7 @@ impl ShaderModules {
         let shadows = shaders.get("include.shadows").unwrap();
         let rain_occlusion = shaders.get("include.rain_occlusion").unwrap();
         let point_glow = shaders.get("include.point_glow").unwrap();
+        let fxaa = shaders.get("include.fxaa").unwrap();
 
         // We dynamically add extra configuration settings to the constants file.
         let mut constants = format!(
@@ -173,6 +176,7 @@ impl ShaderModules {
 #define VOXYGEN_COMPUTATION_PREFERENCE {}
 #define FLUID_MODE {}
 #define CLOUD_MODE {}
+#define REFLECTION_MODE {}
 #define LIGHTING_ALGORITHM {}
 #define SHADOW_MODE {}
 
@@ -181,8 +185,9 @@ impl ShaderModules {
             // TODO: Configurable vertex/fragment shader preference.
             "VOXYGEN_COMPUTATION_PREFERENCE_FRAGMENT",
             match pipeline_modes.fluid {
-                FluidMode::Cheap => "FLUID_MODE_CHEAP",
-                FluidMode::Shiny => "FLUID_MODE_SHINY",
+                FluidMode::Low => "FLUID_MODE_LOW",
+                FluidMode::Medium => "FLUID_MODE_MEDIUM",
+                FluidMode::High => "FLUID_MODE_HIGH",
             },
             match pipeline_modes.cloud {
                 CloudMode::None => "CLOUD_MODE_NONE",
@@ -191,6 +196,11 @@ impl ShaderModules {
                 CloudMode::Medium => "CLOUD_MODE_MEDIUM",
                 CloudMode::High => "CLOUD_MODE_HIGH",
                 CloudMode::Ultra => "CLOUD_MODE_ULTRA",
+            },
+            match pipeline_modes.reflection {
+                ReflectionMode::Low => "REFLECTION_MODE_LOW",
+                ReflectionMode::Medium => "REFLECTION_MODE_MEDIUM",
+                ReflectionMode::High => "REFLECTION_MODE_HIGH",
             },
             match pipeline_modes.lighting {
                 LightingMode::Ashikhmin => "LIGHTING_ALGORITHM_ASHIKHMIN",
@@ -247,6 +257,8 @@ impl ShaderModules {
                 AaMode::MsaaX4 => "antialias.msaa-x4",
                 AaMode::MsaaX8 => "antialias.msaa-x8",
                 AaMode::MsaaX16 => "antialias.msaa-x16",
+                AaMode::Hqx => "antialias.hqx",
+                AaMode::FxUpscale => "antialias.fxupscale",
             })
             .unwrap();
 
@@ -277,6 +289,7 @@ impl ShaderModules {
                     "anti-aliasing.glsl" => anti_alias.0.to_owned(),
                     "cloud.glsl" => cloud.0.to_owned(),
                     "point_glow.glsl" => point_glow.0.to_owned(),
+                    "fxaa.glsl" => fxaa.0.to_owned(),
                     other => {
                         return Err(format!(
                             "Include {} in {} is not defined",
@@ -297,8 +310,8 @@ impl ShaderModules {
         };
 
         let selected_fluid_shader = ["fluid-frag.", match pipeline_modes.fluid {
-            FluidMode::Cheap => "cheap",
-            FluidMode::Shiny => "shiny",
+            FluidMode::Low => "cheap",
+            _ => "shiny",
         }]
         .concat();
 
@@ -347,6 +360,10 @@ impl ShaderModules {
             )?,
             light_shadows_figure_vert: create_shader(
                 "light-shadows-figure-vert",
+                ShaderKind::Vertex,
+            )?,
+            light_shadows_debug_vert: create_shader(
+                "light-shadows-debug-vert",
                 ShaderKind::Vertex,
             )?,
             rain_occlusion_directed_vert: create_shader(
@@ -447,7 +464,7 @@ fn create_ingame_and_shadow_pipelines(
     needs: PipelineNeeds,
     pool: &rayon::ThreadPool,
     // TODO: Reduce the boilerplate in this file
-    tasks: [Task; 18],
+    tasks: [Task; 19],
 ) -> IngameAndShadowPipelines {
     prof_span!(_guard, "create_ingame_and_shadow_pipelines");
 
@@ -479,6 +496,7 @@ fn create_ingame_and_shadow_pipelines(
         point_shadow_task,
         terrain_directed_shadow_task,
         figure_directed_shadow_task,
+        debug_directed_shadow_task,
         terrain_directed_rain_occlusion_task,
         figure_directed_rain_occlusion_task,
     ] = tasks;
@@ -766,6 +784,21 @@ fn create_ingame_and_shadow_pipelines(
             "figure directed shadow pipeline creation",
         )
     };
+    // Pipeline for rendering directional light debug shadow maps.
+    let create_debug_directed_shadow = || {
+        debug_directed_shadow_task.run(
+            || {
+                shadow::ShadowDebugPipeline::new(
+                    device,
+                    &shaders.light_shadows_debug_vert,
+                    &layouts.global,
+                    &layouts.debug,
+                    pipeline_modes.aa,
+                )
+            },
+            "figure directed shadow pipeline creation",
+        )
+    };
     // Pipeline for rendering directional light terrain rain occlusion maps.
     let create_terrain_directed_rain_occlusion = || {
         terrain_directed_rain_occlusion_task.run(
@@ -807,10 +840,9 @@ fn create_ingame_and_shadow_pipelines(
     };
     let j5 = || pool.join(create_postprocess, create_point_shadow);
     let j6 = || {
-        pool.join(
-            create_terrain_directed_shadow,
-            create_figure_directed_shadow,
-        )
+        pool.join(create_terrain_directed_shadow, || {
+            pool.join(create_figure_directed_shadow, create_debug_directed_shadow)
+        })
     };
     let j7 = || {
         pool.join(create_lod_object, || {
@@ -828,7 +860,10 @@ fn create_ingame_and_shadow_pipelines(
             ((sprite, particle), (lod_terrain, (clouds, trail))),
         ),
         (
-            ((postprocess, point_shadow), (terrain_directed_shadow, figure_directed_shadow)),
+            (
+                (postprocess, point_shadow),
+                (terrain_directed_shadow, (figure_directed_shadow, debug_directed_shadow)),
+            ),
             (lod_object, (terrain_directed_rain_occlusion, figure_directed_rain_occlusion)),
         ),
     ) = pool.join(
@@ -858,6 +893,7 @@ fn create_ingame_and_shadow_pipelines(
             point: Some(point_shadow),
             directed: Some(terrain_directed_shadow),
             figure: Some(figure_directed_shadow),
+            debug: Some(debug_directed_shadow),
         },
         rain_occlusion: RainOcclusionPipelines {
             terrain: Some(terrain_directed_rain_occlusion),

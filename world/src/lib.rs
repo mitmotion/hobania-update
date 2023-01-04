@@ -7,13 +7,7 @@
 )]
 #![allow(clippy::branches_sharing_code)] // TODO: evaluate
 #![deny(clippy::clone_on_ref_ptr)]
-#![feature(
-    bool_to_option,
-    label_break_value,
-    option_zip,
-    arbitrary_enum_discriminant,
-    let_else
-)]
+#![feature(option_zip)]
 
 mod all;
 mod block;
@@ -36,6 +30,7 @@ pub use crate::{
     canvas::{Canvas, CanvasInfo},
     config::{Features, CONFIG},
     land::Land,
+    layer::PathLocals,
 };
 pub use block::BlockGen;
 pub use column::ColumnSample;
@@ -150,7 +145,7 @@ impl World {
                             name: site.site_tmp.map(|id| index.sites[id].name().to_string()),
                             // TODO: Probably unify these, at some point
                             kind: match &site.kind {
-                                civ::SiteKind::Settlement | civ::SiteKind::Refactor | civ::SiteKind::CliffTown | civ::SiteKind::DesertCity => world_msg::SiteKind::Town,
+                                civ::SiteKind::Settlement | civ::SiteKind::Refactor | civ::SiteKind::CliffTown | civ::SiteKind::SavannahPit | civ::SiteKind::DesertCity => world_msg::SiteKind::Town,
                                 civ::SiteKind::Dungeon => world_msg::SiteKind::Dungeon {
                                     difficulty: match site.site_tmp.map(|id| &index.sites[id].kind) {
                                         Some(SiteKind::Dungeon(d)) => d.dungeon_difficulty().unwrap_or(0),
@@ -162,6 +157,8 @@ impl World {
                                 // TODO: Maybe change?
                                 civ::SiteKind::Gnarling => world_msg::SiteKind::Gnarling,
                                 civ::SiteKind::ChapelSite => world_msg::SiteKind::ChapelSite,
+                                civ::SiteKind::Citadel => world_msg::SiteKind::Castle,
+                                civ::SiteKind::Bridge(_, _) => world_msg::SiteKind::Bridge,
                             },
                             wpos: site.center * TerrainChunkSize::RECT_SIZE.map(|e| e as i32),
                         }
@@ -255,7 +252,6 @@ impl World {
                 .map(|zcache| zcache.sample.stone_col)
                 .unwrap_or_else(|| index.colors.deep_stone_color.into()),
         );
-        let water = Block::new(BlockKind::Water, Rgb::zero());
 
         let (base_z, sim_chunk) = match self
             .sim
@@ -269,15 +265,9 @@ impl World {
             Some(base_z) => (base_z as i32, self.sim.get(chunk_pos).unwrap()),
             // Some((base_z, sim_chunk)) => (base_z as i32, sim_chunk),
             None => {
-                return Ok((
-                    TerrainChunk::new(
-                        CONFIG.sea_level as i32,
-                        water,
-                        air,
-                        TerrainChunkMeta::void(),
-                    ),
-                    ChunkSupplement::default(),
-                ));
+                // NOTE: This is necessary in order to generate a handful of chunks at the edges
+                // of the map.
+                return Ok((self.sim().generate_oob_chunk(), ChunkSupplement::default()));
             },
         };
 
@@ -370,6 +360,10 @@ impl World {
             entities: Vec::new(),
         };
 
+        if index.features.train_tracks {
+            layer::apply_trains_to(&mut canvas, &self.sim, sim_chunk, chunk_center_wpos2d);
+        }
+
         if index.features.caverns {
             layer::apply_caverns_to(&mut canvas, &mut dynamic_rng);
         }
@@ -387,7 +381,7 @@ impl World {
             layer::apply_trees_to(&mut canvas, &mut dynamic_rng, calendar);
         }
         if index.features.scatter {
-            layer::apply_scatter_to(&mut canvas, &mut dynamic_rng);
+            layer::apply_scatter_to(&mut canvas, &mut dynamic_rng, calendar);
         }
         if index.features.paths {
             layer::apply_paths_to(&mut canvas);
@@ -497,9 +491,10 @@ impl World {
                     Some(lod::Object {
                         kind: match tree.forest_kind {
                             all::ForestKind::Oak => lod::ObjectKind::Oak,
-                            all::ForestKind::Pine | all::ForestKind::Frostpine => {
-                                lod::ObjectKind::Pine
-                            },
+                            all::ForestKind::Dead => lod::ObjectKind::Dead,
+                            all::ForestKind::Pine
+                            | all::ForestKind::Frostpine
+                            | all::ForestKind::Redwood => lod::ObjectKind::Pine,
                             _ => lod::ObjectKind::Oak,
                         },
                         pos: {

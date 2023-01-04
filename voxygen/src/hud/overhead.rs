@@ -5,11 +5,11 @@ use super::{
 };
 use crate::{
     game_input::GameInput,
-    hud::{get_buff_image, get_buff_info},
+    hud::BuffIcon,
     settings::{ControlSettings, InterfaceSettings},
     ui::{fonts::Fonts, Ingameable},
 };
-use common::comp::{Buffs, Energy, Health, SpeechBubble, SpeechBubbleType};
+use common::comp::{Buffs, CharacterState, Energy, Health, SpeechBubble, SpeechBubbleType};
 use conrod_core::{
     color,
     position::Align,
@@ -69,6 +69,7 @@ pub struct Info<'a> {
     pub buffs: &'a Buffs,
     pub energy: Option<&'a Energy>,
     pub combat_rating: f32,
+    pub char_state: &'a CharacterState,
 }
 
 /// Determines whether to show the healthbar
@@ -151,7 +152,9 @@ impl<'a> Ingameable for Overhead<'a> {
         //   - 1 Rect::new for mana
         // If there are Buffs
         // - 1 Alignment Rectangle
-        // - 10 + 10 Buffs and Timer Overlays (only if there is no speech bubble)
+        // - 2 per buff (1 for buff and 1 for timer overlay) (only if there is no speech
+        //   bubble)
+        //   - 22 total with current max of 11 displayed buffs
         // If there's a speech bubble
         // - 2 Text::new for speech bubble
         // - 1 Image::new for icon
@@ -159,20 +162,18 @@ impl<'a> Ingameable for Overhead<'a> {
         self.info.map_or(0, |info| {
             2 + 1
                 + if self.bubble.is_none() {
-                    info.buffs.kinds.len().min(10) * 2
+                    2 * BuffIcon::icons_vec(info.buffs, info.char_state)
+                        .len()
+                        .min(11)
                 } else {
                     0
                 }
                 + if info.health.map_or(false, should_show_healthbar) {
-                    5 + if info.energy.is_some() { 1 } else { 0 }
+                    5 + usize::from(info.energy.is_some())
                 } else {
                     0
                 }
-                + if info.health.map_or(false, decayed_health_displayed) {
-                    1
-                } else {
-                    0
-                }
+                + usize::from(info.health.map_or(false, decayed_health_displayed))
                 + (!self.interaction_options.is_empty()) as usize * 2
         }) + if self.bubble.is_some() { 13 } else { 0 }
     }
@@ -202,6 +203,7 @@ impl<'a> Widget for Overhead<'a> {
             buffs,
             energy,
             combat_rating,
+            char_state,
         }) = self.info
         {
             // Used to set healthbar colours based on hp_percentage
@@ -222,16 +224,17 @@ impl<'a> Widget for Overhead<'a> {
             let health_cur_txt = match health_current as u32 {
                 0..=999 => format!("{:.0}", health_current.max(1.0)),
                 1000..=999999 => format!("{:.0}K", (health_current / 1000.0).max(1.0)),
-                _ => format!("{:.0}M", (health_current as f64 / 1.0e6).max(1.0)),
+                _ => format!("{:.0}M", (health_current / 1.0e6).max(1.0)),
             };
             let health_max_txt = match health_max as u32 {
                 0..=999 => format!("{:.0}", health_max.max(1.0)),
                 1000..=999999 => format!("{:.0}K", (health_max / 1000.0).max(1.0)),
-                _ => format!("{:.0}M", (health_max as f64 / 1.0e6).max(1.0)),
+                _ => format!("{:.0}M", (health_max / 1.0e6).max(1.0)),
             };
             // Buffs
             // Alignment
-            let buff_count = buffs.kinds.len().min(11);
+            let buff_icons = BuffIcon::icons_vec(buffs, char_state);
+            let buff_count = buff_icons.len().min(11);
             Rectangle::fill_with([168.0, 100.0], color::TRANSPARENT)
                 .x_y(-1.0, name_y + 60.0)
                 .parent(id)
@@ -256,18 +259,18 @@ impl<'a> Widget for Overhead<'a> {
                     .iter()
                     .copied()
                     .zip(state.ids.buff_timers.iter().copied())
-                    .zip(buffs.iter_active().map(get_buff_info))
+                    .zip(buff_icons.iter())
                     .enumerate()
                     .for_each(|(i, ((id, timer_id), buff))| {
                         // Limit displayed buffs
-                        let max_duration = buff.data.duration;
+                        let max_duration = buff.kind.max_duration();
                         let current_duration = buff.dur;
                         let duration_percentage = current_duration.map_or(1000.0, |cur| {
                             max_duration.map_or(1000.0, |max| {
                                 cur.as_secs_f32() / max.as_secs_f32() * 1000.0
                             })
                         }) as u32; // Percentage to determine which frame of the timer overlay is displayed
-                        let buff_img = get_buff_image(buff.kind, self.imgs);
+                        let buff_img = buff.kind.image(self.imgs);
                         let buff_widget = Image::new(buff_img).w_h(20.0, 20.0);
                         // Sort buffs into rows of 5 slots
                         let x = i % 5;

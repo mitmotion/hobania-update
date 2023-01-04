@@ -1,7 +1,8 @@
 use crate::{
     column::ColumnSample,
     sim::{RiverKind, WorldSim},
-    CONFIG,
+    site::SiteKind,
+    IndexRef, CONFIG,
 };
 use common::{
     terrain::{
@@ -52,7 +53,7 @@ pub fn sample_wpos(config: &MapConfig, sampler: &WorldSim, wpos: Vec2<i32>) -> f
         })
         .unwrap_or(CONFIG.sea_level)
         - focus.z as f32)
-        / gain as f32
+        / gain
 }
 
 /// Samples a MapSample at a chunk.
@@ -71,6 +72,7 @@ pub fn sample_wpos(config: &MapConfig, sampler: &WorldSim, wpos: Vec2<i32>) -> f
 pub fn sample_pos(
     config: &MapConfig,
     sampler: &WorldSim,
+    index: IndexRef,
     samples: Option<&[Option<ColumnSample>]>,
     pos: Vec2<i32>,
 ) -> MapSample {
@@ -102,6 +104,7 @@ pub fn sample_pos(
         river_kind,
         spline_derivative,
         is_path,
+        is_bridge,
     ) = sampler
         .get(pos)
         .map(|sample| {
@@ -116,6 +119,21 @@ pub fn sample_pos(
                 sample.river.river_kind,
                 sample.river.spline_derivative,
                 sample.path.0.is_way(),
+                sample
+                    .sites
+                    .iter()
+                    .any(|site| match &index.sites.get(*site).kind {
+                        SiteKind::Bridge(bridge) => {
+                            if let Some(plot) =
+                                bridge.wpos_tile(TerrainChunkSize::center_wpos(pos)).plot
+                            {
+                                matches!(bridge.plot(plot).kind, crate::site2::PlotKind::Bridge(_))
+                            } else {
+                                false
+                            }
+                        },
+                        _ => false,
+                    }),
             )
         })
         .unwrap_or((
@@ -129,10 +147,11 @@ pub fn sample_pos(
             None,
             Vec2::zero(),
             false,
+            false,
         ));
 
-    let humidity = humidity.min(1.0).max(0.0);
-    let temperature = temperature.min(1.0).max(-1.0) * 0.5 + 0.5;
+    let humidity = humidity.clamp(0.0, 1.0);
+    let temperature = temperature.clamp(-1.0, 1.0) * 0.5 + 0.5;
     let wpos = pos * TerrainChunkSize::RECT_SIZE.map(|e| e as i32);
     let column_data = samples
         .and_then(|samples| {
@@ -150,14 +169,14 @@ pub fn sample_pos(
                 Lerp::lerp(
                     sample.sub_surface_color,
                     sample.stone_col.map(|e| e as f32 / 255.0),
-                    (alt - grass_depth - wposz as f32) * 0.15,
+                    (alt - grass_depth - wposz) * 0.15,
                 )
                 .map(|e| e as f64)
             } else {
                 Lerp::lerp(
                     sample.sub_surface_color,
                     sample.surface_color,
-                    ((wposz as f32 - (alt - grass_depth)) / grass_depth).sqrt(),
+                    ((wposz - (alt - grass_depth)) / grass_depth).sqrt(),
                 )
                 .map(|e| e as f64)
             };
@@ -174,8 +193,8 @@ pub fn sample_pos(
 
     let true_water_alt = (alt.max(water_alt) as f64 - focus.z) / gain as f64;
     let true_alt = (alt as f64 - focus.z) / gain as f64;
-    let water_depth = (true_water_alt - true_alt).min(1.0).max(0.0);
-    let alt = true_alt.min(1.0).max(0.0);
+    let water_depth = (true_water_alt - true_alt).clamp(0.0, 1.0);
+    let alt = true_alt.clamp(0.0, 1.0);
 
     let water_color_factor = 2.0;
     let g_water = 32.0 * water_color_factor;
@@ -202,7 +221,7 @@ pub fn sample_pos(
         let downhill_pos = downhill_wpos.map2(TerrainChunkSize::RECT_SIZE, |e, f| e / f as i32);
         NEIGHBOR_DELTA
             .iter()
-            .zip((&mut connections).iter_mut())
+            .zip(connections.iter_mut())
             .filter(|&(&offset, _)| downhill_pos - pos == Vec2::from(offset))
             .for_each(|(_, connection)| {
                 has_connections = true;
@@ -246,7 +265,9 @@ pub fn sample_pos(
             }
         };
     // TODO: Make principled.
-    let rgb = if is_path {
+    let rgb = if is_bridge {
+        Rgb::new(0x80, 0x80, 0x80)
+    } else if is_path {
         Rgb::new(0x37, 0x29, 0x23)
     } else {
         rgb

@@ -30,7 +30,7 @@ struct Opt {
 fn main() {
     let opt = Opt::from_args();
     // Start logging
-    common_frontend::init_stdout(None);
+    let _guards = common_frontend::init_stdout(None);
     // Run clients and stuff
     //
     // NOTE:  "swarm0" is assumed to be an admin already
@@ -72,9 +72,7 @@ fn main() {
         );
     });
 
-    loop {
-        thread::sleep(Duration::from_secs_f32(1.0));
-    }
+    std::thread::park();
 }
 
 fn run_client_new_thread(
@@ -102,21 +100,26 @@ fn run_client(
     opt: Opt,
     finished_init: Arc<AtomicU32>,
 ) -> Result<(), veloren_client::Error> {
-    // Connect to localhost
-    let addr = ConnectionArgs::Tcp {
-        prefer_ipv6: false,
-        hostname: "localhost".into(),
+    let mut client = loop {
+        // Connect to localhost
+        let addr = ConnectionArgs::Tcp {
+            prefer_ipv6: false,
+            hostname: "localhost".into(),
+        };
+        let runtime_clone = Arc::clone(&runtime);
+        // NOTE: use a no-auth server
+        match runtime.block_on(Client::new(
+            addr,
+            runtime_clone,
+            &mut None,
+            &username,
+            "",
+            |_| false,
+        )) {
+            Err(e) => tracing::warn!(?e, "Client {} disconnected", index),
+            Ok(client) => break client,
+        }
     };
-    let runtime_clone = Arc::clone(&runtime);
-    let mut client = runtime
-        .block_on(Client::new(addr, runtime_clone, &mut None))
-        .expect("Failed to connect to the server");
-
-    // Login
-    // NOTE: use a no-auth server
-    runtime
-        .block_on(client.register(username.clone(), String::new(), |_| false))
-        .expect("Failed to log in");
 
     let mut clock = common::clock::Clock::new(Duration::from_secs_f32(1.0 / 30.0));
 

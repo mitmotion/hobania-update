@@ -79,7 +79,7 @@ fn recolor_grey(rgb: Rgb<u8>, color: Rgb<u8>) -> Rgb<u8> {
         let c1 = srgb_to_linear(rgb.map(|e| e as f32 / BASE_GREY));
         let c2 = srgb_to_linear(color.map(|e| e as f32 / 255.0));
 
-        linear_to_srgb(c1 * c2).map(|e| (e.min(1.0).max(0.0) * 255.0) as u8)
+        linear_to_srgb(c1 * c2).map(|e| (e.clamp(0.0, 1.0) * 255.0) as u8)
     } else {
         rgb
     }
@@ -125,7 +125,7 @@ macro_rules! make_vox_spec {
         }
 
         impl assets::Compound for $Spec {
-            fn load(_: assets::AnyCache, _: &str) -> Result<Self, assets::BoxedError> {
+            fn load(_: assets::AnyCache, _: &assets::SharedString) -> Result<Self, assets::BoxedError> {
                 Ok($Spec {
                     $( $field: AssetExt::load($asset_path)?, )*
                 })
@@ -1078,12 +1078,16 @@ make_vox_spec!(
         central: QuadrupedSmallCentralSpec = "voxygen.voxel.quadruped_small_central_manifest",
         lateral: QuadrupedSmallLateralSpec = "voxygen.voxel.quadruped_small_lateral_manifest",
     },
-    |FigureKey { body, .. }, spec| {
+    |FigureKey { body, extra, .. }, spec| {
+        let third_person = extra.as_ref().and_then(|loadout| loadout.third_person.as_ref());
+
         [
-            Some(spec.central.read().0.mesh_head(
-                body.species,
-                body.body_type,
-            )),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_head(
+                    body.species,
+                    body.body_type,
+                )
+            }),
             Some(spec.central.read().0.mesh_chest(
                 body.species,
                 body.body_type,
@@ -1282,20 +1286,28 @@ make_vox_spec!(
         central: QuadrupedMediumCentralSpec = "voxygen.voxel.quadruped_medium_central_manifest",
         lateral: QuadrupedMediumLateralSpec = "voxygen.voxel.quadruped_medium_lateral_manifest",
     },
-    |FigureKey { body, .. }, spec| {
+    |FigureKey { body, extra, .. }, spec| {
+        let third_person = extra.as_ref().and_then(|loadout| loadout.third_person.as_ref());
+
         [
-            Some(spec.central.read().0.mesh_head(
-                body.species,
-                body.body_type,
-            )),
-            Some(spec.central.read().0.mesh_neck(
-                body.species,
-                body.body_type,
-            )),
-            Some(spec.central.read().0.mesh_jaw(
-                body.species,
-                body.body_type,
-            )),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_head(
+                    body.species,
+                    body.body_type,
+                )
+            }),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_neck(
+                    body.species,
+                    body.body_type,
+                )
+            }),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_jaw(
+                    body.species,
+                    body.body_type,
+                )
+            }),
             Some(spec.central.read().0.mesh_tail(
                 body.species,
                 body.body_type,
@@ -1308,10 +1320,12 @@ make_vox_spec!(
                 body.species,
                 body.body_type,
             )),
-            Some(spec.central.read().0.mesh_ears(
-                body.species,
-                body.body_type,
-            )),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_ears(
+                    body.species,
+                    body.body_type,
+                )
+            }),
             Some(spec.lateral.read().0.mesh_leg_fl(
                 body.species,
                 body.body_type,
@@ -1631,12 +1645,16 @@ make_vox_spec!(
         central: BirdMediumCentralSpec = "voxygen.voxel.bird_medium_central_manifest",
         lateral: BirdMediumLateralSpec = "voxygen.voxel.bird_medium_lateral_manifest",
     },
-    |FigureKey { body, .. }, spec| {
+    |FigureKey { body, extra, .. }, spec| {
+        let third_person = extra.as_ref().and_then(|loadout| loadout.third_person.as_ref());
+
         [
-            Some(spec.central.read().0.mesh_head(
-                body.species,
-                body.body_type,
-            )),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_head(
+                    body.species,
+                    body.body_type,
+                )
+            }),
             Some(spec.central.read().0.mesh_torso(
                 body.species,
                 body.body_type,
@@ -1830,16 +1848,22 @@ make_vox_spec!(
         central: TheropodCentralSpec = "voxygen.voxel.theropod_central_manifest",
         lateral: TheropodLateralSpec = "voxygen.voxel.theropod_lateral_manifest",
     },
-    |FigureKey { body, .. }, spec| {
+    |FigureKey { body, extra, .. }, spec| {
+        let third_person = extra.as_ref().and_then(|loadout| loadout.third_person.as_ref());
+
         [
-            Some(spec.central.read().0.mesh_head(
-                body.species,
-                body.body_type,
-            )),
-            Some(spec.central.read().0.mesh_jaw(
-                body.species,
-                body.body_type,
-            )),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_head(
+                    body.species,
+                    body.body_type,
+                )
+            }),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_jaw(
+                    body.species,
+                    body.body_type,
+                )
+            }),
             Some(spec.central.read().0.mesh_neck(
                 body.species,
                 body.body_type,
@@ -2147,24 +2171,32 @@ make_vox_spec!(
         central: ArthropodCentralSpec = "voxygen.voxel.arthropod_central_manifest",
         lateral: ArthropodLateralSpec = "voxygen.voxel.arthropod_lateral_manifest",
     },
-    |FigureKey { body, .. }, spec| {
+    |FigureKey { body, extra, .. }, spec| {
+        let third_person = extra.as_ref().and_then(|loadout| loadout.third_person.as_ref());
+
         [
-            Some(spec.central.read().0.mesh_head(
-                body.species,
-                body.body_type,
-            )),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_head(
+                    body.species,
+                    body.body_type,
+                )
+            }),
             Some(spec.central.read().0.mesh_chest(
                 body.species,
                 body.body_type,
             )),
-            Some(spec.lateral.read().0.mesh_mandible_l(
-                body.species,
-                body.body_type,
-            )),
-            Some(spec.lateral.read().0.mesh_mandible_r(
-                body.species,
-                body.body_type,
-            )),
+            third_person.map(|_| {
+                spec.lateral.read().0.mesh_mandible_l(
+                    body.species,
+                    body.body_type,
+                )
+            }),
+            third_person.map(|_| {
+                spec.lateral.read().0.mesh_mandible_r(
+                    body.species,
+                    body.body_type,
+                )
+            }),
             Some(spec.lateral.read().0.mesh_wing_fl(
                 body.species,
                 body.body_type,
@@ -2515,12 +2547,16 @@ make_vox_spec!(
         central: FishMediumCentralSpec = "voxygen.voxel.fish_medium_central_manifest",
         lateral: FishMediumLateralSpec = "voxygen.voxel.fish_medium_lateral_manifest",
     },
-    |FigureKey { body, .. }, spec| {
+    |FigureKey { body, extra, .. }, spec| {
+        let third_person = extra.as_ref().and_then(|loadout| loadout.third_person.as_ref());
+
         [
-            Some(spec.central.read().0.mesh_head(
-                body.species,
-                body.body_type,
-            )),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_head(
+                    body.species,
+                    body.body_type,
+                )
+            }),
             Some(spec.central.read().0.mesh_jaw(
                 body.species,
                 body.body_type,
@@ -2707,12 +2743,16 @@ make_vox_spec!(
         central: FishSmallCentralSpec = "voxygen.voxel.fish_small_central_manifest",
         lateral: FishSmallLateralSpec = "voxygen.voxel.fish_small_lateral_manifest",
     },
-    |FigureKey { body, .. }, spec| {
+    |FigureKey { body, extra, .. }, spec| {
+        let third_person = extra.as_ref().and_then(|loadout| loadout.third_person.as_ref());
+
         [
-            Some(spec.central.read().0.mesh_chest(
-                body.species,
-                body.body_type,
-            )),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_chest(
+                    body.species,
+                    body.body_type,
+                )
+            }),
             Some(spec.central.read().0.mesh_tail(
                 body.species,
                 body.body_type,
@@ -2856,7 +2896,7 @@ make_vox_spec!(
         let foot = loadout.foot.as_deref();
 
 
-[
+        [
             third_person.map(|loadout| {
                 spec.armor_head.read().0.mesh_head(
                     loadout.head.as_deref(),
@@ -3131,20 +3171,26 @@ make_vox_spec!(
         central: DragonCentralSpec = "voxygen.voxel.dragon_central_manifest",
         lateral: DragonLateralSpec = "voxygen.voxel.dragon_lateral_manifest",
     },
-    |FigureKey { body, .. }, spec| {
+    |FigureKey { body, extra, .. }, spec| {
+        let third_person = extra.as_ref().and_then(|loadout| loadout.third_person.as_ref());
+
         [
-            Some(spec.central.read().0.mesh_head_upper(
-                body.species,
-                body.body_type,
-            )),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_head_upper(
+                    body.species,
+                    body.body_type,
+                )
+            }),
             Some(spec.central.read().0.mesh_head_lower(
                 body.species,
                 body.body_type,
             )),
-            Some(spec.central.read().0.mesh_jaw(
-                body.species,
-                body.body_type,
-            )),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_jaw(
+                    body.species,
+                    body.body_type,
+                )
+            }),
             Some(spec.central.read().0.mesh_chest_front(
                 body.species,
                 body.body_type,
@@ -3488,16 +3534,22 @@ make_vox_spec!(
         central: BirdLargeCentralSpec = "voxygen.voxel.bird_large_central_manifest",
         lateral: BirdLargeLateralSpec = "voxygen.voxel.bird_large_lateral_manifest",
     },
-    |FigureKey { body, .. }, spec| {
+    |FigureKey { body, extra, .. }, spec| {
+        let third_person = extra.as_ref().and_then(|loadout| loadout.third_person.as_ref());
+
         [
-            Some(spec.central.read().0.mesh_head(
-                body.species,
-                body.body_type,
-            )),
-            Some(spec.central.read().0.mesh_beak(
-                body.species,
-                body.body_type,
-            )),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_head(
+                    body.species,
+                    body.body_type,
+                )
+            }),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_beak(
+                    body.species,
+                    body.body_type,
+                )
+            }),
             Some(spec.central.read().0.mesh_neck(
                 body.species,
                 body.body_type,
@@ -3879,21 +3931,29 @@ make_vox_spec!(
 
         // TODO: This is bad code, maybe this method should return Option<_>
         let loadout = extra.as_deref().unwrap_or(&DEFAULT_LOADOUT);
+        let third_person = loadout.third_person.as_ref();
+
         //let third_person = loadout.third_person.as_ref();
         let tool = loadout.tool.as_ref();
         [
-            Some(spec.central.read().0.mesh_head(
-                body.species,
-                body.body_type,
-            )),
-            Some(spec.central.read().0.mesh_jaw(
-                body.species,
-                body.body_type,
-            )),
-            Some(spec.central.read().0.mesh_torso_upper(
-                body.species,
-                body.body_type,
-            )),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_head(
+                    body.species,
+                    body.body_type,
+                )
+            }),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_jaw(
+                    body.species,
+                    body.body_type,
+                )
+            }),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_torso_upper(
+                    body.species,
+                    body.body_type,
+                )
+            }),
             Some(spec.central.read().0.mesh_torso_lower(
                 body.species,
                 body.body_type,
@@ -4262,16 +4322,22 @@ make_vox_spec!(
         central: GolemCentralSpec = "voxygen.voxel.golem_central_manifest",
         lateral: GolemLateralSpec = "voxygen.voxel.golem_lateral_manifest",
     },
-    |FigureKey { body, .. }, spec| {
+    |FigureKey { body, extra, .. }, spec| {
+        let third_person = extra.as_ref().and_then(|loadout| loadout.third_person.as_ref());
+
         [
-            Some(spec.central.read().0.mesh_head(
-                body.species,
-                body.body_type,
-            )),
-            Some(spec.central.read().0.mesh_jaw(
-                body.species,
-                body.body_type,
-            )),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_head(
+                    body.species,
+                    body.body_type,
+                )
+            }),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_jaw(
+                    body.species,
+                    body.body_type,
+                )
+            }),
             Some(spec.central.read().0.mesh_torso_upper(
                 body.species,
                 body.body_type,
@@ -4556,20 +4622,28 @@ make_vox_spec!(
         central: QuadrupedLowCentralSpec = "voxygen.voxel.quadruped_low_central_manifest",
         lateral: QuadrupedLowLateralSpec = "voxygen.voxel.quadruped_low_lateral_manifest",
     },
-    |FigureKey { body, .. }, spec| {
+    |FigureKey { body, extra, .. }, spec| {
+        let third_person = extra.as_ref().and_then(|loadout| loadout.third_person.as_ref());
+
         [
-            Some(spec.central.read().0.mesh_head_upper(
-                body.species,
-                body.body_type,
-            )),
-            Some(spec.central.read().0.mesh_head_lower(
-                body.species,
-                body.body_type,
-            )),
-            Some(spec.central.read().0.mesh_jaw(
-                body.species,
-                body.body_type,
-            )),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_head_upper(
+                    body.species,
+                    body.body_type,
+                )
+            }),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_head_lower(
+                    body.species,
+                    body.body_type,
+                )
+            }),
+            third_person.map(|_| {
+                spec.central.read().0.mesh_jaw(
+                    body.species,
+                    body.body_type,
+                )
+            }),
             Some(spec.central.read().0.mesh_chest(
                 body.species,
                 body.body_type,
@@ -4896,7 +4970,7 @@ impl ItemDropCentralSpec {
                         .map(|mat_cell| match mat_cell {
                             MatCell::None => None,
                             MatCell::Mat(_) => Some(MatCell::None),
-                            MatCell::Normal(data) => data.is_hollow().then(|| MatCell::None),
+                            MatCell::Normal(data) => data.is_hollow().then_some(MatCell::None),
                         })
                         .to_segment(|_| Default::default())
                 },

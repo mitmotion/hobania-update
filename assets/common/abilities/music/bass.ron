@@ -1,6 +1,0 @@
-Music(
-    buildup_duration: 0.1,
-    play_duration: 0.1,
-    recover_duration: 0.1,
-    ori_modifier: 1.0,
-)

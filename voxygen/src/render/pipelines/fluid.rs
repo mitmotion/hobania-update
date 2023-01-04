@@ -7,17 +7,18 @@ use vek::*;
 #[derive(Copy, Clone, Debug, Zeroable, Pod)]
 pub struct Vertex {
     pos_norm: u32,
+    vel: u32,
 }
 
 impl Vertex {
-    pub fn new(pos: Vec3<f32>, norm: Vec3<f32>) -> Self {
+    pub fn new(pos: Vec3<f32>, norm: Vec3<f32>, river_velocity: Vec2<f32>) -> Self {
         let (norm_axis, norm_dir) = norm
             .as_slice()
             .iter()
             .enumerate()
             .find(|(_i, e)| **e != 0.0)
             .unwrap_or((0, &1.0));
-        let norm_bits = ((norm_axis << 1) | if *norm_dir > 0.0 { 1 } else { 0 }) as u32;
+        let norm_bits = ((norm_axis << 1) | usize::from(*norm_dir > 0.0)) as u32;
 
         const EXTRA_NEG_Z: f32 = 65536.0;
 
@@ -25,13 +26,21 @@ impl Vertex {
             pos_norm: 0
                 | ((pos.x as u32) & 0x003F) << 0
                 | ((pos.y as u32) & 0x003F) << 6
-                | (((pos.z + EXTRA_NEG_Z).max(0.0).min((1 << 17) as f32) as u32) & 0x1FFFF) << 12
+                | (((pos.z + EXTRA_NEG_Z).clamp(0.0, (1 << 17) as f32) as u32) & 0x1FFFF) << 12
                 | (norm_bits & 0x7) << 29,
+            vel: river_velocity
+                .map2(Vec2::new(0, 16), |e, off| {
+                    ((e * 1000.0 + 32768.9) as u16 as u32) << off
+                })
+                .reduce_bitor(),
         }
     }
 
     fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-        const ATTRIBUTES: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![0 => Uint32];
+        const ATTRIBUTES: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
+            0 => Uint32,
+            1 => Uint32,
+        ];
         wgpu::VertexBufferLayout {
             array_stride: Self::STRIDE,
             step_mode: wgpu::InputStepMode::Vertex,
@@ -70,12 +79,7 @@ impl FluidPipeline {
                 ],
             });
 
-        let samples = match aa_mode {
-            AaMode::None | AaMode::Fxaa => 1,
-            AaMode::MsaaX4 => 4,
-            AaMode::MsaaX8 => 8,
-            AaMode::MsaaX16 => 16,
-        };
+        let samples = aa_mode.samples();
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Fluid pipeline"),
@@ -129,7 +133,7 @@ impl FluidPipeline {
                         alpha: wgpu::BlendComponent {
                             src_factor: wgpu::BlendFactor::One,
                             dst_factor: wgpu::BlendFactor::One,
-                            operation: wgpu::BlendOperation::Add,
+                            operation: wgpu::BlendOperation::Min,
                         },
                     }),
                     write_mask: wgpu::ColorWrite::ALL,

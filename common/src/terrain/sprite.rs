@@ -1,5 +1,5 @@
 use crate::{comp::tool::ToolKind, lottery::LootSpec, make_case_elim};
-use enum_iterator::IntoEnumIterator;
+use strum::EnumIter;
 use hashbrown::HashMap;
 use lazy_static::lazy_static;
 use num_derive::FromPrimitive;
@@ -17,7 +17,7 @@ make_case_elim!(
         PartialEq,
         Serialize,
         Deserialize,
-        IntoEnumIterator,
+        EnumIter,
         FromPrimitive,
     )]
     #[repr(u8)]
@@ -557,8 +557,10 @@ impl fmt::Display for SpriteKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{:?}", self) }
 }
 
+use strum::IntoEnumIterator;
+
 lazy_static! {
-    pub static ref SPRITE_KINDS: HashMap<String, SpriteKind> = SpriteKind::into_enum_iter()
+    pub static ref SPRITE_KINDS: HashMap<String, SpriteKind> = SpriteKind::iter()
         .map(|sk| (sk.to_string(), sk))
         .collect();
 }

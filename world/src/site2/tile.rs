@@ -181,6 +181,7 @@ pub enum TileKind {
     Field,
     Plaza,
     Road { a: u16, b: u16, w: u16 },
+    Path,
     Building,
     Castle,
     Wall(Dir),
@@ -219,7 +220,12 @@ impl Tile {
 
     pub fn is_natural(&self) -> bool { matches!(self.kind, TileKind::Empty | TileKind::Hazard(_)) }
 
-    pub fn is_road(&self) -> bool { matches!(self.kind, TileKind::Plaza | TileKind::Road { .. }) }
+    pub fn is_road(&self) -> bool {
+        matches!(
+            self.kind,
+            TileKind::Plaza | TileKind::Road { .. } | TileKind::Path
+        )
+    }
 
     pub fn is_obstacle(&self) -> bool {
         matches!(self.kind, TileKind::Hazard(_)) || self.is_building()
@@ -239,14 +245,14 @@ pub enum HazardKind {
     Hill { gradient: f32 },
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum KeepKind {
     Middle,
     Corner,
     Wall(Dir),
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum RoofKind {
     Parapet,
     Pyramid,

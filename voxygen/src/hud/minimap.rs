@@ -87,13 +87,13 @@ impl VoxelMinimap {
             let grid = Grid::populate_from(Vec2::new(32, 32), |v| {
                 let mut rgba = Rgba::<f32>::zero();
                 let (weights, zoff) = (&[1, 2, 4, 1, 1, 1][..], -2);
-                for dz in 0..weights.len() {
+                for (dz, weight) in weights.iter().enumerate() {
                     let color = chunk
                         .get(Vec3::new(v.x, v.y, dz as i32 + z + zoff))
                         .ok()
                         .and_then(Self::block_color)
                         .unwrap_or_else(Rgba::zero);
-                    rgba += color.as_() * weights[dz as usize] as f32;
+                    rgba += color.as_() * *weight as f32;
                 }
                 let rgba: Rgba<u8> = (rgba / weights.iter().map(|x| *x as f32).sum::<f32>()).as_();
                 (rgba, true)
@@ -276,7 +276,7 @@ impl VoxelMinimap {
                 )
                 .unwrap_or(0)
         };
-        if cpos.distance_squared(self.last_pos.xy()) >= 1
+        if self.last_pos.xy() != cpos
             || self.last_pos.z != pos.z as i32
             || self.last_ceiling != ceiling_offset
             || new_chunks
@@ -698,6 +698,7 @@ impl<'a> Widget for MiniMap<'a> {
                     SiteKind::Cave => None,
                     SiteKind::Tree => None,
                     SiteKind::Gnarling => Some(0),
+                    SiteKind::Bridge => None,
                 };
 
                 Image::new(match &site.kind {
@@ -708,6 +709,7 @@ impl<'a> Widget for MiniMap<'a> {
                     SiteKind::Cave => self.imgs.mmap_site_cave_bg,
                     SiteKind::Tree => self.imgs.mmap_site_tree,
                     SiteKind::Gnarling => self.imgs.mmap_site_gnarling_bg,
+                    SiteKind::Bridge => self.imgs.mmap_site_bridge_bg,
                 })
                 .x_y_position_relative_to(
                     state.ids.map_layers[0],
@@ -733,6 +735,7 @@ impl<'a> Widget for MiniMap<'a> {
                     SiteKind::Cave => self.imgs.mmap_site_cave,
                     SiteKind::Tree => self.imgs.mmap_site_tree,
                     SiteKind::Gnarling => self.imgs.mmap_site_gnarling,
+                    SiteKind::Bridge => self.imgs.mmap_site_bridge,
                 })
                 .middle_of(state.ids.mmap_site_icons_bgs[i])
                 .w_h(20.0, 20.0)
@@ -769,7 +772,7 @@ impl<'a> Widget for MiniMap<'a> {
                 let member_pos = entity.and_then(|entity| member_pos.get(entity));
 
                 if let Some(member_pos) = member_pos {
-                    let rpos = match wpos_to_rpos(member_pos.0.xy().map(|e| e as f32), false) {
+                    let rpos = match wpos_to_rpos(member_pos.0.xy(), false) {
                         Some(rpos) => rpos,
                         None => continue,
                     };

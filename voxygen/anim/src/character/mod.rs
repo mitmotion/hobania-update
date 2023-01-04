@@ -5,19 +5,26 @@ pub mod block;
 pub mod chargeswing;
 pub mod climb;
 pub mod collect;
+pub mod combomelee;
 pub mod consume;
 pub mod dance;
 pub mod dash;
+pub mod divemelee;
 pub mod equip;
+pub mod finishermelee;
 pub mod glidewield;
 pub mod gliding;
 pub mod idle;
 pub mod jump;
 pub mod leapmelee;
 pub mod mount;
+pub mod music;
+pub mod rapidmelee;
 pub mod repeater;
+pub mod ripostemelee;
 pub mod roll;
 pub mod run;
+pub mod selfbuff;
 pub mod shockwave;
 pub mod shoot;
 pub mod sit;
@@ -39,11 +46,14 @@ pub mod wield;
 pub use self::{
     alpha::AlphaAnimation, beam::BeamAnimation, beta::BetaAnimation, block::BlockAnimation,
     chargeswing::ChargeswingAnimation, climb::ClimbAnimation, collect::CollectAnimation,
-    consume::ConsumeAnimation, dance::DanceAnimation, dash::DashAnimation, equip::EquipAnimation,
-    glidewield::GlideWieldAnimation, gliding::GlidingAnimation, idle::IdleAnimation,
-    jump::JumpAnimation, leapmelee::LeapAnimation, mount::MountAnimation,
-    repeater::RepeaterAnimation, roll::RollAnimation, run::RunAnimation,
-    shockwave::ShockwaveAnimation, shoot::ShootAnimation, sit::SitAnimation, sneak::SneakAnimation,
+    combomelee::ComboAnimation, consume::ConsumeAnimation, dance::DanceAnimation,
+    dash::DashAnimation, divemelee::DiveMeleeAnimation, equip::EquipAnimation,
+    finishermelee::FinisherMeleeAnimation, glidewield::GlideWieldAnimation,
+    gliding::GlidingAnimation, idle::IdleAnimation, jump::JumpAnimation, leapmelee::LeapAnimation,
+    mount::MountAnimation, music::MusicAnimation, rapidmelee::RapidMeleeAnimation,
+    repeater::RepeaterAnimation, ripostemelee::RiposteMeleeAnimation, roll::RollAnimation,
+    run::RunAnimation, selfbuff::SelfBuffAnimation, shockwave::ShockwaveAnimation,
+    shoot::ShootAnimation, sit::SitAnimation, sneak::SneakAnimation,
     sneakequip::SneakEquipAnimation, sneakwield::SneakWieldAnimation, spin::SpinAnimation,
     spinmelee::SpinMeleeAnimation, staggered::StaggeredAnimation, stand::StandAnimation,
     stunned::StunnedAnimation, swim::SwimAnimation, swimwield::SwimWieldAnimation,
@@ -155,6 +165,7 @@ impl Skeleton for CharacterSkeleton {
         let weapon_trails = self.main_weapon_trail || self.off_weapon_trail;
         Offsets {
             lantern: Some((lantern_mat * Vec4::new(0.0, 0.5, -6.0, 1.0)).xyz()),
+            viewpoint: Some((head_mat * Vec4::new(0.0, 0.0, 4.0, 1.0)).xyz()),
             // TODO: see quadruped_medium for how to animate this
             mount_bone: Transform {
                 position: comp::Body::Humanoid(body)
@@ -297,7 +308,7 @@ impl<'a> From<&'a Body> for SkeletonAttr {
             lantern: (5.0, 2.5, 5.5),
             shl: (-0.75, -1.0, 0.5, 1.47, -0.2, 0.0),
             shr: (0.75, -1.5, -2.5, 1.47, 0.3, 0.0),
-            sc: (-7.0, 7.0, 2.0, -0.1, 0.0, 0.0),
+            sc: (-6.0, 6.0, 0.0, -0.5, 0.0, 0.0),
             hhl: (0.1, 0.0, 11.0, 4.71, 0.0, PI),
             hhr: (0.0, 0.0, 0.0, 4.71, 0.0, PI),
             hc: (6.0, 7.0, 1.0, -0.3, -PI / 2.0, 3.64),

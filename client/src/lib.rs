@@ -1,6 +1,6 @@
 #![deny(unsafe_code)]
 #![deny(clippy::clone_on_ref_ptr)]
-#![feature(label_break_value, option_zip)]
+#![feature(option_zip)]
 
 pub mod addr;
 pub mod error;
@@ -21,7 +21,7 @@ use common::{
     character::{CharacterId, CharacterItem},
     comp::{
         self,
-        chat::{KillSource, KillType},
+        chat::KillSource,
         controller::CraftEvent,
         group,
         inventory::item::{modular, tool, ItemKind},
@@ -32,18 +32,18 @@ use common::{
         GroupManip, InputKind, InventoryAction, InventoryEvent, InventoryUpdateEvent,
         MapMarkerChange, UtteranceKind,
     },
-    event::{EventBus, LocalEvent},
+    event::{EventBus, LocalEvent, UpdateCharacterMetadata},
     grid::Grid,
     link::Is,
     lod,
     mounting::Rider,
     outcome::Outcome,
     recipe::{ComponentRecipeBook, RecipeBook},
-    resources::{PlayerEntity, TimeOfDay},
+    resources::{GameMode, PlayerEntity, TimeOfDay},
     spiral::Spiral2d,
     terrain::{
         block::Block, map::MapConfig, neighbors, site::DungeonKindMeta, BiomeKind, SiteKindMeta,
-        SpriteKind, TerrainChunk, TerrainChunkSize,
+        SpriteKind, TerrainChunk, TerrainChunkSize, TerrainGrid,
     },
     trade::{PendingTrade, SitePrices, TradeAction, TradeId, TradeResult},
     uid::{Uid, UidAllocator},
@@ -56,9 +56,9 @@ use common_net::{
     msg::{
         self,
         world_msg::{EconomyInfo, PoiInfo, SiteId, SiteInfo},
-        ClientGeneral, ClientMsg, ClientRegister, ClientType, DisconnectReason, InviteAnswer,
-        Notification, PingMsg, PlayerInfo, PlayerListUpdate, PresenceKind, RegisterError,
-        ServerGeneral, ServerInit, ServerRegisterAnswer,
+        ChatTypeContext, ClientGeneral, ClientMsg, ClientRegister, ClientType, DisconnectReason,
+        InviteAnswer, Notification, PingMsg, PlayerInfo, PlayerListUpdate, PresenceKind,
+        RegisterError, ServerGeneral, ServerInit, ServerRegisterAnswer,
     },
     sync::WorldSyncExt,
 };
@@ -88,6 +88,7 @@ const PING_ROLLING_AVERAGE_SECS: usize = 10;
 #[derive(Debug)]
 pub enum Event {
     Chat(comp::ChatMsg),
+    GroupInventoryUpdate(comp::Item, String, Uid),
     InviteComplete {
         target: Uid,
         answer: InviteAnswer,
@@ -106,6 +107,7 @@ pub enum Event {
     Outcome(Outcome),
     CharacterCreated(CharacterId),
     CharacterEdited(CharacterId),
+    CharacterJoined(UpdateCharacterMetadata),
     CharacterError(String),
     MapMarker(comp::MapMarkerUpdate),
     StartSpectate(Vec3<f32>),
@@ -250,8 +252,10 @@ pub struct Client {
     tick: u64,
     state: State,
 
-    server_view_distance_limit: Option<u32>,
+    flashing_lights_enabled: bool,
+
     /// Terrrain view distance
+    server_view_distance_limit: Option<u32>,
     view_distance: Option<u32>,
     lod_distance: f32,
     // TODO: move into voxygen
@@ -275,10 +279,13 @@ impl Client {
         runtime: Arc<Runtime>,
         // TODO: refactor to avoid needing to use this out parameter
         mismatched_server_info: &mut Option<ServerInfo>,
+        username: &str,
+        password: &str,
+        auth_trusted: impl FnMut(&str) -> bool,
     ) -> Result<Self, Error> {
         let network = Network::new(Pid::new(), &runtime);
 
-        let participant = match addr {
+        let mut participant = match addr {
             ConnectionArgs::Tcp {
                 hostname,
                 prefer_ipv6,
@@ -301,7 +308,7 @@ impl Client {
         };
 
         let stream = participant.opened().await?;
-        let mut ping_stream = participant.opened().await?;
+        let ping_stream = participant.opened().await?;
         let mut register_stream = participant.opened().await?;
         let character_screen_stream = participant.opened().await?;
         let in_game_stream = participant.opened().await?;
@@ -315,19 +322,336 @@ impl Client {
                 server_info.git_hash,
                 server_info.git_date,
                 common::util::GIT_HASH.to_string(),
-                common::util::GIT_DATE.to_string(),
+                *common::util::GIT_DATE,
             );
-
-            // Pass the server info back to the caller to ensure they can access it even
-            // if this function errors.
-            mem::swap(mismatched_server_info, &mut Some(server_info.clone()));
         }
+        // Pass the server info back to the caller to ensure they can access it even
+        // if this function errors.
+        mem::swap(mismatched_server_info, &mut Some(server_info.clone()));
         debug!("Auth Server: {:?}", server_info.auth_provider);
 
         ping_stream.send(PingMsg::Ping)?;
 
+        // Register client
+        Self::register(
+            username,
+            password,
+            auth_trusted,
+            &server_info,
+            &mut register_stream,
+        )
+        .await?;
+
         // Wait for initial sync
         let mut ping_interval = tokio::time::interval(Duration::from_secs(1));
+        let ServerInit::GameSync {
+            entity_package,
+            time_of_day,
+            max_group_size,
+            client_timeout,
+            world_map,
+            recipe_book,
+            component_recipe_book,
+            material_stats,
+            ability_map,
+        } = loop {
+            tokio::select! {
+                // Spawn in a blocking thread (leaving the network thread free).  This is mostly
+                // useful for bots.
+                res = register_stream.recv() => break res?,
+                _ = ping_interval.tick() => ping_stream.send(PingMsg::Ping)?,
+            }
+        };
+
+        // Spawn in a blocking thread (leaving the network thread free).  This is mostly
+        // useful for bots.
+        let mut task = tokio::task::spawn_blocking(move || {
+            let map_size_lg =
+                common::terrain::MapSizeLg::new(world_map.dimensions_lg).map_err(|_| {
+                    Error::Other(format!(
+                        "Server sent bad world map dimensions: {:?}",
+                        world_map.dimensions_lg,
+                    ))
+                })?;
+            let sea_level = world_map.default_chunk.get_min_z() as f32;
+
+            // Initialize `State`
+            let pools = State::pools(GameMode::Client);
+            let mut state = State::client(pools, map_size_lg, world_map.default_chunk);
+            // Client-only components
+            state.ecs_mut().register::<comp::Last<CharacterState>>();
+            let entity = state.ecs_mut().apply_entity_package(entity_package);
+            *state.ecs_mut().write_resource() = time_of_day;
+            *state.ecs_mut().write_resource() = PlayerEntity(Some(entity));
+            state.ecs_mut().insert(material_stats);
+            state.ecs_mut().insert(ability_map);
+
+            let map_size = map_size_lg.chunks();
+            let max_height = world_map.max_height;
+            let rgba = world_map.rgba;
+            let alt = world_map.alt;
+            if rgba.size() != map_size.map(|e| e as i32) {
+                return Err(Error::Other("Server sent a bad world map image".into()));
+            }
+            if alt.size() != map_size.map(|e| e as i32) {
+                return Err(Error::Other("Server sent a bad altitude map.".into()));
+            }
+            let [west, east] = world_map.horizons;
+            let scale_angle = |a: u8| (a as f32 / 255.0 * <f32 as FloatConst>::FRAC_PI_2()).tan();
+            let scale_height = |h: u8| h as f32 / 255.0 * max_height;
+            let scale_height_big = |h: u32| (h >> 3) as f32 / 8191.0 * max_height;
+
+            debug!("Preparing image...");
+            let unzip_horizons = |(angles, heights): &(Vec<_>, Vec<_>)| {
+                (
+                    angles.iter().copied().map(scale_angle).collect::<Vec<_>>(),
+                    heights
+                        .iter()
+                        .copied()
+                        .map(scale_height)
+                        .collect::<Vec<_>>(),
+                )
+            };
+            let horizons = [unzip_horizons(&west), unzip_horizons(&east)];
+
+            // Redraw map (with shadows this time).
+            let mut world_map_rgba = vec![0u32; rgba.size().product() as usize];
+            let mut world_map_topo = vec![0u32; rgba.size().product() as usize];
+            let mut map_config = common::terrain::map::MapConfig::orthographic(
+                map_size_lg,
+                core::ops::RangeInclusive::new(0.0, max_height),
+            );
+            map_config.horizons = Some(&horizons);
+            let rescale_height = |h: f32| h / max_height;
+            let bounds_check = |pos: Vec2<i32>| {
+                pos.reduce_partial_min() >= 0
+                    && pos.x < map_size.x as i32
+                    && pos.y < map_size.y as i32
+            };
+            fn sample_pos(
+                map_config: &MapConfig,
+                pos: Vec2<i32>,
+                alt: &Grid<u32>,
+                rgba: &Grid<u32>,
+                map_size: &Vec2<u16>,
+                map_size_lg: &common::terrain::MapSizeLg,
+                max_height: f32,
+            ) -> common::terrain::map::MapSample {
+                let rescale_height = |h: f32| h / max_height;
+                let scale_height_big = |h: u32| (h >> 3) as f32 / 8191.0 * max_height;
+                let bounds_check = |pos: Vec2<i32>| {
+                    pos.reduce_partial_min() >= 0
+                        && pos.x < map_size.x as i32
+                        && pos.y < map_size.y as i32
+                };
+                let MapConfig {
+                    gain,
+                    is_contours,
+                    is_height_map,
+                    is_stylized_topo,
+                    ..
+                } = *map_config;
+                let mut is_contour_line = false;
+                let mut is_border = false;
+                let (rgb, alt, downhill_wpos) = if bounds_check(pos) {
+                    let posi = pos.y as usize * map_size.x as usize + pos.x as usize;
+                    let [r, g, b, _a] = rgba[pos].to_le_bytes();
+                    let is_water = r == 0 && b > 102 && g < 77;
+                    let alti = alt[pos];
+                    // Compute contours (chunks are assigned in the river code below)
+                    let altj = rescale_height(scale_height_big(alti));
+                    let contour_interval = 150.0;
+                    let chunk_contour = (altj * gain / contour_interval) as u32;
+
+                    // Compute downhill.
+                    let downhill = {
+                        let mut best = -1;
+                        let mut besth = alti;
+                        for nposi in neighbors(*map_size_lg, posi) {
+                            let nbh = alt.raw()[nposi];
+                            let nalt = rescale_height(scale_height_big(nbh));
+                            let nchunk_contour = (nalt * gain / contour_interval) as u32;
+                            if !is_contour_line && chunk_contour > nchunk_contour {
+                                is_contour_line = true;
+                            }
+                            let [nr, ng, nb, _na] = rgba.raw()[nposi].to_le_bytes();
+                            let n_is_water = nr == 0 && nb > 102 && ng < 77;
+
+                            if !is_border && is_water && !n_is_water {
+                                is_border = true;
+                            }
+
+                            if nbh < besth {
+                                besth = nbh;
+                                best = nposi as isize;
+                            }
+                        }
+                        best
+                    };
+                    let downhill_wpos = if downhill < 0 {
+                        None
+                    } else {
+                        Some(
+                            Vec2::new(
+                                (downhill as usize % map_size.x as usize) as i32,
+                                (downhill as usize / map_size.x as usize) as i32,
+                            ) * TerrainChunkSize::RECT_SIZE.map(|e| e as i32),
+                        )
+                    };
+                    (Rgb::new(r, g, b), alti, downhill_wpos)
+                } else {
+                    (Rgb::zero(), 0, None)
+                };
+                let alt = f64::from(rescale_height(scale_height_big(alt)));
+                let wpos = pos * TerrainChunkSize::RECT_SIZE.map(|e| e as i32);
+                let downhill_wpos =
+                    downhill_wpos.unwrap_or(wpos + TerrainChunkSize::RECT_SIZE.map(|e| e as i32));
+                let is_path = rgb.r == 0x37 && rgb.g == 0x29 && rgb.b == 0x23;
+                let rgb = rgb.map(|e: u8| e as f64 / 255.0);
+                let is_water = rgb.r == 0.0 && rgb.b > 0.4 && rgb.g < 0.3;
+
+                let rgb = if is_height_map {
+                    if is_path {
+                        // Path color is Rgb::new(0x37, 0x29, 0x23)
+                        Rgb::new(0.9, 0.9, 0.63)
+                    } else if is_water {
+                        Rgb::new(0.23, 0.47, 0.53)
+                    } else if is_contours && is_contour_line {
+                        // Color contour lines
+                        Rgb::new(0.15, 0.15, 0.15)
+                    } else {
+                        // Color hill shading
+                        let lightness = (alt + 0.2).min(1.0);
+                        Rgb::new(lightness, 0.9 * lightness, 0.5 * lightness)
+                    }
+                } else if is_stylized_topo {
+                    if is_path {
+                        Rgb::new(0.9, 0.9, 0.63)
+                    } else if is_water {
+                        if is_border {
+                            Rgb::new(0.10, 0.34, 0.50)
+                        } else {
+                            Rgb::new(0.23, 0.47, 0.63)
+                        }
+                    } else if is_contour_line {
+                        Rgb::new(0.25, 0.25, 0.25)
+                    } else {
+                        // Stylized colors
+                        Rgb::new(
+                            (rgb.r + 0.25).min(1.0),
+                            (rgb.g + 0.23).min(1.0),
+                            (rgb.b + 0.10).min(1.0),
+                        )
+                    }
+                } else {
+                    Rgb::new(rgb.r, rgb.g, rgb.b)
+                }
+                .map(|e| (e * 255.0) as u8);
+                common::terrain::map::MapSample {
+                    rgb,
+                    alt,
+                    downhill_wpos,
+                    connections: None,
+                }
+            }
+            // Generate standard shaded map
+            map_config.is_shaded = true;
+            map_config.generate(
+                |pos| {
+                    sample_pos(
+                        &map_config,
+                        pos,
+                        &alt,
+                        &rgba,
+                        &map_size,
+                        &map_size_lg,
+                        max_height,
+                    )
+                },
+                |wpos| {
+                    let pos = wpos.map2(TerrainChunkSize::RECT_SIZE, |e, f| e / f as i32);
+                    rescale_height(if bounds_check(pos) {
+                        scale_height_big(alt[pos])
+                    } else {
+                        0.0
+                    })
+                },
+                |pos, (r, g, b, a)| {
+                    world_map_rgba[pos.y * map_size.x as usize + pos.x] =
+                        u32::from_le_bytes([r, g, b, a]);
+                },
+            );
+            // Generate map with topographical lines and stylized colors
+            map_config.is_contours = true;
+            map_config.is_stylized_topo = true;
+            map_config.generate(
+                |pos| {
+                    sample_pos(
+                        &map_config,
+                        pos,
+                        &alt,
+                        &rgba,
+                        &map_size,
+                        &map_size_lg,
+                        max_height,
+                    )
+                },
+                |wpos| {
+                    let pos = wpos.map2(TerrainChunkSize::RECT_SIZE, |e, f| e / f as i32);
+                    rescale_height(if bounds_check(pos) {
+                        scale_height_big(alt[pos])
+                    } else {
+                        0.0
+                    })
+                },
+                |pos, (r, g, b, a)| {
+                    world_map_topo[pos.y * map_size.x as usize + pos.x] =
+                        u32::from_le_bytes([r, g, b, a]);
+                },
+            );
+            let make_raw = |rgb| -> Result<_, Error> {
+                let mut raw = vec![0u8; 4 * world_map_rgba.len()];
+                LittleEndian::write_u32_into(rgb, &mut raw);
+                Ok(Arc::new(
+                    DynamicImage::ImageRgba8({
+                        // Should not fail if the dimensions are correct.
+                        let map =
+                            image::ImageBuffer::from_raw(u32::from(map_size.x), u32::from(map_size.y), raw);
+                        map.ok_or_else(|| Error::Other("Server sent a bad world map image".into()))?
+                    })
+                    // Flip the image, since Voxygen uses an orientation where rotation from
+                    // positive x axis to positive y axis is counterclockwise around the z axis.
+                    .flipv(),
+                ))
+            };
+            let lod_base = rgba;
+            let lod_alt = alt;
+            let world_map_rgb_img = make_raw(&world_map_rgba)?;
+            let world_map_topo_img = make_raw(&world_map_topo)?;
+            let world_map_layers = vec![world_map_rgb_img, world_map_topo_img];
+            let horizons = (west.0, west.1, east.0, east.1)
+                .into_par_iter()
+                .map(|(wa, wh, ea, eh)| u32::from_le_bytes([wa, wh, ea, eh]))
+                .collect::<Vec<_>>();
+            let lod_horizon = horizons;
+            let map_bounds = Vec2::new(sea_level, max_height);
+            debug!("Done preparing image...");
+
+            Ok((
+                state,
+                lod_base,
+                lod_alt,
+                Grid::from_raw(map_size.map(|e| e as i32), lod_horizon),
+                (world_map_layers, map_size, map_bounds),
+                world_map.sites,
+                world_map.pois,
+                recipe_book,
+                component_recipe_book,
+                max_group_size,
+                client_timeout,
+            ))
+        });
+
         let (
             state,
             lod_base,
@@ -340,320 +664,18 @@ impl Client {
             component_recipe_book,
             max_group_size,
             client_timeout,
-        ) = match loop {
+        ) = loop {
             tokio::select! {
-                res = register_stream.recv() => break res?,
+                res = &mut task => break res.expect("Client thread should not panic")?,
                 _ = ping_interval.tick() => ping_stream.send(PingMsg::Ping)?,
             }
-        } {
-            ServerInit::GameSync {
-                entity_package,
-                time_of_day,
-                max_group_size,
-                client_timeout,
-                world_map,
-                recipe_book,
-                component_recipe_book,
-                material_stats,
-                ability_map,
-            } => {
-                // Initialize `State`
-                let mut state = State::client();
-                // Client-only components
-                state.ecs_mut().register::<comp::Last<CharacterState>>();
-
-                let entity = state.ecs_mut().apply_entity_package(entity_package);
-                *state.ecs_mut().write_resource() = time_of_day;
-                *state.ecs_mut().write_resource() = PlayerEntity(Some(entity));
-                state.ecs_mut().insert(material_stats);
-                state.ecs_mut().insert(ability_map);
-
-                let map_size_lg = common::terrain::MapSizeLg::new(world_map.dimensions_lg)
-                    .map_err(|_| {
-                        Error::Other(format!(
-                            "Server sent bad world map dimensions: {:?}",
-                            world_map.dimensions_lg,
-                        ))
-                    })?;
-                let map_size = map_size_lg.chunks();
-                let max_height = world_map.max_height;
-                let sea_level = world_map.sea_level;
-                let rgba = world_map.rgba;
-                let alt = world_map.alt;
-                if rgba.size() != map_size.map(|e| e as i32) {
-                    return Err(Error::Other("Server sent a bad world map image".into()));
-                }
-                if alt.size() != map_size.map(|e| e as i32) {
-                    return Err(Error::Other("Server sent a bad altitude map.".into()));
-                }
-                let [west, east] = world_map.horizons;
-                let scale_angle =
-                    |a: u8| (a as f32 / 255.0 * <f32 as FloatConst>::FRAC_PI_2()).tan();
-                let scale_height = |h: u8| h as f32 / 255.0 * max_height;
-                let scale_height_big = |h: u32| (h >> 3) as f32 / 8191.0 * max_height;
-                ping_stream.send(PingMsg::Ping)?;
-
-                debug!("Preparing image...");
-                let unzip_horizons = |(angles, heights): &(Vec<_>, Vec<_>)| {
-                    (
-                        angles.iter().copied().map(scale_angle).collect::<Vec<_>>(),
-                        heights
-                            .iter()
-                            .copied()
-                            .map(scale_height)
-                            .collect::<Vec<_>>(),
-                    )
-                };
-                let horizons = [unzip_horizons(&west), unzip_horizons(&east)];
-
-                // Redraw map (with shadows this time).
-                let mut world_map_rgba = vec![0u32; rgba.size().product() as usize];
-                let mut world_map_topo = vec![0u32; rgba.size().product() as usize];
-                let mut map_config = common::terrain::map::MapConfig::orthographic(
-                    map_size_lg,
-                    core::ops::RangeInclusive::new(0.0, max_height),
-                );
-                map_config.horizons = Some(&horizons);
-                let rescale_height = |h: f32| h / max_height;
-                let bounds_check = |pos: Vec2<i32>| {
-                    pos.reduce_partial_min() >= 0
-                        && pos.x < map_size.x as i32
-                        && pos.y < map_size.y as i32
-                };
-                ping_stream.send(PingMsg::Ping)?;
-                fn sample_pos(
-                    map_config: &MapConfig,
-                    pos: Vec2<i32>,
-                    alt: &Grid<u32>,
-                    rgba: &Grid<u32>,
-                    map_size: &Vec2<u16>,
-                    map_size_lg: &common::terrain::MapSizeLg,
-                    max_height: f32,
-                ) -> common::terrain::map::MapSample {
-                    let rescale_height = |h: f32| h / max_height;
-                    let scale_height_big = |h: u32| (h >> 3) as f32 / 8191.0 * max_height;
-                    let bounds_check = |pos: Vec2<i32>| {
-                        pos.reduce_partial_min() >= 0
-                            && pos.x < map_size.x as i32
-                            && pos.y < map_size.y as i32
-                    };
-                    let MapConfig {
-                        gain,
-                        is_contours,
-                        is_height_map,
-                        is_stylized_topo,
-                        ..
-                    } = *map_config;
-                    let mut is_contour_line = false;
-                    let mut is_border = false;
-                    let (rgb, alt, downhill_wpos) = if bounds_check(pos) {
-                        let posi = pos.y as usize * map_size.x as usize + pos.x as usize;
-                        let [r, g, b, _a] = rgba[pos].to_le_bytes();
-                        let is_water = r == 0 && b > 102 && g < 77;
-                        let alti = alt[pos];
-                        // Compute contours (chunks are assigned in the river code below)
-                        let altj = rescale_height(scale_height_big(alti));
-                        let contour_interval = 150.0;
-                        let chunk_contour = (altj * gain / contour_interval) as u32;
-
-                        // Compute downhill.
-                        let downhill = {
-                            let mut best = -1;
-                            let mut besth = alti;
-                            for nposi in neighbors(*map_size_lg, posi) {
-                                let nbh = alt.raw()[nposi];
-                                let nalt = rescale_height(scale_height_big(nbh));
-                                let nchunk_contour = (nalt * gain / contour_interval) as u32;
-                                if !is_contour_line && chunk_contour > nchunk_contour {
-                                    is_contour_line = true;
-                                }
-                                let [nr, ng, nb, _na] = rgba.raw()[nposi].to_le_bytes();
-                                let n_is_water = nr == 0 && nb > 102 && ng < 77;
-
-                                if !is_border && is_water && !n_is_water {
-                                    is_border = true;
-                                }
-
-                                if nbh < besth {
-                                    besth = nbh;
-                                    best = nposi as isize;
-                                }
-                            }
-                            best
-                        };
-                        let downhill_wpos = if downhill < 0 {
-                            None
-                        } else {
-                            Some(
-                                Vec2::new(
-                                    (downhill as usize % map_size.x as usize) as i32,
-                                    (downhill as usize / map_size.x as usize) as i32,
-                                ) * TerrainChunkSize::RECT_SIZE.map(|e| e as i32),
-                            )
-                        };
-                        (Rgb::new(r, g, b), alti, downhill_wpos)
-                    } else {
-                        (Rgb::zero(), 0, None)
-                    };
-                    let alt = f64::from(rescale_height(scale_height_big(alt)));
-                    let wpos = pos * TerrainChunkSize::RECT_SIZE.map(|e| e as i32);
-                    let downhill_wpos = downhill_wpos
-                        .unwrap_or(wpos + TerrainChunkSize::RECT_SIZE.map(|e| e as i32));
-                    let is_path = rgb.r == 0x37 && rgb.g == 0x29 && rgb.b == 0x23;
-                    let rgb = rgb.map(|e: u8| e as f64 / 255.0);
-                    let is_water = rgb.r == 0.0 && rgb.b > 0.4 && rgb.g < 0.3;
-
-                    let rgb = if is_height_map {
-                        if is_path {
-                            // Path color is Rgb::new(0x37, 0x29, 0x23)
-                            Rgb::new(0.9, 0.9, 0.63)
-                        } else if is_water {
-                            Rgb::new(0.23, 0.47, 0.53)
-                        } else if is_contours && is_contour_line {
-                            // Color contour lines
-                            Rgb::new(0.15, 0.15, 0.15)
-                        } else {
-                            // Color hill shading
-                            let lightness = (alt + 0.2).min(1.0) as f64;
-                            Rgb::new(lightness, 0.9 * lightness, 0.5 * lightness)
-                        }
-                    } else if is_stylized_topo {
-                        if is_path {
-                            Rgb::new(0.9, 0.9, 0.63)
-                        } else if is_water {
-                            if is_border {
-                                Rgb::new(0.10, 0.34, 0.50)
-                            } else {
-                                Rgb::new(0.23, 0.47, 0.63)
-                            }
-                        } else if is_contour_line {
-                            Rgb::new(0.25, 0.25, 0.25)
-                        } else {
-                            // Stylized colors
-                            Rgb::new(
-                                (rgb.r + 0.25).min(1.0),
-                                (rgb.g + 0.23).min(1.0),
-                                (rgb.b + 0.10).min(1.0),
-                            )
-                        }
-                    } else {
-                        Rgb::new(rgb.r, rgb.g, rgb.b)
-                    }
-                    .map(|e| (e * 255.0) as u8);
-                    common::terrain::map::MapSample {
-                        rgb,
-                        alt,
-                        downhill_wpos,
-                        connections: None,
-                    }
-                }
-                // Generate standard shaded map
-                map_config.is_shaded = true;
-                map_config.generate(
-                    |pos| {
-                        sample_pos(
-                            &map_config,
-                            pos,
-                            &alt,
-                            &rgba,
-                            &map_size,
-                            &map_size_lg,
-                            max_height,
-                        )
-                    },
-                    |wpos| {
-                        let pos = wpos.map2(TerrainChunkSize::RECT_SIZE, |e, f| e / f as i32);
-                        rescale_height(if bounds_check(pos) {
-                            scale_height_big(alt[pos])
-                        } else {
-                            0.0
-                        })
-                    },
-                    |pos, (r, g, b, a)| {
-                        world_map_rgba[pos.y * map_size.x as usize + pos.x] =
-                            u32::from_le_bytes([r, g, b, a]);
-                    },
-                );
-                // Generate map with topographical lines and stylized colors
-                map_config.is_contours = true;
-                map_config.is_stylized_topo = true;
-                map_config.generate(
-                    |pos| {
-                        sample_pos(
-                            &map_config,
-                            pos,
-                            &alt,
-                            &rgba,
-                            &map_size,
-                            &map_size_lg,
-                            max_height,
-                        )
-                    },
-                    |wpos| {
-                        let pos = wpos.map2(TerrainChunkSize::RECT_SIZE, |e, f| e / f as i32);
-                        rescale_height(if bounds_check(pos) {
-                            scale_height_big(alt[pos])
-                        } else {
-                            0.0
-                        })
-                    },
-                    |pos, (r, g, b, a)| {
-                        world_map_topo[pos.y * map_size.x as usize + pos.x] =
-                            u32::from_le_bytes([r, g, b, a]);
-                    },
-                );
-                ping_stream.send(PingMsg::Ping)?;
-                let make_raw = |rgb| -> Result<_, Error> {
-                    let mut raw = vec![0u8; 4 * world_map_rgba.len()];
-                    LittleEndian::write_u32_into(rgb, &mut raw);
-                    Ok(Arc::new(
-                        DynamicImage::ImageRgba8({
-                            // Should not fail if the dimensions are correct.
-                            let map =
-                                image::ImageBuffer::from_raw(u32::from(map_size.x), u32::from(map_size.y), raw);
-                            map.ok_or_else(|| Error::Other("Server sent a bad world map image".into()))?
-                        })
-                        // Flip the image, since Voxygen uses an orientation where rotation from
-                        // positive x axis to positive y axis is counterclockwise around the z axis.
-                        .flipv(),
-                    ))
-                };
-                ping_stream.send(PingMsg::Ping)?;
-                let lod_base = rgba;
-                let lod_alt = alt;
-                let world_map_rgb_img = make_raw(&world_map_rgba)?;
-                let world_map_topo_img = make_raw(&world_map_topo)?;
-                let world_map_layers = vec![world_map_rgb_img, world_map_topo_img];
-                let horizons = (west.0, west.1, east.0, east.1)
-                    .into_par_iter()
-                    .map(|(wa, wh, ea, eh)| u32::from_le_bytes([wa, wh, ea, eh]))
-                    .collect::<Vec<_>>();
-                let lod_horizon = horizons;
-                let map_bounds = Vec2::new(sea_level, max_height);
-                debug!("Done preparing image...");
-
-                Ok((
-                    state,
-                    lod_base,
-                    lod_alt,
-                    Grid::from_raw(map_size.map(|e| e as i32), lod_horizon),
-                    (world_map_layers, map_size, map_bounds),
-                    world_map.sites,
-                    world_map.pois,
-                    recipe_book,
-                    component_recipe_book,
-                    max_group_size,
-                    client_timeout,
-                ))
-            },
-            ServerInit::TooManyPlayers => Err(Error::TooManyPlayers),
-        }?;
+        };
         ping_stream.send(PingMsg::Ping)?;
 
         debug!("Initial sync done");
 
         Ok(Self {
-            registered: false,
+            registered: true,
             presence: None,
             runtime,
             server_info,
@@ -711,6 +733,9 @@ impl Client {
 
             tick: 0,
             state,
+
+            flashing_lights_enabled: true,
+
             server_view_distance_limit: None,
             view_distance: None,
             lod_distance: 4.0,
@@ -722,14 +747,15 @@ impl Client {
     }
 
     /// Request a state transition to `ClientState::Registered`.
-    pub async fn register(
-        &mut self,
-        username: String,
-        password: String,
+    async fn register(
+        username: &str,
+        password: &str,
         mut auth_trusted: impl FnMut(&str) -> bool,
+        server_info: &ServerInfo,
+        register_stream: &mut Stream,
     ) -> Result<(), Error> {
         // Authentication
-        let token_or_username = match &self.server_info.auth_provider {
+        let token_or_username = match &server_info.auth_provider {
             Some(addr) => {
                 // Query whether this is a trusted auth server
                 if auth_trusted(addr) {
@@ -749,26 +775,29 @@ impl Client {
                     };
 
                     Ok(authc::AuthClient::new(scheme, authority)?
-                        .sign_in(&username, &password)
+                        .sign_in(username, password)
                         .await?
                         .serialize())
                 } else {
                     Err(Error::AuthServerNotTrusted)
                 }
             },
-            None => Ok(username),
+            None => Ok(username.to_owned()),
         }?;
 
-        self.send_msg_err(ClientRegister { token_or_username })?;
+        debug!("Registering client...");
 
-        match self.register_stream.recv::<ServerRegisterAnswer>().await? {
+        register_stream.send(ClientRegister { token_or_username })?;
+
+        match register_stream.recv::<ServerRegisterAnswer>().await? {
             Err(RegisterError::AuthError(err)) => Err(Error::AuthErr(err)),
             Err(RegisterError::InvalidCharacter) => Err(Error::InvalidCharacter),
             Err(RegisterError::NotOnWhitelist) => Err(Error::NotOnWhitelist),
             Err(RegisterError::Kicked(err)) => Err(Error::Kicked(err)),
             Err(RegisterError::Banned(reason)) => Err(Error::Banned(reason)),
+            Err(RegisterError::TooManyPlayers) => Err(Error::TooManyPlayers),
             Ok(()) => {
-                self.registered = true;
+                debug!("Client registered successfully.");
                 Ok(())
             },
         }
@@ -821,10 +850,8 @@ impl Client {
                     | ClientGeneral::PlayerPhysics { .. }
                     | ClientGeneral::UnlockSkill(_)
                     | ClientGeneral::RequestSiteInfo(_)
-                    | ClientGeneral::UnlockSkillGroup(_)
                     | ClientGeneral::RequestPlayerPhysics { .. }
                     | ClientGeneral::RequestLossyTerrainCompression { .. }
-                    | ClientGeneral::AcknowledgePersistenceLoadError
                     | ClientGeneral::UpdateMapMarker(_)
                     | ClientGeneral::SpectatePosition(_) => {
                         #[cfg(feature = "tracy")]
@@ -978,8 +1005,7 @@ impl Client {
         let view_distances = common::ViewDistances {
             terrain: view_distances
                 .terrain
-                .max(1)
-                .min(MAX_SELECTABLE_VIEW_DISTANCE),
+                .clamp(1, MAX_SELECTABLE_VIEW_DISTANCE),
             entity: view_distances.entity.max(1),
         };
         self.view_distance = Some(view_distances.terrain);
@@ -987,8 +1013,12 @@ impl Client {
     }
 
     pub fn set_lod_distance(&mut self, lod_distance: u32) {
-        let lod_distance = lod_distance.max(0).min(1000) as f32 / lod::ZONE_SIZE as f32;
+        let lod_distance = lod_distance.clamp(0, 1000) as f32 / lod::ZONE_SIZE as f32;
         self.lod_distance = lod_distance;
+    }
+
+    pub fn set_flashing_lights_enabled(&mut self, flashing_lights_enabled: bool) {
+        self.flashing_lights_enabled = flashing_lights_enabled;
     }
 
     pub fn use_slot(&mut self, slot: Slot) {
@@ -1651,10 +1681,6 @@ impl Client {
         }))
     }
 
-    pub fn acknolwedge_persistence_load_error(&mut self) {
-        self.send_msg(ClientGeneral::AcknowledgePersistenceLoadError)
-    }
-
     /// Execute a single client tick, handle input and update the game state by
     /// the given duration.
     pub fn tick(
@@ -1756,14 +1782,10 @@ impl Client {
         // Lerp the clientside weather.
         self.weather.update(&mut self.state.weather_grid_mut());
 
-        // Lerp towards the target time of day - this ensures a smooth transition for
-        // large jumps in TimeOfDay such as when using /time
         if let Some(target_tod) = self.target_time_of_day {
             let mut tod = self.state.ecs_mut().write_resource::<TimeOfDay>();
-            tod.0 = Lerp::lerp(tod.0, target_tod.0, dt.as_secs_f64());
-            if tod.0 >= target_tod.0 {
-                self.target_time_of_day = None;
-            }
+            tod.0 = target_tod.0;
+            self.target_time_of_day = None;
         }
 
         // 4) Tick the client's LocalState
@@ -1776,7 +1798,8 @@ impl Client {
             true,
         );
         // TODO: avoid emitting these in the first place
-        self.state
+        let _ = self
+            .state
             .ecs()
             .fetch::<EventBus<common::event::ServerEvent>>()
             .recv_all();
@@ -1850,8 +1873,11 @@ impl Client {
                 // 1 for the chunks needed bordering other chunks for meshing
                 // 1 as a buffer so that if the player moves back in that direction the chunks
                 //   don't need to be reloaded
+                // Take the minimum of the adjusted difference vs the view_distance + 1 to
+                //   prevent magnitude_squared from overflowing
+
                 if (chunk_pos - key)
-                    .map(|e: i32| (e.unsigned_abs()).saturating_sub(2))
+                    .map(|e: i32| (e.unsigned_abs()).saturating_sub(2).min(view_distance + 1))
                     .magnitude_squared()
                     > view_distance.pow(2)
                 {
@@ -1894,7 +1920,19 @@ impl Client {
                     ];
 
                     for key in keys.iter() {
-                        if self.state.terrain().get_key(*key).is_none() {
+                        let dist_to_player = (TerrainGrid::key_chunk(*key).map(|x| x as f32)
+                            + TerrainChunkSize::RECT_SIZE.map(|x| x as f32) / 2.0)
+                            .distance_squared(pos.0.into());
+
+                        let terrain = self.state.terrain();
+                        if let Some(chunk) = terrain.get_key_arc(*key) {
+                            if !skip_mode && !terrain.contains_key_real(*key) {
+                                let chunk = Arc::clone(chunk);
+                                drop(terrain);
+                                self.state.insert_chunk(*key, chunk);
+                            }
+                        } else {
+                            drop(terrain);
                             if !skip_mode && !self.pending_chunks.contains_key(key) {
                                 const TOTAL_PENDING_CHUNKS_LIMIT: usize = 12;
                                 const CURRENT_TICK_PENDING_CHUNKS_LIMIT: usize = 2;
@@ -1911,11 +1949,6 @@ impl Client {
                                     skip_mode = true;
                                 }
                             }
-
-                            let dist_to_player =
-                                (self.state.terrain().key_pos(*key).map(|x| x as f32)
-                                    + TerrainChunkSize::RECT_SIZE.map(|x| x as f32) / 2.0)
-                                    .distance_squared(pos.0.into());
 
                             if dist_to_player < self.loaded_distance {
                                 self.loaded_distance = dist_to_player;
@@ -2257,6 +2290,9 @@ impl Client {
                     kind,
                 });
             },
+            ServerGeneral::GroupInventoryUpdate(item, taker, uid) => {
+                frontend_events.push(Event::GroupInventoryUpdate(item, taker, uid));
+            },
             // Cleanup for when the client goes back to the `presence = None`
             ServerGeneral::ExitInGameSuccess => {
                 self.presence = None;
@@ -2379,7 +2415,11 @@ impl Client {
                 warn!("CharacterActionError: {:?}.", error);
                 events.push(Event::CharacterError(error));
             },
-            ServerGeneral::CharacterDataLoadError(error) => {
+            ServerGeneral::CharacterDataLoadResult(Ok(metadata)) => {
+                trace!("Handling join result by server");
+                events.push(Event::CharacterJoined(metadata));
+            },
+            ServerGeneral::CharacterDataLoadResult(Err(error)) => {
                 trace!("Handling join error by server");
                 self.presence = None;
                 self.clean_state();
@@ -2505,7 +2545,12 @@ impl Client {
         }
 
         // ignore network events
-        while let Some(Ok(Some(event))) = self.participant.as_ref().map(|p| p.try_fetch_event()) {
+        while let Some(res) = self
+            .participant
+            .as_mut()
+            .and_then(|p| p.try_fetch_event().transpose())
+        {
+            let event = res?;
             trace!(?event, "received network event");
         }
 
@@ -2563,7 +2608,7 @@ impl Client {
     pub fn players(&self) -> impl Iterator<Item = &str> {
         self.player_list()
             .values()
-            .filter_map(|player_info| player_info.is_online.then(|| &*player_info.player_alias))
+            .filter_map(|player_info| player_info.is_online.then_some(&*player_info.player_alias))
     }
 
     /// Return true if this client is a moderator on the server
@@ -2605,7 +2650,7 @@ impl Client {
     }
 
     /// Change player alias to "You" if client belongs to matching player
-    fn personalize_alias(&self, uid: Uid, alias: String) -> String {
+    pub fn personalize_alias(&self, uid: Uid, alias: String) -> String {
         let client_uid = self.uid().expect("Client doesn't have a Uid!!!");
         if client_uid == uid {
             "You".to_string() // TODO: Localize
@@ -2614,11 +2659,14 @@ impl Client {
         }
     }
 
-    /// Format a message for the client (voxygen chat box or chat-cli)
-    pub fn format_message(&self, msg: &comp::ChatMsg, character_name: bool) -> String {
-        let comp::ChatMsg {
-            chat_type, message, ..
-        } = &msg;
+    /// Get important information from client that is necessary for message
+    /// localisation
+    pub fn lookup_msg_context(&self, msg: &comp::ChatMsg) -> ChatTypeContext {
+        let mut result = ChatTypeContext {
+            you: self.uid().expect("Client doesn't have a Uid!!!"),
+            player_alias: HashMap::new(),
+            entity_name: HashMap::new(),
+        };
         let name_of_uid = |uid| {
             let ecs = self.state.ecs();
             (
@@ -2629,192 +2677,55 @@ impl Client {
                 .find(|(_, u)| u == &uid)
                 .map(|(c, _)| c.name.clone())
         };
-        let alias_of_uid = |uid| {
-            self.player_list.get(uid).map_or(
-                name_of_uid(uid).unwrap_or_else(|| "<?>".to_string()),
-                |player_info| {
-                    if player_info.is_moderator {
-                        format!(
-                            "MOD - {}",
-                            self.personalize_alias(*uid, player_info.player_alias.clone())
-                        )
-                    } else {
-                        self.personalize_alias(*uid, player_info.player_alias.clone())
-                    }
-                },
-            )
-        };
-        let message_format = |uid, message, group| {
-            let alias = alias_of_uid(uid);
-            let name = if character_name {
-                name_of_uid(uid)
-            } else {
-                None
-            };
-            match (group, name) {
-                (Some(group), None) => format!("({}) [{}]: {}", group, alias, message),
-                (None, None) => format!("[{}]: {}", alias, message),
-                (Some(group), Some(name)) => {
-                    format!("({}) [{}] {}: {}", group, alias, name, message)
-                },
-                (None, Some(name)) => format!("[{}] {}: {}", alias, name, message),
-            }
-        };
-        match chat_type {
-            // For ChatType::{Online, Offline, Kill} these message strings are localized
-            // in voxygen/src/hud/chat.rs before being formatted here.
-            // Kill messages are generated in server/src/events/entity_manipulation.rs
-            // fn handle_destroy
-            comp::ChatType::Online(uid) => {
-                // Default message formats if no localized message string is set by hud
-                // Needed for cli clients that don't set localization info
-                if message.is_empty() {
-                    format!("[{}] came online", alias_of_uid(uid))
-                } else {
-                    message.replace("{name}", &alias_of_uid(uid))
-                }
+        let mut alias_of_uid = |uid| match self.player_list.get(uid) {
+            Some(player_info) => {
+                result.player_alias.insert(*uid, player_info.clone());
             },
-            comp::ChatType::Offline(uid) => {
-                // Default message formats if no localized message string is set by hud
-                // Needed for cli clients that don't set localization info
-                if message.is_empty() {
-                    format!("[{}] went offline", alias_of_uid(uid))
-                } else {
-                    message.replace("{name}", &alias_of_uid(uid))
-                }
+            None => {
+                result
+                    .entity_name
+                    .insert(*uid, name_of_uid(uid).unwrap_or_else(|| "<?>".to_string()));
             },
-            comp::ChatType::CommandError => message.to_string(),
-            comp::ChatType::CommandInfo => message.to_string(),
-            comp::ChatType::FactionMeta(_) => message.to_string(),
-            comp::ChatType::GroupMeta(_) => message.to_string(),
+        };
+        match &msg.chat_type {
+            comp::ChatType::Online(uid) | comp::ChatType::Offline(uid) => {
+                alias_of_uid(uid);
+            },
+            comp::ChatType::CommandError => (),
+            comp::ChatType::CommandInfo => (),
+            comp::ChatType::FactionMeta(_) => (),
+            comp::ChatType::GroupMeta(_) => (),
             comp::ChatType::Kill(kill_source, victim) => {
-                // Default message formats if no localized message string is set by hud
-                // Needed for cli clients that don't set localization info
-                if message.is_empty() {
-                    match kill_source {
-                        KillSource::Player(attacker_uid, KillType::Buff(buff_kind)) => format!(
-                            "[{}] died of {} caused by [{}]",
-                            alias_of_uid(victim),
-                            format!("{:?}", buff_kind).to_lowercase().as_str(),
-                            alias_of_uid(attacker_uid)
-                        ),
-                        KillSource::Player(attacker_uid, KillType::Melee) => format!(
-                            "[{}] killed [{}]",
-                            alias_of_uid(attacker_uid),
-                            alias_of_uid(victim)
-                        ),
-                        KillSource::Player(attacker_uid, KillType::Projectile) => format!(
-                            "[{}] shot [{}]",
-                            alias_of_uid(attacker_uid),
-                            alias_of_uid(victim)
-                        ),
-                        KillSource::Player(attacker_uid, KillType::Explosion) => format!(
-                            "[{}] blew up [{}]",
-                            alias_of_uid(attacker_uid),
-                            alias_of_uid(victim)
-                        ),
-                        KillSource::Player(attacker_uid, KillType::Energy) => format!(
-                            "[{}] used magic to kill [{}]",
-                            alias_of_uid(attacker_uid),
-                            alias_of_uid(victim)
-                        ),
-                        KillSource::Player(attacker_uid, KillType::Other) => format!(
-                            "[{}] killed [{}]",
-                            alias_of_uid(attacker_uid),
-                            alias_of_uid(victim)
-                        ),
-                        KillSource::NonExistent(KillType::Buff(buff_kind)) => format!(
-                            "[{}] died of {}",
-                            alias_of_uid(victim),
-                            format!("{:?}", buff_kind).to_lowercase().as_str()
-                        ),
-                        KillSource::NonPlayer(attacker_name, KillType::Buff(buff_kind)) => format!(
-                            "[{}] died of {} caused by {}",
-                            alias_of_uid(victim),
-                            format!("{:?}", buff_kind).to_lowercase().as_str(),
-                            attacker_name
-                        ),
-                        KillSource::NonPlayer(attacker_name, KillType::Melee) => {
-                            format!("{} killed [{}]", attacker_name, alias_of_uid(victim))
-                        },
-                        KillSource::NonPlayer(attacker_name, KillType::Projectile) => {
-                            format!("{} shot [{}]", attacker_name, alias_of_uid(victim))
-                        },
-                        KillSource::NonPlayer(attacker_name, KillType::Explosion) => {
-                            format!("{} blew up [{}]", attacker_name, alias_of_uid(victim))
-                        },
-                        KillSource::NonPlayer(attacker_name, KillType::Energy) => format!(
-                            "{} used magic to kill [{}]",
-                            attacker_name,
-                            alias_of_uid(victim)
-                        ),
-                        KillSource::NonPlayer(attacker_name, KillType::Other) => {
-                            format!("{} killed [{}]", attacker_name, alias_of_uid(victim))
-                        },
-                        KillSource::Environment(environment) => {
-                            format!("[{}] died in {}", alias_of_uid(victim), environment)
-                        },
-                        KillSource::FallDamage => {
-                            format!("[{}] died from fall damage", alias_of_uid(victim))
-                        },
-                        KillSource::Suicide => {
-                            format!("[{}] died from self-inflicted wounds", alias_of_uid(victim))
-                        },
-                        KillSource::NonExistent(_) => format!("[{}] died", alias_of_uid(victim)),
-                        KillSource::Other => format!("[{}] died", alias_of_uid(victim)),
-                    }
-                } else {
-                    match kill_source {
-                        KillSource::Player(attacker_uid, _) => message
-                            .replace("{attacker}", &alias_of_uid(attacker_uid))
-                            .replace("{victim}", &alias_of_uid(victim)),
-                        KillSource::NonExistent(KillType::Buff(_)) => {
-                            message.replace("{victim}", &alias_of_uid(victim))
-                        },
-                        KillSource::NonPlayer(attacker_name, _) => message
-                            .replace("{attacker}", attacker_name)
-                            .replace("{victim}", &alias_of_uid(victim)),
-                        KillSource::Environment(environment) => message
-                            .replace("{name}", &alias_of_uid(victim))
-                            .replace("{environment}", environment),
-                        KillSource::FallDamage => message.replace("{name}", &alias_of_uid(victim)),
-                        KillSource::Suicide => message.replace("{name}", &alias_of_uid(victim)),
-                        KillSource::NonExistent(_) => {
-                            message.replace("{name}", &alias_of_uid(victim))
-                        },
-                        KillSource::Other => message.replace("{name}", &alias_of_uid(victim)),
-                    }
-                }
+                alias_of_uid(victim);
+                match kill_source {
+                    KillSource::Player(attacker_uid, _) => {
+                        alias_of_uid(attacker_uid);
+                    },
+                    KillSource::NonPlayer(_, _) => (),
+                    KillSource::Environment(_) => (),
+                    KillSource::FallDamage => (),
+                    KillSource::Suicide => (),
+                    KillSource::NonExistent(_) => (),
+                    KillSource::Other => (),
+                };
             },
-            comp::ChatType::Tell(from, to) => {
-                let from_alias = alias_of_uid(from);
-                let to_alias = alias_of_uid(to);
-                if Some(*from) == self.uid() {
-                    format!("To [{}]: {}", to_alias, message)
-                } else {
-                    format!("From [{}]: {}", from_alias, message)
-                }
+            comp::ChatType::Tell(from, to) | comp::ChatType::NpcTell(from, to, _) => {
+                alias_of_uid(from);
+                alias_of_uid(to);
             },
-            comp::ChatType::Say(uid) => message_format(uid, message, None),
-            comp::ChatType::Group(uid, s) => message_format(uid, message, Some(s)),
-            comp::ChatType::Faction(uid, s) => message_format(uid, message, Some(s)),
-            comp::ChatType::Region(uid) => message_format(uid, message, None),
-            comp::ChatType::World(uid) => message_format(uid, message, None),
-            // NPCs can't talk. Should be filtered by hud/mod.rs for voxygen and should be filtered
-            // by server (due to not having a Pos) for chat-cli
-            comp::ChatType::Npc(_uid, _r) => "".to_string(),
-            comp::ChatType::NpcSay(uid, _r) => message_format(uid, message, None),
-            comp::ChatType::NpcTell(from, to, _r) => {
-                let from_alias = alias_of_uid(from);
-                let to_alias = alias_of_uid(to);
-                if Some(*from) == self.uid() {
-                    format!("To [{}]: {}", to_alias, message)
-                } else {
-                    format!("From [{}]: {}", from_alias, message)
-                }
+            comp::ChatType::Say(uid)
+            | comp::ChatType::Region(uid)
+            | comp::ChatType::World(uid)
+            | comp::ChatType::NpcSay(uid, _) => {
+                alias_of_uid(uid);
             },
-            comp::ChatType::Meta => message.to_string(),
-        }
+            comp::ChatType::Group(uid, _) | comp::ChatType::Faction(uid, _) => {
+                alias_of_uid(uid);
+            },
+            comp::ChatType::Npc(uid, _) => alias_of_uid(uid),
+            comp::ChatType::Meta => (),
+        };
+        result
     }
 
     /// Execute a single client tick:
@@ -2870,8 +2781,12 @@ impl Client {
                 self.state.read_storage().get(self.entity()).cloned(),
                 self.state.read_storage().get(self.entity()).cloned(),
             ) {
-                self.in_game_stream
-                    .send(ClientGeneral::PlayerPhysics { pos, vel, ori })?;
+                self.in_game_stream.send(ClientGeneral::PlayerPhysics {
+                    pos,
+                    vel,
+                    ori,
+                    force_counter: self.force_update_counter,
+                })?;
             }
         }
 
@@ -2913,6 +2828,7 @@ impl Drop for Client {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use client_i18n::LocalizationHandle;
 
     #[test]
     /// THIS TEST VERIFIES THE CONSTANT API.
@@ -2922,11 +2838,15 @@ mod tests {
     /// CONTACT @Core Developer BEFORE MERGING CHANGES TO THIS TEST
     fn constant_api_test() {
         use common::clock::Clock;
+        use voxygen_i18n_helpers::localize_chat_message;
 
         const SPT: f64 = 1.0 / 60.0;
 
         let runtime = Arc::new(Runtime::new().unwrap());
         let runtime2 = Arc::clone(&runtime);
+        let username = "Foo";
+        let password = "Bar";
+        let auth_server = "auth.veloren.net";
         let veloren_client: Result<Client, Error> = runtime.block_on(Client::new(
             ConnectionArgs::Tcp {
                 hostname: "127.0.0.1:9000".to_owned(),
@@ -2934,18 +2854,13 @@ mod tests {
             },
             runtime2,
             &mut None,
+            username,
+            password,
+            |suggestion: &str| suggestion == auth_server,
         ));
+        let localisation = LocalizationHandle::load_expect("en");
 
         let _ = veloren_client.map(|mut client| {
-            //register
-            let username: String = "Foo".to_string();
-            let password: String = "Bar".to_string();
-            let auth_server: String = "auth.veloren.net".to_string();
-            let _result: Result<(), Error> =
-                runtime.block_on(client.register(username, password, |suggestion: &str| {
-                    suggestion == auth_server
-                }));
-
             //clock
             let mut clock = Clock::new(Duration::from_secs_f64(SPT));
 
@@ -2962,7 +2877,13 @@ mod tests {
                     match event {
                         Event::Chat(msg) => {
                             let msg: comp::ChatMsg = msg;
-                            let _s: String = client.format_message(&msg, true);
+                            let _s: String = localize_chat_message(
+                                msg,
+                                |msg| client.lookup_msg_context(msg),
+                                &localisation.read(),
+                                true,
+                            )
+                            .message;
                         },
                         Event::Disconnect => {},
                         Event::DisconnectionNotification(_) => {

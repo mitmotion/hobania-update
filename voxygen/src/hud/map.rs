@@ -63,6 +63,9 @@ widget_ids! {
         show_castles_img,
         show_castles_box,
         show_castles_text,
+        show_bridges_img,
+        show_bridges_box,
+        show_bridges_text,
         show_dungeons_img,
         show_dungeons_box,
         show_dungeons_text,
@@ -215,6 +218,7 @@ impl<'a> Widget for Map<'a> {
         let show_towns = self.global_state.settings.interface.map_show_towns;
         let show_dungeons = self.global_state.settings.interface.map_show_dungeons;
         let show_castles = self.global_state.settings.interface.map_show_castles;
+        let show_bridges = self.global_state.settings.interface.map_show_bridges;
         let show_caves = self.global_state.settings.interface.map_show_caves;
         let show_trees = self.global_state.settings.interface.map_show_trees;
         let show_peaks = self.global_state.settings.interface.map_show_peaks;
@@ -395,7 +399,7 @@ impl<'a> Widget for Map<'a> {
                     .map(|scroll| scroll.y)
                     .sum();
                 if scrolled != 0.0 {
-                    let min_zoom = map_size.x as f64 / worldsize.reduce_partial_max() as f64 / 2.0;
+                    let min_zoom = map_size.x / worldsize.reduce_partial_max() as f64 / 2.0;
                     let new_zoom_lvl: f64 = (f64::log2(zoom) - scrolled * 0.03)
                         .exp2()
                         .clamp(min_zoom, 16.0);
@@ -584,9 +588,43 @@ impl<'a> Widget for Map<'a> {
             .graphics_for(state.ids.show_castles_box)
             .color(TEXT_COLOR)
             .set(state.ids.show_castles_text, ui);
+        // Bridges
+        Image::new(self.imgs.mmap_site_bridge)
+            .down_from(state.ids.show_castles_img, 10.0)
+            .w_h(20.0, 20.0)
+            .set(state.ids.show_bridges_img, ui);
+        if Button::image(if show_bridges {
+            self.imgs.checkbox_checked
+        } else {
+            self.imgs.checkbox
+        })
+        .w_h(18.0, 18.0)
+        .hover_image(if show_bridges {
+            self.imgs.checkbox_checked_mo
+        } else {
+            self.imgs.checkbox_mo
+        })
+        .press_image(if show_bridges {
+            self.imgs.checkbox_checked
+        } else {
+            self.imgs.checkbox_press
+        })
+        .right_from(state.ids.show_bridges_img, 10.0)
+        .set(state.ids.show_bridges_box, ui)
+        .was_clicked()
+        {
+            events.push(Event::SettingsChange(MapShowBridges(!show_bridges)));
+        }
+        Text::new(&i18n.get_msg("hud-map-bridge"))
+            .right_from(state.ids.show_bridges_box, 10.0)
+            .font_size(self.fonts.cyri.scale(14))
+            .font_id(self.fonts.cyri.conrod_id)
+            .graphics_for(state.ids.show_bridges_box)
+            .color(TEXT_COLOR)
+            .set(state.ids.show_bridges_text, ui);
         // Dungeons
         Image::new(self.imgs.mmap_site_dungeon)
-            .down_from(state.ids.show_castles_img, 10.0)
+            .down_from(state.ids.show_bridges_img, 10.0)
             .w_h(20.0, 20.0)
             .set(state.ids.show_dungeons_img, ui);
         if Button::image(if show_dungeons {
@@ -882,6 +920,7 @@ impl<'a> Widget for Map<'a> {
                         SiteKind::Tree => i18n.get_msg("hud-map-tree"),
                         SiteKind::Gnarling => i18n.get_msg("hud-map-gnarling"),
                         SiteKind::ChapelSite => i18n.get_msg("hud-map-chapel_Site"),
+                        SiteKind::Bridge => i18n.get_msg("hud-map-bridge"),
                     });
             let (difficulty, desc) = match &site.kind {
                 SiteKind::Town => (None, i18n.get_msg("hud-map-town")),
@@ -907,6 +946,7 @@ impl<'a> Widget for Map<'a> {
                 SiteKind::Tree => (None, i18n.get_msg("hud-map-tree")),
                 SiteKind::Gnarling => (Some(0), i18n.get_msg("hud-map-gnarling")),
                 SiteKind::ChapelSite => (Some(3), i18n.get_msg("hud-map-chapel_site")),
+                SiteKind::Bridge => (None, i18n.get_msg("hud-map-bridge")),
             };
             let desc = desc.into_owned() + &get_site_economy(site_rich);
             let site_btn = Button::image(match &site.kind {
@@ -921,6 +961,7 @@ impl<'a> Widget for Map<'a> {
                     5 => self.imgs.mmap_site_mindflayer,
                     _ => self.imgs.mmap_site_dungeon,
                 },
+                SiteKind::Bridge => self.imgs.mmap_site_bridge,
             })
             .x_y_position_relative_to(
                 state.ids.map_layers[0],
@@ -940,6 +981,7 @@ impl<'a> Widget for Map<'a> {
                     5 => self.imgs.mmap_site_mindflayer_hover,
                     _ => self.imgs.mmap_site_dungeon_hover,
                 },
+                SiteKind::Bridge => self.imgs.mmap_site_bridge_hover,
             })
             .image_color(UI_HIGHLIGHT_0.alpha(fade))
             .with_tooltip(
@@ -962,6 +1004,7 @@ impl<'a> Widget for Map<'a> {
                     },
                     SiteKind::Cave => TEXT_COLOR,
                     SiteKind::Tree => TEXT_COLOR,
+                    SiteKind::Bridge => TEXT_COLOR,
                 },
             );
 
@@ -982,6 +1025,7 @@ impl<'a> Widget for Map<'a> {
                 SiteKind::Castle => show_castles,
                 SiteKind::Cave => show_caves,
                 SiteKind::Tree => show_trees,
+                SiteKind::Bridge => show_bridges,
             };
             if show_site {
                 let tooltip_visible = site_btn.set_ext(state.ids.mmap_site_icons[i], ui).1;
@@ -1051,6 +1095,11 @@ impl<'a> Widget for Map<'a> {
                     },
                     SiteKind::Tree => {
                         if show_trees {
+                            dif_img.set(state.ids.site_difs[i], ui)
+                        }
+                    },
+                    SiteKind::Bridge => {
+                        if show_bridges {
                             dif_img.set(state.ids.site_difs[i], ui)
                         }
                     },
@@ -1153,7 +1202,7 @@ impl<'a> Widget for Map<'a> {
                             )
                             .font_size(
                                 self.fonts.cyri.scale(
-                                    (2.0 + font_scale_factor * zoom).min(18.0).max(10.0) as u32,
+                                    (2.0 + font_scale_factor * zoom).clamp(10.0, 18.0) as u32,
                                 ),
                             )
                             .font_id(self.fonts.cyri.conrod_id)
@@ -1204,7 +1253,7 @@ impl<'a> Widget for Map<'a> {
                 let side_length = 20.0 * factor;
 
                 let (rpos, fade) = match wpos_to_rpos_fade(
-                    member_pos.0.xy().map(|e| e as f32),
+                    member_pos.0.xy(),
                     Vec2::from(side_length / 2.0),
                     side_length / 2.0,
                 ) {
@@ -1232,7 +1281,7 @@ impl<'a> Widget for Map<'a> {
 
                 handle_widget_mouse_events(
                     state.ids.member_indicators[i],
-                    MarkerChange::Pos(member_pos.0.xy().map(|e| e as f32)),
+                    MarkerChange::Pos(member_pos.0.xy()),
                     ui,
                     &mut events,
                     state.ids.map_layers[0],

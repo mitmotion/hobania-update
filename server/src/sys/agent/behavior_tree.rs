@@ -1,17 +1,22 @@
+use crate::rtsim::Entity as RtSimEntity;
 use common::{
     comp::{
         agent::{
-            AgentEvent, Target, TimerAction, DEFAULT_INTERACTION_TIME, TRADE_INTERACTION_TIME,
+            AgentEvent, AwarenessState, Target, TimerAction, DEFAULT_INTERACTION_TIME,
+            TRADE_INTERACTION_TIME,
         },
         Agent, Alignment, BehaviorCapability, BehaviorState, Body, BuffKind, ControlAction,
-        ControlEvent, Controller, InputKind, InventoryEvent, UtteranceKind,
+        ControlEvent, Controller, InputKind, InventoryEvent, Pos, UtteranceKind,
     },
     event::{Emitter, ServerEvent},
     path::TraversalConfig,
 };
-use rand::{prelude::ThreadRng, Rng};
-use specs::saveload::{Marker, MarkerAllocator};
-use vek::Vec2;
+use rand::{prelude::ThreadRng, thread_rng, Rng};
+use specs::{
+    saveload::{Marker, MarkerAllocator},
+    Entity as EcsEntity,
+};
+use vek::{Vec2, Vec3};
 
 use self::interaction::{
     handle_inbox_cancel_interactions, handle_inbox_finished_trade, handle_inbox_talk,
@@ -21,8 +26,9 @@ use self::interaction::{
 
 use super::{
     consts::{
-        DAMAGE_MEMORY_DURATION, FLEE_DURATION, HEALING_ITEM_THRESHOLD, MAX_FLEE_DIST,
-        MAX_FOLLOW_DIST, NPC_PICKUP_RANGE, RETARGETING_THRESHOLD_SECONDS,
+        DAMAGE_MEMORY_DURATION, FLEE_DURATION, HEALING_ITEM_THRESHOLD, MAX_FOLLOW_DIST,
+        NORMAL_FLEE_DIR_DIST, NPC_PICKUP_RANGE, RETARGETING_THRESHOLD_SECONDS,
+        STD_AWARENESS_DECAY_RATE,
     },
     data::{AgentData, ReadData, TargetData},
     util::{get_entity_by_id, is_dead, is_dead_or_invulnerable, is_invulnerable, stop_pursuing},
@@ -34,6 +40,8 @@ mod interaction;
 pub struct BehaviorData<'a, 'b, 'c> {
     pub agent: &'a mut Agent,
     pub agent_data: AgentData<'a>,
+    // TODO: Move rtsim back into AgentData after rtsim2 when it has a separate crate
+    pub rtsim_entity: Option<&'a RtSimEntity>,
     pub read_data: &'a ReadData<'a>,
     pub event_emitter: &'a mut Emitter<'c, ServerEvent>,
     pub controller: &'a mut Controller,
@@ -50,6 +58,22 @@ type BehaviorFn = fn(&mut BehaviorData) -> bool;
 /// one finally handles an event
 pub struct BehaviorTree {
     tree: Vec<BehaviorFn>,
+}
+
+/// Enumeration of the timers used by the behavior tree.
+// FIXME: We shouldnt have a global timer enumeration for the whole behavior
+// tree. It isnt entirely clear where a lot of the agents in some of the bdata
+// objects in behavior tree functions come from, so it's hard to granularly
+// define these timers per action node. As such, the behavior tree currently has
+// one global enumeration for mapping timers in all functions, regardless as to
+// use case or action node currently executed -- even if the agent might be
+// different between calls. This doesn't break anything as each agent has its
+// own instance of timers, but it is much less clear than I would like.
+//
+// This may require some refactoring to fix, and I don't feel confident doing
+// so.
+enum ActionStateBehaviorTreeTimers {
+    TimerBehaviorTree = 0,
 }
 
 impl BehaviorTree {
@@ -76,11 +100,13 @@ impl BehaviorTree {
     pub fn target() -> Self {
         Self {
             tree: vec![
+                update_last_known_pos,
                 untarget_if_dead,
-                do_hostile_tree_if_hostile,
+                update_target_awareness,
+                search_last_known_pos_if_not_alert,
+                do_hostile_tree_if_hostile_and_aware,
                 do_pet_tree_if_owned,
                 do_pickup_loot,
-                untarget,
                 do_idle_tree,
             ],
         }
@@ -102,17 +128,21 @@ impl BehaviorTree {
     /// events.
     pub fn interaction(agent: &Agent) -> Self {
         let is_in_combat = agent.target.map_or(false, |t| t.hostile);
-        if !is_in_combat && agent.behavior.can(BehaviorCapability::SPEAK) {
-            Self {
-                tree: vec![
-                    increment_timer_deltatime,
-                    handle_inbox_talk,
-                    handle_inbox_trade_invite,
-                    handle_inbox_trade_accepted,
-                    handle_inbox_finished_trade,
-                    handle_inbox_update_pending_trade,
-                ],
+        if !is_in_combat
+            && (agent.behavior.can(BehaviorCapability::SPEAK)
+                || agent.behavior.can(BehaviorCapability::TRADE))
+        {
+            let mut tree: Vec<BehaviorFn> = vec![increment_timer_deltatime];
+            if agent.behavior.can(BehaviorCapability::SPEAK) {
+                tree.push(handle_inbox_talk);
             }
+            tree.extend_from_slice(&[
+                handle_inbox_trade_invite,
+                handle_inbox_trade_accepted,
+                handle_inbox_finished_trade,
+                handle_inbox_update_pending_trade,
+            ]);
+            Self { tree }
         } else {
             Self {
                 tree: vec![handle_inbox_cancel_interactions],
@@ -201,7 +231,8 @@ fn react_if_on_fire(bdata: &mut BehaviorData) -> bool {
 fn target_if_attacked(bdata: &mut BehaviorData) -> bool {
     match bdata.agent_data.health {
         Some(health)
-            if bdata.read_data.time.0 - health.last_change.time.0 < DAMAGE_MEMORY_DURATION =>
+            if bdata.read_data.time.0 - health.last_change.time.0 < DAMAGE_MEMORY_DURATION
+                && health.last_change.amount < 0.0 =>
         {
             if let Some(by) = health.last_change.damage_by() {
                 if let Some(attacker) = bdata
@@ -220,6 +251,8 @@ fn target_if_attacked(bdata: &mut BehaviorData) -> bool {
                                 .push_event(ControlEvent::Utterance(UtteranceKind::Angry));
                         }
 
+                        bdata.agent.awareness.change_by(1.0);
+
                         // Determine whether the new target should be a priority
                         // over the old one (i.e: because it's either close or
                         // because they attacked us).
@@ -235,14 +268,17 @@ fn target_if_attacked(bdata: &mut BehaviorData) -> bool {
                                 hostile: true,
                                 selected_at: bdata.read_data.time.0,
                                 aggro_on: true,
+                                last_known_pos: bdata
+                                    .read_data
+                                    .positions
+                                    .get(attacker)
+                                    .map(|pos| pos.0),
                             });
                         }
 
                         // Remember this attack if we're an RtSim entity
-                        if let Some(attacker_stats) = bdata
-                            .agent_data
-                            .rtsim_entity
-                            .and(bdata.read_data.stats.get(attacker))
+                        if let Some(attacker_stats) =
+                            bdata.rtsim_entity.and(bdata.read_data.stats.get(attacker))
                         {
                             bdata
                                 .agent
@@ -280,11 +316,7 @@ fn untarget_if_dead(bdata: &mut BehaviorData) -> bool {
         if let Some(tgt_health) = bdata.read_data.healths.get(target) {
             // If target is dead, forget them
             if tgt_health.is_dead {
-                if let Some(tgt_stats) = bdata
-                    .agent_data
-                    .rtsim_entity
-                    .and(bdata.read_data.stats.get(target))
-                {
+                if let Some(tgt_stats) = bdata.rtsim_entity.and(bdata.read_data.stats.get(target)) {
                     bdata.agent.forget_enemy(&tgt_stats.name);
                 }
                 bdata.agent.target = None;
@@ -295,10 +327,13 @@ fn untarget_if_dead(bdata: &mut BehaviorData) -> bool {
     false
 }
 
-/// If target is hostile, do the hostile tree and stop the current BehaviorTree
-fn do_hostile_tree_if_hostile(bdata: &mut BehaviorData) -> bool {
+/// If target is hostile and agent is aware of target, do the hostile tree and
+/// stop the current BehaviorTree
+fn do_hostile_tree_if_hostile_and_aware(bdata: &mut BehaviorData) -> bool {
+    let alert = bdata.agent.awareness.reached();
+
     if let Some(Target { hostile, .. }) = bdata.agent.target {
-        if hostile {
+        if alert && hostile {
             BehaviorTree::hostile().run(bdata);
             return true;
         }
@@ -334,6 +369,7 @@ fn do_pickup_loot(bdata: &mut BehaviorData) -> bool {
                             .controller
                             .push_event(ControlEvent::InventoryEvent(InventoryEvent::Pickup(*uid)));
                     }
+                    bdata.agent.target = None;
                 } else if let Some((bearing, speed)) = bdata.agent.chaser.chase(
                     &*bdata.read_data.terrain,
                     bdata.agent_data.pos.0,
@@ -354,14 +390,6 @@ fn do_pickup_loot(bdata: &mut BehaviorData) -> bool {
             return true;
         }
     }
-    false
-}
-
-/// Reset the agent's target
-///
-/// This function will never stop the BehaviorTree
-fn untarget(bdata: &mut BehaviorData) -> bool {
-    bdata.agent.target = None;
     false
 }
 
@@ -419,7 +447,15 @@ fn set_owner_if_no_target(bdata: &mut BehaviorData) -> bool {
     if bdata.agent.target.is_none() && small_chance {
         if let Some(Alignment::Owned(owner)) = bdata.agent_data.alignment {
             if let Some(owner) = get_entity_by_id(owner.id(), bdata.read_data) {
-                bdata.agent.target = Some(Target::new(owner, false, bdata.read_data.time.0, false));
+                let owner_pos = bdata.read_data.positions.get(owner).map(|pos| pos.0);
+
+                bdata.agent.target = Some(Target::new(
+                    owner,
+                    false,
+                    bdata.read_data.time.0,
+                    false,
+                    owner_pos,
+                ));
             }
         }
     }
@@ -460,6 +496,7 @@ fn handle_timed_events(bdata: &mut BehaviorData) -> bool {
                     bdata.controller,
                     bdata.read_data,
                     bdata.event_emitter,
+                    will_ambush(bdata.rtsim_entity, &bdata.agent_data),
                 );
             } else {
                 bdata.agent_data.handle_sounds_heard(
@@ -474,6 +511,43 @@ fn handle_timed_events(bdata: &mut BehaviorData) -> bool {
     false
 }
 
+fn update_last_known_pos(bdata: &mut BehaviorData) -> bool {
+    let BehaviorData {
+        agent,
+        agent_data,
+        read_data,
+        controller,
+        ..
+    } = bdata;
+
+    if let Some(target_info) = agent.target {
+        let target = target_info.target;
+
+        if let Some(target_pos) = read_data.positions.get(target) {
+            if agent_data.detects_other(agent, controller, &target, target_pos, read_data) {
+                let updated_pos = Some(target_pos.0);
+
+                let Target {
+                    hostile,
+                    selected_at,
+                    aggro_on,
+                    ..
+                } = target_info;
+
+                agent.target = Some(Target::new(
+                    target,
+                    hostile,
+                    selected_at,
+                    aggro_on,
+                    updated_pos,
+                ));
+            }
+        }
+    }
+
+    false
+}
+
 /// Try to heal self if our damage went below a certain threshold
 fn heal_self_if_hurt(bdata: &mut BehaviorData) -> bool {
     if bdata.agent_data.damage < HEALING_ITEM_THRESHOLD
@@ -481,7 +555,8 @@ fn heal_self_if_hurt(bdata: &mut BehaviorData) -> bool {
             .agent_data
             .heal_self(bdata.agent, bdata.controller, false)
     {
-        bdata.agent.action_state.timer = 0.01;
+        bdata.agent.action_state.timers
+            [ActionStateBehaviorTreeTimers::TimerBehaviorTree as usize] = 0.01;
         return true;
     }
     false
@@ -498,10 +573,71 @@ fn hurt_utterance(bdata: &mut BehaviorData) -> bool {
     false
 }
 
+fn update_target_awareness(bdata: &mut BehaviorData) -> bool {
+    let BehaviorData {
+        agent,
+        agent_data,
+        read_data,
+        controller,
+        ..
+    } = bdata;
+
+    let target = agent.target.map(|t| t.target);
+    let tgt_pos = target.and_then(|t| read_data.positions.get(t));
+
+    if let (Some(target), Some(tgt_pos)) = (target, tgt_pos) {
+        if agent_data.can_see_entity(agent, controller, target, tgt_pos, read_data) {
+            agent.awareness.change_by(1.75 * read_data.dt.0);
+        } else if agent_data.can_sense_directly_near(tgt_pos) {
+            agent.awareness.change_by(0.25);
+        } else {
+            agent
+                .awareness
+                .change_by(STD_AWARENESS_DECAY_RATE * read_data.dt.0);
+        }
+    } else {
+        agent
+            .awareness
+            .change_by(STD_AWARENESS_DECAY_RATE * read_data.dt.0);
+    }
+
+    if bdata.agent.awareness.state() == AwarenessState::Unaware {
+        bdata.agent.target = None;
+    }
+
+    false
+}
+
+fn search_last_known_pos_if_not_alert(bdata: &mut BehaviorData) -> bool {
+    let awareness = &bdata.agent.awareness;
+    if awareness.reached() || awareness.state() < AwarenessState::Low {
+        return false;
+    }
+
+    let BehaviorData {
+        agent,
+        agent_data,
+        controller,
+        read_data,
+        ..
+    } = bdata;
+
+    if let Some(target) = agent.target {
+        if let Some(last_known_pos) = target.last_known_pos {
+            agent_data.follow(agent, controller, &read_data.terrain, &Pos(last_known_pos));
+
+            return true;
+        }
+    }
+
+    false
+}
+
 fn do_combat(bdata: &mut BehaviorData) -> bool {
     let BehaviorData {
         agent,
         agent_data,
+        rtsim_entity,
         read_data,
         event_emitter,
         controller,
@@ -544,19 +680,42 @@ fn do_combat(bdata: &mut BehaviorData) -> bool {
             let aggro_on = *aggro_on;
 
             if agent_data.below_flee_health(agent) {
-                let has_opportunity_to_flee = agent.action_state.timer < FLEE_DURATION;
-                let within_flee_distance = dist_sqrd < MAX_FLEE_DIST.powi(2);
+                let flee_timer_done = agent.action_state.timers
+                    [ActionStateBehaviorTreeTimers::TimerBehaviorTree as usize]
+                    > FLEE_DURATION;
+                let within_normal_flee_dir_dist = dist_sqrd < NORMAL_FLEE_DIR_DIST.powi(2);
 
                 // FIXME: Using action state timer to see if allowed to speak is a hack.
-                if agent.action_state.timer == 0.0 {
+                if agent.action_state.timers
+                    [ActionStateBehaviorTreeTimers::TimerBehaviorTree as usize]
+                    == 0.0
+                {
                     agent_data.cry_out(agent, event_emitter, read_data);
-                    agent.action_state.timer = 0.01;
-                } else if within_flee_distance && has_opportunity_to_flee {
-                    agent_data.flee(agent, controller, tgt_pos, &read_data.terrain);
-                    agent.action_state.timer += read_data.dt.0;
+                    agent.action_state.timers
+                        [ActionStateBehaviorTreeTimers::TimerBehaviorTree as usize] = 0.01;
+                    agent.flee_from_pos = {
+                        let random = || thread_rng().gen_range(-1.0..1.0);
+                        Some(Pos(
+                            agent_data.pos.0 + Vec3::new(random(), random(), random())
+                        ))
+                    };
+                } else if !flee_timer_done {
+                    if within_normal_flee_dir_dist {
+                        agent_data.flee(agent, controller, tgt_pos, &read_data.terrain);
+                    } else if let Some(random_pos) = agent.flee_from_pos {
+                        agent_data.flee(agent, controller, &random_pos, &read_data.terrain);
+                    } else {
+                        agent_data.flee(agent, controller, tgt_pos, &read_data.terrain);
+                    }
+
+                    agent.action_state.timers
+                        [ActionStateBehaviorTreeTimers::TimerBehaviorTree as usize] +=
+                        read_data.dt.0;
                 } else {
-                    agent.action_state.timer = 0.0;
+                    agent.action_state.timers
+                        [ActionStateBehaviorTreeTimers::TimerBehaviorTree as usize] = 0.0;
                     agent.target = None;
+                    agent.flee_from_pos = None;
                     agent_data.idle(agent, controller, read_data, rng);
                 }
             } else if is_dead(target, read_data) {
@@ -580,24 +739,71 @@ fn do_combat(bdata: &mut BehaviorData) -> bool {
                     read_data.time.0 - selected_at > RETARGETING_THRESHOLD_SECONDS;
 
                 if !in_aggro_range && is_time_to_retarget {
-                    agent_data.choose_target(agent, controller, read_data, event_emitter);
+                    agent_data.choose_target(
+                        agent,
+                        controller,
+                        read_data,
+                        event_emitter,
+                        will_ambush(*rtsim_entity, agent_data),
+                    );
                 }
 
                 if aggro_on {
-                    let target_data = TargetData::new(
-                        tgt_pos,
-                        read_data.bodies.get(target),
-                        read_data.scales.get(target),
-                    );
+                    let target_data = TargetData::new(tgt_pos, target, read_data);
                     let tgt_name = read_data.stats.get(target).map(|stats| stats.name.clone());
 
                     tgt_name.map(|tgt_name| agent.add_fight_to_memory(&tgt_name, read_data.time.0));
                     agent_data.attack(agent, controller, &target_data, read_data, rng);
                 } else {
-                    agent_data.menacing(agent, controller, target, read_data, event_emitter, rng);
+                    agent_data.menacing(
+                        agent,
+                        controller,
+                        target,
+                        read_data,
+                        event_emitter,
+                        rng,
+                        remembers_fight_with(*rtsim_entity, read_data, target),
+                    );
+                    remember_fight(*rtsim_entity, read_data, agent, target);
                 }
             }
         }
     }
     false
+}
+
+fn will_ambush(rtsim_entity: Option<&RtSimEntity>, agent_data: &AgentData) -> bool {
+    agent_data
+        .health
+        .map_or(false, |h| h.current() / h.maximum() > 0.7)
+        && rtsim_entity.map_or(false, |re| re.brain.personality.will_ambush)
+}
+
+fn remembers_fight_with(
+    rtsim_entity: Option<&RtSimEntity>,
+    read_data: &ReadData,
+    other: EcsEntity,
+) -> bool {
+    let name = || read_data.stats.get(other).map(|stats| stats.name.clone());
+
+    rtsim_entity.map_or(false, |rtsim_entity| {
+        name().map_or(false, |name| {
+            rtsim_entity.brain.remembers_fight_with_character(&name)
+        })
+    })
+}
+
+/// Remember target.
+fn remember_fight(
+    rtsim_entity: Option<&RtSimEntity>,
+    read_data: &ReadData,
+    agent: &mut Agent,
+    target: EcsEntity,
+) {
+    rtsim_entity.is_some().then(|| {
+        read_data
+            .stats
+            .get(target)
+            .map(|stats| agent.add_fight_to_memory(&stats.name, read_data.time.0))
+    });
 }

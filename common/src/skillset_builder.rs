@@ -9,7 +9,7 @@ use tracing::warn;
 /// `SkillSetBuilder` preset. Consider using loading from assets, when possible.
 /// When you're adding new enum variant,
 /// handle it in [`with_preset`](SkillSetBuilder::with_preset) method
-#[derive(Copy, Clone, PartialEq, Serialize, Deserialize, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
 pub enum Preset {
     Rank1,
     Rank2,
@@ -110,9 +110,8 @@ impl SkillSetBuilder {
     /// 2) If added skill already applied
     /// 3) If added skill wasn't applied at the end
     pub fn with_skill(mut self, skill: Skill, level: u16) -> Self {
-        let group = if let Some(skill_group) = skill.skill_group_kind() {
-            skill_group
-        } else {
+
+        let Some(group) = skill.skill_group_kind() else {
             let err = format!(
                 "Tried to add skill: {:?} which does not have an associated skill group.",
                 skill
@@ -131,7 +130,7 @@ impl SkillSetBuilder {
         for _ in 0..level {
             skill_set.add_skill_points(group, skill_set.skill_cost(skill));
             if let Err(err) = skill_set.unlock_skill(skill) {
-                let err_msg = format!("Failed to add skill: {:?}. Error: {:?}", skill, err);
+                let err_msg = format!("Failed to add skill: {skill:?}. Error: {err:?}");
                 common_base::dev_panic!(err_msg);
             }
         }

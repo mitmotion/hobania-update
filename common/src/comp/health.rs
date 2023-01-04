@@ -1,6 +1,6 @@
-use crate::DamageSource;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::{comp, consts::HP_PER_LEVEL};
+use crate::{uid::Uid, DamageSource};
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -105,7 +105,7 @@ impl Health {
             // NaN does not need to be handled here as rust will automatically change to 0 when casting to u32
             .clamp(0.0, Self::MAX_SCALED_HEALTH as f32) as u32;
 
-        (maximum != self.maximum).then(|| maximum)
+        (maximum != self.maximum).then_some(maximum)
     }
 
     /// Updates the maximum value for health.
@@ -172,8 +172,8 @@ impl Health {
                     .damage_contributors
                     .entry(attacker)
                     .or_insert((0, change.time));
-                (*entry).0 += u64::try_from(-delta).unwrap_or(0);
-                (*entry).1 = change.time
+                entry.0 += u64::try_from(-delta).unwrap_or(0);
+                entry.1 = change.time
             }
 
             // Prune any damage contributors who haven't contributed damage for over the
@@ -191,6 +191,12 @@ impl Health {
         self.damage_contributors
             .iter()
             .map(|(damage_contrib, (damage, _))| (damage_contrib, damage))
+    }
+
+    pub fn recent_damagers(&self) -> impl Iterator<Item = (Uid, Time)> + '_ {
+        self.damage_contributors
+            .iter()
+            .map(|(contrib, (_, time))| (contrib.uid(), *time))
     }
 
     pub fn should_die(&self) -> bool { self.current == 0 }

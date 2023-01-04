@@ -228,7 +228,7 @@ pub fn init(
                     }
 
                     // guards
-                    for _ in 0..site2.plazas().len() as usize {
+                    for _ in 0..site2.plazas().len() {
                         rtsim.entities.insert(Entity {
                             is_loaded: false,
                             pos: site2
@@ -252,7 +252,7 @@ pub fn init(
                     }
 
                     // merchants
-                    for _ in 0..site2.plazas().len() as usize {
+                    for _ in 0..site2.plazas().len() {
                         rtsim.entities.insert(Entity {
                             is_loaded: false,
                             pos: site2
@@ -299,6 +299,35 @@ pub fn init(
                         });
                     }
                 },
+                SiteKind::SavannahPit(site2) => {
+                    for _ in 0..4 {
+                        rtsim.entities.insert(Entity {
+                            is_loaded: false,
+                            pos: site2
+                                .plots()
+                                .filter(|plot| {
+                                    matches!(plot.kind(), world::site2::PlotKind::SavannahPit(_))
+                                })
+                                .choose(&mut thread_rng())
+                                .map_or(site.get_origin(), |plot| {
+                                    site2.tile_center_wpos(
+                                        plot.root_tile()
+                                            + Vec2::new(
+                                                thread_rng().gen_range(-5..5),
+                                                thread_rng().gen_range(-5..5),
+                                            ),
+                                    )
+                                })
+                                .with_z(0)
+                                .map(|e| e as f32),
+                            seed: thread_rng().gen(),
+                            controller: RtSimController::default(),
+                            last_time_ticked: 0.0,
+                            kind: RtSimEntityKind::Merchant,
+                            brain: Brain::merchant(site_id, &mut thread_rng()),
+                        });
+                    }
+                },
                 SiteKind::DesertCity(site2) => {
                     // villagers
                     for _ in 0..(site2.plazas().len() as f32 * 1.5) as usize {
@@ -321,7 +350,7 @@ pub fn init(
                     }
 
                     // guards
-                    for _ in 0..site2.plazas().len() as usize {
+                    for _ in 0..site2.plazas().len() {
                         rtsim.entities.insert(Entity {
                             is_loaded: false,
                             pos: site2
@@ -345,7 +374,7 @@ pub fn init(
                     }
 
                     // merchants
-                    for _ in 0..site2.plazas().len() as usize {
+                    for _ in 0..site2.plazas().len() {
                         rtsim.entities.insert(Entity {
                             is_loaded: false,
                             pos: site2
@@ -365,6 +394,33 @@ pub fn init(
                             last_time_ticked: 0.0,
                             kind: RtSimEntityKind::Merchant,
                             brain: Brain::merchant(site_id, &mut thread_rng()),
+                        });
+                    }
+                },
+                SiteKind::ChapelSite(site2) => {
+                    // prisoners
+                    for _ in 0..10 {
+                        rtsim.entities.insert(Entity {
+                            is_loaded: false,
+                            pos: site2
+                                .plots()
+                                .filter(|plot| {
+                                    matches!(plot.kind(), world::site2::PlotKind::SeaChapel(_))
+                                })
+                                .choose(&mut thread_rng())
+                                .map_or(site.get_origin(), |plot| {
+                                    site2.tile_center_wpos(Vec2::new(
+                                        plot.root_tile().x,
+                                        plot.root_tile().y + 4,
+                                    ))
+                                })
+                                .with_z(0)
+                                .map(|e| e as f32),
+                            seed: thread_rng().gen(),
+                            controller: RtSimController::default(),
+                            last_time_ticked: 0.0,
+                            kind: RtSimEntityKind::Prisoner,
+                            brain: Brain::villager(site_id, &mut thread_rng()),
                         });
                     }
                 },

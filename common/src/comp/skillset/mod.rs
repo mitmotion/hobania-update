@@ -5,6 +5,7 @@ use crate::{
         skills::{GeneralSkill, Skill},
     },
 };
+use core::borrow::{Borrow, BorrowMut};
 use hashbrown::HashMap;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
@@ -50,6 +51,15 @@ impl Asset for SkillLevelMap {
 pub struct SkillPrerequisitesMap(HashMap<Skill, HashMap<Skill, u16>>);
 
 impl Asset for SkillPrerequisitesMap {
+    type Loader = assets::RonLoader;
+
+    const EXTENSION: &'static str = "ron";
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SkillCostMap(HashMap<Skill, u16>);
+
+impl Asset for SkillCostMap {
     type Loader = assets::RonLoader;
 
     const EXTENSION: &'static str = "ron";
@@ -127,17 +137,28 @@ impl SkillGroupKind {
     /// Changing this is forward compatible with persistence and will
     /// automatically force a respec for skill group kinds that are affected.
     pub fn skill_point_cost(self, level: u16) -> u32 {
-        const EXP_INCREMENT: f32 = 10.0;
-        const STARTING_EXP: f32 = 70.0;
-        const EXP_CEILING: f32 = 1000.0;
-        const SCALING_FACTOR: f32 = 0.125;
-        (EXP_INCREMENT
-            * (EXP_CEILING
-                / EXP_INCREMENT
-                / (1.0
-                    + std::f32::consts::E.powf(-SCALING_FACTOR * level as f32)
-                        * (EXP_CEILING / STARTING_EXP - 1.0)))
-                .floor()) as u32
+        use std::f32::consts::E;
+        match self {
+            Self::Weapon(ToolKind::Sword) => {
+                let level = level as f32;
+                ((400.0 * (level / (level + 20.0)).powi(2) + 5.0 * E.powf(0.025 * level))
+                    .min(u32::MAX as f32) as u32)
+                    .saturating_mul(25)
+            },
+            _ => {
+                const EXP_INCREMENT: f32 = 10.0;
+                const STARTING_EXP: f32 = 70.0;
+                const EXP_CEILING: f32 = 1000.0;
+                const SCALING_FACTOR: f32 = 0.125;
+                (EXP_INCREMENT
+                    * (EXP_CEILING
+                        / EXP_INCREMENT
+                        / (1.0
+                            + E.powf(-SCALING_FACTOR * level as f32)
+                                * (EXP_CEILING / STARTING_EXP - 1.0)))
+                        .floor()) as u32
+            },
+        }
     }
 
     /// Gets the total amount of skill points that can be spent in a particular
@@ -232,16 +253,12 @@ impl SkillGroup {
 /// Contains all of a player's skill groups and skills. Provides methods for
 /// manipulating assigned skills and skill groups including unlocking skills,
 /// refunding skills etc.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SkillSet {
     skill_groups: HashMap<SkillGroupKind, SkillGroup>,
     skills: HashMap<Skill, u16>,
     pub modify_health: bool,
     pub modify_energy: bool,
-    // TODO: why is this part of the component?
-    /// Used to indicate to the frontend that there was an error in loading the
-    /// skillset from the database
-    pub persistence_load_error: Option<SkillsPersistenceError>,
 }
 
 impl Component for SkillSet {
@@ -259,7 +276,6 @@ impl Default for SkillSet {
             skills: SkillSet::initial_skills(),
             modify_health: false,
             modify_energy: false,
-            persistence_load_error: None,
         };
 
         // Insert default skill groups
@@ -281,17 +297,20 @@ impl SkillSet {
         skills
     }
 
+    /// NOTE: This does *not* return an error on failure, since we can partially
+    /// recover from some failures.  Instead, it returns the error in the
+    /// second return value; make sure to handle it if present!
     pub fn load_from_database(
         skill_groups: HashMap<SkillGroupKind, SkillGroup>,
         mut all_skills: HashMap<SkillGroupKind, Result<Vec<Skill>, SkillsPersistenceError>>,
-    ) -> Self {
+    ) -> (Self, Option<SkillsPersistenceError>) {
         let mut skillset = SkillSet {
             skill_groups,
             skills: SkillSet::initial_skills(),
             modify_health: true,
             modify_energy: true,
-            persistence_load_error: None,
         };
+        let mut persistence_load_error = None;
 
         // Loops while checking the all_skills hashmap. For as long as it can find an
         // entry where the skill group kind is unlocked, insert the skills corresponding
@@ -317,29 +336,33 @@ impl SkillSet {
                         {
                             skillset = backup_skillset;
                             // If unlocking failed, set persistence_load_error
-                            skillset.persistence_load_error =
+                            persistence_load_error =
                                 Some(SkillsPersistenceError::SkillsUnlockFailed)
                         }
                     },
-                    Err(persistence_error) => {
-                        skillset.persistence_load_error = Some(persistence_error)
-                    },
+                    Err(persistence_error) => persistence_load_error = Some(persistence_error),
                 }
             }
         }
 
-        skillset
+        (skillset, persistence_load_error)
+    }
+
+    /// Check if a particular skill group is accessible for an entity, *if* it
+    /// exists.
+    fn skill_group_accessible_if_exists(&self, skill_group_kind: SkillGroupKind) -> bool {
+        self.has_skill(Skill::UnlockGroup(skill_group_kind))
     }
 
     /// Checks if a particular skill group is accessible for an entity
     pub fn skill_group_accessible(&self, skill_group_kind: SkillGroupKind) -> bool {
         self.skill_groups.contains_key(&skill_group_kind)
-            && self.has_skill(Skill::UnlockGroup(skill_group_kind))
+            && self.skill_group_accessible_if_exists(skill_group_kind)
     }
 
     ///  Unlocks a skill group for a player. It starts with 0 exp and 0 skill
     ///  points.
-    pub fn unlock_skill_group(&mut self, skill_group_kind: SkillGroupKind) {
+    fn unlock_skill_group(&mut self, skill_group_kind: SkillGroupKind) {
         if !self.skill_groups.contains_key(&skill_group_kind) {
             self.skill_groups
                 .insert(skill_group_kind, SkillGroup::new(skill_group_kind));
@@ -462,33 +485,56 @@ impl SkillSet {
 
     /// Unlocks a skill for a player, assuming they have the relevant skill
     /// group unlocked and available SP in that skill group.
-    pub fn unlock_skill(&mut self, skill: Skill) -> Result<(), SkillUnlockError> {
+    ///
+    /// NOTE: Please don't use pathological or clever implementations of to_mut
+    /// here.
+    pub fn unlock_skill_cow<'a, B, C: 'a>(
+        this_: &'a mut B,
+        skill: Skill,
+        to_mut: impl FnOnce(&'a mut B) -> &'a mut C,
+    ) -> Result<(), SkillUnlockError>
+    where
+        B: Borrow<SkillSet>,
+        C: BorrowMut<SkillSet>,
+    {
         if let Some(skill_group_kind) = skill.skill_group_kind() {
-            let next_level = self.next_skill_level(skill);
-            let prerequisites_met = self.prerequisites_met(skill);
+            let this = (*this_).borrow();
+            let next_level = this.next_skill_level(skill);
+            let prerequisites_met = this.prerequisites_met(skill);
             // Check that skill is not yet at max level
-            if !matches!(self.skills.get(&skill), Some(level) if *level == skill.max_level()) {
-                if let Some(mut skill_group) = self.skill_group_mut(skill_group_kind) {
+            if !matches!(this.skills.get(&skill), Some(level) if *level == skill.max_level()) {
+                if let Some(skill_group) = this.skill_groups.get(&skill_group_kind) &&
+                    this.skill_group_accessible_if_exists(skill_group_kind)
+                {
                     if prerequisites_met {
                         if let Some(new_available_sp) = skill_group
                             .available_sp
                             .checked_sub(skill.skill_cost(next_level))
                         {
+                            // Perform all mutation inside this branch, to avoid triggering a copy
+                            // on write or flagged storage in cases where this matters.
+                            let this_ = to_mut(this_);
+                            let mut this = this_.borrow_mut();
+                            // NOTE: Verified to exist previously when we accessed
+                            // this.skill_groups (assuming a non-pathological implementation of
+                            // ToOwned).
+                            let skill_group = this.skill_groups.get_mut(&skill_group_kind)
+                                .expect("Verified to exist when we previously accessed this.skill_groups");
                             skill_group.available_sp = new_available_sp;
                             skill_group.ordered_skills.push(skill);
                             match skill {
                                 Skill::UnlockGroup(group) => {
-                                    self.unlock_skill_group(group);
+                                    this.unlock_skill_group(group);
                                 },
                                 Skill::General(GeneralSkill::HealthIncrease) => {
-                                    self.modify_health = true;
+                                    this.modify_health = true;
                                 },
                                 Skill::General(GeneralSkill::EnergyIncrease) => {
-                                    self.modify_energy = true;
+                                    this.modify_energy = true;
                                 },
                                 _ => {},
                             }
-                            self.skills.insert(skill, next_level);
+                            this.skills.insert(skill, next_level);
                             Ok(())
                         } else {
                             trace!("Tried to unlock skill for skill group with insufficient SP");
@@ -513,6 +559,12 @@ impl SkillSet {
             );
             Err(SkillUnlockError::NoParentSkillTree)
         }
+    }
+
+    /// Convenience function for the case where you have mutable access to the
+    /// skill.
+    pub fn unlock_skill(&mut self, skill: Skill) -> Result<(), SkillUnlockError> {
+        Self::unlock_skill_cow(self, skill, |x| x)
     }
 
     /// Checks if the player has available SP to spend
@@ -567,7 +619,7 @@ pub enum SpRewardError {
     Overflow,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize)]
 pub enum SkillsPersistenceError {
     HashMismatch,
     DeserializationFailure,

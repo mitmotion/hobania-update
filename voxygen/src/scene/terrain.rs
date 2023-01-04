@@ -31,7 +31,6 @@ use common::{
 use common_base::{prof_span, span};
 use core::{f32, fmt::Debug, marker::PhantomData, time::Duration};
 use crossbeam_channel as channel;
-use enum_iterator::IntoEnumIterator;
 use guillotiere::AtlasAllocator;
 use hashbrown::HashMap;
 use serde::Deserialize;
@@ -39,6 +38,7 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc,
 };
+use strum::IntoEnumIterator;
 use tracing::warn;
 use treeculler::{BVol, Frustum, AABB};
 use vek::*;
@@ -196,7 +196,7 @@ impl TryFrom<HashMap<SpriteKind, Option<SpriteConfig<String>>>> for SpriteSpec {
         mut map: HashMap<SpriteKind, Option<SpriteConfig<String>>>,
     ) -> Result<Self, Self::Error> {
         let mut array = [(); 256].map(|()| None);
-        let sprites_missing = SpriteKind::into_enum_iter()
+        let sprites_missing = SpriteKind::iter()
             .filter(|kind| match map.remove(kind) {
                 Some(config) => {
                     array[*kind as usize] = config;
@@ -224,12 +224,12 @@ impl assets::Asset for SpriteSpec {
 
 /// skip_remesh is either None (do the full remesh, including recomputing the
 /// light map), or Some((light_map, glow_map)).
-fn mesh_worker<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + 'static>(
+fn mesh_worker(
     pos: Vec2<i32>,
     z_bounds: (f32, f32),
     skip_remesh: Option<(LightMapFn, LightMapFn)>,
     started_tick: u64,
-    volume: <VolGrid2d<V> as SampleVol<Aabr<i32>>>::Sample,
+    volume: <VolGrid2d<TerrainChunk> as SampleVol<Aabr<i32>>>::Sample,
     max_texture_size: u16,
     chunk: Arc<TerrainChunk>,
     range: Aabb<i32>,
@@ -274,11 +274,12 @@ fn mesh_worker<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + '
             prof_span!("extract sprite_instances");
             let mut instances = [(); SPRITE_LOD_LEVELS].map(|()| Vec::new());
 
-            for x in 0..V::RECT_SIZE.x as i32 {
-                for y in 0..V::RECT_SIZE.y as i32 {
+            for x in 0..TerrainChunk::RECT_SIZE.x as i32 {
+                for y in 0..TerrainChunk::RECT_SIZE.y as i32 {
                     for z in z_bounds.0 as i32..z_bounds.1 as i32 + 1 {
                         let rel_pos = Vec3::new(x, y, z);
-                        let wpos = Vec3::from(pos * V::RECT_SIZE.map(|e: u32| e as i32)) + rel_pos;
+                        let wpos = Vec3::from(pos * TerrainChunk::RECT_SIZE.map(|e: u32| e as i32))
+                            + rel_pos;
 
                         let block = if let Ok(block) = volume.get(wpos) {
                             block
@@ -329,6 +330,7 @@ fn mesh_worker<V: BaseVol<Vox = Block> + RectRasterableVol + ReadVol + Debug + '
                                         light,
                                         glow,
                                         page,
+                                        matches!(sprite, SpriteKind::Door),
                                     );
                                     lod_level.push(instance);
                                 }
@@ -454,7 +456,7 @@ impl SpriteRenderContext {
             );
             let mut sprite_mesh = Mesh::new();
             // NOTE: Tracks the start vertex of the next model to be meshed.
-            let sprite_data: HashMap<(SpriteKind, usize), _> = SpriteKind::into_enum_iter()
+            let sprite_data: HashMap<(SpriteKind, usize), _> = SpriteKind::iter()
                 .filter_map(|kind| Some((kind, sprite_config.get(kind)?)))
                 .flat_map(|(kind, sprite_config)| {
                     sprite_config.variations.iter().enumerate().map(
@@ -513,6 +515,7 @@ impl SpriteRenderContext {
                                     generate_mesh_base_vol_sprite(
                                         Segment::from(&model.read().0).scaled_by(lod_scale),
                                         (greedy, sprite_mesh, false),
+                                        offset.map(|e: f32| e.floor()) * lod_scale,
                                     );
                                     // Get the number of pages after the model was meshed
                                     let end_page_num = (sprite_mesh.vertices().len()
@@ -530,7 +533,7 @@ impl SpriteRenderContext {
                                     SpriteData {
                                         vert_pages: start_page_num as u32..end_page_num as u32,
                                         scale: sprite_scale,
-                                        offset,
+                                        offset: offset.map(|e| e.rem_euclid(1.0)),
                                     }
                                 });
 
@@ -555,7 +558,7 @@ impl SpriteRenderContext {
             }
         });
 
-        let init = core::lazy::OnceCell::new();
+        let init = core::cell::OnceCell::new();
         let mut join_handle = Some(join_handle);
         let mut closure = move |renderer: &mut Renderer| {
             // The second unwrap can only fail if the sprite meshing thread panics, which
@@ -812,7 +815,6 @@ impl<V: RectRasterableVol> Terrain<V> {
     }
 
     /// Maintain terrain data. To be called once per tick.
-    #[allow(clippy::for_loops_over_fallibles)] // TODO: Pending review in #587
     pub fn maintain(
         &mut self,
         renderer: &mut Renderer,
@@ -890,8 +892,7 @@ impl<V: RectRasterableVol> Terrain<V> {
                                 neighbours &= scene_data
                                     .state
                                     .terrain()
-                                    .get_key(pos + Vec2::new(i, j))
-                                    .is_some();
+                                    .contains_key_real(pos + Vec2::new(i, j));
                             }
                         }
 
@@ -979,8 +980,7 @@ impl<V: RectRasterableVol> Terrain<V> {
                             neighbours &= scene_data
                                 .state
                                 .terrain()
-                                .get_key(neighbour_chunk_pos + Vec2::new(i, j))
-                                .is_some();
+                                .contains_key_real(neighbour_chunk_pos + Vec2::new(i, j));
                         }
                     }
                     if neighbours {
@@ -1019,7 +1019,9 @@ impl<V: RectRasterableVol> Terrain<V> {
 
         span!(guard, "Queue meshing from todo list");
         let mesh_focus_pos = focus_pos.map(|e| e.trunc()).xy().as_::<i64>();
-        for (todo, chunk) in self
+        //TODO: this is actually no loop, it just runs for a single entry because of
+        // the `min_by_key`. Evaluate actually looping here
+        while let Some((todo, chunk)) = self
             .mesh_todo
             .values_mut()
             .filter(|todo| !todo.is_worker_active)

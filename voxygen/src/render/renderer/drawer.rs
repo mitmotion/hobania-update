@@ -6,7 +6,6 @@ use super::{
         pipelines::{
             blit, bloom, clouds, debug, figure, fluid, lod_object, lod_terrain, particle, shadow,
             skybox, sprite, terrain, trail, ui, ColLights, GlobalsBindGroup,
-            ShadowTexturesBindGroup,
         },
     },
     rain_occlusion_map::{RainOcclusionMap, RainOcclusionMapRenderer},
@@ -250,20 +249,19 @@ impl<'frame> Drawer<'frame> {
             borrow: &self.borrow,
             pipelines,
             globals: self.globals,
-            shadows: &shadow.bind,
         })
     }
 
-    /// Returns None if the clouds pipeline is not available
-    pub fn second_pass(&mut self) -> Option<SecondPassDrawer> {
+    /// Returns None if the volumetrics pipeline is not available
+    pub fn volumetric_pass(&mut self) -> Option<VolumetricPassDrawer> {
         let pipelines = &self.borrow.pipelines.all()?;
         let shadow = self.borrow.shadow?;
 
         let encoder = self.encoder.as_mut().unwrap();
         let device = self.borrow.device;
         let mut render_pass =
-            encoder.scoped_render_pass("second_pass", device, &wgpu::RenderPassDescriptor {
-                label: Some("second pass (clouds)"),
+            encoder.scoped_render_pass("volumetric_pass", device, &wgpu::RenderPassDescriptor {
+                label: Some("volumetric pass (clouds)"),
                 color_attachments: &[wgpu::RenderPassColorAttachment {
                     view: &self.borrow.views.tgt_color_pp,
                     resolve_target: None,
@@ -272,9 +270,43 @@ impl<'frame> Drawer<'frame> {
                         store: true,
                     },
                 }],
+                depth_stencil_attachment: None,
+            });
+
+        render_pass.set_bind_group(0, &self.globals.bind_group, &[]);
+        render_pass.set_bind_group(1, &shadow.bind.bind_group, &[]);
+
+        Some(VolumetricPassDrawer {
+            render_pass,
+            borrow: &self.borrow,
+            clouds_pipeline: &pipelines.clouds,
+        })
+    }
+
+    /// Returns None if the trail pipeline is not available
+    pub fn transparent_pass(&mut self) -> Option<TransparentPassDrawer> {
+        let pipelines = &self.borrow.pipelines.all()?;
+        let shadow = self.borrow.shadow?;
+
+        let encoder = self.encoder.as_mut().unwrap();
+        let device = self.borrow.device;
+        let mut render_pass =
+            encoder.scoped_render_pass("transparent_pass", device, &wgpu::RenderPassDescriptor {
+                label: Some("transparent pass (trails)"),
+                color_attachments: &[wgpu::RenderPassColorAttachment {
+                    view: &self.borrow.views.tgt_color_pp,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: true,
+                    },
+                }],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &self.borrow.views.tgt_depth,
-                    depth_ops: None,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: false,
+                    }),
                     stencil_ops: None,
                 }),
             });
@@ -282,10 +314,9 @@ impl<'frame> Drawer<'frame> {
         render_pass.set_bind_group(0, &self.globals.bind_group, &[]);
         render_pass.set_bind_group(1, &shadow.bind.bind_group, &[]);
 
-        Some(SecondPassDrawer {
+        Some(TransparentPassDrawer {
             render_pass,
             borrow: &self.borrow,
-            clouds_pipeline: &pipelines.clouds,
             trail_pipeline: &pipelines.trail,
         })
     }
@@ -423,7 +454,7 @@ impl<'frame> Drawer<'frame> {
         let screen_descriptor = ScreenDescriptor {
             physical_width: self.borrow.sc_desc.width,
             physical_height: self.borrow.sc_desc.height,
-            scale_factor: scale_factor as f32,
+            scale_factor,
         };
 
         self.borrow.egui_render_pass.update_texture(
@@ -681,6 +712,17 @@ impl<'pass> ShadowPassDrawer<'pass> {
 
         TerrainShadowDrawer { render_pass }
     }
+
+    pub fn draw_debug_shadows(&mut self) -> DebugShadowDrawer<'_, 'pass> {
+        let mut render_pass = self
+            .render_pass
+            .scope("directed_debug_shadows", self.borrow.device);
+
+        render_pass.set_pipeline(&self.shadow_renderer.debug_directed_pipeline.pipeline);
+        set_quad_index_buffer::<debug::Vertex>(&mut render_pass, self.borrow);
+
+        DebugShadowDrawer { render_pass }
+    }
 }
 
 #[must_use]
@@ -728,7 +770,7 @@ impl<'pass_ref, 'pass: 'pass_ref> FigureShadowDrawer<'pass_ref, 'pass> {
         self.render_pass.set_bind_group(1, &locals.bind_group, &[]);
         self.render_pass.set_vertex_buffer(0, model.buf());
         self.render_pass
-            .draw_indexed(0..model.len() as u32 / 4 * 6, 0, 0..1);
+            .draw_indexed(0..model.len() / 4 * 6, 0, 0..1);
     }
 }
 
@@ -750,6 +792,23 @@ impl<'pass_ref, 'pass: 'pass_ref> TerrainShadowDrawer<'pass_ref, 'pass> {
     }
 }
 
+#[must_use]
+pub struct DebugShadowDrawer<'pass_ref, 'pass: 'pass_ref> {
+    render_pass: Scope<'pass_ref, wgpu::RenderPass<'pass>>,
+}
+
+impl<'pass_ref, 'pass: 'pass_ref> DebugShadowDrawer<'pass_ref, 'pass> {
+    pub fn draw<'data: 'pass>(
+        &mut self,
+        model: &'data Model<debug::Vertex>,
+        locals: &'data debug::BoundLocals,
+    ) {
+        self.render_pass.set_bind_group(1, &locals.bind_group, &[]);
+        self.render_pass.set_vertex_buffer(0, model.buf().slice(..));
+        self.render_pass.draw(0..model.len() as u32, 0..1);
+    }
+}
+
 // First pass
 #[must_use]
 pub struct FirstPassDrawer<'pass> {
@@ -757,7 +816,6 @@ pub struct FirstPassDrawer<'pass> {
     borrow: &'pass RendererBorrow<'pass>,
     pipelines: &'pass super::Pipelines,
     globals: &'pass GlobalsBindGroup,
-    shadows: &'pass ShadowTexturesBindGroup,
 }
 
 impl<'pass> FirstPassDrawer<'pass> {
@@ -776,10 +834,7 @@ impl<'pass> FirstPassDrawer<'pass> {
         render_pass.set_pipeline(&self.pipelines.debug.pipeline);
         set_quad_index_buffer::<debug::Vertex>(&mut render_pass, self.borrow);
 
-        DebugDrawer {
-            render_pass,
-            shadows: self.shadows,
-        }
+        DebugDrawer { render_pass }
     }
 
     pub fn draw_lod_terrain<'data: 'pass>(&mut self, model: &'data Model<lod_terrain::Vertex>) {
@@ -862,7 +917,6 @@ impl<'pass> FirstPassDrawer<'pass> {
 #[must_use]
 pub struct DebugDrawer<'pass_ref, 'pass: 'pass_ref> {
     render_pass: Scope<'pass_ref, wgpu::RenderPass<'pass>>,
-    shadows: &'pass ShadowTexturesBindGroup,
 }
 
 impl<'pass_ref, 'pass: 'pass_ref> DebugDrawer<'pass_ref, 'pass> {
@@ -871,18 +925,9 @@ impl<'pass_ref, 'pass: 'pass_ref> DebugDrawer<'pass_ref, 'pass> {
         model: &'data Model<debug::Vertex>,
         locals: &'data debug::BoundLocals,
     ) {
-        self.render_pass.set_bind_group(1, &locals.bind_group, &[]);
+        self.render_pass.set_bind_group(2, &locals.bind_group, &[]);
         self.render_pass.set_vertex_buffer(0, model.buf().slice(..));
         self.render_pass.draw(0..model.len() as u32, 0..1);
-    }
-}
-
-impl<'pass_ref, 'pass: 'pass_ref> Drop for DebugDrawer<'pass_ref, 'pass> {
-    fn drop(&mut self) {
-        // Maintain that the shadow bind group is set in
-        // slot 1 by default during the main pass
-        self.render_pass
-            .set_bind_group(1, &self.shadows.bind_group, &[]);
     }
 }
 
@@ -904,7 +949,7 @@ impl<'pass_ref, 'pass: 'pass_ref> FigureDrawer<'pass_ref, 'pass> {
         self.render_pass.set_bind_group(3, &locals.bind_group, &[]);
         self.render_pass.set_vertex_buffer(0, model.buf());
         self.render_pass
-            .draw_indexed(0..model.len() as u32 / 4 * 6, 0, 0..1);
+            .draw_indexed(0..model.len() / 4 * 6, 0, 0..1);
     }
 }
 
@@ -1031,16 +1076,15 @@ impl<'pass_ref, 'pass: 'pass_ref> FluidDrawer<'pass_ref, 'pass> {
     }
 }
 
-// Second pass: clouds
+// Second pass: volumetrics
 #[must_use]
-pub struct SecondPassDrawer<'pass> {
+pub struct VolumetricPassDrawer<'pass> {
     render_pass: OwningScope<'pass, wgpu::RenderPass<'pass>>,
     borrow: &'pass RendererBorrow<'pass>,
     clouds_pipeline: &'pass clouds::CloudsPipeline,
-    trail_pipeline: &'pass trail::TrailPipeline,
 }
 
-impl<'pass> SecondPassDrawer<'pass> {
+impl<'pass> VolumetricPassDrawer<'pass> {
     pub fn draw_clouds(&mut self) {
         self.render_pass
             .set_pipeline(&self.clouds_pipeline.pipeline);
@@ -1048,7 +1092,17 @@ impl<'pass> SecondPassDrawer<'pass> {
             .set_bind_group(2, &self.borrow.locals.clouds_bind.bind_group, &[]);
         self.render_pass.draw(0..3, 0..1);
     }
+}
 
+// Third pass: transparents
+#[must_use]
+pub struct TransparentPassDrawer<'pass> {
+    render_pass: OwningScope<'pass, wgpu::RenderPass<'pass>>,
+    borrow: &'pass RendererBorrow<'pass>,
+    trail_pipeline: &'pass trail::TrailPipeline,
+}
+
+impl<'pass> TransparentPassDrawer<'pass> {
     pub fn draw_trails(&mut self) -> Option<TrailDrawer<'_, 'pass>> {
         let shadow = &self.borrow.shadow?;
 
@@ -1133,7 +1187,7 @@ impl<'pass_ref, 'pass: 'pass_ref> UiDrawer<'pass_ref, 'pass> {
         // Note: not actually prepared yet
         // we do this to avoid having to write extra code for the set functions
         let mut prepared = PreparedUiDrawer {
-            render_pass: &mut *self.render_pass,
+            render_pass: &mut self.render_pass,
         };
         // Prepare
         prepared.set_locals(locals);

@@ -36,7 +36,7 @@ fn main() {
                 .short('m')
                 .long("mode")
                 .takes_value(true)
-                .possible_values(&["server", "client", "both"])
+                .possible_values(["server", "client", "both"])
                 .default_value("both")
                 .help(
                     "choose whether you want to start the server or client or both needed for \
@@ -63,7 +63,7 @@ fn main() {
                 .long("protocol")
                 .takes_value(true)
                 .default_value("tcp")
-                .possible_values(&["tcp", "udp", "mpsc"])
+                .possible_values(["tcp", "udp", "mpsc"])
                 .help(
                     "underlying protocol used for this test, mpsc can only combined with mode=both",
                 ),
@@ -74,7 +74,7 @@ fn main() {
                 .long("trace")
                 .takes_value(true)
                 .default_value("warn")
-                .possible_values(&["trace", "debug", "info", "warn", "error"])
+                .possible_values(["trace", "debug", "info", "warn", "error"])
                 .help("set trace level, not this has a performance impact!"),
         )
         .get_matches();
@@ -129,7 +129,7 @@ fn main() {
 
 fn server(address: ListenAddr, runtime: Arc<Runtime>) {
     let registry = Arc::new(Registry::new());
-    let server = Network::new_with_registry(Pid::new(), &runtime, &registry);
+    let mut server = Network::new_with_registry(Pid::new(), &runtime, &registry);
     runtime.spawn(Server::run(
         Arc::clone(&registry),
         SocketAddr::from(([0; 4], 59112)),
@@ -140,7 +140,7 @@ fn server(address: ListenAddr, runtime: Arc<Runtime>) {
     loop {
         info!("----");
         info!("Waiting for participant to connect");
-        let p1 = runtime.block_on(server.connected()).unwrap(); //remote representation of p1
+        let mut p1 = runtime.block_on(server.connected()).unwrap(); //remote representation of p1
         let mut s1 = runtime.block_on(p1.opened()).unwrap(); //remote representation of s1
         runtime.block_on(async {
             let mut last = Instant::now();
@@ -169,7 +169,7 @@ fn client(address: ConnectAddr, runtime: Arc<Runtime>) {
     ));
 
     let p1 = runtime.block_on(client.connect(address)).unwrap(); //remote representation of p1
-    let mut s1 = runtime
+    let s1 = runtime
         .block_on(p1.open(4, Promises::ORDERED | Promises::CONSISTENCY, 0))
         .unwrap(); //remote representation of s1
     let mut last = Instant::now();

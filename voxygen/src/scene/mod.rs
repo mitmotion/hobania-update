@@ -30,10 +30,11 @@ use crate::{
 };
 use client::Client;
 use common::{
+    calendar::Calendar,
     comp,
     outcome::Outcome,
     resources::DeltaTime,
-    terrain::{BlockKind, TerrainChunk},
+    terrain::{BlockKind, TerrainChunk, TerrainGrid},
     vol::ReadVol,
 };
 use common_base::{prof_span, span};
@@ -110,6 +111,8 @@ pub struct Scene {
     ambient_mgr: AmbientMgr,
 
     integrated_rain_vel: f32,
+    wind_vel: Vec2<f32>,
+    pub interpolated_time_of_day: Option<f64>,
     last_lightning: Option<(Vec3<f32>, f64)>,
 }
 
@@ -133,12 +136,17 @@ pub struct SceneData<'a> {
     pub flashing_lights_enabled: bool,
     pub figure_lod_render_distance: f32,
     pub is_aiming: bool,
+    pub interpolated_time_of_day: Option<f64>,
 }
 
 impl<'a> SceneData<'a> {
-    pub fn get_sun_dir(&self) -> Vec3<f32> { Globals::get_sun_dir(self.state.get_time_of_day()) }
+    pub fn get_sun_dir(&self) -> Vec3<f32> {
+        Globals::get_sun_dir(self.interpolated_time_of_day.unwrap_or(0.0))
+    }
 
-    pub fn get_moon_dir(&self) -> Vec3<f32> { Globals::get_moon_dir(self.state.get_time_of_day()) }
+    pub fn get_moon_dir(&self) -> Vec3<f32> {
+        Globals::get_moon_dir(self.interpolated_time_of_day.unwrap_or(0.0))
+    }
 }
 
 /// Approximate a scalar field of view angle using the parameterization from
@@ -307,6 +315,8 @@ impl Scene {
             _ => CameraMode::ThirdPerson,
         };
 
+        let calendar = client.state().ecs().read_resource::<Calendar>();
+
         Self {
             data,
             globals_bind_group,
@@ -331,11 +341,13 @@ impl Scene {
             trail_mgr: TrailMgr::default(),
             figure_mgr: FigureMgr::new(renderer),
             sfx_mgr: SfxMgr::default(),
-            music_mgr: MusicMgr::default(),
+            music_mgr: MusicMgr::new(&calendar),
             ambient_mgr: AmbientMgr {
                 ambience: ambient::load_ambience_items(),
             },
             integrated_rain_vel: 0.0,
+            wind_vel: Vec2::zero(),
+            interpolated_time_of_day: None,
             last_lightning: None,
         }
     }
@@ -514,28 +526,16 @@ impl Scene {
                 .get(scene_data.viewpoint_entity)
                 .map_or(Quaternion::identity(), |ori| ori.to_quat());
 
-            let viewpoint_rolling = ecs
-                .read_storage::<comp::CharacterState>()
-                .get(scene_data.viewpoint_entity)
-                .map_or(false, |cs| cs.is_dodge());
-
-            let is_running = ecs
-                .read_storage::<comp::Vel>()
-                .get(scene_data.viewpoint_entity)
-                .map(|v| v.0.magnitude_squared() > RUNNING_THRESHOLD.powi(2))
-                .unwrap_or(false);
-
-            let on_ground = ecs
-                .read_storage::<comp::PhysicsState>()
-                .get(scene_data.viewpoint_entity)
-                .map(|p| p.on_ground.is_some());
-
-            let (viewpoint_height, viewpoint_eye_height) = scene_data
-                .state
-                .ecs()
+            let (is_humanoid, viewpoint_height, viewpoint_eye_height) = ecs
                 .read_storage::<comp::Body>()
                 .get(scene_data.viewpoint_entity)
-                .map_or((1.0, 0.0), |b| (b.height(), b.eye_height()));
+                .map_or((false, 1.0, 0.0), |b| {
+                    (
+                        matches!(b, comp::Body::Humanoid(_)),
+                        b.height(),
+                        b.eye_height(),
+                    )
+                });
 
             if scene_data.mutable_viewpoint || matches!(self.camera.get_mode(), CameraMode::Freefly)
             {
@@ -566,31 +566,51 @@ impl Scene {
                     .set_orientation_instant(Vec3::new(-yaw, pitch, roll));
             }
 
-            // Alter camera position to match player.
-            let tilt = self.camera.get_orientation().y;
-            let dist = self.camera.get_distance();
+            let viewpoint_offset = if is_humanoid {
+                let viewpoint_rolling = ecs
+                    .read_storage::<comp::CharacterState>()
+                    .get(scene_data.viewpoint_entity)
+                    .map_or(false, |cs| cs.is_dodge());
 
-            let up = match self.camera.get_mode() {
-                CameraMode::FirstPerson => {
-                    if viewpoint_rolling {
-                        viewpoint_height * 0.42
-                    } else if is_running && on_ground.unwrap_or(false) {
-                        viewpoint_eye_height
-                            + (scene_data.state.get_time() as f32 * 17.0).sin() * 0.05
-                    } else {
-                        viewpoint_eye_height
-                    }
-                },
-                CameraMode::ThirdPerson if scene_data.is_aiming => viewpoint_height * 1.16,
-                CameraMode::ThirdPerson => viewpoint_eye_height,
-                CameraMode::Freefly => 0.0,
+                let is_running = ecs
+                    .read_storage::<comp::Vel>()
+                    .get(scene_data.viewpoint_entity)
+                    .map(|v| v.0.magnitude_squared() > RUNNING_THRESHOLD.powi(2))
+                    .unwrap_or(false);
+
+                let on_ground = ecs
+                    .read_storage::<comp::PhysicsState>()
+                    .get(scene_data.viewpoint_entity)
+                    .map(|p| p.on_ground.is_some());
+
+                let up = match self.camera.get_mode() {
+                    CameraMode::FirstPerson => {
+                        if viewpoint_rolling {
+                            viewpoint_height * 0.42
+                        } else if is_running && on_ground.unwrap_or(false) {
+                            viewpoint_eye_height
+                                + (scene_data.state.get_time() as f32 * 17.0).sin() * 0.05
+                        } else {
+                            viewpoint_eye_height
+                        }
+                    },
+                    CameraMode::ThirdPerson if scene_data.is_aiming => viewpoint_height * 1.16,
+                    CameraMode::ThirdPerson => viewpoint_eye_height,
+                    CameraMode::Freefly => 0.0,
+                };
+                // Alter camera position to match player.
+                let tilt = self.camera.get_orientation().y;
+                let dist = self.camera.get_distance();
+
+                Vec3::unit_z() * (up - tilt.min(0.0).sin() * dist * 0.6)
+            } else {
+                self.figure_mgr
+                    .viewpoint_offset(scene_data, scene_data.viewpoint_entity)
             };
 
             match self.camera.get_mode() {
                 CameraMode::FirstPerson | CameraMode::ThirdPerson => {
-                    self.camera.set_focus_pos(
-                        viewpoint_pos + Vec3::unit_z() * (up - tilt.min(0.0).sin() * dist * 0.6),
-                    );
+                    self.camera.set_focus_pos(viewpoint_pos + viewpoint_offset);
                 },
                 CameraMode::Freefly => {},
             };
@@ -604,7 +624,7 @@ impl Scene {
         };
 
         // Compute camera matrices.
-        self.camera.compute_dependents(&*scene_data.state.terrain());
+        self.camera.compute_dependents(&scene_data.state.terrain());
         let camera::Dependents {
             view_mat,
             view_mat_inv,
@@ -652,7 +672,7 @@ impl Scene {
                 .filter(|(pos, _, light_anim, h)| {
                     light_anim.col != Rgb::zero()
                         && light_anim.strength > 0.0
-                        && (pos.0.distance_squared(viewpoint_pos) as f32)
+                        && pos.0.distance_squared(viewpoint_pos)
                             < loaded_distance.powi(2) + LIGHT_DIST_RADIUS
                         && h.map_or(true, |h| !h.is_dead)
                 })
@@ -692,7 +712,7 @@ impl Scene {
             .join()
             .filter(|(_, _, _, _, health)| !health.is_dead)
             .filter(|(pos, _, _, _, _)| {
-                (pos.0.distance_squared(viewpoint_pos) as f32)
+                pos.0.distance_squared(viewpoint_pos)
                     < (loaded_distance.min(SHADOW_MAX_DIST) + SHADOW_DIST_RADIUS).powi(2)
             })
             .map(|(pos, interpolated, scale, _, _)| {
@@ -711,7 +731,28 @@ impl Scene {
         self.loaded_distance = loaded_distance;
 
         // Update light projection matrices for the shadow map.
+
+        // When the target time of day and time of day have a large discrepancy
+        // (i.e two days), the linear interpolation causes brght flashing effects
+        // in the sky. This will snap the time of day to the target time of day
+        // for the client to avoid the flashing effect if flashing lights is
+        // disabled.
+        const DAY: f64 = 60.0 * 60.0 * 24.0;
         let time_of_day = scene_data.state.get_time_of_day();
+        let max_lerp_period = if scene_data.flashing_lights_enabled {
+            DAY * 2.0
+        } else {
+            DAY * 0.25
+        };
+        self.interpolated_time_of_day =
+            Some(self.interpolated_time_of_day.map_or(time_of_day, |tod| {
+                if (tod - time_of_day).abs() > max_lerp_period {
+                    time_of_day
+                } else {
+                    Lerp::lerp(tod, time_of_day, dt as f64)
+                }
+            }));
+        let time_of_day = self.interpolated_time_of_day.unwrap_or(time_of_day);
         let focus_pos = self.camera.get_focus_pos();
         let focus_off = focus_pos.map(|e| e.trunc());
 
@@ -744,9 +785,10 @@ impl Scene {
             scene_data.gamma,
             scene_data.exposure,
             self.last_lightning.unwrap_or((Vec3::zero(), -1000.0)),
+            self.wind_vel,
             scene_data.ambiance,
             self.camera.get_mode(),
-            scene_data.sprite_render_distance as f32 - 20.0,
+            scene_data.sprite_render_distance - 20.0,
         )]);
         renderer.update_clouds_locals(CloudsLocals::new(proj_mat_inv, view_mat_inv));
         renderer.update_postprocess_locals(PostProcessLocals::new(proj_mat_inv, view_mat_inv));
@@ -1062,6 +1104,7 @@ impl Scene {
         let weather = client
             .state()
             .max_weather_near(focus_off.xy() + cam_pos.xy());
+        self.wind_vel = weather.wind_vel();
         if weather.rain > RAIN_THRESHOLD {
             let weather = client.state().weather_at(focus_off.xy() + cam_pos.xy());
             let rain_vel = weather.rain_vel();
@@ -1222,6 +1265,8 @@ impl Scene {
                         tick,
                         camera_data,
                     );
+                    self.debug
+                        .render_shadows(&mut shadow_pass.draw_debug_shadows());
                 }
             }
 
@@ -1298,8 +1343,63 @@ impl Scene {
         client: &Client,
         settings: &Settings,
         hitboxes: &mut HashMap<specs::Entity, DebugShapeId>,
+        tracks: &mut HashMap<Vec2<i32>, Vec<DebugShapeId>>,
     ) {
         let ecs = client.state().ecs();
+        {
+            let mut current_chunks = hashbrown::HashSet::new();
+            let terrain_grid = ecs.read_resource::<TerrainGrid>();
+            for (key, chunk) in terrain_grid.iter() {
+                current_chunks.insert(key);
+                tracks.entry(key).or_insert_with(|| {
+                    let mut ret = Vec::new();
+                    for bezier in chunk.meta().tracks().iter() {
+                        let shape_id = self.debug.add_shape(DebugShape::TrainTrack {
+                            path: *bezier,
+                            rail_width: 0.25,
+                            rail_sep: 1.0,
+                            plank_width: 0.5,
+                            plank_height: 0.125,
+                            plank_sep: 2.0,
+                        });
+                        ret.push(shape_id);
+                        self.debug
+                            .set_context(shape_id, [0.0; 4], [1.0; 4], [0.0, 0.0, 0.0, 1.0]);
+                    }
+                    for point in chunk.meta().debug_points().iter() {
+                        let shape_id = self.debug.add_shape(DebugShape::Cylinder {
+                            radius: 0.1,
+                            height: 0.1,
+                        });
+                        ret.push(shape_id);
+                        self.debug.set_context(
+                            shape_id,
+                            point.with_w(0.0).into_array(),
+                            [1.0; 4],
+                            [0.0, 0.0, 0.0, 1.0],
+                        );
+                    }
+                    for line in chunk.meta().debug_lines().iter() {
+                        let shape_id = self
+                            .debug
+                            .add_shape(DebugShape::Line([line.start, line.end]));
+                        ret.push(shape_id);
+                        self.debug
+                            .set_context(shape_id, [0.0; 4], [1.0; 4], [0.0, 0.0, 0.0, 1.0]);
+                    }
+                    ret
+                });
+            }
+            tracks.retain(|k, v| {
+                let keep = current_chunks.contains(k);
+                if !keep {
+                    for shape in v.iter() {
+                        self.debug.remove_shape(*shape);
+                    }
+                }
+                keep
+            });
+        }
         let mut current_entities = hashbrown::HashSet::new();
         if settings.interface.toggle_hitboxes {
             let positions = ecs.read_component::<comp::Pos>();
@@ -1340,6 +1440,7 @@ impl Scene {
                         } else {
                             [0.0, 1.0, 0.0, 0.5]
                         };
+                        //let color = [1.0, 1.0, 1.0, 1.0];
                         let ori = ori.to_quat();
                         let hb_ori = [ori.x, ori.y, ori.z, ori.w];
                         self.debug.set_context(*shape_id, hb_pos, color, hb_ori);

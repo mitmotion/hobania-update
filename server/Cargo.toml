@@ -10,6 +10,7 @@ simd = ["vek/platform_intrinsics"]
 plugins = ["common-state/plugins"]
 persistent_world = []
 hot-reloading = ["common/hot-reloading"]
+hot-agent = ["server-agent/use-dyn-lib"]
 
 default = ["worldgen", "plugins", "persistent_world", "simd"]
 
@@ -22,6 +23,8 @@ common-systems = { package = "veloren-common-systems", path = "../common/systems
 common-net = { package = "veloren-common-net", path = "../common/net" }
 world = { package = "veloren-world", path = "../world" }
 network = { package = "veloren-network", path = "../network", features = ["metrics", "compression", "quic"], default-features = false }
+
+server-agent = {package = "veloren-server-agent", path = "agent"}
 
 #inline_tweak = "1.0.8"
 
@@ -39,16 +42,18 @@ quinn = "0.8"
 rustls = { version = "0.20", default-features = false }
 rustls-pemfile = { version = "1", default-features = false }
 atomicwrites = "0.3.0"
-chrono = { version = "0.4.19", features = ["serde"] }
+chrono = { version = "0.4.22", features = ["serde"] }
 chrono-tz = { version = "0.6", features = ["serde"] }
+drop_guard = { version = "0.3.0" }
 humantime = "2.1.0"
 itertools = "0.10"
 lazy_static = "1.4.0"
-ron = { version = "0.7", default-features = false }
+ron = { version = "0.8", default-features = false }
 serde = { version = "1.0.110", features = ["derive"] }
 serde_json = "1.0.50"
 rand = { version = "0.8", features = ["small_rng"] }
 hashbrown = { version = "0.12", features = ["rayon", "serde", "nightly"] }
+parking_lot = { version = "0.12" }
 rayon = "1.5"
 crossbeam-channel = "0.5"
 prometheus = { version = "0.13", default-features = false}

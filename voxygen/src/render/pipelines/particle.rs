@@ -18,6 +18,7 @@ pub struct Vertex {
 impl Vertex {
     #[allow(clippy::collapsible_else_if)]
     pub fn new(pos: Vec3<f32>, norm: Vec3<f32>) -> Self {
+        #[allow(clippy::bool_to_int_with_if)]
         let norm_bits = if norm.x != 0.0 {
             if norm.x < 0.0 { 0 } else { 1 }
         } else if norm.y != 0.0 {
@@ -89,7 +90,8 @@ pub enum ParticleMode {
     WebStrand = 36,
     BlackSmoke = 37,
     Lightning = 38,
-    BarrelOrgan = 39,
+    Steam = 39,
+    BarrelOrgan = 40,
 }
 
 impl ParticleMode {
@@ -200,12 +202,7 @@ impl ParticlePipeline {
                 bind_group_layouts: &[&global_layout.globals, &global_layout.shadow_textures],
             });
 
-        let samples = match aa_mode {
-            AaMode::None | AaMode::Fxaa => 1,
-            AaMode::MsaaX4 => 4,
-            AaMode::MsaaX8 => 8,
-            AaMode::MsaaX16 => 16,
-        };
+        let samples = aa_mode.samples();
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Particle pipeline"),

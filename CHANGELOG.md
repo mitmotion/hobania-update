@@ -8,21 +8,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - Setting for disabling flashing lights
 - Spectate mode for moderators.
 - Currently playing music track and artist now shows in the debug menu.
 - Added a setting to influence the gap between music track plays.
 - Added a Craft All button.
 - Server: Vacuum database on startup
-- SeaChapel, greek/latin inspired dungeon for ocean biome coasts 
+- SeaChapel, greek/latin inspired dungeon for ocean biome coasts
 - Entity view distance setting added (shown in graphics and network tabs). This setting controls
   the distance at which entities are synced to the client and which entities are displayed in.
   This is clamped to be no more than the current overall view distance setting.
 - View distance settings that are lowered by the server limit (or other factors) now display an
   extra ghost slider cursor when set above the limit (instead of snapping back to the limit).
   Limits on the view distance by the server no longer affect the settings saved on the client.
+- HQX upscaling shader for people playing on low internal resolutions
+- Pets can now be traded with.
+- Crafting recipe for black lantern
+- Added redwood and dead trees
+- Water will now move according to its apparent flow direction
+- Added screen-space reflection and refraction shaders
+- Added reflection quality setting
+- UI: Added a poise indicator to the player's status bars
+- FxUpscale AA mode for higher quality graphics at reduced internal resolutions
+- Graphics presets
+- Sword
+- Doors now animate opening when entities are near them.
+- Musical instruments can now be crafted, looted and played
+- NPCs now move to their target's last known position.
+- Experience bar below the hotbar
+- Bridges.
+- Tool for exporting PNG images of all in-game models (`cargo img-export`)
+- Calendar event soundtracks.
 
 ### Changed
+
 - Use fluent for translations
 - First tab on Login screen triggers username focus
 - Certain NPCs will now attack when alone with victim
@@ -33,10 +53,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   distance at which lower detail models are used for entities).
 - Present mode options renamed for clarity: Fifo -> 'Vsync capped', Mailbox -> 'Vsync uncapped',
   Immediate -> 'Vsync off'.
+- Item pickup UI now displays items that members of your group pick up.
+- Improved shiny water shaders
+- Tweaked armor stats
+- Move bag icon to skillbar
+- Improved inventory sorting by Category
 
 ### Removed
 
 ### Fixed
+
 - Fixed npc not handling interactions while fighting (especially merchants in trade)
 - Fixed bug where you would still be burning after dying in lava.
 - Workaround for rayon bug that caused lag spikes in slowjobs
@@ -48,10 +74,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed bug where the view distance selection was not immediately applied to entity syncing when
   first joining a server and when changing the view distance (previously this required moving to a
   new chunk for the initial setting or subsequent change to apply).
+- Moderators and admins are no longer blocked from logging in when there are too many players.
+- FXAA now behaves correctly at non-1.0x internal resolutions
+- Pets no longer aggro on pet owners after being healed
+- Pets no longer lose their intrinsic weapons/armour when loaded on login.
+- Fixed npcs using `/say` instead of `/tell`
+- Camera jittering in third person has been significantly reduced
+- Many water shader issues have been fixed
+- Flee if attacked even if attacker is not close.
+- `/time` command will never rewind time, only advance it to not break rtsim
 
 ## [0.13.0] - 2022-07-23
 
 ### Added
+
 - Chat commands to mute and unmute players
 - Waypoints saved between sessions and shared with group members.
 - New rocks
@@ -107,9 +143,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Overhauled caves: they're now a multi-layer network spanning the entire world
 
 ### Removed
+
 - Removed the options for single and cumulated damage.
 
 ### Fixed
+
 - Fixed bug that would sometimes cause taking a screenshot to panic because a buffer was mapped at the wrong time.
 - Players can no longer push waypoints around
 - Sites will now also be placed near the edge of the map
@@ -799,7 +837,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New attack animation
 - Weapon control system
 - Game pauses when in single player and pause menu
-- Added authentication system (to play on the official server register on https://account.veloren.net)
+- Added authentication system (to play on the official server register on <https://account.veloren.net>)
 - Added gamepad/controller support
 - Added player feedback when attempting to pickup an item with a full inventory
 - Added free look

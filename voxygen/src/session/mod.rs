@@ -17,13 +17,11 @@ use common::{
     comp::{
         inventory::slot::{EquipSlot, Slot},
         invite::InviteKind,
-        item::{
-            tool::{AbilityMap, ToolKind},
-            ItemDesc, MaterialStatManifest,
-        },
+        item::{tool::ToolKind, ItemDesc},
         ChatMsg, ChatType, InputKind, InventoryUpdateEvent, Pos, Stats, UtteranceKind, Vel,
     },
     consts::MAX_MOUNT_RANGE,
+    event::UpdateCharacterMetadata,
     link::Is,
     mounting::Mount,
     outcome::Outcome,
@@ -74,6 +72,7 @@ enum TickAction {
 pub struct SessionState {
     scene: Scene,
     client: Rc<RefCell<Client>>,
+    metadata: UpdateCharacterMetadata,
     hud: Hud,
     key_state: KeyState,
     inputs: comp::ControllerInputs,
@@ -92,18 +91,23 @@ pub struct SessionState {
     #[cfg(not(target_os = "macos"))]
     mumble_link: SharedLink,
     hitboxes: HashMap<specs::Entity, DebugShapeId>,
+    tracks: HashMap<Vec2<i32>, Vec<DebugShapeId>>,
 }
 
 /// Represents an active game session (i.e., the one being played).
 impl SessionState {
     /// Create a new `SessionState`.
-    pub fn new(global_state: &mut GlobalState, client: Rc<RefCell<Client>>) -> Self {
+    pub fn new(
+        global_state: &mut GlobalState,
+        metadata: UpdateCharacterMetadata,
+        client: Rc<RefCell<Client>>,
+    ) -> Self {
         // Create a scene for this session. The scene handles visible elements of the
         // game world.
         let mut scene = Scene::new(
             global_state.window.renderer_mut(),
             &mut global_state.lazy_init,
-            &*client.borrow(),
+            &client.borrow(),
             &global_state.settings,
         );
         scene
@@ -153,6 +157,8 @@ impl SessionState {
             #[cfg(not(target_os = "macos"))]
             mumble_link,
             hitboxes: HashMap::new(),
+            metadata,
+            tracks: HashMap::new(),
         }
     }
 
@@ -180,13 +186,17 @@ impl SessionState {
         span!(_guard, "tick", "Session::tick");
 
         let mut client = self.client.borrow_mut();
-        self.scene
-            .maintain_debug_hitboxes(&client, &global_state.settings, &mut self.hitboxes);
+        self.scene.maintain_debug_hitboxes(
+            &client,
+            &global_state.settings,
+            &mut self.hitboxes,
+            &mut self.tracks,
+        );
 
         // All this camera code is just to determine if it's underwater for the sfx
         // filter
         let camera = self.scene.camera_mut();
-        camera.compute_dependents(&*client.state().terrain());
+        camera.compute_dependents(&client.state().terrain());
         let camera::Dependents { cam_pos, .. } = self.scene.camera().dependents();
         let focus_pos = self.scene.camera().get_focus_pos();
         let focus_off = focus_pos.map(|e| e.trunc());
@@ -222,6 +232,13 @@ impl SessionState {
             match event {
                 client::Event::Chat(m) => {
                     self.hud.new_message(m);
+                },
+                client::Event::GroupInventoryUpdate(item, taker, uid) => {
+                    self.hud.new_loot_message(LootMessage {
+                        amount: item.amount(),
+                        item,
+                        taken_by: client.personalize_alias(uid, taker),
+                    });
                 },
                 client::Event::InviteComplete {
                     target,
@@ -312,11 +329,10 @@ impl SessionState {
                             }
                         },
                         InventoryUpdateEvent::Collected(item) => {
-                            let ability_map = AbilityMap::load().read();
-                            let msm = MaterialStatManifest::load().read();
                             self.hud.new_loot_message(LootMessage {
-                                item: item.duplicate(&ability_map, &msm),
                                 amount: item.amount(),
+                                item,
+                                taken_by: "You".to_string(),
                             });
                         },
                         _ => {},
@@ -355,9 +371,8 @@ impl SessionState {
                 client::Event::Outcome(outcome) => outcomes.push(outcome),
                 client::Event::CharacterCreated(_) => {},
                 client::Event::CharacterEdited(_) => {},
-                client::Event::CharacterError(error) => {
-                    global_state.client_error = Some(error);
-                },
+                client::Event::CharacterError(_) => {},
+                client::Event::CharacterJoined(_) => {},
                 client::Event::MapMarker(event) => {
                     self.hud.show.update_map_markers(event);
                 },
@@ -439,7 +454,7 @@ impl PlayState for SessionState {
                 let mut cam_dir = camera.get_orientation();
                 let cam_dir_clamp =
                     (global_state.settings.gameplay.camera_clamp_angle as f32).to_radians();
-                cam_dir.y = (-cam_dir_clamp).max(cam_dir.y).min(cam_dir_clamp);
+                cam_dir.y = cam_dir.y.clamp(-cam_dir_clamp, cam_dir_clamp);
                 camera.set_orientation(cam_dir);
             }
 
@@ -474,7 +489,7 @@ impl PlayState for SessionState {
             }
 
             // Compute camera data
-            camera.compute_dependents(&*client.state().terrain());
+            camera.compute_dependents(&client.state().terrain());
             let camera::Dependents {
                 cam_pos, cam_dir, ..
             } = self.scene.camera().dependents();
@@ -1195,7 +1210,7 @@ impl PlayState for SessionState {
             // Recompute dependents just in case some input modified the camera
             self.scene
                 .camera_mut()
-                .compute_dependents(&*self.client.borrow().state().terrain());
+                .compute_dependents(&self.client.borrow().state().terrain());
 
             // Generate debug info, if needed
             // (it iterates through enough data that we might
@@ -1258,6 +1273,7 @@ impl PlayState for SessionState {
                     mutable_viewpoint,
                     target_entity: self.target_entity,
                     selected_entity: self.selected_entity,
+                    persistence_load_error: self.metadata.skill_set_persistence_load_error,
                 },
                 self.interactable,
             );
@@ -1307,6 +1323,9 @@ impl PlayState for SessionState {
                         };
                     },
                     HudEvent::CharacterSelection => {
+                        global_state.audio.stop_all_music();
+                        global_state.audio.stop_all_ambience();
+                        global_state.audio.stop_all_sfx();
                         self.client.borrow_mut().request_remove_character()
                     },
                     HudEvent::Logout => {
@@ -1457,6 +1476,9 @@ impl PlayState for SessionState {
                         if move_allowed {
                             self.client.borrow_mut().swap_slots(slot_a, slot_b);
                         }
+                    },
+                    HudEvent::SelectExpBar(skillgroup) => {
+                        global_state.settings.interface.xp_bar_skillgroup = skillgroup;
                     },
                     HudEvent::SplitSwapSlots {
                         slot_a,
@@ -1677,9 +1699,7 @@ impl PlayState for SessionState {
                         settings_change.process(global_state, self);
                     },
                     HudEvent::AcknowledgePersistenceLoadError => {
-                        self.client
-                            .borrow_mut()
-                            .acknolwedge_persistence_load_error();
+                        self.metadata.skill_set_persistence_load_error = None;
                     },
                     HudEvent::MapMarkerEvent(event) => {
                         self.client.borrow_mut().map_marker_event(event);
@@ -1722,6 +1742,7 @@ impl PlayState for SessionState {
                         .figure_lod_render_distance
                         as f32,
                     is_aiming,
+                    interpolated_time_of_day: self.scene.interpolated_time_of_day,
                 };
 
                 // Runs if either in a multiplayer server or the singleplayer server is unpaused
@@ -1803,6 +1824,7 @@ impl PlayState for SessionState {
             weapon_trails_enabled: settings.graphics.weapon_trails_enabled,
             flashing_lights_enabled: settings.graphics.render_mode.flashing_lights_enabled,
             is_aiming: self.is_aiming,
+            interpolated_time_of_day: self.scene.interpolated_time_of_day,
         };
 
         // Render world
@@ -1814,20 +1836,18 @@ impl PlayState for SessionState {
             &scene_data,
         );
 
-        if let Some(mut second_pass) = drawer.second_pass() {
+        if let Some(mut volumetric_pass) = drawer.volumetric_pass() {
             // Clouds
-            {
-                prof_span!("clouds");
-                second_pass.draw_clouds();
-            }
+            prof_span!("clouds");
+            volumetric_pass.draw_clouds();
+        }
+        if let Some(mut transparent_pass) = drawer.transparent_pass() {
             // Trails
-            {
-                prof_span!("trails");
-                if let Some(mut trail_drawer) = second_pass.draw_trails() {
-                    self.scene
-                        .trail_mgr()
-                        .render(&mut trail_drawer, &scene_data);
-                }
+            prof_span!("trails");
+            if let Some(mut trail_drawer) = transparent_pass.draw_trails() {
+                self.scene
+                    .trail_mgr()
+                    .render(&mut trail_drawer, &scene_data);
             }
         }
         // Bloom (call does nothing if bloom is off)

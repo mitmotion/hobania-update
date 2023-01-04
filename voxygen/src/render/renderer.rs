@@ -28,8 +28,8 @@ use super::{
         ui, GlobalsBindGroup, GlobalsLayouts, ShadowTexturesBindGroup,
     },
     texture::Texture,
-    AaMode, AddressMode, FilterMode, OtherModes, PipelineModes, RenderError, RenderMode,
-    ShadowMapMode, ShadowMode, Vertex,
+    AddressMode, FilterMode, OtherModes, PipelineModes, RenderError, RenderMode, ShadowMapMode,
+    ShadowMode, Vertex,
 };
 use common::assets::{self, AssetExt, AssetHandle, ReloadWatcher};
 use common_base::span;
@@ -254,7 +254,7 @@ impl Renderer {
 
                 let full_name = format!("#{} {} {:?}", i, info.name, info.device_type,);
 
-                full_name.contains(&filter).then(|| adapter)
+                full_name.contains(&filter).then_some(adapter)
             }),
             Some(_) | None => {
                 runtime.block_on(instance.request_adapter(&wgpu::RequestAdapterOptionsBase {
@@ -504,7 +504,7 @@ impl Renderer {
 
         #[cfg(feature = "egui-ui")]
         let egui_renderpass =
-            egui_wgpu_backend::RenderPass::new(&*device, TextureFormat::Bgra8UnormSrgb, 1);
+            egui_wgpu_backend::RenderPass::new(&device, TextureFormat::Bgra8UnormSrgb, 1);
 
         Ok(Self {
             device,
@@ -798,12 +798,8 @@ impl Renderer {
         let upscaled = Vec2::<u32>::from(size)
             .map(|e| (e as f32 * other_modes.upscale_mode.factor) as u32)
             .into_tuple();
-        let (width, height, sample_count) = match pipeline_modes.aa {
-            AaMode::None | AaMode::Fxaa => (upscaled.0, upscaled.1, 1),
-            AaMode::MsaaX4 => (upscaled.0, upscaled.1, 4),
-            AaMode::MsaaX8 => (upscaled.0, upscaled.1, 8),
-            AaMode::MsaaX16 => (upscaled.0, upscaled.1, 16),
-        };
+        let (width, height) = upscaled;
+        let sample_count = pipeline_modes.aa.samples();
         let levels = 1;
 
         let color_view = |width, height| {
@@ -1021,6 +1017,7 @@ impl Renderer {
                         shadow.point,
                         shadow.directed,
                         shadow.figure,
+                        shadow.debug,
                         shadow_views,
                     );
 
@@ -1080,16 +1077,19 @@ impl Renderer {
                         Some(point_pipeline),
                         Some(terrain_directed_pipeline),
                         Some(figure_directed_pipeline),
+                        Some(debug_directed_pipeline),
                         ShadowMap::Enabled(shadow_map),
                     ) = (
                         shadow_pipelines.point,
                         shadow_pipelines.directed,
                         shadow_pipelines.figure,
+                        shadow_pipelines.debug,
                         &mut shadow.map,
                     ) {
                         shadow_map.point_pipeline = point_pipeline;
                         shadow_map.terrain_directed_pipeline = terrain_directed_pipeline;
                         shadow_map.figure_directed_pipeline = figure_directed_pipeline;
+                        shadow_map.debug_directed_pipeline = debug_directed_pipeline;
                     }
 
                     if let (

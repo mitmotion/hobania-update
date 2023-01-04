@@ -5,24 +5,24 @@ members = [
     "common",
     "common/assets",
     "common/base",
+    "common/dynlib",
     "common/ecs",
     "common/net",
     "common/state",
     "common/systems",
     "common/frontend",
     "client",
+    "client/i18n",
     "plugin/api",
     "plugin/derive",
     "plugin/rt",
     "server",
+    "server/agent",
     "server-cli",
     "voxygen",
     "voxygen/anim",
-    "voxygen/anim/dyn",
-    "voxygen/i18n",
-    "voxygen/dynlib",
+    "voxygen/i18n-helpers",
     "voxygen/egui",
-    "voxygen/egui/dyn",
     "world",
     "network",
     "network/protocol",
@@ -115,14 +115,11 @@ systems = ["x86_64-linux"]
 name = "veloren-nix"
 key = "veloren-nix.cachix.org-1:zokfKJqVsNV6kI/oJdLF6TYBdNPYGSb+diMVQPn/5Rc="
 
-[workspace.metadata.nix.crateOverride.veloren-network]
-buildInputs = ["openssl"]
-nativeBuildInputs = ["pkg-config"]
-
 [patch.crates-io]
 vek = { git = "https://github.com/yoanlcq/vek.git", rev = "84d5cb65841d46599a986c5477341bea4456be26" }
 # patch wgpu so we can use wgpu-profiler crate
-wgpu = { git = "https://github.com/gfx-rs/wgpu.git", rev = "a92b8549a8e2cb9dac781bafc5ed32828f3caf46" }
+# wgpu = { git = "https://github.com/gfx-rs/wgpu.git", rev = "a92b8549a8e2cb9dac781bafc5ed32828f3caf46" }
+wgpu = { git = "https://github.com/pythonesque/wgpu.git", rev = "179ea209374a92837cde252f1d9ee01f628cae08" }
 
 # # use the latest fixes in naga (remove when updates trickle down to wgpu-rs)
 # naga = { git = "https://github.com/gfx-rs/naga.git", rev = "3a0f0144112ff621dd7f731bf455adf6cab19164" }

@@ -5,14 +5,13 @@
 #![feature(
     array_methods,
     array_zip,
-    bool_to_option,
     drain_filter,
     once_cell,
     trait_alias,
     option_get_or_insert_default,
     map_try_insert,
     slice_as_chunks,
-    unzip_option
+    let_chains
 )]
 #![recursion_limit = "2048"]
 
@@ -30,6 +29,7 @@ pub mod hud;
 pub mod key_state;
 pub mod menu;
 pub mod mesh;
+pub mod panic_handler;
 pub mod profile;
 pub mod render;
 pub mod run;
@@ -78,10 +78,6 @@ pub struct GlobalState {
     // TODO: redo this so that the watcher doesn't have to exist for reloading to occur
     pub i18n: LocalizationHandle,
     pub clipboard: iced_winit::Clipboard,
-    // NOTE: This can be removed from GlobalState if client state behavior is refactored to not
-    // enter the game before confirmation of successful character load
-    /// An error returned by Client that needs to be displayed by the UI
-    pub client_error: Option<String>,
     // Used to clear the shadow textures when entering a PlayState that doesn't utilise shadows
     pub clear_shadows_next_frame: bool,
     /// A channel that sends Discord activity updates to a background task

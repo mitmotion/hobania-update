@@ -1,6 +1,7 @@
 use super::img_ids;
 use common::{
     comp::{
+        ability::{AbilityKind, SwordStance},
         inventory::trade_pricing::TradePricing,
         item::{
             armor::{Armor, ArmorKind, Protection},
@@ -21,51 +22,43 @@ pub fn price_desc<'a>(
     item_definition_id: ItemDefinitionId<'_>,
     i18n: &'a Localization,
 ) -> Option<(Cow<'a, str>, Cow<'a, str>, f32)> {
-    if let Some(prices) = prices {
-        if let Some(materials) = TradePricing::get_materials(&item_definition_id) {
-            let coinprice = prices.values.get(&Good::Coin).cloned().unwrap_or(1.0);
-            let buyprice: f32 = materials
-                .iter()
-                .map(|e| prices.values.get(&e.1).cloned().unwrap_or_default() * e.0)
-                .sum();
-            let sellprice: f32 = materials
-                .iter()
-                .map(|e| {
-                    prices.values.get(&e.1).cloned().unwrap_or_default() * e.0 * e.1.trade_margin()
-                })
-                .sum();
+    let prices = prices.as_ref()?;
+    let materials = TradePricing::get_materials(&item_definition_id)?;
+    let coinprice = prices.values.get(&Good::Coin).cloned().unwrap_or(1.0);
+    let buyprice: f32 = materials
+        .iter()
+        .map(|e| prices.values.get(&e.1).cloned().unwrap_or_default() * e.0)
+        .sum();
+    let sellprice: f32 = materials
+        .iter()
+        .map(|e| prices.values.get(&e.1).cloned().unwrap_or_default() * e.0 * e.1.trade_margin())
+        .sum();
 
-            let deal_goodness: f32 = materials
-                .iter()
-                .map(|e| prices.values.get(&e.1).cloned().unwrap_or(0.0))
-                .sum::<f32>()
-                / prices.values.get(&Good::Coin).cloned().unwrap_or(1.0)
-                / (materials.len() as f32);
-            let deal_goodness = deal_goodness.log(2.0);
+    let deal_goodness: f32 = materials
+        .iter()
+        .map(|e| prices.values.get(&e.1).cloned().unwrap_or(0.0))
+        .sum::<f32>()
+        / prices.values.get(&Good::Coin).cloned().unwrap_or(1.0)
+        / (materials.len() as f32);
+    let deal_goodness = deal_goodness.log(2.0);
 
-            let buy_string = i18n.get_msg_ctx("hud-trade-buy", &fluent_args! {
-                "coin_num" => buyprice / coinprice,
-                "coin_formatted" => format!("{:0.1}", buyprice / coinprice),
-            });
-            let sell_string = i18n.get_msg_ctx("hud-trade-sell", &fluent_args! {
-                "coin_num" => sellprice / coinprice,
-                "coin_formatted" => format!("{:0.1}", sellprice / coinprice),
-            });
+    let buy_string = i18n.get_msg_ctx("hud-trade-buy", &fluent_args! {
+        "coin_num" => buyprice / coinprice,
+        "coin_formatted" => format!("{:0.1}", buyprice / coinprice),
+    });
+    let sell_string = i18n.get_msg_ctx("hud-trade-sell", &fluent_args! {
+        "coin_num" => sellprice / coinprice,
+        "coin_formatted" => format!("{:0.1}", sellprice / coinprice),
+    });
 
-            let deal_goodness = match deal_goodness {
-                x if x < -2.5 => 0.0,
-                x if x < -1.05 => 0.25,
-                x if x < -0.95 => 0.5,
-                x if x < 0.0 => 0.75,
-                _ => 1.0,
-            };
-            Some((buy_string, sell_string, deal_goodness))
-        } else {
-            None
-        }
-    } else {
-        None
-    }
+    let deal_goodness = match deal_goodness {
+        x if x < -2.5 => 0.0,
+        x if x < -1.05 => 0.25,
+        x if x < -0.95 => 0.5,
+        x if x < 0.0 => 0.75,
+        _ => 1.0,
+    };
+    Some((buy_string, sell_string, deal_goodness))
 }
 
 pub fn kind_text<'a>(kind: &ItemKind, i18n: &'a Localization) -> Cow<'a, str> {
@@ -126,6 +119,21 @@ pub fn stats_count(item: &dyn ItemDesc, msm: &MaterialStatManifest) -> usize {
     }
 }
 
+pub fn line_count(item: &dyn ItemDesc, msm: &MaterialStatManifest, i18n: &Localization) -> usize {
+    match &*item.kind() {
+        ItemKind::Consumable { effects, .. } => {
+            let descs = consumable_desc(effects, i18n);
+            let mut lines = 0;
+            for desc in descs {
+                lines += desc.matches('\n').count() + 1;
+            }
+
+            lines
+        },
+        _ => stats_count(item, msm),
+    }
+}
+
 /// Takes N `effects` and returns N effect descriptions
 /// If effect isn't intended to have description, returns empty string
 ///
@@ -149,6 +157,11 @@ pub fn consumable_desc(effects: &[Effect], i18n: &Localization) -> Vec<String> {
                     .get_msg_ctx("buff-stat-health", &i18n::fluent_args! {
                         "str_total" => format_float(str_total),
                     }),
+                BuffKind::EnergyRegen => {
+                    i18n.get_msg_ctx("buff-stat-energy_regen", &i18n::fluent_args! {
+                        "str_total" => format_float(str_total),
+                    })
+                },
                 BuffKind::IncreaseMaxEnergy => {
                     i18n.get_msg_ctx("buff-stat-increase_max_energy", &i18n::fluent_args! {
                         "strength" => format_float(strength),
@@ -171,18 +184,19 @@ pub fn consumable_desc(effects: &[Effect], i18n: &Localization) -> Vec<String> {
                 | BuffKind::Wet
                 | BuffKind::Ensnared
                 | BuffKind::Poisoned
-                | BuffKind::Hastened => Cow::Borrowed(""),
+                | BuffKind::Hastened
+                | BuffKind::Fortitude
+                | BuffKind::Parried => Cow::Borrowed(""),
             };
 
             write!(&mut description, "{}", buff_desc).unwrap();
 
             let dur_desc = if let Some(dur_secs) = dur_secs {
                 match buff.kind {
-                    BuffKind::Saturation | BuffKind::Regeneration => {
-                        i18n.get_msg_ctx("buff-text-over_seconds", &i18n::fluent_args! {
+                    BuffKind::Saturation | BuffKind::Regeneration | BuffKind::EnergyRegen => i18n
+                        .get_msg_ctx("buff-text-over_seconds", &i18n::fluent_args! {
                             "dur_secs" => dur_secs
-                        })
-                    },
+                        }),
                     BuffKind::IncreaseMaxEnergy
                     | BuffKind::IncreaseMaxHealth
                     | BuffKind::Invulnerability => {
@@ -202,9 +216,13 @@ pub fn consumable_desc(effects: &[Effect], i18n: &Localization) -> Vec<String> {
                     | BuffKind::Wet
                     | BuffKind::Ensnared
                     | BuffKind::Poisoned
-                    | BuffKind::Hastened => Cow::Borrowed(""),
+                    | BuffKind::Hastened
+                    | BuffKind::Fortitude
+                    | BuffKind::Parried => Cow::Borrowed(""),
                 }
-            } else if let BuffKind::Saturation | BuffKind::Regeneration = buff.kind {
+            } else if let BuffKind::Saturation | BuffKind::Regeneration | BuffKind::EnergyRegen =
+                buff.kind
+            {
                 i18n.get_msg("buff-text-every_second")
             } else {
                 Cow::Borrowed("")
@@ -319,9 +337,39 @@ pub fn ability_image(imgs: &img_ids::Imgs, ability_id: &str) -> image::Id {
         "common.abilities.debug.upboost" => imgs.flyingrod_m2,
         "common.abilities.debug.possess" => imgs.snake_arrow_0,
         // Sword
-        "common.abilities.sword.triplestrike" => imgs.twohsword_m1,
-        "common.abilities.sword.dash" => imgs.twohsword_m2,
-        "common.abilities.sword.spin" => imgs.sword_whirlwind,
+        "common.abilities.sword.balanced_combo" => imgs.sword_balanced_combo,
+        "common.abilities.sword.balanced_thrust" => imgs.sword_balanced_thrust,
+        "common.abilities.sword.balanced_finisher" => imgs.sword_balanced_finisher,
+        "common.abilities.sword.offensive_combo" => imgs.sword_offensive_combo,
+        "common.abilities.sword.offensive_finisher" => imgs.sword_offensive_finisher,
+        "common.abilities.sword.offensive_advance" => imgs.sword_offensive_advance,
+        "common.abilities.sword.crippling_combo" => imgs.sword_crippling_combo,
+        "common.abilities.sword.crippling_finisher" => imgs.sword_crippling_finisher,
+        "common.abilities.sword.crippling_strike" => imgs.sword_crippling_strike,
+        "common.abilities.sword.crippling_gouge" => imgs.sword_crippling_gouge,
+        "common.abilities.sword.cleaving_combo" => imgs.sword_cleaving_combo,
+        "common.abilities.sword.cleaving_finisher" => imgs.sword_cleaving_finisher,
+        "common.abilities.sword.cleaving_spin" => imgs.sword_cleaving_spin,
+        "common.abilities.sword.cleaving_dive" => imgs.sword_cleaving_dive,
+        "common.abilities.sword.defensive_combo" => imgs.sword_defensive_combo,
+        "common.abilities.sword.defensive_bulwark" => imgs.sword_defensive_bulwark,
+        "common.abilities.sword.defensive_retreat" => imgs.sword_defensive_retreat,
+        "common.abilities.sword.parrying_combo" => imgs.sword_parrying_combo,
+        "common.abilities.sword.parrying_parry" => imgs.sword_parrying_parry,
+        "common.abilities.sword.parrying_riposte" => imgs.sword_parrying_riposte,
+        "common.abilities.sword.parrying_counter" => imgs.sword_parrying_counter,
+        "common.abilities.sword.heavy_combo" => imgs.sword_heavy_combo,
+        "common.abilities.sword.heavy_finisher" => imgs.sword_heavy_finisher,
+        "common.abilities.sword.heavy_pommelstrike" => imgs.sword_heavy_pommelstrike,
+        "common.abilities.sword.heavy_fortitude" => imgs.sword_heavy_fortitude,
+        "common.abilities.sword.mobility_combo" => imgs.sword_mobility_combo,
+        "common.abilities.sword.mobility_feint" => imgs.sword_mobility_feint,
+        "common.abilities.sword.mobility_agility" => imgs.sword_mobility_agility,
+        "common.abilities.sword.reaching_combo" => imgs.sword_reaching_combo,
+        "common.abilities.sword.reaching_charge" => imgs.sword_reaching_charge,
+        "common.abilities.sword.reaching_flurry" => imgs.sword_reaching_flurry,
+        "common.abilities.sword.reaching_skewer" => imgs.sword_reaching_skewer,
+        "veloren.core.pseudo_abilities.sword.stance_ability" => imgs.sword,
         // Axe
         "common.abilities.axe.doublestrike" => imgs.twohaxe_m1,
         "common.abilities.axe.spin" => imgs.axespin,
@@ -357,7 +405,12 @@ pub fn ability_image(imgs: &img_ids::Imgs, ability_id: &str) -> image::Id {
         "common.abilities.music.kalimba" => imgs.instrument,
         "common.abilities.music.melodica" => imgs.instrument,
         "common.abilities.music.lute" => imgs.instrument,
+        "common.abilities.music.guitar" => imgs.instrument,
         "common.abilities.music.sitar" => imgs.instrument,
+        "common.abilities.music.double_bass" => imgs.instrument,
+        "common.abilities.music.glass_flute" => imgs.instrument,
+        "common.abilities.music.lyre" => imgs.instrument,
+        "common.abilities.music.washboard" => imgs.instrument,
         _ => imgs.not_found,
     }
 }
@@ -369,4 +422,18 @@ pub fn ability_description<'a>(
     let ability = ability_id.replace('.', "-");
 
     (loc.get_msg(&ability), loc.get_attr(&ability, "desc"))
+}
+
+pub fn representative_ability_id(ability_kind: AbilityKind) -> &'static str {
+    match ability_kind {
+        AbilityKind::Sword(SwordStance::Balanced) => "common.abilities.sword.balanced_combo",
+        AbilityKind::Sword(SwordStance::Offensive) => "common.abilities.sword.offensive_combo",
+        AbilityKind::Sword(SwordStance::Crippling) => "common.abilities.sword.crippling_combo",
+        AbilityKind::Sword(SwordStance::Cleaving) => "common.abilities.sword.cleaving_combo",
+        AbilityKind::Sword(SwordStance::Defensive) => "common.abilities.sword.defensive_combo",
+        AbilityKind::Sword(SwordStance::Parrying) => "common.abilities.sword.parrying_combo",
+        AbilityKind::Sword(SwordStance::Heavy) => "common.abilities.sword.heavy_combo",
+        AbilityKind::Sword(SwordStance::Mobility) => "common.abilities.sword.mobility_combo",
+        AbilityKind::Sword(SwordStance::Reaching) => "common.abilities.sword.reaching_combo",
+    }
 }
