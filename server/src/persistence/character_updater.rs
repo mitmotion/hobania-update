@@ -34,10 +34,10 @@ pub type CharacterUpdateData = (
 pub type PetPersistenceData = (comp::Pet, comp::Body, comp::Stats);
 
 #[allow(clippy::large_enum_variant)]
-pub enum CharacterUpdaterAction {
+enum CharacterUpdaterAction {
     BatchUpdate {
         batch_id: u64,
-        updates: Vec<PendingDatabaseActionKind>,
+        updates: Vec<DatabaseActionKind>,
     },
     CreateCharacter {
         entity: Entity,
@@ -56,13 +56,13 @@ pub enum CharacterUpdaterAction {
 }
 
 #[derive(Clone)]
-pub enum PendingDatabaseAction {
-    New(PendingDatabaseActionKind),
+enum DatabaseAction {
+    New(DatabaseActionKind),
     Submitted { batch_id: u64 },
 }
 
-impl PendingDatabaseAction {
-    fn take_new(&mut self, batch_id: u64) -> Option<PendingDatabaseActionKind> {
+impl DatabaseAction {
+    fn take_new(&mut self, batch_id: u64) -> Option<DatabaseActionKind> {
         match core::mem::replace(self, Self::Submitted { batch_id }) {
             Self::New(action) => Some(action),
             submitted @ Self::Submitted { .. } => {
@@ -74,7 +74,7 @@ impl PendingDatabaseAction {
 }
 
 #[derive(Clone)]
-pub enum PendingDatabaseActionKind {
+enum DatabaseActionKind {
     UpdateCharacter(Box<CharacterUpdateData>),
     DeleteCharacter {
         requesting_player_uuid: String,
@@ -93,7 +93,7 @@ pub struct CharacterUpdater {
     handle: Option<std::thread::JoinHandle<()>>,
     /// Pending actions to be performed during the next persistence batch, such
     /// as updates for recently logged out players and character deletions
-    pending_database_actions: HashMap<CharacterId, PendingDatabaseAction>,
+    pending_database_actions: HashMap<CharacterId, DatabaseAction>,
     /// Will disconnect all characters (without persistence) on the next tick if
     /// set to true
     disconnect_all_clients_requested: Arc<AtomicBool>,
@@ -258,18 +258,8 @@ impl CharacterUpdater {
 
         self.pending_database_actions.insert(
             update_data.0, // CharacterId
-            PendingDatabaseAction::New(PendingDatabaseActionKind::UpdateCharacter(Box::new(
-                update_data,
-            ))),
+            DatabaseAction::New(DatabaseActionKind::UpdateCharacter(Box::new(update_data))),
         );
-    }
-
-    /// Returns the character IDs of characters that have recently logged out
-    /// and are awaiting persistence in the next batch update.
-    pub fn characters_with_pending_database_actions(
-        &self,
-    ) -> impl Iterator<Item = CharacterId> + '_ {
-        self.pending_database_actions.keys().copied()
     }
 
     pub fn has_pending_database_action(&self, character_id: CharacterId) -> bool {
@@ -278,7 +268,7 @@ impl CharacterUpdater {
 
     pub fn process_batch_completion(&mut self, completed_batch_id: u64) {
         self.pending_database_actions.drain_filter(|_, event| {
-            matches!(event, PendingDatabaseAction::Submitted {
+            matches!(event, DatabaseAction::Submitted {
                     batch_id,
             } if completed_batch_id == *batch_id)
         });
@@ -356,7 +346,7 @@ impl CharacterUpdater {
         // is fine, as the user has actively chosen to delete the character.
         self.pending_database_actions.insert(
             character_id,
-            PendingDatabaseAction::New(PendingDatabaseActionKind::DeleteCharacter {
+            DatabaseAction::New(DatabaseActionKind::DeleteCharacter {
                 requesting_player_uuid,
                 character_id,
             }),
@@ -377,10 +367,8 @@ impl CharacterUpdater {
         // Combine the pending actions with the updates for logged in characters
         let pending_actions = existing_pending_actions
             .into_iter()
-            .chain(
-                updates.map(|update| PendingDatabaseActionKind::UpdateCharacter(Box::new(update))),
-            )
-            .collect::<Vec<PendingDatabaseActionKind>>();
+            .chain(updates.map(|update| DatabaseActionKind::UpdateCharacter(Box::new(update))))
+            .collect::<Vec<DatabaseActionKind>>();
 
         if !pending_actions.is_empty() {
             debug!(
@@ -422,14 +410,14 @@ impl CharacterUpdater {
 }
 
 fn execute_batch_update(
-    updates: impl Iterator<Item = PendingDatabaseActionKind>,
+    updates: impl Iterator<Item = DatabaseActionKind>,
     connection: &mut VelorenConnection,
 ) -> Result<(), PersistenceError> {
     let mut transaction = connection.connection.transaction()?;
     transaction.set_drop_behavior(DropBehavior::Rollback);
     trace!("Transaction started for character batch update");
     updates.into_iter().try_for_each(|event| match event {
-        PendingDatabaseActionKind::UpdateCharacter(box (
+        DatabaseActionKind::UpdateCharacter(box (
             character_id,
             stats,
             inventory,
@@ -447,7 +435,7 @@ fn execute_batch_update(
             map_marker,
             &mut transaction,
         ),
-        PendingDatabaseActionKind::DeleteCharacter {
+        DatabaseActionKind::DeleteCharacter {
             requesting_player_uuid,
             character_id,
         } => super::character::delete_character(

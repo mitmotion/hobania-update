@@ -13,7 +13,6 @@ pub enum DisconnectReason {
     NetworkError,
     Timeout,
     ClientRequested,
-    PendingDatabaseAction,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -24,8 +24,8 @@ pub fn handle_character_delete(
     // Can't process a character delete for a player that has an in-game presence,
     // so kick them out before processing the delete.
     // NOTE: This relies on StateExt::handle_initialize_character adding the
-    // Presence component to characters during login to detect whether a
-    // character is in-game.
+    // Presence component when a character is initialized to detect whether a client
+    // is in-game.
     let has_presence = {
         let presences = server.state.ecs().read_storage::<Presence>();
         presences.get(entity).is_some()
@@ -145,7 +145,6 @@ fn get_reason_str(reason: &comp::DisconnectReason) -> &str {
         comp::DisconnectReason::NewerLogin => "newer_login",
         comp::DisconnectReason::Kicked => "kicked",
         comp::DisconnectReason::ClientRequested => "client_requested",
-        comp::DisconnectReason::PendingDatabaseAction => "pending_database_action",
     }
 }
 

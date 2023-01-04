@@ -588,7 +588,7 @@ pub fn edit_character(
     char_list.map(|list| (character_id, list))
 }
 
-/// Delete a character. Returns the updated character list.
+/// Permanently deletes a character
 pub fn delete_character(
     requesting_player_uuid: &str,
     char_id: CharacterId,

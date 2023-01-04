@@ -968,7 +968,7 @@ impl Client {
             .character_list
             .characters
             .iter()
-            .position(|x| x.character.id.unwrap_or_default() == character_id)
+            .position(|x| x.character.id == Some(character_id))
         {
             self.character_list.characters.remove(pos);
         }
