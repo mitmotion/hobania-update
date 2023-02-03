@@ -172,8 +172,11 @@ pub struct State {
     // Resolution, Bit Depth and Refresh Rate
     video_modes: Vec<VideoMode>,
 }
-const FPS_CHOICES: [Fps; 17] = [
+const FPS_CHOICES: [Fps; 20] = [
+    Fps::Max(5),
+    Fps::Max(10),
     Fps::Max(15),
+    Fps::Max(20),
     Fps::Max(30),
     Fps::Max(40),
     Fps::Max(50),
@@ -191,7 +194,8 @@ const FPS_CHOICES: [Fps; 17] = [
     Fps::Max(500),
     Fps::Unlimited,
 ];
-const BG_FPS_CHOICES: [Fps; 20] = [
+const BG_FPS_CHOICES: [Fps; 21] = [
+    Fps::Max(1),
     Fps::Max(5),
     Fps::Max(10),
     Fps::Max(15),
